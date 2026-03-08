@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "dev"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  # ── Validate manifest, strings, and integration structure ──────────────
+  hassfest:
+    name: Hassfest validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: "home-assistant/actions/hassfest@master"
+
+  # ── HACS custom integration validation ─────────────────────────────────
+  hacs:
+    name: HACS validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: HACS Action
+        uses: hacs/action@main
+        with:
+          category: integration
+
+  # ── Lint with ruff ──────────────────────────────────────────────────────
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff
+        run: ruff check custom_components/dockhand/
+
+  # ── Test suite ──────────────────────────────────────────────────────────
+  # Uses stdlib unittest + ha_stubs (no external HA installation required).
+  # The ha_stubs module provides accurate minimal stubs for all HA classes
+  # used by the integration, so tests run in plain Python with no network
+  # access needed during CI.
+  tests:
+    name: Tests (unittest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Run test suite
+        run: python3 tests/run_tests.py

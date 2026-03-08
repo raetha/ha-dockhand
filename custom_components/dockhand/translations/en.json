@@ -1,0 +1,118 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Dockhand Setup",
+        "description": "Enter your Dockhand connection details. Use a local Dockhand user \u2014 OIDC accounts are not supported.",
+        "data": {
+          "api_url": "API URL",
+          "username": "Username",
+          "password": "Password",
+          "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
+          "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
+          "enable_schedules": "Enable schedule sensors",
+          "enable_images": "Enable image sensors",
+          "enable_volumes": "Enable volume sensors",
+          "enable_networks": "Enable network sensors",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "api_url": "The base URL of your Dockhand instance.",
+          "username": "A local Dockhand account. OIDC/SSO accounts are not supported.",
+          "password": "The password for the local Dockhand account.",
+          "poll_interval": "How often to refresh container, stack, and environment stats. Lower values increase load. Default: 30.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
+          "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
+          "enable_images": "Enables sensors for Docker images on each environment.",
+          "enable_volumes": "Enables sensors for Docker volumes on each environment.",
+          "enable_networks": "Enables sensors for Docker networks on each environment.",
+          "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
+        }
+      },
+      "mfa": {
+        "title": "Multi-Factor Authentication",
+        "description": "Enter the 6-digit code from your authenticator app.",
+        "data": {
+          "mfa_token": "MFA Code"
+        },
+        "data_description": {
+          "mfa_token": "The current 6-digit TOTP code from your authenticator app."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate with Dockhand",
+        "description": "Your session has expired. Please enter your credentials to continue.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "The local Dockhand username to re-authenticate with.",
+          "password": "The current password for the local Dockhand account."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Dockhand",
+        "description": "Update connection details or feature settings. Leave password blank to keep the current one.",
+        "data": {
+          "api_url": "API URL",
+          "username": "Username",
+          "password": "New password (leave blank to keep current)",
+          "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
+          "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
+          "enable_schedules": "Enable schedule sensors",
+          "enable_images": "Enable image sensors",
+          "enable_volumes": "Enable volume sensors",
+          "enable_networks": "Enable network sensors",
+          "verify_ssl": "Verify SSL certificate"
+        },
+        "data_description": {
+          "api_url": "The base URL of your Dockhand instance.",
+          "username": "A local Dockhand account. OIDC/SSO accounts are not supported.",
+          "password": "Leave blank to keep the existing password.",
+          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 30.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
+          "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
+          "enable_images": "Enables sensors for Docker images on each environment.",
+          "enable_volumes": "Enables sensors for Docker volumes on each environment.",
+          "enable_networks": "Enables sensors for Docker networks on each environment.",
+          "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Dockhand. Check the API URL and network connectivity.",
+      "invalid_auth": "Invalid username or password.",
+      "invalid_mfa": "Invalid MFA code. Please try again."
+    },
+    "abort": {
+      "already_configured": "This Dockhand instance is already configured.",
+      "reauth_successful": "Re-authentication was successful.",
+      "reconfigure_successful": "Reconfiguration was successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dockhand Options",
+        "description": "Adjust polling intervals and optional data sources. To change the URL or credentials, use Reconfigure instead.",
+        "data": {
+          "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
+          "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
+          "enable_schedules": "Enable schedule sensors",
+          "enable_images": "Enable image sensors",
+          "enable_volumes": "Enable volume sensors",
+          "enable_networks": "Enable network sensors"
+        },
+        "data_description": {
+          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 30.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
+          "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
+          "enable_images": "Enables sensors for Docker images on each environment.",
+          "enable_volumes": "Enables sensors for Docker volumes on each environment.",
+          "enable_networks": "Enables sensors for Docker networks on each environment."
+        }
+      }
+    }
+  }
+}

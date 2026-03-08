@@ -1,0 +1,12 @@
+# Test dependencies for the Dockhand integration.
+#
+# The test suite uses stdlib unittest + ha_stubs and requires no third-party
+# packages. No installation step is needed to run the tests.
+#
+# To run the tests:
+#   python3 tests/run_tests.py          # direct (no install needed)
+#   bash scripts/run_tests.sh           # via venv (creates/updates automatically)
+#
+# Optional: install ruff for linting
+#   pip install ruff
+#   ruff check custom_components/dockhand/

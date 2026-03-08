@@ -1,0 +1,373 @@
+rules:
+  # ── Bronze ────────────────────────────────────────────────────────────────
+
+  action-setup:
+    status: exempt
+    comment: >
+      No custom service actions are registered.
+
+  appropriate-polling:
+    status: done
+    comment: >
+      Both coordinators use DataUpdateCoordinator with user-configurable
+      intervals. Fast coordinator defaults to 60 s (stats, containers, stacks);
+      slow coordinator defaults to 600 s (images, volumes, networks, schedules).
+
+  brands:
+    status: done
+    comment: >
+      brand/ directory is present with icon assets.
+
+  common-modules:
+    status: done
+    comment: >
+      helpers.py contains all shared URL helpers (_env_url, _container_url,
+      _stack_url, etc.) and DeviceInfo factory functions (_env_device,
+      _container_device, etc.) used across all platform modules.
+
+  config-flow:
+    status: done
+    comment: >
+      Full UI config flow: async_step_user, async_step_mfa,
+      async_step_reauth_confirm, async_step_reconfigure, and options flow.
+      All steps include data_description for each field. Connection steps
+      include a verify_ssl checkbox (default: True) to support self-signed certs.
+
+  config-flow-test-coverage:
+    status: done
+    comment: >
+      Full test coverage across all five flow steps: async_step_user (6 tests),
+      async_step_mfa (4 tests), async_step_reauth_confirm (4 tests),
+      async_step_reconfigure (5 tests), and options async_step_init (3 tests).
+      All error branches, duplicate detection, MFA prompt, and blank-password
+      preservation are tested in tests/test_config_flow.py.
+
+  dependency-transparency:
+    status: done
+    comment: >
+      No third-party requirements. Uses only HA's bundled aiohttp session via
+      async_get_clientsession.
+
+  docs-actions:
+    status: exempt
+    comment: >
+      No custom service actions registered.
+
+  docs-high-level-description:
+    status: done
+    comment: >
+      README opens with a description of the integration and the Dockhand
+      project it connects to.
+
+  docs-installation-instructions:
+    status: done
+    comment: >
+      README has step-by-step Installation section covering HACS and manual
+      methods, including prerequisites.
+
+  docs-removal-instructions:
+    status: done
+    comment: >
+      README has a Removal section describing how to delete via the HA UI and
+      uninstall via HACS.
+
+  entity-event-setup:
+    status: exempt
+    comment: >
+      No event-subscribed entities. All entities are coordinator-polled.
+
+  entity-unique-id:
+    status: done
+    comment: >
+      Every entity class sets _attr_unique_id in its __init__ using a
+      domain-prefixed string that includes the resource type and identifier.
+
+  has-entity-name:
+    status: done
+    comment: >
+      All entity classes set _attr_has_entity_name = True and _attr_name to
+      a short name relative to their parent device.
+
+  runtime-data:
+    status: done
+    comment: >
+      DockhandData dataclass is stored on entry.runtime_data. Contains client,
+      fast_coordinator, and slow_coordinator. Typed alias DockhandConfigEntry
+      used throughout so runtime_data is typed without casting.
+
+  test-before-configure:
+    status: done
+    comment: >
+      async_step_user calls async_login() before saving the config entry.
+      Raises appropriate errors for auth failure, MFA required, and connection
+      failure with translated error keys.
+
+  test-before-setup:
+    status: done
+    comment: >
+      async_setup_entry raises ConfigEntryNotReady if the fast coordinator's
+      first refresh fails, and ConfigEntryAuthFailed if credentials are invalid.
+
+  unique-config-entry:
+    status: done
+    comment: >
+      async_set_unique_id called with the normalised API URL in async_step_user.
+      _abort_if_unique_id_configured prevents duplicate config entries.
+
+  # ── Silver ────────────────────────────────────────────────────────────────
+
+  action-exceptions:
+    status: exempt
+    comment: >
+      No custom service actions registered.
+
+  config-entry-unloading:
+    status: done
+    comment: >
+      async_unload_entry calls async_unload_platforms and returns its result.
+      All coordinator listeners are cleaned up via entry.async_on_unload.
+
+  docs-configuration-parameters:
+    status: done
+    comment: >
+      README "Configuration parameters" section documents all fields: API URL,
+      username, password, fast and slow poll intervals, and all four optional
+      feature flags (schedules, images, volumes, networks). Separate subsections
+      cover setup-time fields, the Options flow (adjustable via Configure), and
+      Reconfigure (for changing URL/credentials).
+
+  docs-installation-parameters:
+    status: done
+    comment: >
+      README Setup section documents all fields shown during installation:
+      API URL, username, password, MFA token.
+
+  entity-unavailable:
+    status: done
+    comment: >
+      All entities inherit CoordinatorEntity. When a coordinator update fails,
+      HA automatically marks all its entities unavailable. Entities that depend
+      on optional data (e.g. health sensor) additionally return None when their
+      specific data is absent.
+
+  integration-owner:
+    status: done
+    comment: >
+      manifest.json codeowners field set to ['@raetha'].
+
+  log-when-unavailable:
+    status: done
+    comment: >
+      DataUpdateCoordinator logs once when a fetch fails (UpdateFailed) and
+      once when it recovers. Subsequent failures at the same level are
+      suppressed to avoid log spam.
+
+  parallel-updates:
+    status: done
+    comment: >
+      PARALLEL_UPDATES = 0 set in all four platform files (sensor.py,
+      binary_sensor.py, switch.py, button.py). Coordinator-based platforms
+      use 0 to indicate updates are managed by the coordinator.
+
+  reauthentication-flow:
+    status: done
+    comment: >
+      async_step_reauth and async_step_reauth_confirm implemented. The fast
+      coordinator also handles session expiry transparently at runtime by
+      calling async_login and retrying before raising ConfigEntryAuthFailed.
+
+  test-coverage:
+    status: done
+    comment: >
+      210 tests across five files: test_api.py (31), test_config_flow.py (21),
+      test_coordinator.py (26), test_entities.py (110), test_init.py (44).
+      Covers all API methods, all config flow steps, both coordinators, all
+      entity types, device registration, stale cleanup, setup, and unload.
+      Zero external dependencies — runs in ~0.15 s with stdlib only.
+
+  # ── Gold ──────────────────────────────────────────────────────────────────
+
+  devices:
+    status: done
+    comment: >
+      All entities create DeviceInfo via helpers in helpers.py. Device hierarchy:
+      Environment hub → Containers/Stacks/Networks/Images/Volumes group →
+      individual container/stack devices (env-prefixed names).
+      Images, networks, and volumes are entities directly under their group device —
+      no per-resource sub-devices. Schedules hub is a top-level device with one
+      per-schedule child device (two entities: Next run + Last status) —
+      future-proofed for run-now/enable-disable action entities.
+
+  diagnostics:
+    status: done
+    comment: >
+      diagnostics.py implements async_get_config_entry_diagnostics. Returns
+      redacted config entry data, per-environment summary counts, and full
+      coordinator data snapshots. session_cookie and password are redacted.
+
+  discovery:
+    status: exempt
+    comment: >
+      Dockhand has no mDNS, SSDP, DHCP, or Bluetooth discovery mechanism.
+
+  discovery-update-info:
+    status: exempt
+    comment: >
+      No discovery mechanism; not applicable.
+
+  docs-data-update:
+    status: done
+    comment: >
+      README has a Data Updates section explaining the dual-coordinator model:
+      what each coordinator fetches, default intervals, how failures are handled,
+      and how session expiry is managed transparently.
+
+  docs-examples:
+    status: done
+    comment: >
+      README includes a complete automation example triggered by container
+      state change.
+
+  docs-known-limitations:
+    status: done
+    comment: >
+      README documents that OIDC/SSO accounts are not supported and only
+      local Dockhand accounts can be used.
+
+  docs-supported-devices:
+    status: done
+    comment: >
+      README describes Dockhand as the supported service and links to the
+      Dockhand project.
+
+  docs-supported-functions:
+    status: done
+    comment: >
+      README includes a comprehensive entity reference table covering all
+      platforms and entity categories, with notes on which are disabled by
+      default.
+
+  docs-troubleshooting:
+    status: done
+    comment: >
+      README has a Troubleshooting section covering connection errors, auth
+      failures, session expiry, unavailable entities, and missing compose
+      labels.
+
+  docs-use-cases:
+    status: done
+    comment: >
+      README includes an automation example illustrating a real use case:
+      alerting when a container stops unexpectedly.
+
+  dynamic-devices:
+    status: done
+    comment: >
+      _ensure_fast_group_devices() runs on every fast coordinator update and
+      idempotently creates env hub, Containers, and Stacks group devices as
+      data appears. _ensure_slow_group_devices() does the same for Networks,
+      Images, and Volumes on every slow update. All four platform modules
+      register coordinator listeners that call async_add_entities for newly
+      discovered resources. Listeners are cleaned up on unload via
+      entry.async_on_unload.
+
+  entity-category:
+    status: done
+    comment: >
+      EntityCategory.DIAGNOSTIC applied to all monitoring and config-mirror
+      entities. EntityCategory.CONFIG applied to Restart buttons (user-initiated
+      device control actions). Primary state sensors (Container State, Stack
+      Status) and Running switches have no category as they are primary
+      control and observation entities.
+
+  entity-device-class:
+    status: done
+    comment: >
+      SensorDeviceClass.MEASUREMENT used for container count sensors (networks, volumes).
+      SensorDeviceClass.TIMESTAMP used for created and next-run timestamp sensors.
+      BinarySensorDeviceClass.CONNECTIVITY used for the Online sensor.
+      BinarySensorDeviceClass.PLUG used for volume In use sensor.
+
+  entity-disabled-by-default:
+    status: done
+    comment: >
+      12 niche or verbose entities are disabled by default via
+      _attr_entity_registry_enabled_default = False: build cache size,
+      containers disk usage, activity events, Hawser agent version,
+      per-container Image and Health sensors, and the six config-mirror
+      binary sensors (activity logging, metrics collection, vulnerability
+      scanning, update checks, auto update, image pruning).
+
+  entity-translations:
+    status: todo
+    comment: >
+      All entities still use hardcoded _attr_name strings. Requires
+      converting all 28 unique names to translation_key references and
+      adding entity blocks to strings.json and translations/en.json.
+
+  exception-translations:
+    status: exempt
+    comment: >
+      No HomeAssistantError or ServiceValidationError is raised anywhere in
+      entity methods or service actions. Config flow errors already use
+      translated error keys (cannot_connect, invalid_auth, invalid_mfa) via
+      strings.json. The integration has no custom service actions that would
+      surface exception messages to the user.
+      Requires an 'exceptions' block in strings.json and translations/en.json.
+      Low priority until non-English support is actively needed.
+
+  icon-translations:
+    status: done
+    comment: >
+      icons.json created with 29 entity icon entries covering all four
+      platforms. Includes state-specific icons for container State
+      (running/stopped/paused), Health (healthy/unhealthy/starting), and
+      Stack Status (running/partial/stopped).
+
+  reconfiguration-flow:
+    status: done
+    comment: >
+      async_step_reconfigure implemented. Allows changing API URL, credentials,
+      and poll intervals without removing the integration.
+
+  repair-issues:
+    status: exempt
+    comment: >
+      No user-actionable repair scenarios beyond session re-authentication,
+      which is handled by the existing reauthentication flow.
+
+  stale-devices:
+    status: done
+    comment: >
+      _remove_stale_devices() runs on every coordinator update and removes device
+      registry entries for stale containers and stacks. _remove_stale_entities()
+      runs on every slow update and removes entity registry entries for images,
+      networks, and volumes that no longer exist. Three safety guards prevent
+      mass-deletion on API failure: (1) last_update_success must be True,
+      (2) coordinator must have returned ≥1 environment, (3) only entities
+      belonging to currently-present environments are considered for removal.
+      Environment, group, and schedule devices are intentionally preserved.
+
+  # ── Platinum ──────────────────────────────────────────────────────────────
+
+  async-dependency:
+    status: done
+    comment: >
+      All API calls use HA's async aiohttp session. No blocking I/O anywhere
+      in the codebase. All coordinator fetches use asyncio.gather.
+
+  inject-websession:
+    status: done
+    comment: >
+      async_get_clientsession(hass, verify_ssl=...) is called in async_setup_entry
+      and config_flow steps. The verify_ssl flag mirrors the CONF_VERIFY_SSL
+      config entry option, defaulting to True. No session is created internally
+      by the integration.
+
+  strict-typing:
+    status: done
+    comment: >
+      from __future__ import annotations present in all Python modules.
+      py.typed marker added. Full mypy --strict validation is not yet
+      configured but the codebase uses consistent return type annotations
+      throughout.

@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to create releases and upload assets
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches manifest version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          MANIFEST_VERSION=$(jq -r '.version' custom_components/dockhand/manifest.json)
+          if [ "$TAG" != "$MANIFEST_VERSION" ]; then
+            echo "ERROR: Tag $TAG does not match manifest version $MANIFEST_VERSION"
+            exit 1
+          fi
+          echo "Version check passed: $TAG"
+
+      - name: Build release ZIP
+        run: |
+          mkdir -p release
+          cd custom_components
+          zip -r ../release/dockhand.zip dockhand \
+            --exclude "dockhand/__pycache__/*" \
+            --exclude "dockhand/*.pyc"
+
+      - name: Extract changelog for this release
+        id: changelog
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          # Extract the section for this version from CHANGELOG.md
+          NOTES=$(awk "/^## $VERSION/{found=1; next} found && /^## /{exit} found{print}" CHANGELOG.md)
+          if [ -z "$NOTES" ]; then
+            NOTES="See CHANGELOG.md for details."
+          fi
+          # Write to file to avoid quoting issues
+          echo "$NOTES" > /tmp/release_notes.md
+          echo "notes_file=/tmp/release_notes.md" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Dockhand ${{ github.ref_name }}"
+          body_path: ${{ steps.changelog.outputs.notes_file }}
+          files: release/dockhand.zip
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
