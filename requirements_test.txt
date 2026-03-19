@@ -10,3 +10,7 @@
 # Optional: install ruff for linting
 #   pip install ruff
 #   ruff check custom_components/dockhand/
+#
+# Optional: install pyyaml for workflow static analysis tests
+#   pip install pyyaml
+# Without pyyaml the workflow tests are automatically skipped.
