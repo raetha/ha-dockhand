@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.1 — 2026-03-19
+
+Patch release fixing entity ID suffix accumulation, stale entity cleanup, and icons.
+
+### Bug fixes
+- Fixed: stack devices pre-registered with bare name instead of environment-prefixed name (e.g. `traefik` instead of `Heimdall – traefik`), causing entity IDs for compose-managed containers to be generated without the environment prefix and colliding across environments
+- Fixed: stale cleanup listeners were registered after platform setup, so cleanup fired after `async_add_entities` rather than before — allowing old and new container/image devices to briefly coexist and trigger `_2` suffixes on entity IDs
+- Fixed: stale image, network, and volume entities were not cleaned up until the next slow coordinator poll (up to 600 s after reload); cleanup now runs immediately on integration setup so pruned resources are removed before new entities are registered
+- Fixed: `icons.json` entries were never applied because no entity had `_attr_translation_key` set and `strings.json` lacked the required `entity` section; all 22 statically-named entities now declare their translation key
+- Fixed: image and network sensors were missing `_attr_icon`; all three dynamic-name sensor types (image, network, volume) now have correct fallback icons
+
+### Documentation
+- README: added session timeout guidance — Dockhand defaults to 24 h; instructions to extend via Settings → Authentication → General → Session timeout
+- README: added troubleshooting entry for `_2`/`_3` entity ID suffixes and how to resolve with Recreate entity IDs after a prune cycle
+
 ## 1.0.0 — 2026-03-08
 
 Initial stable release of the Dockhand integration for Home Assistant.
