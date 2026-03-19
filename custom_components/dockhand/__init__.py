@@ -12,7 +12,7 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .const import (
     CONF_VERIFY_SSL,
-    DOMAIN, PLATFORMS, CONF_API_URL, CONF_SESSION_COOKIE,
+    DOMAIN, PLATFORMS, CONF_API_URL, CONF_USERNAME, CONF_SESSION_COOKIE,
     CONF_ENABLE_SCHEDULES, CONF_ENABLE_IMAGES, CONF_ENABLE_VOLUMES, CONF_ENABLE_NETWORKS,
 )
 from .api import DockhandClient, DockhandAuthError, DockhandMFARequiredError
@@ -44,7 +44,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     session = async_get_clientsession(hass, verify_ssl=verify_ssl)
     client = DockhandClient(session, entry.data)
 
-    if not entry.data.get(CONF_SESSION_COOKIE):
+    # Only attempt login if credentials are present. A no-auth install
+    # has no username stored, so skip login entirely in that case.
+    if entry.data.get(CONF_USERNAME) and not entry.data.get(CONF_SESSION_COOKIE):
         try:
             cookie = await client.async_login()
             hass.config_entries.async_update_entry(

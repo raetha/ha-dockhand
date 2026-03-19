@@ -14,6 +14,7 @@ from .const import (
     DOMAIN,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
+    CONF_USERNAME,
     CONF_SESSION_COOKIE,
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_IMAGES,
@@ -71,6 +72,13 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             raise UpdateFailed(f"Fast data error: {err}") from err
 
     async def _handle_reauth(self) -> None:
+        # No-auth install — a 401 means auth was re-enabled in Dockhand.
+        # Surface as ConfigEntryAuthFailed so the user is prompted to reconfigure.
+        if self._entry and not self._entry.data.get(CONF_USERNAME):
+            raise ConfigEntryAuthFailed(
+                "Received 401 but no credentials are stored. "
+                "If you re-enabled authentication in Dockhand, use Reconfigure."
+            )
         try:
             cookie = await self.client.async_login()
             if self._entry:

@@ -453,7 +453,7 @@ class TestSetupEntry(unittest.TestCase):
         from ha_stubs import ConfigEntryAuthFailed as CEAFailed
         reset_registry()
         hass = HomeAssistant()
-        entry = _make_entry({"session_cookie": ""})
+        entry = _make_entry({"username": "admin", "password": "pass", "session_cookie": ""})
 
         mock_client = MagicMock()
         mock_client.async_login = AsyncMock(side_effect=DockhandAuthError("bad creds"))

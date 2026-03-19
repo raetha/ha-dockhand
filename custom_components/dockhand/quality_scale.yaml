@@ -28,19 +28,22 @@ rules:
   config-flow:
     status: done
     comment: >
-      Full UI config flow: async_step_user, async_step_mfa,
-      async_step_reauth_confirm, async_step_reconfigure, and options flow.
-      All steps include data_description for each field. Connection steps
-      include a verify_ssl checkbox (default: True) to support self-signed certs.
+      Full UI config flow: async_step_user (URL and settings), async_step_credentials
+      (shown only when server returns 401), async_step_mfa (shown only when MFA
+      required), async_step_reauth_confirm, async_step_reconfigure, and options flow.
+      Auth is auto-detected — no checkbox needed. All steps include data_description
+      for each field. Connection steps include a verify_ssl checkbox (default: True)
+      to support self-signed certs.
 
   config-flow-test-coverage:
     status: done
     comment: >
-      Full test coverage across all five flow steps: async_step_user (6 tests),
-      async_step_mfa (4 tests), async_step_reauth_confirm (4 tests),
-      async_step_reconfigure (5 tests), and options async_step_init (3 tests).
-      All error branches, duplicate detection, MFA prompt, and blank-password
-      preservation are tested in tests/test_config_flow.py.
+      Full test coverage across all flow steps: async_step_user (6 tests),
+      async_step_credentials (6 tests), async_step_mfa (4 tests),
+      async_step_reauth_confirm (4 tests), async_step_reconfigure (7 tests),
+      and options async_step_init (2 tests). All error branches, duplicate
+      detection, MFA prompt, auth-detection probe, blank-password preservation,
+      and no-auth credential stripping are tested in tests/test_config_flow.py.
 
   dependency-transparency:
     status: done
@@ -98,9 +101,10 @@ rules:
   test-before-configure:
     status: done
     comment: >
-      async_step_user calls async_login() before saving the config entry.
-      Raises appropriate errors for auth failure, MFA required, and connection
-      failure with translated error keys.
+      async_step_user probes the server with async_get_environments() before
+      saving. If auth is required (401), async_step_credentials calls
+      async_login() before saving. Raises appropriate errors for auth failure,
+      MFA required, and connection failure with translated error keys.
 
   test-before-setup:
     status: done
@@ -112,7 +116,8 @@ rules:
     status: done
     comment: >
       async_set_unique_id called with the normalised API URL in async_step_user.
-      _abort_if_unique_id_configured prevents duplicate config entries.
+      _abort_if_unique_id_configured prevents duplicate config entries. This
+      check runs before the server probe so duplicates are rejected early.
 
   # ── Silver ────────────────────────────────────────────────────────────────
 

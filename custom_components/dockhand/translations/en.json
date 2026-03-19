@@ -2,12 +2,10 @@
   "config": {
     "step": {
       "user": {
-        "title": "Dockhand Setup",
-        "description": "Enter your Dockhand connection details. Use a local Dockhand user \u2014 OIDC accounts are not supported.",
+        "title": "Connect to Dockhand",
+        "description": "Enter your Dockhand server URL and settings. Credentials will be requested if authentication is enabled in Dockhand.",
         "data": {
           "api_url": "API URL",
-          "username": "Username",
-          "password": "Password",
           "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
           "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
           "enable_schedules": "Enable schedule sensors",
@@ -18,8 +16,6 @@
         },
         "data_description": {
           "api_url": "The base URL of your Dockhand instance.",
-          "username": "A local Dockhand account. OIDC/SSO accounts are not supported.",
-          "password": "The password for the local Dockhand account.",
           "poll_interval": "How often to refresh container, stack, and environment stats. Lower values increase load. Default: 30.",
           "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
           "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
@@ -53,7 +49,7 @@
       },
       "reconfigure": {
         "title": "Reconfigure Dockhand",
-        "description": "Update connection details or feature settings. Leave password blank to keep the current one.",
+        "description": "Update server URL and settings. Credentials will be requested if authentication is required.",
         "data": {
           "api_url": "API URL",
           "username": "Username",
@@ -77,6 +73,18 @@
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",
           "enable_networks": "Enables sensors for Docker networks on each environment.",
           "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
+        }
+      },
+      "credentials": {
+        "title": "Dockhand Authentication",
+        "description": "Your Dockhand server requires authentication. Enter your local user credentials.",
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        },
+        "data_description": {
+          "username": "Your local Dockhand username.",
+          "password": "Leave blank to keep the existing password (reconfigure only)."
         }
       }
     },
@@ -175,6 +183,24 @@
     "binary_sensor": {
       "online": {
         "name": "Online"
+      },
+      "activity_logging": {
+        "name": "Activity logging"
+      },
+      "metrics_collection": {
+        "name": "Metrics collection"
+      },
+      "vulnerability_scanning": {
+        "name": "Vulnerability scanning"
+      },
+      "update_checks": {
+        "name": "Update checks"
+      },
+      "auto_update": {
+        "name": "Auto update"
+      },
+      "image_pruning": {
+        "name": "Image pruning"
       }
     },
     "switch": {

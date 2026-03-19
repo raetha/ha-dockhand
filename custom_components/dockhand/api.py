@@ -88,11 +88,15 @@ class DockhandClient:
     # ------------------------------------------------------------------ #
 
     async def _request(self, method: str, path: str, **kwargs) -> Any:
-        if not self._cookie:
-            raise DockhandAuthError("Not authenticated")
         url = f"{self._api_url}{path}"
         headers = kwargs.pop("headers", {})
-        headers["Cookie"] = f"dockhand_session={self._cookie}"
+        if self._cookie:
+            headers["Cookie"] = f"dockhand_session={self._cookie}"
+        elif self._username:
+            # Auth is enabled but we have no cookie yet — should not happen in
+            # normal operation since async_login() is called during setup.
+            raise DockhandAuthError("Not authenticated")
+        # If neither cookie nor username: auth is disabled, send unauthenticated.
         headers.setdefault("Accept", "application/json")
 
         timeout = ClientTimeout(total=30)

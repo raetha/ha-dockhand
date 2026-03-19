@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.1.0 — 2026-03-19
+
+Adds support for Dockhand instances running without authentication, and redesigns the config flow to auto-detect whether credentials are needed.
+
+### New features
+- **No-auth support**: the integration now works when Dockhand authentication is fully disabled. The setup flow probes the server first — if it responds without a 401, credentials are skipped entirely and no username or password is stored
+- **Auto-detecting config flow**: setup and reconfigure no longer show a username/password screen by default. Credentials are only requested if the server returns a 401, mirroring how the MFA screen already worked. The `auth_enabled` checkbox from the previous approach has been removed entirely
+
+### Behaviour changes
+- Reconfigure now detects auth state from the server: if Dockhand authentication was disabled since the last setup, stored credentials are automatically removed on reconfigure
+- If a no-auth install receives a 401 (e.g. authentication was re-enabled in Dockhand), the integration surfaces a clear reconfigure prompt rather than silently failing
+
+### Bug fixes
+- Fixed: `async_setup_entry` called `async_login()` even for no-auth installs (no username stored), causing HTTP 400 `Authentication is not enabled` errors on startup
+- Fixed: MFA token submission failed after the config flow rewrite because credentials were not preserved in `_connection_data` before redirecting to the MFA step
+
 ## 1.0.1 — 2026-03-19
 
 Patch release fixing entity ID suffix accumulation, stale entity cleanup, and icons.

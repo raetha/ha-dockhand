@@ -133,7 +133,7 @@ class TestFastAuth(unittest.TestCase):
                 raise DockhandAuthError("expired")
             return [ENV1]
         client.async_get_environments = AsyncMock(side_effect=envs)
-        entry = ConfigEntry(data={"session_cookie": "old"})
+        entry = ConfigEntry(data={"username": "admin", "session_cookie": "old"})
         coord = _fast(client, entry=entry)
         run(coord.async_config_entry_first_refresh())
         client.async_login.assert_called_once()
