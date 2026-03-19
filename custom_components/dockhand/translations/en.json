@@ -114,5 +114,81 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "cpu_usage": {
+        "name": "CPU usage"
+      },
+      "memory_usage": {
+        "name": "Memory usage"
+      },
+      "containers": {
+        "name": "Containers"
+      },
+      "stacks": {
+        "name": "Stacks"
+      },
+      "image_count": {
+        "name": "Image count"
+      },
+      "volume_count": {
+        "name": "Volume count"
+      },
+      "network_count": {
+        "name": "Network count"
+      },
+      "containers_disk_usage": {
+        "name": "Containers disk usage"
+      },
+      "build_cache_size": {
+        "name": "Build cache size"
+      },
+      "activity_events": {
+        "name": "Activity events"
+      },
+      "state": {
+        "name": "State"
+      },
+      "health": {
+        "name": "Health"
+      },
+      "image": {
+        "name": "Image"
+      },
+      "status": {
+        "name": "Status"
+      },
+      "containers_in_stack": {
+        "name": "Containers"
+      },
+      "hawser_agent_version": {
+        "name": "Hawser agent version"
+      },
+      "next_run": {
+        "name": "Next run"
+      },
+      "last_status": {
+        "name": "Last status"
+      }
+    },
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      }
+    },
+    "switch": {
+      "running": {
+        "name": "Container"
+      },
+      "stack": {
+        "name": "Stack"
+      }
+    },
+    "button": {
+      "restart": {
+        "name": "Restart"
+      }
+    }
   }
 }

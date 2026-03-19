@@ -63,23 +63,14 @@
       "hawser_agent_version": {
         "default": "mdi:transit-connection-variant"
       },
-      "size": {
-        "default": "mdi:harddisk"
-      },
       "next_run": {
         "default": "mdi:calendar-clock"
       },
       "last_status": {
         "default": "mdi:clipboard-check"
       },
-      "volume": {
-        "default": "mdi:database"
-      },
-      "network": {
+      "network_count": {
         "default": "mdi:lan"
-      },
-      "schedule": {
-        "default": "mdi:calendar-clock"
       }
     },
     "binary_sensor": {

@@ -108,6 +108,7 @@ class _BaseFastStackButton(CoordinatorEntity[DockhandFastCoordinator], ButtonEnt
 class DockhandContainerRestartButton(_BaseFastContainerButton):
     """Restart a running container — mirrors Portainer's restart button entity."""
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "restart"
     _attr_name = "Restart"
 
     def __init__(self, coordinator: DockhandFastCoordinator, client: Any,
@@ -123,6 +124,7 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
 class DockhandStackRestartButton(_BaseFastStackButton):
     """Restart a running compose stack."""
     _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "restart"
     _attr_name = "Restart"
 
     def __init__(self, coordinator: DockhandFastCoordinator, client: Any,

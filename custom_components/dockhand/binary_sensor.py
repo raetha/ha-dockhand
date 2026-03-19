@@ -83,6 +83,7 @@ class BaseEnvBinarySensor(CoordinatorEntity[DockhandFastCoordinator], BinarySens
 
 class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_translation_key = "online"
     _attr_name = "Online"
 
     def __init__(self, coordinator: DockhandFastCoordinator,

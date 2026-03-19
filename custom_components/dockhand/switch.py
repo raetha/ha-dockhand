@@ -113,6 +113,7 @@ class _BaseFastStackSwitch(CoordinatorEntity[DockhandFastCoordinator], SwitchEnt
 
 class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
     """Start/stop switch for a container — on=running, off=stopped."""
+    _attr_translation_key = "running"
     _attr_name = "Container"
 
     def __init__(self, coordinator: DockhandFastCoordinator, client: Any,
@@ -141,6 +142,7 @@ class DockhandStackRunningSwitch(_BaseFastStackSwitch):
     entity of a device shares the device's name, making it the canonical
     on/off control in dashboards and automations.
     """
+    _attr_translation_key = "stack"
     _attr_name = "Stack"
 
     def __init__(self, coordinator: DockhandFastCoordinator, client: Any,

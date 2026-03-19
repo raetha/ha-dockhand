@@ -408,7 +408,12 @@ class TestSlowSensors(unittest.TestCase):
         self.assertEqual(sensor.native_value, "latest")
 
     def test_image_name_is_repo_portion(self):
-        """Entity name is the repository portion only (e.g. 'nginx'), not the full tag."""
+        """Entity name is the repository portion only (e.g. 'nginx'), not the full tag.
+
+        The name is stable across image pulls so dashboard/automation references
+        remain valid. The unique_id uses the image hash so stale entities are
+        cleaned up when the old image is pruned from Docker.
+        """
         sc = _sensor_classes()
         coord = _slow_coord()
         sensor = sc["DockhandImageSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, IMAGE)

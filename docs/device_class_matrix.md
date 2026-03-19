@@ -87,7 +87,7 @@ primary tag (e.g. `cloudflare/cloudflared`) and the state is the tag portion (e.
 
 | Entity | Platform | Device class | State class | Unit | Notes |
 |---|---|---|---|---|---|
-| *repo-name* | sensor | — | — | — | Named for the image repo (e.g. `nginx`); state is the tag (e.g. `latest`). Attributes: tags (list), digests (list), size_bytes, created, containers_using. |
+| *repo-name* | sensor | — | — | — | Named for the image repo (e.g. `nginx`); state is the tag (e.g. `latest`). Name is stable across image pulls so dashboard and automation references remain valid. Attributes: tags (list), digests (list), size_bytes, created, containers_using. |
 
 ---
 

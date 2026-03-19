@@ -49,6 +49,7 @@ def _make_fast_coordinator(data, entry=None):
 def _make_slow_coordinator(data, entry=None):
     coord = MagicMock(spec=DockhandSlowCoordinator)
     coord.data = data
+    coord.last_update_success = True
     coord.async_config_entry_first_refresh = AsyncMock()
     coord.async_add_listener = MagicMock(return_value=lambda: None)
     return coord
@@ -400,6 +401,7 @@ class TestSetupEntry(unittest.TestCase):
 
         slow = MagicMock(spec=DockhandSlowCoordinator)
         slow.data = slow_data or {"environments": {}, "schedules": []}
+        slow.last_update_success = True
         if slow_side_effect:
             slow.async_config_entry_first_refresh = AsyncMock(side_effect=slow_side_effect)
         else:

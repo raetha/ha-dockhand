@@ -102,15 +102,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     base_url = entry.data.get(CONF_API_URL, "")
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
 
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Run cleanup immediately on setup so that stale registry entries from a
+    # previous install/reload are removed before platforms add new entities.
+    # Without this, entities pruned between reloads (images, networks, volumes,
+    # containers) persist in the registry and cause _2/_3/etc suffixes when new
+    # entities with the same name try to register.
+    _remove_stale_devices(hass, entry)
+    _remove_stale_entities(hass, entry)
 
-    # Register stale-device cleanup listener. After every fast coordinator
-    # refresh, remove devices for containers/stacks that no longer exist in
-    # Dockhand. This runs after platforms are loaded so the entity registry
-    # is fully populated before we start pruning.
-    # Stale cleanup runs on both coordinator updates. Fast handles container/stack
-    # device registry entries. Slow handles entity registry entries for images,
-    # networks, and volumes, plus any legacy device registry entries for those types.
+    # Register stale-device cleanup listeners BEFORE platform setup so that
+    # cleanup fires before async_add_entities on each coordinator update.
+    # Listener registration order determines fire order — if cleanup runs after
+    # entity addition, a recreated container (new Docker ID, same name) briefly
+    # has both old and new devices in the registry simultaneously, causing HA to
+    # suffix the new entity_id with "_2". By cleaning up first, the old device
+    # is gone before the new one is added, so the entity_id is clean.
     entry.async_on_unload(
         fast_coordinator.async_add_listener(
             lambda: _remove_stale_devices(hass, entry)
@@ -124,6 +130,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
             )
         )
     )
+
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
 

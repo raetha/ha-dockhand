@@ -84,6 +84,13 @@ OIDC/SSO accounts are **not supported**. The integration authenticates with the 
 ### MFA support
 If your local user has MFA enabled, the integration will prompt for your TOTP code during setup and whenever the session expires. HA stores the session cookie and re-uses it automatically; it only asks for a code again when the session expires or credentials change.
 
+### Session timeout and re-authentication
+Dockhand's default session timeout is **86400 seconds (24 hours)**. When a session expires, the integration silently re-authenticates using the stored username and password — but if MFA is enabled it cannot supply a TOTP code automatically, so HA will surface a re-authentication prompt instead.
+
+If you find yourself re-authenticating frequently, increase the session timeout in Dockhand under **Settings → Authentication → General → Session timeout**. A value of `604800` (7 days) or `2592000` (30 days) is reasonable for a local home network. The field accepts seconds.
+
+> **Note:** Dockhand does not currently provide a token refresh API, so the integration cannot extend a session silently — it can only re-use the cookie until it expires.
+
 ---
 
 ## Device model
@@ -240,6 +247,12 @@ Entities update automatically when their coordinator refreshes. If a fetch fails
 
 **Cannot connect**
 Check the API URL is reachable from the HA host. Confirm you are using a local user, not OIDC.
+
+**Entity IDs have a `_2` or `_3` suffix after a container or image update**
+When a container is recreated with a new image, or a new image is pulled before the old one is pruned, both the old and new objects briefly exist simultaneously. HA assigns a suffix to the new entity to avoid a collision. Once the old object is gone (container removed, image pruned) and the integration has reloaded or polled, the stale entity is cleaned up automatically. To reclaim the clean entity ID, go to **Settings → Devices & Services → ⋮ → Recreate entity IDs** on the Dockhand integration card. HA will rename any suffixed entity whose "natural" ID is now free. Any automations or dashboard cards referencing the suffixed ID will need to be updated after the rename.
+
+**Re-authentication prompt appears daily (or frequently)**
+Dockhand's default session timeout is 24 hours. When a session expires and MFA is enabled, the integration cannot re-authenticate silently and HA surfaces a prompt. Increase the timeout under **Settings → Authentication → General → Session timeout** in Dockhand — `604800` (7 days) or `2592000` (30 days) are common values. The field accepts seconds.
 
 **MFA prompted on every Reconfigure**
 Dockhand validates the session when settings change. If your user has MFA, one code per reconfigure is expected.
