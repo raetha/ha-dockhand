@@ -6,12 +6,11 @@ ZIP file they can attach to a bug report.
 
 Sensitive fields (API token) are redacted before export.
 """
-from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.core import HomeAssistant
 from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.core import HomeAssistant
 
 from . import DockhandConfigEntry
 
@@ -55,11 +54,13 @@ async def async_get_config_entry_diagnostics(
             "network_count": len(slow_env.get("networks") or []),
             # Include freestanding vs compose-managed breakdown
             "freestanding_containers": sum(
-                1 for c in containers
+                1
+                for c in containers
                 if not (c.get("labels") or {}).get("com.docker.compose.project")
             ),
             "compose_containers": sum(
-                1 for c in containers
+                1
+                for c in containers
                 if (c.get("labels") or {}).get("com.docker.compose.project")
             ),
         }
@@ -72,12 +73,16 @@ async def async_get_config_entry_diagnostics(
         "coordinator": {
             "fast": {
                 "last_update_success": fast.last_update_success,
-                "last_exception": str(fast.last_exception) if fast.last_exception else None,
+                "last_exception": str(fast.last_exception)
+                if fast.last_exception
+                else None,
                 "data": fast_data,
             },
             "slow": {
                 "last_update_success": slow.last_update_success,
-                "last_exception": str(slow.last_exception) if slow.last_exception else None,
+                "last_exception": str(slow.last_exception)
+                if slow.last_exception
+                else None,
                 "data": slow_data,
             },
         },

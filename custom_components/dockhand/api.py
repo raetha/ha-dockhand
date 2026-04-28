@@ -1,7 +1,5 @@
-from __future__ import annotations
-
 import logging
-from typing import Any, Optional
+from typing import Any
 
 from aiohttp import ClientSession, ClientTimeout
 
@@ -31,7 +29,7 @@ class DockhandClient:
     def __init__(self, session: ClientSession, config: dict[str, Any]) -> None:
         self._session = session
         self._api_url = config.get("api_url", "").rstrip("/")
-        self._api_token: Optional[str] = config.get("api_token")
+        self._api_token: str | None = config.get("api_token")
 
     # ------------------------------------------------------------------ #
     # Internal helper
@@ -111,7 +109,9 @@ class DockhandClient:
 
     async def async_start_container(self, env_id: int, container_id: str) -> None:
         """Start a stopped container. POST /api/containers/[id]/start?env=X"""
-        await self._request("POST", f"/api/containers/{container_id}/start?env={env_id}")
+        await self._request(
+            "POST", f"/api/containers/{container_id}/start?env={env_id}"
+        )
 
     async def async_stop_container(self, env_id: int, container_id: str) -> None:
         """Stop a running container. POST /api/containers/[id]/stop?env=X"""
@@ -119,7 +119,9 @@ class DockhandClient:
 
     async def async_restart_container(self, env_id: int, container_id: str) -> None:
         """Restart a running container. POST /api/containers/[id]/restart?env=X"""
-        await self._request("POST", f"/api/containers/{container_id}/restart?env={env_id}")
+        await self._request(
+            "POST", f"/api/containers/{container_id}/restart?env={env_id}"
+        )
 
     # ------------------------------------------------------------------ #
     # Stack actions

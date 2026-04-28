@@ -1,6 +1,7 @@
-from __future__ import annotations
-
-from homeassistant.components.binary_sensor import BinarySensorDeviceClass, BinarySensorEntity
+from homeassistant.components.binary_sensor import (
+    BinarySensorDeviceClass,
+    BinarySensorEntity,
+)
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import DeviceInfo
@@ -12,13 +13,14 @@ from .const import CONF_API_URL
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import _env_device
 
-
 # Coordinator-based read-only platform.
 PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: DockhandConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+    async_add_entities: AddEntitiesCallback,
 ) -> None:
     fast: DockhandFastCoordinator = entry.runtime_data.fast_coordinator
     slow: DockhandSlowCoordinator = entry.runtime_data.slow_coordinator
@@ -60,13 +62,17 @@ async def async_setup_entry(
     )
 
 
-class BaseEnvBinarySensor(CoordinatorEntity[DockhandFastCoordinator], BinarySensorEntity):
+class BaseEnvBinarySensor(
+    CoordinatorEntity[DockhandFastCoordinator], BinarySensorEntity
+):
     """Base for all environment-level binary sensors."""
+
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator)
         self._env_id = env_id
         self._base_url = base_url
@@ -86,8 +92,9 @@ class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
     _attr_translation_key = "online"
     _attr_name = "Online"
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_online"
 
@@ -102,8 +109,9 @@ class DockhandEnvCollectActivitySensor(BaseEnvBinarySensor):
     _attr_translation_key = "activity_logging"
     _attr_name = "Activity logging"
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_collect_activity"
 
@@ -119,8 +127,9 @@ class DockhandEnvCollectMetricsSensor(BaseEnvBinarySensor):
     _attr_translation_key = "metrics_collection"
     _attr_name = "Metrics collection"
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_collect_metrics"
 
@@ -136,8 +145,9 @@ class DockhandEnvScannerEnabledSensor(BaseEnvBinarySensor):
     _attr_translation_key = "vulnerability_scanning"
     _attr_name = "Vulnerability scanning"
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_scanner_enabled"
 
@@ -153,8 +163,9 @@ class DockhandEnvUpdateCheckSensor(BaseEnvBinarySensor):
     _attr_translation_key = "update_checks"
     _attr_name = "Update checks"
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_update_check_enabled"
 
@@ -170,8 +181,9 @@ class DockhandEnvAutoUpdateSensor(BaseEnvBinarySensor):
     _attr_translation_key = "auto_update"
     _attr_name = "Auto update"
 
-    def __init__(self, coordinator: DockhandFastCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_auto_update"
 
@@ -181,24 +193,25 @@ class DockhandEnvAutoUpdateSensor(BaseEnvBinarySensor):
         return bool(v) if v is not None else None
 
 
-class BaseSlowEnvBinarySensor(CoordinatorEntity[DockhandSlowCoordinator], BinarySensorEntity):
+class BaseSlowEnvBinarySensor(
+    CoordinatorEntity[DockhandSlowCoordinator], BinarySensorEntity
+):
     """Base for environment binary sensors sourced from the slow coordinator."""
+
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
-    def __init__(self, coordinator: DockhandSlowCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandSlowCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator)
         self._env_id = env_id
         self._base_url = base_url
 
     def _env_obj(self) -> dict:
-        return (
-            (self.coordinator.data or {})
-            .get("environments", {})
-            .get(self._env_id, {})
-            .get("env") or {}
-        )
+        return (self.coordinator.data or {}).get("environments", {}).get(
+            self._env_id, {}
+        ).get("env") or {}
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -212,8 +225,9 @@ class DockhandEnvImagePruneBinarySensor(BaseSlowEnvBinarySensor):
     _attr_translation_key = "image_pruning"
     _attr_name = "Image pruning"
 
-    def __init__(self, coordinator: DockhandSlowCoordinator,
-                 env_id: int, base_url: str) -> None:
+    def __init__(
+        self, coordinator: DockhandSlowCoordinator, env_id: int, base_url: str
+    ) -> None:
         super().__init__(coordinator, env_id, base_url)
         self._attr_unique_id = f"dockhand_env_{env_id}_image_prune_enabled"
 
@@ -221,5 +235,3 @@ class DockhandEnvImagePruneBinarySensor(BaseSlowEnvBinarySensor):
     def is_on(self) -> bool | None:
         v = self._env_obj().get("imagePruneEnabled")
         return bool(v) if v is not None else None
-
-

@@ -1,8 +1,9 @@
 # Test and lint dependencies for the Dockhand integration.
 #
-# The unittest suite itself uses only stdlib + ha_stubs and requires no
-# third-party packages. Ruff is the only external dependency, used for
-# linting the integration source.
+# Requires Python 3.14+ (matching Home Assistant 2026.3+).
+#
+# The unittest suite uses only stdlib + ha_stubs — no HA installation needed.
+# Ruff is the only external dependency, used for linting and format checking.
 #
 # To run everything (lint + tests):
 #   python3 tests/run_tests.py          # direct; warns and skips lint if ruff missing
@@ -10,9 +11,5 @@
 #
 # To install manually:
 #   pip install ruff
-#
-# Optional: install pyyaml for workflow static analysis tests
-#   pip install pyyaml
-# Without pyyaml the workflow tests are automatically skipped.
 
 ruff

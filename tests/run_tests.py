@@ -24,12 +24,13 @@ install()
 lint_ok = True
 if shutil.which("ruff"):
     print("── Ruff lint ────────────────────────────────────────────────────────")
-    r = subprocess.run(["ruff", "check", TARGET], capture_output=False)
-    lint_ok = r.returncode == 0
+    r1 = subprocess.run(["ruff", "check", TARGET], capture_output=False)
+    r2 = subprocess.run(["ruff", "format", "--check", TARGET], capture_output=False)
+    lint_ok = r1.returncode == 0 and r2.returncode == 0
     if lint_ok:
         print("Lint: OK\n")
     else:
-        print("\nLint: FAILED\n")
+        print("\nLint: FAILED (run `ruff check` and/or `ruff format` to see details)\n")
 else:
     print("── Ruff lint ────────────────────────────────────────────────────────")
     print("WARNING: ruff not found — skipping lint. Install with: pip install ruff\n")

@@ -1,26 +1,38 @@
-from __future__ import annotations
-
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType
 
-from .const import (
-    CONF_VERIFY_SSL,
-    DOMAIN, PLATFORMS, CONF_API_URL, CONF_API_TOKEN,
-    CONF_ENABLE_SCHEDULES, CONF_ENABLE_IMAGES, CONF_ENABLE_VOLUMES, CONF_ENABLE_NETWORKS,
-    _LEGACY_CONF_USERNAME, _LEGACY_CONF_PASSWORD, _LEGACY_CONF_SESSION_COOKIE,
-)
 from .api import DockhandClient
+from .const import (
+    _LEGACY_CONF_PASSWORD,
+    _LEGACY_CONF_SESSION_COOKIE,
+    _LEGACY_CONF_USERNAME,
+    CONF_API_TOKEN,
+    CONF_API_URL,
+    CONF_ENABLE_IMAGES,
+    CONF_ENABLE_NETWORKS,
+    CONF_ENABLE_SCHEDULES,
+    CONF_ENABLE_VOLUMES,
+    CONF_VERIFY_SSL,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import (
-    _env_url, _container_url, _stack_url,
-    _network_url, _image_url, _volume_url, _schedules_url,
+    _container_url,
+    _env_url,
+    _image_url,
+    _network_url,
+    _schedules_url,
+    _stack_url,
+    _volume_url,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -29,6 +41,7 @@ _LOGGER = logging.getLogger(__name__)
 @dataclass
 class DockhandData:
     """Runtime data stored on the config entry."""
+
     client: DockhandClient
     fast_coordinator: DockhandFastCoordinator
     slow_coordinator: DockhandSlowCoordinator
@@ -46,22 +59,30 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     client = DockhandClient(session, entry.data)
 
     # Detect legacy config entries (pre-1.2.0) that used session-cookie auth.
-    has_legacy = entry.data.get(_LEGACY_CONF_USERNAME) or entry.data.get(_LEGACY_CONF_SESSION_COOKIE)
+    has_legacy = entry.data.get(_LEGACY_CONF_USERNAME) or entry.data.get(
+        _LEGACY_CONF_SESSION_COOKIE
+    )
     if has_legacy:
         if entry.data.get(CONF_API_TOKEN):
             # Reauth flow already stored a token — strip the legacy keys so
             # this migration path is only triggered once.
             clean = {
-                k: v for k, v in entry.data.items()
-                if k not in (_LEGACY_CONF_USERNAME, _LEGACY_CONF_PASSWORD, _LEGACY_CONF_SESSION_COOKIE)
+                k: v
+                for k, v in entry.data.items()
+                if k
+                not in (
+                    _LEGACY_CONF_USERNAME,
+                    _LEGACY_CONF_PASSWORD,
+                    _LEGACY_CONF_SESSION_COOKIE,
+                )
             }
             hass.config_entries.async_update_entry(entry, data=clean)
         else:
             # No token yet — prompt the user to provide one via reauth.
             raise ConfigEntryAuthFailed(
-                "This Dockhand entry uses the old session-cookie authentication which is no "
-                "longer supported. Please use Reconfigure to provide an API token instead. "
-                "Generate one in Dockhand under Profile → API tokens."
+                "This Dockhand entry uses the old session-cookie auth, "
+                "which is no longer supported. Use Reconfigure to provide "
+                "an API token (Profile → API tokens in Dockhand)."
             )
 
     config = {**entry.data, **entry.options}
@@ -119,9 +140,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     # suffix the new entity_id with "_2". By cleaning up first, the old device
     # is gone before the new one is added, so the entity_id is clean.
     entry.async_on_unload(
-        fast_coordinator.async_add_listener(
-            lambda: _remove_stale_devices(hass, entry)
-        )
+        fast_coordinator.async_add_listener(lambda: _remove_stale_devices(hass, entry))
     )
     entry.async_on_unload(
         slow_coordinator.async_add_listener(
@@ -178,7 +197,8 @@ def _register_devices(
         # (containers not managed by Compose). Compose containers are parented
         # directly to their Stack device, so the group would otherwise be empty.
         freestanding = [
-            c for c in (env_data.get("containers") or [])
+            c
+            for c in (env_data.get("containers") or [])
             if not (c.get("labels") or {}).get("com.docker.compose.project")
         ]
         if freestanding:
@@ -227,7 +247,9 @@ def _register_devices(
         # enabled AND the slow coordinator has confirmed that resources exist for
         # this environment. This preserves the "no empty groups" principle while
         # ensuring the parent device exists before its child entities load.
-        slow_env = (slow_coordinator.data or {}).get("environments", {}).get(env_id) or {}
+        slow_env = (slow_coordinator.data or {}).get("environments", {}).get(
+            env_id
+        ) or {}
         if enable_networks and slow_env.get("networks"):
             registry.async_get_or_create(
                 config_entry_id=entry.entry_id,
@@ -276,7 +298,7 @@ def _register_devices(
 
 def _remove_stale_entities(
     hass: HomeAssistant,
-    entry: "DockhandConfigEntry",
+    entry: DockhandConfigEntry,
 ) -> None:
     """Remove entity registry entries for resources that no longer exist in Dockhand.
 
@@ -375,7 +397,7 @@ def _remove_stale_entities(
 
 def _remove_stale_devices(
     hass: HomeAssistant,
-    entry: "DockhandConfigEntry",
+    entry: DockhandConfigEntry,
 ) -> None:
     """Remove devices whose backing objects have been deleted in Dockhand.
 
@@ -415,8 +437,13 @@ def _remove_stale_devices(
         for domain, identifier in device.identifiers:
             if domain != DOMAIN:
                 continue
-            if identifier.startswith("container_") and identifier not in live_containers:
-                _LOGGER.debug("Dockhand: removing stale container device %s", identifier)
+            if (
+                identifier.startswith("container_")
+                and identifier not in live_containers
+            ):
+                _LOGGER.debug(
+                    "Dockhand: removing stale container device %s", identifier
+                )
                 registry.async_remove_device(device.id)
             elif identifier.startswith("stack_") and identifier not in live_stacks:
                 _LOGGER.debug("Dockhand: removing stale stack device %s", identifier)
@@ -431,5 +458,5 @@ def _remove_stale_devices(
 
 async def async_unload_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> bool:
     """Unload Dockhand config entry."""
-    # runtime_data is cleaned up automatically by HA — no manual hass.data removal needed.
+    # runtime_data is cleaned up automatically by HA.
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

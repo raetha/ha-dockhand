@@ -5,7 +5,6 @@ switch.py, and button.py can all import from here without any circular
 dependencies.  Platform modules (sensor.py etc.) are loaded lazily by HA and
 must never be imported by __init__.py or by each other.
 """
-from __future__ import annotations
 
 from typing import Any
 
@@ -14,13 +13,13 @@ from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 
-
 # --------------------------------------------------------------------------- #
 # Section URL helpers
 # Dockhand uses flat paths — no hash routing, no per-object deep links.
 # All links land on the relevant section list; the user selects env/object there.
 # Pattern: {base_url}/{section}
 # --------------------------------------------------------------------------- #
+
 
 def _section_url(base_url: str, section: str) -> str | None:
     """Return a Dockhand section URL, or None if base_url is not configured."""
@@ -60,8 +59,10 @@ def _schedules_url(base_url: str) -> str | None:
 # model field shows as the "Type" badge in the HA device list.
 # --------------------------------------------------------------------------- #
 
-def _env_device(env_id: int, env_name: str, base_url: str,
-                stats: dict | None = None) -> DeviceInfo:
+
+def _env_device(
+    env_id: int, env_name: str, base_url: str, stats: dict | None = None
+) -> DeviceInfo:
     info: dict[str, Any] = {
         "identifiers": {(DOMAIN, f"env_{env_id}")},
         "name": env_name,
@@ -125,9 +126,14 @@ def _volume_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInf
     )
 
 
-def _container_device(container_id: str, container_name: str,
-                      env_id: int, env_name: str, base_url: str,
-                      stack_name: str | None = None) -> DeviceInfo:
+def _container_device(
+    container_id: str,
+    container_name: str,
+    env_id: int,
+    env_name: str,
+    base_url: str,
+    stack_name: str | None = None,
+) -> DeviceInfo:
     """Device info for a container.
 
     If stack_name is provided the container is compose-managed and is parented
@@ -149,7 +155,9 @@ def _container_device(container_id: str, container_name: str,
     )
 
 
-def _stack_device(stack_name: str, env_id: int, env_name: str, base_url: str) -> DeviceInfo:
+def _stack_device(
+    stack_name: str, env_id: int, env_name: str, base_url: str
+) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"stack_{env_id}_{stack_name}")},
         name=f"{env_name} – {stack_name}",
@@ -161,8 +169,9 @@ def _stack_device(stack_name: str, env_id: int, env_name: str, base_url: str) ->
     )
 
 
-def _network_device(network_id: str, network_name: str,
-                    env_id: int, env_name: str, base_url: str) -> DeviceInfo:
+def _network_device(
+    network_id: str, network_name: str, env_id: int, env_name: str, base_url: str
+) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"network_{network_id}")},
         name=f"{env_name} – {network_name}",
@@ -174,7 +183,9 @@ def _network_device(network_id: str, network_name: str,
     )
 
 
-def _volume_device(volume_name: str, env_id: int, env_name: str, base_url: str) -> DeviceInfo:
+def _volume_device(
+    volume_name: str, env_id: int, env_name: str, base_url: str
+) -> DeviceInfo:
     return DeviceInfo(
         identifiers={(DOMAIN, f"volume_{env_id}_{volume_name}")},
         name=f"{env_name} – {volume_name}",
@@ -201,6 +212,7 @@ def _image_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInfo
 # --------------------------------------------------------------------------- #
 # Container helpers
 # --------------------------------------------------------------------------- #
+
 
 def _image_display_name(image: dict) -> str:
     """Return a human-readable name for an image.

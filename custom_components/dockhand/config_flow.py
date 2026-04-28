@@ -1,31 +1,28 @@
-from __future__ import annotations
-
 from typing import Any
 
 import voluptuous as vol
-
 from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import DockhandClient, DockhandAuthError
+from .api import DockhandAuthError, DockhandClient
 from .const import (
-    DOMAIN,
-    CONF_API_URL,
     CONF_API_TOKEN,
+    CONF_API_URL,
+    CONF_ENABLE_IMAGES,
+    CONF_ENABLE_NETWORKS,
+    CONF_ENABLE_SCHEDULES,
+    CONF_ENABLE_VOLUMES,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
-    CONF_ENABLE_SCHEDULES,
-    CONF_ENABLE_IMAGES,
-    CONF_ENABLE_VOLUMES,
-    CONF_ENABLE_NETWORKS,
     CONF_VERIFY_SSL,
+    DEFAULT_ENABLE_IMAGES,
+    DEFAULT_ENABLE_NETWORKS,
+    DEFAULT_ENABLE_SCHEDULES,
+    DEFAULT_ENABLE_VOLUMES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
-    DEFAULT_ENABLE_SCHEDULES,
-    DEFAULT_ENABLE_IMAGES,
-    DEFAULT_ENABLE_VOLUMES,
-    DEFAULT_ENABLE_NETWORKS,
+    DOMAIN,
 )
 
 DEFAULT_VERIFY_SSL = True
@@ -34,35 +31,79 @@ DEFAULT_VERIFY_SSL = True
 def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     """Step 1: URL and feature/poll settings."""
     d = defaults or {}
-    return vol.Schema({
-        vol.Required(CONF_API_URL, default=d.get(CONF_API_URL, "")): str,
-        vol.Optional(CONF_POLL_INTERVAL, default=d.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)): int,
-        vol.Optional(CONF_POLL_INTERVAL_SLOW, default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW)): int,
-        vol.Optional(CONF_ENABLE_SCHEDULES, default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES)): bool,
-        vol.Optional(CONF_ENABLE_IMAGES, default=d.get(CONF_ENABLE_IMAGES, DEFAULT_ENABLE_IMAGES)): bool,
-        vol.Optional(CONF_ENABLE_VOLUMES, default=d.get(CONF_ENABLE_VOLUMES, DEFAULT_ENABLE_VOLUMES)): bool,
-        vol.Optional(CONF_ENABLE_NETWORKS, default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS)): bool,
-        vol.Optional(CONF_VERIFY_SSL, default=d.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)): bool,
-    })
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_URL, default=d.get(CONF_API_URL, "")): str,
+            vol.Optional(
+                CONF_POLL_INTERVAL,
+                default=d.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
+            ): int,
+            vol.Optional(
+                CONF_POLL_INTERVAL_SLOW,
+                default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW),
+            ): int,
+            vol.Optional(
+                CONF_ENABLE_SCHEDULES,
+                default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_IMAGES,
+                default=d.get(CONF_ENABLE_IMAGES, DEFAULT_ENABLE_IMAGES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_VOLUMES,
+                default=d.get(CONF_ENABLE_VOLUMES, DEFAULT_ENABLE_VOLUMES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_NETWORKS,
+                default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS),
+            ): bool,
+            vol.Optional(
+                CONF_VERIFY_SSL, default=d.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
+            ): bool,
+        }
+    )
 
 
 def _token_schema() -> vol.Schema:
     """Step 2: API token — only shown when server requires authentication."""
-    return vol.Schema({
-        vol.Required(CONF_API_TOKEN): str,
-    })
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_TOKEN): str,
+        }
+    )
 
 
 def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     d = defaults or {}
-    return vol.Schema({
-        vol.Optional(CONF_POLL_INTERVAL, default=d.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL)): int,
-        vol.Optional(CONF_POLL_INTERVAL_SLOW, default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW)): int,
-        vol.Optional(CONF_ENABLE_SCHEDULES, default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES)): bool,
-        vol.Optional(CONF_ENABLE_IMAGES, default=d.get(CONF_ENABLE_IMAGES, DEFAULT_ENABLE_IMAGES)): bool,
-        vol.Optional(CONF_ENABLE_VOLUMES, default=d.get(CONF_ENABLE_VOLUMES, DEFAULT_ENABLE_VOLUMES)): bool,
-        vol.Optional(CONF_ENABLE_NETWORKS, default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS)): bool,
-    })
+    return vol.Schema(
+        {
+            vol.Optional(
+                CONF_POLL_INTERVAL,
+                default=d.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
+            ): int,
+            vol.Optional(
+                CONF_POLL_INTERVAL_SLOW,
+                default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW),
+            ): int,
+            vol.Optional(
+                CONF_ENABLE_SCHEDULES,
+                default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_IMAGES,
+                default=d.get(CONF_ENABLE_IMAGES, DEFAULT_ENABLE_IMAGES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_VOLUMES,
+                default=d.get(CONF_ENABLE_VOLUMES, DEFAULT_ENABLE_VOLUMES),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_NETWORKS,
+                default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS),
+            ): bool,
+        }
+    )
 
 
 class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -137,11 +178,17 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     )
 
                 # reauth and reconfigure — update the existing entry
-                entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+                entry = self.hass.config_entries.async_get_entry(
+                    self.context["entry_id"]
+                )
                 if entry:
                     self.hass.config_entries.async_update_entry(entry, data=merged)
                     await self.hass.config_entries.async_reload(entry.entry_id)
-                reason = "reauth_successful" if self._flow_origin == "reauth" else "reconfigure_successful"
+                reason = (
+                    "reauth_successful"
+                    if self._flow_origin == "reauth"
+                    else "reconfigure_successful"
+                )
                 return self.async_abort(reason=reason)
 
             except DockhandAuthError:
@@ -207,8 +254,11 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await client.async_probe()
                 # No auth required — strip any previously stored token.
-                clean = {k: v for k, v in {**entry.data, **user_input}.items()
-                         if k != CONF_API_TOKEN}
+                clean = {
+                    k: v
+                    for k, v in {**entry.data, **user_input}.items()
+                    if k != CONF_API_TOKEN
+                }
                 self.hass.config_entries.async_update_entry(entry, data=clean)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
@@ -238,4 +288,6 @@ class DockhandOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
         defaults = {**self._entry.data, **self._entry.options}
-        return self.async_show_form(step_id="init", data_schema=_options_schema(defaults))
+        return self.async_show_form(
+            step_id="init", data_schema=_options_schema(defaults)
+        )

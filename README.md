@@ -264,7 +264,7 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 
 ## Requirements
 
-- Home Assistant 2026.3 or later
+- Home Assistant 2026.3 or later (requires Python 3.14)
 - Dockhand ≥ 1.0.26 (for API token authentication; no-auth installs work on any version)
 - Dockhand reachable from the HA host
 

@@ -1,0 +1,45 @@
+line-length = 88
+target-version = "py314"
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "F",      # pyflakes
+    "I",      # isort
+    "W",      # pycodestyle warnings
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+    "FURB",   # refurb
+]
+ignore = [
+    # Boolean positional args are idiomatic in HA entity constructors
+    "FBT001",
+    "FBT002",
+    "FBT003",
+    # HA callback signatures require matching the platform API exactly;
+    # unused args in async_remove_config_entry_device,
+    # async_get_config_entry_diagnostics, and async_get_options_flow
+    # are mandated by the HA platform contract.
+    "ARG001",
+    "ARG004",
+    # HA uses many-arg constructors throughout; suppressing globally
+    "PLR0913",
+    # Exception message style: HA raises UpdateFailed with f-strings throughout core
+    "TRY003",
+    "EM101",
+    "EM102",
+    # Abstract raise to inner function is rarely beneficial in coordinator update methods
+    "TRY301",
+    # Type-checking block requirement is overly strict for small integrations
+    "TC001",
+    "TC002",
+    # Docstring imperative mood is stylistic preference, not a correctness issue
+    "D401",
+]
+
+[lint.per-file-ignores]
+"tests/**" = [
+    "S101",   # assert is fine in tests
+    "D",      # no docstring requirements in tests
+    "ANN",    # no annotation requirements in tests
+]

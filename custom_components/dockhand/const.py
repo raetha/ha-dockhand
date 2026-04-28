@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 DOMAIN = "dockhand"
 
 CONF_API_URL = "api_url"

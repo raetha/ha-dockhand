@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — unreleased
+## 1.2.0 — 2026-04-28
 
 **Breaking change** — session-cookie authentication (username + password + MFA) has been
 removed. The integration now authenticates exclusively via Dockhand API tokens or requires
@@ -19,17 +19,46 @@ action.
 
 ### Changes
 
+**Authentication**
 - **Token authentication**: all API requests now use `Authorization: Bearer dh_...`
-  instead of session cookies. Tokens do not expire on a 24-hour session timeout, which
-  eliminates the periodic re-authentication prompts that affected MFA users
-- **Removed**: username, password, and MFA fields from the config flow. The setup flow
-  now probes the server first; if authentication is required it prompts for a token only
+  instead of session cookies. Tokens do not expire on a 24-hour session timeout,
+  eliminating the periodic re-authentication prompts that affected MFA users
+- **Removed**: username, password, and MFA fields from the config flow. Setup now
+  probes the server first; a token is only requested if the server returns 401
 - **Removed**: `DockhandMFARequiredError`, `DockhandAuthError` login path, and all
   `async_login()` logic from the API client
-- **Fixed**: stack start/stop/restart actions now include `Accept: application/json`,
-  causing Dockhand to run the operation synchronously and return a real result rather
-  than a job-ID reference for async polling. This ensures switch and button entities
-  correctly surface failures instead of silently succeeding
+- **Fixed**: legacy config entries (pre-1.2.0) that stored a session cookie alongside
+  a newly provided API token no longer loop on startup — the legacy keys are stripped
+  on first successful setup after re-authentication
+
+**API**
+- **Fixed**: stack start/stop/restart actions now send `Accept: application/json`,
+  causing Dockhand to execute the operation synchronously and return a real result
+  rather than a job-ID for async polling. Switch and button entities now correctly
+  surface failures instead of silently succeeding
+
+**Code quality**
+- **Python 3.14**: minimum Python version raised to 3.14 (matching Home Assistant
+  2026.3). `from __future__ import annotations` removed from all files — lazy
+  annotation evaluation is now the default interpreter behaviour
+- **Ruff format**: code is now fully formatted with `ruff format` in addition to
+  passing `ruff check`. Both checks run in CI and in the local test runner
+- **Ruff config**: lint configuration moved from inline CI flags to `.ruff.toml` at
+  repo root, with a documented rule set and per-file ignores for tests
+- **Dead code removed**: unreachable retry block after `_handle_reauth` in the fast
+  coordinator collapsed; unused imports (`DockhandAuthError` in `__init__.py`,
+  `DockhandError` in `config_flow.py`) removed
+
+**Repository**
+- Added `.github/ISSUE_TEMPLATE/` with bug report, feature request, and blank issue
+  configuration templates
+- Added `dependabot.yml` for automated weekly updates of GitHub Actions and pip
+  dependencies
+- Added `CONTRIBUTING.md` with development setup, test/lint instructions, and
+  pre-PR checklist
+- Added `.gitattributes` enforcing LF line endings across all platforms
+- GitHub Actions bumped: `actions/checkout@v6`, `actions/setup-python@v6`
+- `manifest.json` now declares `"homeassistant": "2026.3.0"` minimum version
 
 ## 1.1.0 — 2026-03-19
 
