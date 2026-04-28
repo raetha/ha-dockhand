@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.2.0 — unreleased
+
+**Breaking change** — session-cookie authentication (username + password + MFA) has been
+removed. The integration now authenticates exclusively via Dockhand API tokens or requires
+no authentication at all (when Dockhand authentication is disabled).
+
+Requires **Dockhand ≥ 1.0.26** for reliable token authentication.
+
+### Migration
+
+Existing installations using username/password will be flagged for re-authentication on
+the next HA restart. Go to **Settings → Devices & Services → Dockhand → Re-authenticate**,
+then generate an API token in Dockhand under **Profile → API tokens** and paste it in.
+
+No-auth installations (Dockhand authentication disabled) are unaffected and require no
+action.
+
+### Changes
+
+- **Token authentication**: all API requests now use `Authorization: Bearer dh_...`
+  instead of session cookies. Tokens do not expire on a 24-hour session timeout, which
+  eliminates the periodic re-authentication prompts that affected MFA users
+- **Removed**: username, password, and MFA fields from the config flow. The setup flow
+  now probes the server first; if authentication is required it prompts for a token only
+- **Removed**: `DockhandMFARequiredError`, `DockhandAuthError` login path, and all
+  `async_login()` logic from the API client
+- **Fixed**: stack start/stop/restart actions now include `Accept: application/json`,
+  causing Dockhand to run the operation synchronously and return a real result rather
+  than a job-ID reference for async polling. This ensures switch and button entities
+  correctly surface failures instead of silently succeeding
+
 ## 1.1.0 — 2026-03-19
 
 Adds support for Dockhand instances running without authentication, and redesigns the config flow to auto-detect whether credentials are needed.

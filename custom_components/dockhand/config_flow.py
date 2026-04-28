@@ -8,12 +8,11 @@ from homeassistant import config_entries
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import DockhandClient, DockhandAuthError, DockhandMFARequiredError
+from .api import DockhandClient, DockhandAuthError
 from .const import (
     DOMAIN,
     CONF_API_URL,
-    CONF_USERNAME,
-    CONF_PASSWORD,
+    CONF_API_TOKEN,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
     CONF_ENABLE_SCHEDULES,
@@ -21,7 +20,6 @@ from .const import (
     CONF_ENABLE_VOLUMES,
     CONF_ENABLE_NETWORKS,
     CONF_VERIFY_SSL,
-    CONF_SESSION_COOKIE,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
     DEFAULT_ENABLE_SCHEDULES,
@@ -34,7 +32,7 @@ DEFAULT_VERIFY_SSL = True
 
 
 def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Step 1: URL and feature/poll settings — no credentials."""
+    """Step 1: URL and feature/poll settings."""
     d = defaults or {}
     return vol.Schema({
         vol.Required(CONF_API_URL, default=d.get(CONF_API_URL, "")): str,
@@ -48,18 +46,11 @@ def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     })
 
 
-def _credentials_schema(defaults: dict[str, Any] | None = None,
-                         require_password: bool = True) -> vol.Schema:
-    """Step 2: credentials — only shown when server returns 401."""
-    d = defaults or {}
-    fields: dict = {
-        vol.Required(CONF_USERNAME, default=d.get(CONF_USERNAME, "")): str,
-    }
-    if require_password:
-        fields[vol.Required(CONF_PASSWORD)] = str
-    else:
-        fields[vol.Optional(CONF_PASSWORD)] = str  # blank = keep existing (reconfigure)
-    return vol.Schema(fields)
+def _token_schema() -> vol.Schema:
+    """Step 2: API token — only shown when server requires authentication."""
+    return vol.Schema({
+        vol.Required(CONF_API_TOKEN): str,
+    })
 
 
 def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -80,7 +71,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         # Accumulates data across multi-step flows.
         self._connection_data: dict[str, Any] = {}
-        # Tracks which flow triggered the credentials/MFA step.
+        # Tracks which flow triggered the token step.
         # Values: "user" | "reauth" | "reconfigure"
         self._flow_origin: str = "user"
 
@@ -100,21 +91,19 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
             session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
-            # Probe with no credentials — if the server responds without a 401,
-            # authentication is disabled in Dockhand.
             client = DockhandClient(session, user_input)
             try:
-                await client.async_get_environments()
-                # Success with no credentials — auth is disabled.
+                await client.async_probe()
+                # Probe succeeded with no token — auth is disabled.
                 return self.async_create_entry(
                     title=user_input[CONF_API_URL],
                     data=user_input,
                 )
             except DockhandAuthError:
-                # Server requires authentication — proceed to credentials step.
+                # Server requires authentication — proceed to token step.
                 self._connection_data = user_input
                 self._flow_origin = "user"
-                return await self.async_step_credentials()
+                return await self.async_step_token()
             except Exception:
                 errors["base"] = "cannot_connect"
 
@@ -125,13 +114,13 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------ #
-    # Step 2: credentials (only reached when server returned 401)
+    # Step 2: API token (only reached when server returned 401)
     # ------------------------------------------------------------------ #
 
-    async def async_step_credentials(
+    async def async_step_token(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Credential step — shown only when the server requires authentication."""
+        """Token step — shown only when the server requires authentication."""
         errors: dict[str, str] = {}
         if user_input is not None:
             merged = {**self._connection_data, **user_input}
@@ -139,82 +128,35 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
             client = DockhandClient(session, merged)
             try:
-                cookie = await client.async_login()
+                await client.async_probe()
 
                 if self._flow_origin == "user":
                     return self.async_create_entry(
                         title=merged[CONF_API_URL],
-                        data={**merged, CONF_SESSION_COOKIE: cookie},
+                        data=merged,
                     )
 
                 # reauth and reconfigure — update the existing entry
                 entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
                 if entry:
-                    self.hass.config_entries.async_update_entry(
-                        entry, data={**merged, CONF_SESSION_COOKIE: cookie}
-                    )
+                    self.hass.config_entries.async_update_entry(entry, data=merged)
                     await self.hass.config_entries.async_reload(entry.entry_id)
                 reason = "reauth_successful" if self._flow_origin == "reauth" else "reconfigure_successful"
                 return self.async_abort(reason=reason)
 
-            except DockhandMFARequiredError:
-                # Save merged (includes credentials) so async_step_mfa can
-                # build a client with username+password to submit the token.
-                self._connection_data = merged
-                return await self.async_step_mfa()
             except DockhandAuthError:
                 errors["base"] = "invalid_auth"
+            except Exception:
+                errors["base"] = "cannot_connect"
 
         return self.async_show_form(
-            step_id="credentials",
-            data_schema=_credentials_schema(
-                self._connection_data,
-                require_password=(self._flow_origin != "reconfigure"),
-            ),
+            step_id="token",
+            data_schema=_token_schema(),
             errors=errors,
         )
 
     # ------------------------------------------------------------------ #
-    # Step 3: MFA (only reached when server requires TOTP)
-    # ------------------------------------------------------------------ #
-
-    async def async_step_mfa(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            verify_ssl = self._connection_data.get(CONF_VERIFY_SSL, True)
-            session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
-            client = DockhandClient(session, self._connection_data)
-            try:
-                cookie = await client.async_login(mfa_token=user_input["mfa_token"])
-
-                if self._flow_origin == "user":
-                    return self.async_create_entry(
-                        title=self._connection_data[CONF_API_URL],
-                        data={**self._connection_data, CONF_SESSION_COOKIE: cookie},
-                    )
-
-                entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-                if entry:
-                    self.hass.config_entries.async_update_entry(
-                        entry, data={**self._connection_data, CONF_SESSION_COOKIE: cookie}
-                    )
-                    await self.hass.config_entries.async_reload(entry.entry_id)
-                reason = "reauth_successful" if self._flow_origin == "reauth" else "reconfigure_successful"
-                return self.async_abort(reason=reason)
-
-            except DockhandAuthError:
-                errors["base"] = "invalid_mfa"
-
-        return self.async_show_form(
-            step_id="mfa",
-            data_schema=vol.Schema({"mfa_token": str}),
-            errors=errors,
-        )
-
-    # ------------------------------------------------------------------ #
-    # Re-authentication (session expired — auth clearly was enabled)
+    # Re-authentication (token revoked / auth re-enabled on no-auth install)
     # ------------------------------------------------------------------ #
 
     async def async_step_reauth(
@@ -229,34 +171,27 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         if user_input is not None and entry:
             merged = {**entry.data, **user_input}
-            self._connection_data = merged
-            self._flow_origin = "reauth"
             verify_ssl = merged.get(CONF_VERIFY_SSL, True)
             session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
             client = DockhandClient(session, merged)
             try:
-                cookie = await client.async_login()
-                self.hass.config_entries.async_update_entry(
-                    entry, data={**merged, CONF_SESSION_COOKIE: cookie}
-                )
+                await client.async_probe()
+                self.hass.config_entries.async_update_entry(entry, data=merged)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
-            except DockhandMFARequiredError:
-                return await self.async_step_mfa()
             except DockhandAuthError:
                 errors["base"] = "invalid_auth"
+            except Exception:
+                errors["base"] = "cannot_connect"
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=vol.Schema({
-                vol.Required(CONF_USERNAME, default=entry.data.get(CONF_USERNAME, "") if entry else ""): str,
-                vol.Required(CONF_PASSWORD): str,
-            }),
+            data_schema=_token_schema(),
             errors=errors,
         )
 
     # ------------------------------------------------------------------ #
-    # Reconfigure (change URL, credentials, or feature flags)
+    # Reconfigure (change URL, token, or feature flags)
     # ------------------------------------------------------------------ #
 
     async def async_step_reconfigure(
@@ -270,19 +205,18 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
             client = DockhandClient(session, user_input)
             try:
-                await client.async_get_environments()
-                # No auth required — strip any previously stored credentials.
+                await client.async_probe()
+                # No auth required — strip any previously stored token.
                 clean = {k: v for k, v in {**entry.data, **user_input}.items()
-                         if k not in (CONF_USERNAME, CONF_PASSWORD, CONF_SESSION_COOKIE)}
+                         if k != CONF_API_TOKEN}
                 self.hass.config_entries.async_update_entry(entry, data=clean)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
             except DockhandAuthError:
-                # Auth required — carry connection data forward and show credentials.
-                # Pre-fill username from existing entry so user only needs password.
+                # Auth required — carry connection data forward and show token step.
                 self._connection_data = {**entry.data, **user_input}
                 self._flow_origin = "reconfigure"
-                return await self.async_step_credentials()
+                return await self.async_step_token()
             except Exception:
                 errors["base"] = "cannot_connect"
 

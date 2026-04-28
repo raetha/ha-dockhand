@@ -26,7 +26,7 @@ from ha_stubs import (
     HomeAssistant, ConfigEntry, ConfigEntryAuthFailed, ConfigEntryNotReady,
     DeviceRegistry, DeviceEntry, reset_registry,
 )
-from custom_components.dockhand.api import DockhandAuthError, DockhandMFARequiredError
+from custom_components.dockhand.api import DockhandAuthError
 from custom_components.dockhand import _register_devices, _remove_stale_devices, _remove_stale_entities, DockhandData
 from custom_components.dockhand.coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 
@@ -56,7 +56,7 @@ def _make_slow_coordinator(data, entry=None):
 
 
 def _make_entry(data=None, options=None):
-    d = {"api_url": "http://dh.test:3000", "session_cookie": "tok",
+    d = {"api_url": "http://dh.test:3000", "api_token": "dh_test_token",
          "enable_schedules": False, "enable_images": False,
          "enable_volumes": False, "enable_networks": False}
     if data:
@@ -414,11 +414,10 @@ class TestSetupEntry(unittest.TestCase):
         from custom_components.dockhand import async_setup_entry
         reset_registry()
         hass = HomeAssistant()
-        entry = _make_entry({"session_cookie": "tok"})
+        entry = _make_entry({"api_token": "dh_test_token"})
         fast, slow = self._make_mock_coordinators()
 
         mock_client = MagicMock()
-        mock_client.async_login = AsyncMock(return_value="tok")
         with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
              patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
              patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
@@ -434,12 +433,11 @@ class TestSetupEntry(unittest.TestCase):
         from custom_components.dockhand import async_setup_entry
         reset_registry()
         hass = HomeAssistant()
-        entry = _make_entry({"session_cookie": "tok"})
+        entry = _make_entry({"api_token": "dh_test_token"})
         fast, slow = self._make_mock_coordinators(
             fast_side_effect=ConfigEntryNotReady("timeout"))
 
         mock_client = MagicMock()
-        mock_client.async_login = AsyncMock(return_value="tok")
         with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
              patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
              patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
@@ -447,20 +445,53 @@ class TestSetupEntry(unittest.TestCase):
             with self.assertRaises(ConfigEntryNotReady):
                 run(async_setup_entry(hass, entry))
 
-    def test_auth_failure_raises_config_entry_auth_failed(self):
-        """If login raises DockhandAuthError, ConfigEntryAuthFailed is raised."""
+    def test_legacy_entry_without_token_raises_auth_failed(self):
+        """A pre-1.2.0 entry with username/session_cookie but no api_token must
+        raise ConfigEntryAuthFailed so HA prompts the user to provide a token."""
         from custom_components.dockhand import async_setup_entry
         from ha_stubs import ConfigEntryAuthFailed as CEAFailed
         reset_registry()
         hass = HomeAssistant()
-        entry = _make_entry({"username": "admin", "password": "pass", "session_cookie": ""})
+        entry = _make_entry({"username": "admin", "password": "pass", "session_cookie": "old_cookie"})
+        # Ensure no api_token present
+        entry.data.pop("api_token", None)
 
         mock_client = MagicMock()
-        mock_client.async_login = AsyncMock(side_effect=DockhandAuthError("bad creds"))
         with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
              patch("custom_components.dockhand.DockhandClient", return_value=mock_client):
             with self.assertRaises(CEAFailed):
                 run(async_setup_entry(hass, entry))
+
+    def test_legacy_entry_with_token_strips_legacy_keys_and_proceeds(self):
+        """After reauth, a token is present alongside legacy keys. Setup must
+        strip the legacy keys and continue normally rather than looping."""
+        from custom_components.dockhand import async_setup_entry
+        reset_registry()
+        hass = HomeAssistant()
+        # Simulate the state after reauth_confirm writes the token but leaves old keys
+        entry = _make_entry({
+            "username": "admin",
+            "password": "pass",
+            "session_cookie": "old_cookie",
+            "api_token": "dh_new_token",
+        })
+        fast, slow = self._make_mock_coordinators()
+
+        mock_client = MagicMock()
+        with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
+             patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
+             patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
+             patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow):
+            run(async_setup_entry(hass, entry))
+
+        # Legacy keys must have been stripped from the entry
+        self.assertNotIn("username", entry.data)
+        self.assertNotIn("session_cookie", entry.data)
+        self.assertNotIn("password", entry.data)
+        # Token must be retained
+        self.assertEqual(entry.data.get("api_token"), "dh_new_token")
+        # Integration must be fully set up
+        self.assertIsNotNone(entry.runtime_data)
 
     def test_slow_coordinator_failure_is_non_fatal(self):
         """Slow coordinator first-refresh failure should not prevent setup."""
@@ -468,17 +499,15 @@ class TestSetupEntry(unittest.TestCase):
         from ha_stubs import UpdateFailed
         reset_registry()
         hass = HomeAssistant()
-        entry = _make_entry({"session_cookie": "tok"})
+        entry = _make_entry({"api_token": "dh_test_token"})
         fast, slow = self._make_mock_coordinators(
             slow_side_effect=UpdateFailed("slow timeout"))
 
         mock_client = MagicMock()
-        mock_client.async_login = AsyncMock(return_value="tok")
         with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
              patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
              patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
              patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow):
-            # Should not raise — slow coordinator failures are non-fatal at setup
             run(async_setup_entry(hass, entry))
         self.assertIsNotNone(entry.runtime_data)
 

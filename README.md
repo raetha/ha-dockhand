@@ -5,7 +5,7 @@
 
 Monitor and control your Docker environments through **[Dockhand](https://dockhand.pro)** — a modern Docker management UI. This integration exposes environments, containers, stacks, networks, images, volumes, and schedules as Home Assistant devices and entities, using the same API as the Dockhand web UI.
 
-No cloud services are used. Supports **local user authentication** including **MFA (TOTP)**.
+No cloud services are used. Supports **API token authentication** and works with Dockhand instances where authentication is disabled.
 
 ---
 
@@ -38,14 +38,13 @@ This integration is not yet in the default HACS catalog. You can add it as a cus
 2. Search for **Dockhand**
 3. Enter:
    - **API URL** — e.g. `http://dockhand.local:3000`
-   - **Username** and **Password** (must be a local Dockhand user — see below)
    - **Fast poll interval** — default 60 s (stats, containers, stacks)
    - **Slow poll interval** — default 600 s (optional features)
    - Which optional features to enable (schedules, images, volumes, networks)
    - **Verify SSL certificate** — uncheck only if using a self-signed cert
-4. If MFA is enabled, enter your 6-digit TOTP code when prompted
+4. The integration probes the server. If authentication is enabled it will prompt for an **API token** — generate one in Dockhand under **Profile → API tokens**, then paste it in
 
-After setup, use **Configure** (the cog) to adjust poll intervals and feature flags, or **Reconfigure** to change the URL or credentials.
+After setup, use **Configure** (the cog) to adjust poll intervals and feature flags, or **Reconfigure** to change the URL or API token.
 
 ---
 
@@ -56,8 +55,7 @@ After setup, use **Configure** (the cog) to adjust poll intervals and feature fl
 | Field | Description | Default |
 |---|---|---|
 | **API URL** | Full URL to your Dockhand server, e.g. `http://dockhand.local:3000` | — |
-| **Username** | Local Dockhand account username | — |
-| **Password** | Local Dockhand account password | — |
+| **API Token** | A Dockhand API token starting with `dh_`. Only requested if the server requires authentication. Generate one under **Profile → API tokens** | — |
 | **Fast poll interval** | How often (seconds) to refresh container states, stacks, and environment stats | 60 |
 | **Slow poll interval** | How often (seconds) to refresh images, volumes, networks, and schedules | 600 |
 | **Enable schedules** | Create entities for Dockhand scheduled tasks | off |
@@ -68,28 +66,33 @@ After setup, use **Configure** (the cog) to adjust poll intervals and feature fl
 
 ### Options (adjustable via Configure without removing the integration)
 
-All fields except **API URL**, **Username**, and **Password** can be changed at any time through the **Configure** button on the integration card. Changes take effect on the next coordinator refresh.
+All fields except **API URL** and **API Token** can be changed at any time through the **Configure** button on the integration card. Changes take effect on the next coordinator refresh.
 
 ### Reconfigure (change URL or credentials)
 
-Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, **Username**, or **Password**. The integration re-authenticates immediately and updates the stored session. Leave the password field blank to keep the existing password.
+Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, **API Token**, or feature flags. The integration re-probes the server immediately; if authentication is required it will prompt for a token.
 
 ---
 
 ## Authentication
 
-### Local user required
-OIDC/SSO accounts are **not supported**. The integration authenticates with the same session-cookie login the web UI uses, which requires a local Dockhand user. Create one under **Settings → Authentication → Local Users** in Dockhand.
+### API token (recommended)
+When Dockhand authentication is enabled, the integration authenticates using a **Bearer token** (`dh_...`). Tokens do not have a session timeout, which eliminates the daily re-authentication prompts that affected MFA users with the previous session-cookie approach.
 
-### MFA support
-If your local user has MFA enabled, the integration will prompt for your TOTP code during setup and whenever the session expires. HA stores the session cookie and re-uses it automatically; it only asks for a code again when the session expires or credentials change.
+To generate a token:
+1. Open the Dockhand UI and click your avatar in the sidebar
+2. Scroll to **API tokens**
+3. Click **Generate token**, give it a name, and optionally set an expiry
+4. Copy the token immediately — it is shown only once
+5. Paste it into the HA integration setup or re-authentication prompt
 
-### Session timeout and re-authentication
-Dockhand's default session timeout is **86400 seconds (24 hours)**. When a session expires, the integration silently re-authenticates using the stored username and password — but if MFA is enabled it cannot supply a TOTP code automatically, so HA will surface a re-authentication prompt instead.
+> **Requires Dockhand ≥ 1.0.26.** Token authentication was introduced in 1.0.25 but had a bug with enterprise licences that was fixed in 1.0.26.
 
-If you find yourself re-authenticating frequently, increase the session timeout in Dockhand under **Settings → Authentication → General → Session timeout**. A value of `604800` (7 days) or `2592000` (30 days) is reasonable for a local home network. The field accepts seconds.
+### No-auth installs
+If Dockhand authentication is fully disabled, no token is needed. The integration detects this automatically during setup and skips the token prompt. If you later enable authentication in Dockhand, HA will surface a re-authentication prompt the next time a poll fails.
 
-> **Note:** Dockhand does not currently provide a token refresh API, so the integration cannot extend a session silently — it can only re-use the cookie until it expires.
+### Re-authentication
+If a token is revoked or expires, the integration will surface a re-authentication notification in HA. Go to **Settings → Devices & Services → Dockhand → Re-authenticate**, generate a new token in Dockhand, and paste it in.
 
 ---
 
@@ -241,21 +244,15 @@ Dockhand uses two polling coordinators with independent intervals to balance res
 - Per-environment detailed data for optional features: Images, Networks, Volumes
 - Global schedule list
 
-Entities update automatically when their coordinator refreshes. If a fetch fails, entities remain at their last known value and are marked unavailable after the coordinator's built-in retry threshold. Both coordinators handle session expiry transparently — they will attempt re-authentication and retry the failed fetch before raising an unavailable state.
+Entities update automatically when their coordinator refreshes. If a fetch fails, entities remain at their last known value and are marked unavailable after the coordinator's built-in retry threshold. Both coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
 
 ## Troubleshooting
 
 **Cannot connect**
-Check the API URL is reachable from the HA host. Confirm you are using a local user, not OIDC.
+Check the API URL is reachable from the HA host. If authentication is enabled, confirm your API token starts with `dh_` and was copied in full.
 
 **Entity IDs have a `_2` or `_3` suffix after a container or image update**
 When a container is recreated with a new image, or a new image is pulled before the old one is pruned, both the old and new objects briefly exist simultaneously. HA assigns a suffix to the new entity to avoid a collision. Once the old object is gone (container removed, image pruned) and the integration has reloaded or polled, the stale entity is cleaned up automatically. To reclaim the clean entity ID, go to **Settings → Devices & Services → ⋮ → Recreate entity IDs** on the Dockhand integration card. HA will rename any suffixed entity whose "natural" ID is now free. Any automations or dashboard cards referencing the suffixed ID will need to be updated after the rename.
-
-**Re-authentication prompt appears daily (or frequently)**
-Dockhand's default session timeout is 24 hours. When a session expires and MFA is enabled, the integration cannot re-authenticate silently and HA surfaces a prompt. Increase the timeout under **Settings → Authentication → General → Session timeout** in Dockhand — `604800` (7 days) or `2592000` (30 days) are common values. The field accepts seconds.
-
-**MFA prompted on every Reconfigure**
-Dockhand validates the session when settings change. If your user has MFA, one code per reconfigure is expected.
 
 **No entities appear after setup**
 Check HA logs for errors containing `dockhand`. Ensure the user account has permission to view all environments.
@@ -268,15 +265,15 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 ## Requirements
 
 - Home Assistant 2026.3 or later
+- Dockhand ≥ 1.0.26 (for API token authentication; no-auth installs work on any version)
 - Dockhand reachable from the HA host
-- A local Dockhand user account (OIDC not supported)
 
 ---
 
 ## Notes
 
 - All data is fetched locally — no external cloud services
-- The session cookie is stored in the HA config entry, not the password itself
+- The API token is stored securely in the HA config entry; credentials (username/password) are never stored
 - The Restart button only works on *running* containers/stacks
 - Disable **Verify SSL certificate** only if using a self-signed certificate on the Dockhand server
 

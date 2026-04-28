@@ -28,22 +28,21 @@ rules:
   config-flow:
     status: done
     comment: >
-      Full UI config flow: async_step_user (URL and settings), async_step_credentials
-      (shown only when server returns 401), async_step_mfa (shown only when MFA
-      required), async_step_reauth_confirm, async_step_reconfigure, and options flow.
-      Auth is auto-detected — no checkbox needed. All steps include data_description
-      for each field. Connection steps include a verify_ssl checkbox (default: True)
-      to support self-signed certs.
+      Full UI config flow: async_step_user (URL and settings), async_step_token
+      (shown only when server returns 401), async_step_reauth_confirm,
+      async_step_reconfigure, and options flow. Auth is auto-detected — no checkbox
+      needed. All steps include data_description for each field. Connection steps
+      include a verify_ssl checkbox (default: True) to support self-signed certs.
 
   config-flow-test-coverage:
     status: done
     comment: >
-      Full test coverage across all flow steps: async_step_user (6 tests),
-      async_step_credentials (6 tests), async_step_mfa (4 tests),
-      async_step_reauth_confirm (4 tests), async_step_reconfigure (7 tests),
-      and options async_step_init (2 tests). All error branches, duplicate
-      detection, MFA prompt, auth-detection probe, blank-password preservation,
-      and no-auth credential stripping are tested in tests/test_config_flow.py.
+      Full test coverage across all flow steps: async_step_user (5 tests),
+      async_step_token (7 tests), async_step_reauth_confirm (4 tests),
+      async_step_reconfigure (5 tests), and options async_step_init (2 tests).
+      All error branches, duplicate detection, auth-detection probe, token
+      merging, origin-routing, and no-auth token stripping are tested in
+      tests/test_config_flow.py.
 
   dependency-transparency:
     status: done
@@ -102,15 +101,15 @@ rules:
     status: done
     comment: >
       async_step_user probes the server with async_get_environments() before
-      saving. If auth is required (401), async_step_credentials calls
-      async_login() before saving. Raises appropriate errors for auth failure,
-      MFA required, and connection failure with translated error keys.
+      saving. If auth is required (401), async_step_token validates the provided
+      token with another probe before saving. Raises appropriate errors for
+      invalid token and connection failure with translated error keys.
 
   test-before-setup:
     status: done
     comment: >
       async_setup_entry raises ConfigEntryNotReady if the fast coordinator's
-      first refresh fails, and ConfigEntryAuthFailed if credentials are invalid.
+      first refresh fails, and ConfigEntryAuthFailed if the token is invalid or revoked.
 
   unique-config-entry:
     status: done
@@ -136,16 +135,16 @@ rules:
     status: done
     comment: >
       README "Configuration parameters" section documents all fields: API URL,
-      username, password, fast and slow poll intervals, and all four optional
-      feature flags (schedules, images, volumes, networks). Separate subsections
-      cover setup-time fields, the Options flow (adjustable via Configure), and
-      Reconfigure (for changing URL/credentials).
+      API token (when auth is enabled), fast and slow poll intervals, and all
+      four optional feature flags (schedules, images, volumes, networks).
+      Separate subsections cover setup-time fields, the Options flow (adjustable
+      via Configure), and Reconfigure (for changing URL/token).
 
   docs-installation-parameters:
     status: done
     comment: >
       README Setup section documents all fields shown during installation:
-      API URL, username, password, MFA token.
+      API URL and API token (shown only when server authentication is enabled).
 
   entity-unavailable:
     status: done
@@ -177,18 +176,20 @@ rules:
   reauthentication-flow:
     status: done
     comment: >
-      async_step_reauth and async_step_reauth_confirm implemented. The fast
-      coordinator also handles session expiry transparently at runtime by
-      calling async_login and retrying before raising ConfigEntryAuthFailed.
+      async_step_reauth and async_step_reauth_confirm implemented. On a 401,
+      the fast coordinator raises ConfigEntryAuthFailed immediately so HA
+      surfaces the re-authentication prompt. The reauth flow accepts a new
+      API token and reloads the entry.
 
   test-coverage:
     status: done
     comment: >
-      210 tests across five files: test_api.py (31), test_config_flow.py (21),
-      test_coordinator.py (26), test_entities.py (110), test_init.py (44).
-      Covers all API methods, all config flow steps, both coordinators, all
-      entity types, device registration, stale cleanup, setup, and unload.
-      Zero external dependencies — runs in ~0.15 s with stdlib only.
+      215 tests across five files: test_api.py (28), test_config_flow.py (23),
+      test_coordinator.py (25), test_entities.py (89), test_init.py (44).
+      Covers all API methods, Bearer token header, Accept header, all config
+      flow steps, legacy migration paths, both coordinators, all entity types,
+      device registration, stale cleanup, setup, and unload.
+      Zero external dependencies — runs in ~0.2 s with stdlib only.
 
   # ── Gold ──────────────────────────────────────────────────────────────────
 
@@ -208,7 +209,7 @@ rules:
     comment: >
       diagnostics.py implements async_get_config_entry_diagnostics. Returns
       redacted config entry data, per-environment summary counts, and full
-      coordinator data snapshots. session_cookie and password are redacted.
+      coordinator data snapshots. api_token is redacted before export.
 
   discovery:
     status: exempt
@@ -236,8 +237,8 @@ rules:
   docs-known-limitations:
     status: done
     comment: >
-      README documents that OIDC/SSO accounts are not supported and only
-      local Dockhand accounts can be used.
+      README documents the minimum Dockhand version required for token
+      authentication (≥ 1.0.26) and that no-auth installs are unaffected.
 
   docs-supported-devices:
     status: done
@@ -315,7 +316,7 @@ rules:
     comment: >
       No HomeAssistantError or ServiceValidationError is raised anywhere in
       entity methods or service actions. Config flow errors already use
-      translated error keys (cannot_connect, invalid_auth, invalid_mfa) via
+      translated error keys (cannot_connect, invalid_auth) via
       strings.json. The integration has no custom service actions that would
       surface exception messages to the user.
       Requires an 'exceptions' block in strings.json and translations/en.json.
@@ -332,7 +333,7 @@ rules:
   reconfiguration-flow:
     status: done
     comment: >
-      async_step_reconfigure implemented. Allows changing API URL, credentials,
+      async_step_reconfigure implemented. Allows changing API URL, API token,
       and poll intervals without removing the integration.
 
   repair-issues:

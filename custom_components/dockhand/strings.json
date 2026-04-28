@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Connect to Dockhand",
-        "description": "Enter your Dockhand server URL and settings. Credentials will be requested if authentication is enabled in Dockhand.",
+        "description": "Enter your Dockhand server URL and settings. An API token will be requested if authentication is enabled in Dockhand.",
         "data": {
           "api_url": "API URL",
           "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
@@ -16,8 +16,8 @@
         },
         "data_description": {
           "api_url": "The base URL of your Dockhand instance.",
-          "poll_interval": "How often to refresh container, stack, and environment stats. Lower values increase load. Default: 30.",
-          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
+          "poll_interval": "How often to refresh container, stack, and environment stats. Lower values increase load. Default: 60.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 600.",
           "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
           "enable_images": "Enables sensors for Docker images on each environment.",
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",
@@ -25,35 +25,31 @@
           "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
         }
       },
-      "mfa": {
-        "title": "Multi-Factor Authentication",
-        "description": "Enter the 6-digit code from your authenticator app.",
+      "token": {
+        "title": "Dockhand API Token",
+        "description": "Your Dockhand server requires authentication. Generate an API token in Dockhand under **Profile \u2192 API tokens**, then paste it here.",
         "data": {
-          "mfa_token": "MFA Code"
+          "api_token": "API Token"
         },
         "data_description": {
-          "mfa_token": "The current 6-digit TOTP code from your authenticator app."
+          "api_token": "A Dockhand API token starting with dh_. Generate one under Profile \u2192 API tokens in the Dockhand UI."
         }
       },
       "reauth_confirm": {
         "title": "Re-authenticate with Dockhand",
-        "description": "Your session has expired. Please enter your credentials to continue.",
+        "description": "Your API token is no longer valid. Generate a new token in Dockhand under **Profile \u2192 API tokens** and enter it below.",
         "data": {
-          "username": "Username",
-          "password": "Password"
+          "api_token": "API Token"
         },
         "data_description": {
-          "username": "The local Dockhand username to re-authenticate with.",
-          "password": "The current password for the local Dockhand account."
+          "api_token": "A Dockhand API token starting with dh_."
         }
       },
       "reconfigure": {
         "title": "Reconfigure Dockhand",
-        "description": "Update server URL and settings. Credentials will be requested if authentication is required.",
+        "description": "Update server URL and settings. An API token will be requested if authentication is required.",
         "data": {
           "api_url": "API URL",
-          "username": "Username",
-          "password": "New password (leave blank to keep current)",
           "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
           "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
           "enable_schedules": "Enable schedule sensors",
@@ -64,34 +60,19 @@
         },
         "data_description": {
           "api_url": "The base URL of your Dockhand instance.",
-          "username": "A local Dockhand account. OIDC/SSO accounts are not supported.",
-          "password": "Leave blank to keep the existing password.",
-          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 30.",
-          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
+          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 60.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 600.",
           "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
           "enable_images": "Enables sensors for Docker images on each environment.",
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",
           "enable_networks": "Enables sensors for Docker networks on each environment.",
           "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
-        }
-      },
-      "credentials": {
-        "title": "Dockhand Authentication",
-        "description": "Your Dockhand server requires authentication. Enter your local user credentials.",
-        "data": {
-          "username": "Username",
-          "password": "Password"
-        },
-        "data_description": {
-          "username": "Your local Dockhand username.",
-          "password": "Leave blank to keep the existing password (reconfigure only)."
         }
       }
     },
     "error": {
       "cannot_connect": "Unable to connect to Dockhand. Check the API URL and network connectivity.",
-      "invalid_auth": "Invalid username or password.",
-      "invalid_mfa": "Invalid MFA code. Please try again."
+      "invalid_auth": "Invalid API token. Make sure you copied the full token starting with dh_."
     },
     "abort": {
       "already_configured": "This Dockhand instance is already configured.",
@@ -103,7 +84,7 @@
     "step": {
       "init": {
         "title": "Dockhand Options",
-        "description": "Adjust polling intervals and optional data sources. To change the URL or credentials, use Reconfigure instead.",
+        "description": "Adjust polling intervals and optional data sources. To change the URL or API token, use Reconfigure instead.",
         "data": {
           "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
           "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
@@ -113,8 +94,8 @@
           "enable_networks": "Enable network sensors"
         },
         "data_description": {
-          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 30.",
-          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 300.",
+          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 60.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 600.",
           "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
           "enable_images": "Enables sensors for Docker images on each environment.",
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",

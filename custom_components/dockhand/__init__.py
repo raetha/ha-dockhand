@@ -12,10 +12,11 @@ from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .const import (
     CONF_VERIFY_SSL,
-    DOMAIN, PLATFORMS, CONF_API_URL, CONF_USERNAME, CONF_SESSION_COOKIE,
+    DOMAIN, PLATFORMS, CONF_API_URL, CONF_API_TOKEN,
     CONF_ENABLE_SCHEDULES, CONF_ENABLE_IMAGES, CONF_ENABLE_VOLUMES, CONF_ENABLE_NETWORKS,
+    _LEGACY_CONF_USERNAME, _LEGACY_CONF_PASSWORD, _LEGACY_CONF_SESSION_COOKIE,
 )
-from .api import DockhandClient, DockhandAuthError, DockhandMFARequiredError
+from .api import DockhandClient
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import (
     _env_url, _container_url, _stack_url,
@@ -44,26 +45,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     session = async_get_clientsession(hass, verify_ssl=verify_ssl)
     client = DockhandClient(session, entry.data)
 
-    # Only attempt login if credentials are present. A no-auth install
-    # has no username stored, so skip login entirely in that case.
-    if entry.data.get(CONF_USERNAME) and not entry.data.get(CONF_SESSION_COOKIE):
-        try:
-            cookie = await client.async_login()
-            hass.config_entries.async_update_entry(
-                entry, data={**entry.data, CONF_SESSION_COOKIE: cookie}
+    # Detect legacy config entries (pre-1.2.0) that used session-cookie auth.
+    has_legacy = entry.data.get(_LEGACY_CONF_USERNAME) or entry.data.get(_LEGACY_CONF_SESSION_COOKIE)
+    if has_legacy:
+        if entry.data.get(CONF_API_TOKEN):
+            # Reauth flow already stored a token — strip the legacy keys so
+            # this migration path is only triggered once.
+            clean = {
+                k: v for k, v in entry.data.items()
+                if k not in (_LEGACY_CONF_USERNAME, _LEGACY_CONF_PASSWORD, _LEGACY_CONF_SESSION_COOKIE)
+            }
+            hass.config_entries.async_update_entry(entry, data=clean)
+        else:
+            # No token yet — prompt the user to provide one via reauth.
+            raise ConfigEntryAuthFailed(
+                "This Dockhand entry uses the old session-cookie authentication which is no "
+                "longer supported. Please use Reconfigure to provide an API token instead. "
+                "Generate one in Dockhand under Profile → API tokens."
             )
-        except DockhandMFARequiredError as err:
-            raise ConfigEntryAuthFailed(
-                "MFA is required — please re-add the integration to complete MFA setup"
-            ) from err
-        except DockhandAuthError as err:
-            raise ConfigEntryAuthFailed(
-                f"Dockhand authentication failed: {err}"
-            ) from err
-        except Exception as err:
-            raise ConfigEntryNotReady(
-                f"Could not connect to Dockhand: {err}"
-            ) from err
 
     config = {**entry.data, **entry.options}
 

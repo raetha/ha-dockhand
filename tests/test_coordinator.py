@@ -11,7 +11,7 @@ sys.path.insert(0, ROOT); sys.path.insert(0, TESTS)
 import ha_stubs as stubs; stubs.install()
 from ha_stubs import HomeAssistant, ConfigEntry, ConfigEntryAuthFailed, UpdateFailed
 from custom_components.dockhand.api import (
-    DockhandClient, DockhandAuthError, DockhandMFARequiredError,
+    DockhandClient, DockhandAuthError,
 )
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator, DockhandSlowCoordinator,
@@ -42,7 +42,6 @@ def _make_client(envs=None, stats=None, containers=None, stacks=None,
     c.async_get_networks = AsyncMock(return_value=networks or [NETWORK1])
     c.async_get_volumes = AsyncMock(return_value=volumes or [VOLUME1])
     c.async_get_schedules = AsyncMock(return_value=schedules or [])
-    c.async_login = AsyncMock(return_value="new_cookie")
     return c
 
 
@@ -124,41 +123,29 @@ class TestFastData(unittest.TestCase):
 
 class TestFastAuth(unittest.TestCase):
 
-    def test_auth_error_triggers_relogin(self):
-        client = _make_client()
-        call_n = [0]
-        async def envs():
-            call_n[0] += 1
-            if call_n[0] == 1:
-                raise DockhandAuthError("expired")
-            return [ENV1]
-        client.async_get_environments = AsyncMock(side_effect=envs)
-        entry = ConfigEntry(data={"username": "admin", "session_cookie": "old"})
-        coord = _fast(client, entry=entry)
-        run(coord.async_config_entry_first_refresh())
-        client.async_login.assert_called_once()
-
-    def test_reauth_mfa_required_raises_config_entry_auth_failed(self):
+    def test_auth_error_raises_config_entry_auth_failed(self):
+        """A 401 from the API must surface as ConfigEntryAuthFailed immediately.
+        With token auth there is no silent re-login — HA prompts the user to
+        provide a new token via the re-authentication flow.
+        """
         client = _make_client()
         client.async_get_environments = AsyncMock(
-            side_effect=DockhandAuthError("expired"))
-        client.async_login = AsyncMock(
-            side_effect=DockhandMFARequiredError("need mfa"))
+            side_effect=DockhandAuthError("token revoked"))
         with self.assertRaises(ConfigEntryAuthFailed):
             run(_fast(client).async_config_entry_first_refresh())
 
-    def test_reauth_bad_creds_raises_config_entry_auth_failed(self):
+    def test_auth_error_message_mentions_token(self):
+        """The ConfigEntryAuthFailed message should mention the token so the
+        HA notification gives the user a useful hint."""
         client = _make_client()
         client.async_get_environments = AsyncMock(
             side_effect=DockhandAuthError("expired"))
-        client.async_login = AsyncMock(
-            side_effect=DockhandAuthError("bad creds"))
-        with self.assertRaises(ConfigEntryAuthFailed):
+        with self.assertRaises(ConfigEntryAuthFailed) as ctx:
             run(_fast(client).async_config_entry_first_refresh())
+        self.assertIn("token", str(ctx.exception).lower())
 
     def test_general_error_raises_update_failed(self):
         client = _make_client()
-        # Make both the first call and the reauth-retry fail with generic Exception
         client.async_get_environments = AsyncMock(
             side_effect=Exception("network down"))
         coord = _fast(client)
@@ -230,7 +217,7 @@ class TestSlowData(unittest.TestCase):
         coord = _slow(client)
         with self.assertRaises(UpdateFailed) as ctx:
             run(coord.async_config_entry_first_refresh())
-        self.assertIn("re-authenticate", str(ctx.exception))
+        self.assertIn("reauth", str(ctx.exception))
 
     def test_general_error_raises_update_failed(self):
         client = _make_client()

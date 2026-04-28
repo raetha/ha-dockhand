@@ -35,14 +35,11 @@ else
     fi
 fi
 
-# ── The test suite uses only stdlib — no pip install step needed. ────────────
-# If you add third-party test dependencies to requirements_test.txt in the
-# future, uncomment the block below:
-#
-# REQ="${ROOT}/requirements_test.txt"
-# if [[ -f "${REQ}" ]]; then
-#     "${VENV}/bin/pip" install --quiet -r "${REQ}"
-# fi
+# ── Install ruff for linting (lightweight, no other deps needed) ─────────────
+if ! "${PYTHON}" -c "import ruff" 2>/dev/null; then
+    echo "Installing ruff ..."
+    "${VENV}/bin/pip" install --quiet ruff
+fi
 
 # ── Run tests ────────────────────────────────────────────────────────────────
 echo ""

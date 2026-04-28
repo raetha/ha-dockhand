@@ -14,8 +14,6 @@ from .const import (
     DOMAIN,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
-    CONF_USERNAME,
-    CONF_SESSION_COOKIE,
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_IMAGES,
     CONF_ENABLE_VOLUMES,
@@ -23,7 +21,7 @@ from .const import (
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
 )
-from .api import DockhandClient, DockhandAuthError, DockhandMFARequiredError
+from .api import DockhandClient, DockhandAuthError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -63,31 +61,24 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             return await self._fetch()
         except DockhandAuthError:
+            # Token is invalid or revoked — surface immediately so HA prompts
+            # the user to re-authenticate. No retry is possible without a new token.
             await self._handle_reauth()
-            try:
-                return await self._fetch()
-            except Exception as err:
-                raise UpdateFailed(f"Fast data error after re-auth: {err}") from err
+            # _handle_reauth always raises ConfigEntryAuthFailed; this is unreachable
+            # but satisfies the type checker.
+            raise UpdateFailed("Unreachable")  # pragma: no cover
         except Exception as err:
             raise UpdateFailed(f"Fast data error: {err}") from err
 
     async def _handle_reauth(self) -> None:
-        # No-auth install — a 401 means auth was re-enabled in Dockhand.
-        # Surface as ConfigEntryAuthFailed so the user is prompted to reconfigure.
-        if self._entry and not self._entry.data.get(CONF_USERNAME):
-            raise ConfigEntryAuthFailed(
-                "Received 401 but no credentials are stored. "
-                "If you re-enabled authentication in Dockhand, use Reconfigure."
-            )
-        try:
-            cookie = await self.client.async_login()
-            if self._entry:
-                self.hass.config_entries.async_update_entry(
-                    self._entry, data={**self._entry.data, CONF_SESSION_COOKIE: cookie})
-        except DockhandMFARequiredError as err:
-            raise ConfigEntryAuthFailed("MFA required — re-authenticate via integration page") from err
-        except DockhandAuthError as err:
-            raise ConfigEntryAuthFailed(f"Re-authentication failed: {err}") from err
+        # A 401 means the API token is invalid or was revoked, or authentication
+        # was re-enabled on a previously no-auth Dockhand instance.
+        # Surface as ConfigEntryAuthFailed so HA prompts the user to provide
+        # a new token via the re-authentication flow.
+        raise ConfigEntryAuthFailed(
+            "Dockhand API token is invalid or was revoked. "
+            "Go to the integration page and choose Re-authenticate to provide a new token."
+        )
 
     async def _fetch(self) -> dict[str, Any]:
         environments_list = _safe_list(await self.client.async_get_environments())
@@ -143,7 +134,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             return await self._fetch()
         except DockhandAuthError:
-            raise UpdateFailed("Session expired — waiting for fast coordinator to re-authenticate")
+            raise UpdateFailed("API token rejected — waiting for fast coordinator to surface reauth")
         except Exception as err:
             raise UpdateFailed(f"Slow data error: {err}") from err
 

@@ -1,16 +1,18 @@
-# Test dependencies for the Dockhand integration.
+# Test and lint dependencies for the Dockhand integration.
 #
-# The test suite uses stdlib unittest + ha_stubs and requires no third-party
-# packages. No installation step is needed to run the tests.
+# The unittest suite itself uses only stdlib + ha_stubs and requires no
+# third-party packages. Ruff is the only external dependency, used for
+# linting the integration source.
 #
-# To run the tests:
-#   python3 tests/run_tests.py          # direct (no install needed)
-#   bash scripts/run_tests.sh           # via venv (creates/updates automatically)
+# To run everything (lint + tests):
+#   python3 tests/run_tests.py          # direct; warns and skips lint if ruff missing
+#   bash scripts/run_tests.sh           # via venv; installs ruff automatically
 #
-# Optional: install ruff for linting
+# To install manually:
 #   pip install ruff
-#   ruff check custom_components/dockhand/
 #
 # Optional: install pyyaml for workflow static analysis tests
 #   pip install pyyaml
 # Without pyyaml the workflow tests are automatically skipped.
+
+ruff

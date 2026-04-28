@@ -4,7 +4,7 @@ When a user opens the integration page and clicks "Download diagnostics",
 HA calls async_get_config_entry_diagnostics and includes the result in a
 ZIP file they can attach to a bug report.
 
-Sensitive fields (session cookie, password) are redacted before export.
+Sensitive fields (API token) are redacted before export.
 """
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from . import DockhandConfigEntry
 
 # Fields to redact from config entry data before including in diagnostics
-TO_REDACT = {"session_cookie", "password", "api_key"}
+TO_REDACT = {"api_token"}
 
 
 async def async_get_config_entry_diagnostics(

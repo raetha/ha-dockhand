@@ -2,13 +2,12 @@
 Tests for DockhandConfigFlow and DockhandOptionsFlow (config_flow.py).
 
 Covers:
-- async_step_user: auth disabled (no credentials needed), auth required (→ credentials),
+- async_step_user: no-auth (probe succeeds, entry created), auth required (→ token),
   connection error
-- async_step_credentials: success (user origin), MFA redirect, auth error,
+- async_step_token: success (user origin), auth error, connection error,
   success (reauth origin), success (reconfigure origin)
-- async_step_mfa: success (user origin), auth error, success (reauth origin)
-- async_step_reauth_confirm: success, MFA redirect, auth error
-- async_step_reconfigure: auth disabled (strips credentials), auth required (→ credentials),
+- async_step_reauth_confirm: success, auth error, connection error, no input shows form
+- async_step_reconfigure: no-auth (strips token), auth required (→ token),
   connection error
 - DockhandOptionsFlow: saves user_input as options
 """
@@ -22,7 +21,7 @@ sys.path.insert(0, ROOT); sys.path.insert(0, TESTS)
 
 import ha_stubs as stubs; stubs.install()
 from ha_stubs import ConfigEntry
-from custom_components.dockhand.api import DockhandAuthError, DockhandMFARequiredError
+from custom_components.dockhand.api import DockhandAuthError
 from custom_components.dockhand.config_flow import DockhandConfigFlow, DockhandOptionsFlow
 
 run = asyncio.get_event_loop().run_until_complete
@@ -38,16 +37,11 @@ BASE_CONNECTION = {
     "verify_ssl": True,
 }
 
-BASE_CREDENTIALS = {
-    "username": "admin",
-    "password": "secret",
-}
-
-BASE_INPUT = {**BASE_CONNECTION, **BASE_CREDENTIALS}
+MOCK_TOKEN = "dh_test_token_abc123"
 
 EXISTING_ENTRY = ConfigEntry(
     entry_id="existing_entry",
-    data={**BASE_INPUT, "session_cookie": "old_cookie"},
+    data={**BASE_CONNECTION, "api_token": MOCK_TOKEN},
 )
 
 
@@ -55,7 +49,7 @@ def _flow() -> DockhandConfigFlow:
     """Create a flow instance with a stub hass that has the existing entry."""
     entry = ConfigEntry(
         entry_id="existing_entry",
-        data={**BASE_INPUT, "session_cookie": "old_cookie"},
+        data={**BASE_CONNECTION, "api_token": MOCK_TOKEN},
     )
     flow = DockhandConfigFlow()
     flow.hass.config_entries._entries["existing_entry"] = entry
@@ -63,18 +57,13 @@ def _flow() -> DockhandConfigFlow:
     return flow
 
 
-def _patch_client(login_return=None, login_side_effect=None,
-                  environments_return=None, environments_side_effect=None):
-    """Patch DockhandClient for both login and environments calls."""
+def _patch_client(probe_side_effect=None):
+    """Patch DockhandClient.async_probe."""
     mock_client = MagicMock()
-    if login_side_effect:
-        mock_client.async_login = AsyncMock(side_effect=login_side_effect)
+    if probe_side_effect:
+        mock_client.async_probe = AsyncMock(side_effect=probe_side_effect)
     else:
-        mock_client.async_login = AsyncMock(return_value=login_return or "cookie123")
-    if environments_side_effect:
-        mock_client.async_get_environments = AsyncMock(side_effect=environments_side_effect)
-    else:
-        mock_client.async_get_environments = AsyncMock(return_value=environments_return or [])
+        mock_client.async_probe = AsyncMock(return_value=None)
     return patch(
         "custom_components.dockhand.config_flow.DockhandClient",
         return_value=mock_client,
@@ -86,22 +75,21 @@ def _patch_client(login_return=None, login_side_effect=None,
 class TestStepUser(unittest.TestCase):
 
     def test_no_auth_creates_entry_directly(self):
-        """Server responds without 401 → auth disabled → create entry immediately."""
-        with _patch_client():  # environments succeeds, no login needed
+        """Probe succeeds without token → auth disabled → create entry immediately."""
+        with _patch_client():
             result = run(_flow().async_step_user(BASE_CONNECTION))
         self.assertEqual(result["type"], "create_entry")
-        self.assertNotIn("session_cookie", result["data"])
-        self.assertNotIn("username", result["data"])
+        self.assertNotIn("api_token", result["data"])
 
-    def test_auth_required_redirects_to_credentials(self):
-        """Server returns 401 → redirect to credentials step."""
-        with _patch_client(environments_side_effect=DockhandAuthError("401")):
+    def test_auth_required_redirects_to_token(self):
+        """Server returns 401 → redirect to token step."""
+        with _patch_client(probe_side_effect=DockhandAuthError("401")):
             result = run(_flow().async_step_user(BASE_CONNECTION))
         self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "credentials")
+        self.assertEqual(result["step_id"], "token")
 
     def test_connection_error_shows_cannot_connect(self):
-        with _patch_client(environments_side_effect=Exception("refused")):
+        with _patch_client(probe_side_effect=Exception("refused")):
             result = run(_flow().async_step_user(BASE_CONNECTION))
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["errors"]["base"], "cannot_connect")
@@ -111,14 +99,6 @@ class TestStepUser(unittest.TestCase):
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["step_id"], "user")
 
-    def test_duplicate_aborts(self):
-        flow = _flow()
-        def _abort(): raise Exception("already_configured")
-        flow._abort_if_unique_id_configured = _abort
-        with _patch_client():
-            with self.assertRaises(Exception):
-                run(flow.async_step_user(BASE_CONNECTION))
-
     def test_verify_ssl_false_stored_in_entry(self):
         ssl_input = {**BASE_CONNECTION, "verify_ssl": False}
         with _patch_client():
@@ -127,100 +107,67 @@ class TestStepUser(unittest.TestCase):
         self.assertFalse(result["data"].get("verify_ssl"))
 
 
-# ── async_step_credentials ────────────────────────────────────────────────────
+# ── async_step_token ──────────────────────────────────────────────────────────
 
-class TestStepCredentials(unittest.TestCase):
+class TestStepToken(unittest.TestCase):
 
-    def _flow_at_credentials(self, origin="user"):
-        """Return a flow already at the credentials step."""
+    def _flow_at_token(self, origin="user"):
         flow = _flow()
         flow._connection_data = {**BASE_CONNECTION}
         flow._flow_origin = origin
         return flow
 
     def test_success_creates_entry_from_user_origin(self):
-        flow = self._flow_at_credentials("user")
-        with _patch_client("tok"):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
+        flow = self._flow_at_token("user")
+        with _patch_client():
+            result = run(flow.async_step_token({"api_token": MOCK_TOKEN}))
         self.assertEqual(result["type"], "create_entry")
-        self.assertEqual(result["data"]["session_cookie"], "tok")
-        self.assertEqual(result["data"]["username"], "admin")
+        self.assertEqual(result["data"]["api_token"], MOCK_TOKEN)
 
-    def test_mfa_required_redirects_to_mfa(self):
-        flow = self._flow_at_credentials("user")
-        with _patch_client(login_side_effect=DockhandMFARequiredError("mfa")):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
-        self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "mfa")
-        # Credentials must be saved into _connection_data so async_step_mfa
-        # can build a client with username+password to submit the TOTP token.
-        self.assertEqual(flow._connection_data.get("username"), "admin")
-        self.assertEqual(flow._connection_data.get("password"), "secret")
-
-    def test_auth_error_shows_invalid_auth(self):
-        flow = self._flow_at_credentials("user")
-        with _patch_client(login_side_effect=DockhandAuthError("bad")):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
+    def test_invalid_token_shows_invalid_auth(self):
+        flow = self._flow_at_token("user")
+        with _patch_client(probe_side_effect=DockhandAuthError("bad token")):
+            result = run(flow.async_step_token({"api_token": "dh_bad"}))
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["errors"]["base"], "invalid_auth")
 
-    def test_no_input_shows_form(self):
-        flow = self._flow_at_credentials("user")
-        result = run(flow.async_step_credentials(None))
+    def test_connection_error_shows_cannot_connect(self):
+        flow = self._flow_at_token("user")
+        with _patch_client(probe_side_effect=Exception("refused")):
+            result = run(flow.async_step_token({"api_token": MOCK_TOKEN}))
         self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "credentials")
+        self.assertEqual(result["errors"]["base"], "cannot_connect")
+
+    def test_no_input_shows_form(self):
+        flow = self._flow_at_token("user")
+        result = run(flow.async_step_token(None))
+        self.assertEqual(result["type"], "form")
+        self.assertEqual(result["step_id"], "token")
 
     def test_reauth_origin_aborts_with_reauth_successful(self):
-        flow = self._flow_at_credentials("reauth")
-        flow._connection_data = {**BASE_INPUT, "session_cookie": "old"}
-        with _patch_client("new_tok"):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
+        flow = self._flow_at_token("reauth")
+        flow._connection_data = {**BASE_CONNECTION, "api_token": "dh_old"}
+        with _patch_client():
+            result = run(flow.async_step_token({"api_token": "dh_new"}))
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "reauth_successful")
 
     def test_reconfigure_origin_aborts_with_reconfigure_successful(self):
-        flow = self._flow_at_credentials("reconfigure")
-        flow._connection_data = {**BASE_INPUT, "session_cookie": "old"}
-        with _patch_client("new_tok"):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
+        flow = self._flow_at_token("reconfigure")
+        flow._connection_data = {**BASE_CONNECTION, "api_token": "dh_old"}
+        with _patch_client():
+            result = run(flow.async_step_token({"api_token": "dh_new"}))
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "reconfigure_successful")
 
-
-# ── async_step_mfa ────────────────────────────────────────────────────────────
-
-class TestStepMfa(unittest.TestCase):
-
-    def _flow_at_mfa(self, origin="user"):
-        flow = _flow()
-        flow._connection_data = {**BASE_INPUT}
-        flow._flow_origin = origin
-        return flow
-
-    def test_success_creates_entry(self):
-        flow = self._flow_at_mfa("user")
-        with _patch_client("tok"):
-            result = run(flow.async_step_mfa({"mfa_token": "123456"}))
-        self.assertEqual(result["type"], "create_entry")
-        self.assertEqual(result["data"]["session_cookie"], "tok")
-
-    def test_auth_error_shows_invalid_mfa(self):
-        flow = self._flow_at_mfa("user")
-        with _patch_client(login_side_effect=DockhandAuthError("bad mfa")):
-            result = run(flow.async_step_mfa({"mfa_token": "000"}))
-        self.assertEqual(result["errors"]["base"], "invalid_mfa")
-
-    def test_no_input_shows_form(self):
-        result = run(self._flow_at_mfa().async_step_mfa(None))
-        self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "mfa")
-
-    def test_reauth_origin_aborts_with_reauth_successful(self):
-        flow = self._flow_at_mfa("reauth")
-        with _patch_client("new_tok"):
-            result = run(flow.async_step_mfa({"mfa_token": "123456"}))
-        self.assertEqual(result["type"], "abort")
-        self.assertEqual(result["reason"], "reauth_successful")
+    def test_token_merged_into_connection_data(self):
+        """Token provided in step_token must be present in the created entry."""
+        flow = self._flow_at_token("user")
+        with _patch_client():
+            result = run(flow.async_step_token({"api_token": "dh_specific"}))
+        self.assertEqual(result["data"]["api_token"], "dh_specific")
+        # Connection settings must also be carried through
+        self.assertEqual(result["data"]["api_url"], "http://dh.test:3000")
 
 
 # ── async_step_reauth_confirm ─────────────────────────────────────────────────
@@ -229,29 +176,22 @@ class TestStepReauth(unittest.TestCase):
 
     def test_success_aborts_with_reauth_successful(self):
         flow = _flow()
-        with _patch_client("new_tok"):
-            result = run(flow.async_step_reauth_confirm({
-                "username": "admin", "password": "newpass"
-            }))
+        with _patch_client():
+            result = run(flow.async_step_reauth_confirm({"api_token": "dh_newtoken"}))
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "reauth_successful")
 
-    def test_mfa_required_redirects_to_mfa(self):
+    def test_invalid_token_shows_invalid_auth(self):
         flow = _flow()
-        with _patch_client(login_side_effect=DockhandMFARequiredError("mfa")):
-            result = run(flow.async_step_reauth_confirm({
-                "username": "admin", "password": "pass"
-            }))
-        self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "mfa")
-
-    def test_auth_error_shows_invalid_auth(self):
-        flow = _flow()
-        with _patch_client(login_side_effect=DockhandAuthError("bad")):
-            result = run(flow.async_step_reauth_confirm({
-                "username": "admin", "password": "wrong"
-            }))
+        with _patch_client(probe_side_effect=DockhandAuthError("bad")):
+            result = run(flow.async_step_reauth_confirm({"api_token": "dh_bad"}))
         self.assertEqual(result["errors"]["base"], "invalid_auth")
+
+    def test_connection_error_shows_cannot_connect(self):
+        flow = _flow()
+        with _patch_client(probe_side_effect=Exception("refused")):
+            result = run(flow.async_step_reauth_confirm({"api_token": "dh_tok"}))
+        self.assertEqual(result["errors"]["base"], "cannot_connect")
 
     def test_no_input_shows_form(self):
         result = run(_flow().async_step_reauth_confirm(None))
@@ -263,64 +203,40 @@ class TestStepReauth(unittest.TestCase):
 
 class TestStepReconfigure(unittest.TestCase):
 
-    def test_auth_disabled_strips_credentials_and_succeeds(self):
-        """Server responds without 401 → strip stored credentials, update entry."""
+    def test_auth_disabled_strips_token_and_succeeds(self):
+        """Probe succeeds without token → strip any stored token, update entry."""
         flow = _flow()
-        with _patch_client():  # environments succeeds
+        with _patch_client():
             result = run(flow.async_step_reconfigure(BASE_CONNECTION))
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "reconfigure_successful")
         updated = flow.hass.config_entries._entries["existing_entry"].data
-        self.assertNotIn("username", updated)
-        self.assertNotIn("password", updated)
-        self.assertNotIn("session_cookie", updated)
+        self.assertNotIn("api_token", updated)
 
-    def test_auth_required_redirects_to_credentials(self):
-        """Server returns 401 → redirect to credentials step."""
+    def test_auth_required_redirects_to_token(self):
+        """Server returns 401 → redirect to token step."""
         flow = _flow()
-        with _patch_client(environments_side_effect=DockhandAuthError("401")):
+        with _patch_client(probe_side_effect=DockhandAuthError("401")):
             result = run(flow.async_step_reconfigure(BASE_CONNECTION))
         self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "credentials")
+        self.assertEqual(result["step_id"], "token")
 
-    def test_auth_required_then_credentials_updates_entry(self):
-        """Full reconfigure with auth: connection → credentials → success."""
+    def test_auth_required_then_token_updates_entry(self):
+        """Full reconfigure with auth: connection → token → success."""
         flow = _flow()
-        with _patch_client(environments_side_effect=DockhandAuthError("401")):
+        with _patch_client(probe_side_effect=DockhandAuthError("401")):
             run(flow.async_step_reconfigure(BASE_CONNECTION))
-        with _patch_client("new_tok"):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
+        with _patch_client():
+            result = run(flow.async_step_token({"api_token": "dh_new"}))
         self.assertEqual(result["type"], "abort")
         self.assertEqual(result["reason"], "reconfigure_successful")
 
-    def test_blank_password_uses_existing(self):
-        """Blank password during reconfigure keeps the stored password."""
-        flow = _flow()
-        # First trigger the 401 to reach credentials
-        with _patch_client(environments_side_effect=DockhandAuthError("401")):
-            run(flow.async_step_reconfigure(BASE_CONNECTION))
-        # Submit with blank password — should use existing "secret" from entry
-        with _patch_client("new_tok") as mock_patch:
-            result = run(flow.async_step_credentials({"username": "admin", "password": ""}))
-        self.assertEqual(result["type"], "abort")
-        # password in _connection_data should fall back to stored value
-        self.assertEqual(flow._connection_data.get("password"), "secret")
-
     def test_connection_error_shows_error(self):
         flow = _flow()
-        with _patch_client(environments_side_effect=Exception("timeout")):
+        with _patch_client(probe_side_effect=Exception("timeout")):
             result = run(flow.async_step_reconfigure(BASE_CONNECTION))
         self.assertEqual(result["type"], "form")
         self.assertEqual(result["errors"]["base"], "cannot_connect")
-
-    def test_mfa_required_redirects(self):
-        flow = _flow()
-        with _patch_client(environments_side_effect=DockhandAuthError("401")):
-            run(flow.async_step_reconfigure(BASE_CONNECTION))
-        with _patch_client(login_side_effect=DockhandMFARequiredError("mfa")):
-            result = run(flow.async_step_credentials(BASE_CREDENTIALS))
-        self.assertEqual(result["type"], "form")
-        self.assertEqual(result["step_id"], "mfa")
 
     def test_no_input_shows_form(self):
         result = run(_flow().async_step_reconfigure(None))

@@ -1,25 +1,14 @@
-"""Shared test fixtures for the Dockhand integration.
-
-Uses pytest-homeassistant-custom-component which provides a real (but
-lightweight) HA instance for integration testing without needing a running
-Home Assistant installation.
-
-Install the test environment:
-    pip install pytest-homeassistant-custom-component pytest pytest-asyncio
-"""
+"""Shared test fixtures for the Dockhand integration."""
 from __future__ import annotations
 
-from collections.abc import Generator
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from custom_components.dockhand.const import (
     CONF_API_URL,
-    CONF_USERNAME,
-    CONF_PASSWORD,
-    CONF_SESSION_COOKIE,
+    CONF_API_TOKEN,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
     CONF_ENABLE_SCHEDULES,
@@ -32,20 +21,16 @@ from custom_components.dockhand.const import (
 )
 
 # ---------------------------------------------------------------------------
-# Canonical test data — mirrors realistic Dockhand API responses
+# Canonical test data
 # ---------------------------------------------------------------------------
 
 MOCK_API_URL = "http://dockhand.test:3000"
-MOCK_USERNAME = "admin"
-MOCK_PASSWORD = "secret"
-MOCK_COOKIE = "test_session_cookie_abc123"
+MOCK_TOKEN = "dh_test_token_abc123"
 
-# Config entry data as it would be stored after successful setup
+# Config entry data as stored after successful authenticated setup
 MOCK_CONFIG_DATA: dict[str, Any] = {
     CONF_API_URL: MOCK_API_URL,
-    CONF_USERNAME: MOCK_USERNAME,
-    CONF_PASSWORD: MOCK_PASSWORD,
-    CONF_SESSION_COOKIE: MOCK_COOKIE,
+    CONF_API_TOKEN: MOCK_TOKEN,
     CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW: DEFAULT_POLL_INTERVAL_SLOW,
     CONF_ENABLE_SCHEDULES: False,
@@ -54,19 +39,28 @@ MOCK_CONFIG_DATA: dict[str, Any] = {
     CONF_ENABLE_NETWORKS: False,
 }
 
-# A single environment returned by /api/environments and embedded in stats
+# Config entry data for a no-auth install (no token stored)
+MOCK_CONFIG_DATA_NOAUTH: dict[str, Any] = {
+    CONF_API_URL: MOCK_API_URL,
+    CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
+    CONF_POLL_INTERVAL_SLOW: DEFAULT_POLL_INTERVAL_SLOW,
+    CONF_ENABLE_SCHEDULES: False,
+    CONF_ENABLE_IMAGES: False,
+    CONF_ENABLE_VOLUMES: False,
+    CONF_ENABLE_NETWORKS: False,
+}
+
 ENV_ID = 1
 ENV_NAME = "local"
 
-# Dashboard stats returned by /api/dashboard/stats?env=1
 MOCK_STATS: dict[str, Any] = {
     "name": ENV_NAME,
     "online": True,
     "connectionType": "local",
     "metrics": {
         "memoryPercent": 42.5,
-        "memoryUsed": 4_294_967_296,   # 4 GiB in bytes
-        "memoryTotal": 8_589_934_592,  # 8 GiB in bytes
+        "memoryUsed": 4_294_967_296,
+        "memoryTotal": 8_589_934_592,
         "cpuUsage": 12.3,
     },
     "containers": {
@@ -83,7 +77,6 @@ MOCK_STATS: dict[str, Any] = {
     "buildCacheSize": 268_435_456,
 }
 
-# A freestanding container (no compose label)
 MOCK_CONTAINER_FREE: dict[str, Any] = {
     "id": "abc123def456",
     "name": "my-app",
@@ -96,7 +89,6 @@ MOCK_CONTAINER_FREE: dict[str, Any] = {
     "health": None,
 }
 
-# A compose-managed container
 MOCK_CONTAINER_COMPOSE: dict[str, Any] = {
     "id": "compose111222",
     "name": "mystack_web_1",
@@ -109,7 +101,6 @@ MOCK_CONTAINER_COMPOSE: dict[str, Any] = {
     "health": None,
 }
 
-# A container with a healthcheck
 MOCK_CONTAINER_HEALTHY: dict[str, Any] = {
     "id": "healthy999",
     "name": "healthy-app",
@@ -130,7 +121,7 @@ MOCK_STACK: dict[str, Any] = {
     "containers": [MOCK_CONTAINER_COMPOSE["id"]],
 }
 
-# Fast coordinator data shape
+
 def make_fast_data(
     containers: list | None = None,
     stacks: list | None = None,
@@ -143,7 +134,7 @@ def make_fast_data(
         }
     }
 
-# Slow coordinator data shape
+
 def make_slow_data(
     images: list | None = None,
     networks: list | None = None,
@@ -168,18 +159,14 @@ def make_slow_data(
 # ---------------------------------------------------------------------------
 
 def make_mock_client(
-    cookie: str = MOCK_COOKIE,
-    raise_on_login: Exception | None = None,
-    raise_on_login_mfa: Exception | None = None,
+    raise_on_probe: Exception | None = None,
 ) -> MagicMock:
     """Return a MagicMock that replaces DockhandClient."""
     client = MagicMock()
-    if raise_on_login:
-        client.async_login = AsyncMock(side_effect=raise_on_login)
-    elif raise_on_login_mfa:
-        client.async_login = AsyncMock(side_effect=raise_on_login_mfa)
+    if raise_on_probe:
+        client.async_probe = AsyncMock(side_effect=raise_on_probe)
     else:
-        client.async_login = AsyncMock(return_value=cookie)
+        client.async_probe = AsyncMock(return_value=None)
 
     client.async_get_environments = AsyncMock(return_value=[{"id": ENV_ID, "name": ENV_NAME}])
     client.async_get_dashboard_stats = AsyncMock(return_value=MOCK_STATS)
@@ -190,7 +177,6 @@ def make_mock_client(
     client.async_get_volumes = AsyncMock(return_value=[])
     client.async_get_schedules = AsyncMock(return_value=[])
 
-    # Action methods
     client.async_start_container = AsyncMock()
     client.async_stop_container = AsyncMock()
     client.async_restart_container = AsyncMock()
