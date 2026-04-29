@@ -24,7 +24,7 @@ from ha_stubs import ConfigEntry
 from custom_components.dockhand.api import DockhandAuthError
 from custom_components.dockhand.config_flow import DockhandConfigFlow, DockhandOptionsFlow
 
-run = asyncio.get_event_loop().run_until_complete
+run = asyncio.run
 
 BASE_CONNECTION = {
     "api_url": "http://dh.test:3000",

@@ -18,7 +18,7 @@ import ha_stubs as stubs; stubs.install()
 from ha_stubs import EntityCategory
 DOMAIN = "dockhand"
 
-run = asyncio.get_event_loop().run_until_complete
+run = asyncio.run
 
 # Data fixtures
 ENV_ID = 1

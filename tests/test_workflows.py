@@ -118,7 +118,7 @@ class TestWorkflowStructure(unittest.TestCase):
                 self.assertIsNotNone(trigger, f"{fname} has no trigger defined")
 
     def test_checkout_actions_use_pinned_version(self):
-        """actions/checkout and actions/setup-python should use @v4/@v5, not @main."""
+        """actions/checkout and actions/setup-python should use a pinned version, not @main."""
         unpinned = []
         for fname, wf in _load_workflows().items():
             for job_id, job in (wf.get("jobs") or {}).items():
@@ -131,7 +131,7 @@ class TestWorkflowStructure(unittest.TestCase):
                             unpinned.append(f"{fname}/{job_id}: {uses}")
         self.assertEqual(
             unpinned, [],
-            "Official actions should use pinned versions (@v4, @v5), not @main/@master:\n"
+            "Official actions should use a pinned version (e.g. @v6), not @main/@master:\n"
             + "\n".join(f"  - {u}" for u in unpinned),
         )
 

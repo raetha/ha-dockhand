@@ -20,9 +20,16 @@ from ha_stubs import install
 install()
 
 # ── Phase 1: ruff lint ────────────────────────────────────────────────────────
+# In CI, lint runs as its own dedicated job (with ruff installed) so we skip
+# it here to avoid a noisy warning when ruff is not present in the test step.
+# Locally, lint runs if ruff is installed and is skipped with a hint if not.
 
 lint_ok = True
-if shutil.which("ruff"):
+in_ci = os.environ.get("CI") == "true"
+if in_ci:
+    print("── Ruff lint ────────────────────────────────────────────────────────")
+    print("CI detected — lint handled by dedicated lint job, skipping here.\n")
+elif shutil.which("ruff"):
     print("── Ruff lint ────────────────────────────────────────────────────────")
     r1 = subprocess.run(["ruff", "check", TARGET], capture_output=False)
     r2 = subprocess.run(["ruff", "format", "--check", TARGET], capture_output=False)
@@ -33,7 +40,7 @@ if shutil.which("ruff"):
         print("\nLint: FAILED (run `ruff check` and/or `ruff format` to see details)\n")
 else:
     print("── Ruff lint ────────────────────────────────────────────────────────")
-    print("WARNING: ruff not found — skipping lint. Install with: pip install ruff\n")
+    print("ruff not found — skipping lint. Install with: pip install ruff\n")
 
 # ── Phase 2: unittest suite ───────────────────────────────────────────────────
 

@@ -30,7 +30,7 @@ from custom_components.dockhand.api import DockhandAuthError
 from custom_components.dockhand import _register_devices, _remove_stale_devices, _remove_stale_entities, DockhandData
 from custom_components.dockhand.coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 
-run = asyncio.get_event_loop().run_until_complete
+run = asyncio.run
 
 ENV1_STATS = {"name": "MyHost"}
 CONTAINER_FREE = {"id": "c1", "name": "nginx", "labels": {}}

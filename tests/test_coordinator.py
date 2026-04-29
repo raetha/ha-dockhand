@@ -18,7 +18,7 @@ from custom_components.dockhand.coordinator import (
     _safe_list, _safe_dict, _unwrap,
 )
 
-run = asyncio.get_event_loop().run_until_complete
+run = asyncio.run
 
 ENV1 = {"id": 1, "name": "local"}
 ENV2 = {"id": 2, "name": "remote"}

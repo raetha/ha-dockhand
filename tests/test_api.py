@@ -18,7 +18,7 @@ from custom_components.dockhand.api import (
     DockhandClient, DockhandAuthError, DockhandError,
 )
 
-run = asyncio.get_event_loop().run_until_complete
+run = asyncio.run
 
 
 def _resp(status=200, json_data=None, text=""):
