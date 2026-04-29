@@ -11,18 +11,30 @@ Covers:
   connection error
 - DockhandOptionsFlow: saves user_input as options
 """
+
 from __future__ import annotations
-import asyncio, sys, os, unittest
+
+import asyncio
+import os
+import sys
+import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(ROOT, "tests")
-sys.path.insert(0, ROOT); sys.path.insert(0, TESTS)
+sys.path.insert(0, ROOT)
+sys.path.insert(0, TESTS)
 
-import ha_stubs as stubs; stubs.install()
+import ha_stubs as stubs
+
+stubs.install()
 from ha_stubs import ConfigEntry
+
 from custom_components.dockhand.api import DockhandAuthError
-from custom_components.dockhand.config_flow import DockhandConfigFlow, DockhandOptionsFlow
+from custom_components.dockhand.config_flow import (
+    DockhandConfigFlow,
+    DockhandOptionsFlow,
+)
 
 run = asyncio.run
 
@@ -72,8 +84,8 @@ def _patch_client(probe_side_effect=None):
 
 # ── async_step_user ───────────────────────────────────────────────────────────
 
-class TestStepUser(unittest.TestCase):
 
+class TestStepUser(unittest.TestCase):
     def test_no_auth_creates_entry_directly(self):
         """Probe succeeds without token → auth disabled → create entry immediately."""
         with _patch_client():
@@ -109,8 +121,8 @@ class TestStepUser(unittest.TestCase):
 
 # ── async_step_token ──────────────────────────────────────────────────────────
 
-class TestStepToken(unittest.TestCase):
 
+class TestStepToken(unittest.TestCase):
     def _flow_at_token(self, origin="user"):
         flow = _flow()
         flow._connection_data = {**BASE_CONNECTION}
@@ -172,8 +184,8 @@ class TestStepToken(unittest.TestCase):
 
 # ── async_step_reauth_confirm ─────────────────────────────────────────────────
 
-class TestStepReauth(unittest.TestCase):
 
+class TestStepReauth(unittest.TestCase):
     def test_success_aborts_with_reauth_successful(self):
         flow = _flow()
         with _patch_client():
@@ -201,8 +213,8 @@ class TestStepReauth(unittest.TestCase):
 
 # ── async_step_reconfigure ────────────────────────────────────────────────────
 
-class TestStepReconfigure(unittest.TestCase):
 
+class TestStepReconfigure(unittest.TestCase):
     def test_auth_disabled_strips_token_and_succeeds(self):
         """Probe succeeds without token → strip any stored token, update entry."""
         flow = _flow()
@@ -246,8 +258,8 @@ class TestStepReconfigure(unittest.TestCase):
 
 # ── DockhandOptionsFlow ───────────────────────────────────────────────────────
 
-class TestOptionsFlow(unittest.TestCase):
 
+class TestOptionsFlow(unittest.TestCase):
     def test_saves_options(self):
         flow = DockhandOptionsFlow(EXISTING_ENTRY)
         result = run(flow.async_step_init({"poll_interval": 120}))

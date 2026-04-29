@@ -6,24 +6,27 @@ let our code run correctly under plain Python without a full HA installation.
 Each stub matches the constructor signature and attribute names the integration
 actually uses.
 """
+
 from __future__ import annotations
 
 import asyncio
 import sys
 from datetime import timedelta
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
-
+from unittest.mock import MagicMock
 
 # ---------------------------------------------------------------------------
 # Exceptions
 # ---------------------------------------------------------------------------
 
+
 class ConfigEntryAuthFailed(Exception):
     pass
 
+
 class ConfigEntryNotReady(Exception):
     pass
+
 
 class UpdateFailed(Exception):
     pass
@@ -32,6 +35,7 @@ class UpdateFailed(Exception):
 # ---------------------------------------------------------------------------
 # homeassistant.core
 # ---------------------------------------------------------------------------
+
 
 class HomeAssistant:
     def __init__(self) -> None:
@@ -68,6 +72,7 @@ class ConfigEntriesStub:
 # ---------------------------------------------------------------------------
 # homeassistant.config_entries
 # ---------------------------------------------------------------------------
+
 
 class ConfigEntry:
     """Minimal config entry — covers all attributes the integration accesses."""
@@ -115,12 +120,14 @@ class ConfigFlow:
         # super().__init__(), the flow still gets hass, context, and the
         # standard flow helper methods injected automatically.
         original_init = cls.__dict__.get("__init__")
+
         def patched_init(self, *args, **kw):
             # Inject HA flow infrastructure BEFORE the subclass init runs
             self.hass = HomeAssistant()
             self.context: dict = {"entry_id": "test_entry_id"}
             if original_init:
                 original_init(self, *args, **kw)
+
         cls.__init__ = patched_init
 
     async def async_set_unique_id(self, unique_id: str) -> None:
@@ -143,9 +150,12 @@ class ConfigFlow:
 # homeassistant.helpers.update_coordinator
 # ---------------------------------------------------------------------------
 
+
 class DataUpdateCoordinator:
     """Minimal coordinator stub matching the constructor signature our code uses."""
-    def __class_getitem__(cls, item): return cls  # support DataUpdateCoordinator[T]
+
+    def __class_getitem__(cls, item):
+        return cls  # support DataUpdateCoordinator[T]
 
     def __init__(
         self,
@@ -173,8 +183,10 @@ class DataUpdateCoordinator:
 
     def async_add_listener(self, listener) -> callable:
         self._listeners.append(listener)
+
         def remove():
             self._listeners.remove(listener)
+
         return remove
 
     async def async_request_refresh(self) -> None:
@@ -187,7 +199,9 @@ class DataUpdateCoordinator:
 
 
 class CoordinatorEntity:
-    def __class_getitem__(cls, item): return cls
+    def __class_getitem__(cls, item):
+        return cls
+
     """Stub CoordinatorEntity — our entities inherit from this."""
 
     # Defaults — subclasses override these as class attributes.
@@ -218,14 +232,17 @@ class CoordinatorEntity:
 # homeassistant.helpers.entity
 # ---------------------------------------------------------------------------
 
+
 class DeviceInfo(dict):
     """DeviceInfo is a TypedDict in real HA; dict subclass is sufficient here."""
+
     pass
 
 
 # ---------------------------------------------------------------------------
 # homeassistant.helpers.device_registry
 # ---------------------------------------------------------------------------
+
 
 class DeviceEntryType:
     SERVICE = "service"
@@ -245,10 +262,18 @@ class DeviceRegistry:
         self._created: list[dict] = []  # log of all create calls
         self._removed: list[str] = []  # log of removed device IDs
 
-    def async_get_or_create(self, *, config_entry_id, identifiers, name,
-                             manufacturer=None, model=None,
-                             configuration_url=None, via_device=None,
-                             entry_type=None) -> DeviceEntry:
+    def async_get_or_create(
+        self,
+        *,
+        config_entry_id,
+        identifiers,
+        name,
+        manufacturer=None,
+        model=None,
+        configuration_url=None,
+        via_device=None,
+        entry_type=None,
+    ) -> DeviceEntry:
         key = frozenset(identifiers)
         # Return existing if already registered
         for dev in self._devices.values():
@@ -273,14 +298,19 @@ class DeviceRegistry:
 
 _DEVICE_REGISTRY: DeviceRegistry | None = None
 
+
 def async_get(hass) -> DeviceRegistry:
     global _DEVICE_REGISTRY
     if _DEVICE_REGISTRY is None:
         _DEVICE_REGISTRY = DeviceRegistry()
     return _DEVICE_REGISTRY
 
-def async_entries_for_config_entry(registry: DeviceRegistry, entry_id: str) -> list[DeviceEntry]:
+
+def async_entries_for_config_entry(
+    registry: DeviceRegistry, entry_id: str
+) -> list[DeviceEntry]:
     return registry.async_entries_for_config_entry(entry_id)
+
 
 def reset_registry() -> None:
     global _DEVICE_REGISTRY
@@ -290,6 +320,7 @@ def reset_registry() -> None:
 # ---------------------------------------------------------------------------
 # homeassistant.helpers.entity_registry
 # ---------------------------------------------------------------------------
+
 
 class EntityEntry:
     def __init__(self, entity_id: str, unique_id: str, config_entry_id: str) -> None:
@@ -304,8 +335,9 @@ class EntityRegistry:
         self._by_config_entry: dict[str, list[EntityEntry]] = {}
         self._removed: list[str] = []  # log of removed entity_ids
 
-    def async_get_or_create(self, *, config_entry_id: str, platform: str,
-                             unique_id: str, **kwargs) -> EntityEntry:
+    def async_get_or_create(
+        self, *, config_entry_id: str, platform: str, unique_id: str, **kwargs
+    ) -> EntityEntry:
         for ent in self._entities.values():
             if ent.unique_id == unique_id and ent.config_entry_id == config_entry_id:
                 return ent
@@ -326,7 +358,9 @@ class EntityRegistry:
     def async_entries_for_config_entry(self, config_entry_id: str) -> list[EntityEntry]:
         return list(self._by_config_entry.get(config_entry_id, []))
 
-    def _add(self, config_entry_id: str, unique_id: str, platform: str = "sensor") -> EntityEntry:
+    def _add(
+        self, config_entry_id: str, unique_id: str, platform: str = "sensor"
+    ) -> EntityEntry:
         """Test helper: register an entity directly."""
         entity_id = f"{platform}.{unique_id}"
         entry = EntityEntry(entity_id, unique_id, config_entry_id)
@@ -337,15 +371,19 @@ class EntityRegistry:
 
 _ENTITY_REGISTRY: EntityRegistry | None = None
 
+
 def er_async_get(hass) -> EntityRegistry:
     global _ENTITY_REGISTRY
     if _ENTITY_REGISTRY is None:
         _ENTITY_REGISTRY = EntityRegistry()
     return _ENTITY_REGISTRY
 
-def er_async_entries_for_config_entry(registry: EntityRegistry,
-                                       entry_id: str) -> list[EntityEntry]:
+
+def er_async_entries_for_config_entry(
+    registry: EntityRegistry, entry_id: str
+) -> list[EntityEntry]:
     return registry.async_entries_for_config_entry(entry_id)
+
 
 def reset_entity_registry() -> None:
     global _ENTITY_REGISTRY
@@ -355,6 +393,7 @@ def reset_entity_registry() -> None:
 # ---------------------------------------------------------------------------
 # homeassistant.components.sensor
 # ---------------------------------------------------------------------------
+
 
 class SensorEntity:
     """Platform base — does NOT inherit CoordinatorEntity.
@@ -385,6 +424,7 @@ class SensorDeviceClass:
 # homeassistant.components.binary_sensor
 # ---------------------------------------------------------------------------
 
+
 class BinarySensorEntity:
     @property
     def is_on(self) -> bool | None:
@@ -400,6 +440,7 @@ class BinarySensorDeviceClass:
 # homeassistant.components.switch
 # ---------------------------------------------------------------------------
 
+
 class SwitchEntity:
     @property
     def is_on(self) -> bool | None:
@@ -410,6 +451,7 @@ class SwitchEntity:
 # homeassistant.components.button
 # ---------------------------------------------------------------------------
 
+
 class ButtonEntity:
     async def async_press(self) -> None:
         raise NotImplementedError
@@ -418,6 +460,7 @@ class ButtonEntity:
 # ---------------------------------------------------------------------------
 # homeassistant.const
 # ---------------------------------------------------------------------------
+
 
 class EntityCategory:
     DIAGNOSTIC = "diagnostic"
@@ -435,6 +478,7 @@ FlowResult = dict
 # homeassistant.helpers.aiohttp_client
 # ---------------------------------------------------------------------------
 
+
 def async_get_clientsession(hass, verify_ssl=True) -> MagicMock:
     return MagicMock()
 
@@ -450,25 +494,26 @@ AddEntitiesCallback = callable
 # homeassistant.util.dt
 # ---------------------------------------------------------------------------
 
+
 class dt_util_module:
     @staticmethod
     def utc_from_timestamp(ts: float):
         import datetime
-        return datetime.datetime.utcfromtimestamp(ts).replace(
-            tzinfo=datetime.timezone.utc
-        )
+
+        return datetime.datetime.utcfromtimestamp(ts).replace(tzinfo=datetime.UTC)
 
     @staticmethod
     def parse_datetime(value: str):
         """Parse an ISO 8601 string to a datetime. Returns None for non-strings."""
         import datetime
+
         if not isinstance(value, str):
             return None
         try:
             # Handle Z suffix
             s = value.rstrip("Z")
             if "T" in s:
-                return datetime.datetime.fromisoformat(s).replace(tzinfo=datetime.timezone.utc)
+                return datetime.datetime.fromisoformat(s).replace(tzinfo=datetime.UTC)
             return None
         except (ValueError, AttributeError):
             return None
@@ -477,9 +522,11 @@ class dt_util_module:
     def as_utc(dt):
         """Return dt with UTC timezone attached."""
         import datetime
+
         if dt is None:
             return None
-        return dt.replace(tzinfo=datetime.timezone.utc)
+        return dt.replace(tzinfo=datetime.UTC)
+
 
 dt_util = dt_util_module()
 
@@ -487,6 +534,7 @@ dt_util = dt_util_module()
 # ---------------------------------------------------------------------------
 # Install stubs into sys.modules so our integration imports resolve correctly
 # ---------------------------------------------------------------------------
+
 
 def install() -> None:
     """Call once before importing any integration module."""
@@ -499,24 +547,28 @@ def install() -> None:
         return m
 
     # Core
-    ha_core = _mod("homeassistant.core",
-                   HomeAssistant=HomeAssistant)
-    ha_exc = _mod("homeassistant.exceptions",
-                  ConfigEntryAuthFailed=ConfigEntryAuthFailed,
-                  ConfigEntryNotReady=ConfigEntryNotReady)
+    ha_core = _mod("homeassistant.core", HomeAssistant=HomeAssistant)
+    ha_exc = _mod(
+        "homeassistant.exceptions",
+        ConfigEntryAuthFailed=ConfigEntryAuthFailed,
+        ConfigEntryNotReady=ConfigEntryNotReady,
+    )
 
     # config_entries module — needs ConfigFlow and OptionsFlow as real classes
     # so our DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN) works
-    ha_ce = _mod("homeassistant.config_entries",
-                 ConfigEntry=ConfigEntry,
-                 ConfigFlow=ConfigFlow,
-                 OptionsFlow=OptionsFlow)
+    ha_ce = _mod(
+        "homeassistant.config_entries",
+        ConfigEntry=ConfigEntry,
+        ConfigFlow=ConfigFlow,
+        OptionsFlow=OptionsFlow,
+    )
 
     ha_flow = _mod("homeassistant.data_entry_flow", FlowResult=FlowResult)
 
     # helpers
     ha_dr_mod = sys.modules.get("homeassistant.helpers.device_registry") or _mod(
-        "homeassistant.helpers.device_registry")
+        "homeassistant.helpers.device_registry"
+    )
     ha_dr_mod.async_get = async_get
     ha_dr_mod.async_entries_for_config_entry = async_entries_for_config_entry
     ha_dr_mod.DeviceRegistry = DeviceRegistry
@@ -524,43 +576,53 @@ def install() -> None:
     ha_dr_mod.DeviceEntryType = DeviceEntryType
 
     ha_er_mod = sys.modules.get("homeassistant.helpers.entity_registry") or _mod(
-        "homeassistant.helpers.entity_registry")
+        "homeassistant.helpers.entity_registry"
+    )
     ha_er_mod.async_get = er_async_get
     ha_er_mod.async_entries_for_config_entry = er_async_entries_for_config_entry
     ha_er_mod.EntityRegistry = EntityRegistry
     ha_er_mod.EntityEntry = EntityEntry
 
     ha_entity = _mod("homeassistant.helpers.entity", DeviceInfo=DeviceInfo)
-    ha_coord = _mod("homeassistant.helpers.update_coordinator",
-                    DataUpdateCoordinator=DataUpdateCoordinator,
-                    CoordinatorEntity=CoordinatorEntity,
-                    UpdateFailed=UpdateFailed)
-    ha_aiohttp = _mod("homeassistant.helpers.aiohttp_client",
-                      async_get_clientsession=async_get_clientsession)
-    ha_ep = _mod("homeassistant.helpers.entity_platform",
-                 AddEntitiesCallback=AddEntitiesCallback)
-    ha_helpers = _mod("homeassistant.helpers",
-                      device_registry=ha_dr_mod,
-                      entity_registry=ha_er_mod)
+    ha_coord = _mod(
+        "homeassistant.helpers.update_coordinator",
+        DataUpdateCoordinator=DataUpdateCoordinator,
+        CoordinatorEntity=CoordinatorEntity,
+        UpdateFailed=UpdateFailed,
+    )
+    ha_aiohttp = _mod(
+        "homeassistant.helpers.aiohttp_client",
+        async_get_clientsession=async_get_clientsession,
+    )
+    ha_ep = _mod(
+        "homeassistant.helpers.entity_platform", AddEntitiesCallback=AddEntitiesCallback
+    )
+    ha_helpers = _mod(
+        "homeassistant.helpers", device_registry=ha_dr_mod, entity_registry=ha_er_mod
+    )
 
     # components
-    ha_sensor = _mod("homeassistant.components.sensor",
-                     SensorEntity=SensorEntity,
-                     SensorStateClass=SensorStateClass,
-                     SensorDeviceClass=SensorDeviceClass)
-    ha_bs = _mod("homeassistant.components.binary_sensor",
-                 BinarySensorEntity=BinarySensorEntity,
-                 BinarySensorDeviceClass=BinarySensorDeviceClass)
-    ha_switch = _mod("homeassistant.components.switch",
-                     SwitchEntity=SwitchEntity)
-    ha_button = _mod("homeassistant.components.button",
-                     ButtonEntity=ButtonEntity)
+    ha_sensor = _mod(
+        "homeassistant.components.sensor",
+        SensorEntity=SensorEntity,
+        SensorStateClass=SensorStateClass,
+        SensorDeviceClass=SensorDeviceClass,
+    )
+    ha_bs = _mod(
+        "homeassistant.components.binary_sensor",
+        BinarySensorEntity=BinarySensorEntity,
+        BinarySensorDeviceClass=BinarySensorDeviceClass,
+    )
+    ha_switch = _mod("homeassistant.components.switch", SwitchEntity=SwitchEntity)
+    ha_button = _mod("homeassistant.components.button", ButtonEntity=ButtonEntity)
 
     ha_const = _mod("homeassistant.const", EntityCategory=EntityCategory)
-    ha_dt = _mod("homeassistant.util.dt",
-                 utc_from_timestamp=dt_util.utc_from_timestamp,
-                 parse_datetime=dt_util.parse_datetime,
-                 as_utc=dt_util.as_utc)
+    ha_dt = _mod(
+        "homeassistant.util.dt",
+        utc_from_timestamp=dt_util.utc_from_timestamp,
+        parse_datetime=dt_util.parse_datetime,
+        as_utc=dt_util.as_utc,
+    )
 
     # homeassistant top-level (for `from homeassistant import config_entries`)
     ha_top = _mod("homeassistant", config_entries=ha_ce)
@@ -585,10 +647,12 @@ def install() -> None:
         "homeassistant.const": ha_const,
         "homeassistant.util": _mod("homeassistant.util"),
         "homeassistant.util.dt": ha_dt,
-        "voluptuous": _mod("voluptuous",
-                           Schema=MagicMock(return_value=MagicMock()),
-                           Required=lambda k, **kw: k,
-                           Optional=lambda k, **kw: k),
+        "voluptuous": _mod(
+            "voluptuous",
+            Schema=MagicMock(return_value=MagicMock()),
+            Required=lambda k, **kw: k,
+            Optional=lambda k, **kw: k,
+        ),
         "aiohttp": _mod("aiohttp", ClientSession=MagicMock),
     }
     for name, mod in mods.items():

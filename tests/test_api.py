@@ -5,17 +5,26 @@ Covers: _request (all paths), async_probe, API endpoint URL construction,
         Bearer token header, Accept: application/json header,
         container/stack actions.
 """
+
 from __future__ import annotations
-import asyncio, sys, os, unittest
+
+import asyncio
+import os
+import sys
+import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-import ha_stubs as stubs; stubs.install()
+import ha_stubs as stubs
+
+stubs.install()
 
 from custom_components.dockhand.api import (
-    DockhandClient, DockhandAuthError, DockhandError,
+    DockhandAuthError,
+    DockhandClient,
+    DockhandError,
 )
 
 run = asyncio.run
@@ -24,16 +33,22 @@ run = asyncio.run
 def _resp(status=200, json_data=None, text=""):
     r = MagicMock()
     r.status = status
-    r.json = AsyncMock(return_value=json_data) if json_data is not None \
-              else AsyncMock(side_effect=Exception("no json"))
+    r.json = (
+        AsyncMock(return_value=json_data)
+        if json_data is not None
+        else AsyncMock(side_effect=Exception("no json"))
+    )
     r.text = AsyncMock(return_value=text)
     return r
 
 
 def _session(response):
     s = MagicMock()
+
     @asynccontextmanager
-    async def _ctx(*a, **kw): yield response
+    async def _ctx(*a, **kw):
+        yield response
+
     s.request = MagicMock(return_value=_ctx())
     return s
 
@@ -47,7 +62,6 @@ def _client(session=None, token=None):
 
 
 class TestRequest(unittest.TestCase):
-
     def test_401_raises_auth_error(self):
         with self.assertRaises(DockhandAuthError) as ctx:
             run(_client(_session(_resp(401)))._request("GET", "/api/x"))
@@ -101,7 +115,6 @@ class TestRequest(unittest.TestCase):
 
 
 class TestProbe(unittest.TestCase):
-
     def test_probe_success_calls_environments(self):
         c = _client(token="dh_tok")
         c.async_get_environments = AsyncMock(return_value=[])
@@ -126,7 +139,8 @@ class TestEndpoints(unittest.TestCase):
         self.c = _client(token="dh_tok")
         self.c._request = AsyncMock(return_value=[])
 
-    def _url(self): return self.c._request.call_args.args[1]
+    def _url(self):
+        return self.c._request.call_args.args[1]
 
     def test_get_environments(self):
         run(self.c.async_get_environments())
@@ -177,7 +191,8 @@ class TestActions(unittest.TestCase):
         self.c = _client(token="dh_tok")
         self.c._request = AsyncMock(return_value=None)
 
-    def _call(self): return self.c._request.call_args
+    def _call(self):
+        return self.c._request.call_args
 
     def test_start_container(self):
         run(self.c.async_start_container(1, "cid"))
@@ -189,7 +204,9 @@ class TestActions(unittest.TestCase):
 
     def test_restart_container(self):
         run(self.c.async_restart_container(1, "cid"))
-        self.assertEqual(self._call().args, ("POST", "/api/containers/cid/restart?env=1"))
+        self.assertEqual(
+            self._call().args, ("POST", "/api/containers/cid/restart?env=1")
+        )
 
     def test_start_stack(self):
         run(self.c.async_start_stack(1, "myapp"))

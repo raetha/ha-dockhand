@@ -7,7 +7,12 @@ Runs in two phases:
 
 Exit code is non-zero if either phase fails.
 """
-import subprocess, sys, os, unittest, shutil
+
+import os
+import shutil
+import subprocess
+import sys
+import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(ROOT, "tests")
@@ -17,6 +22,7 @@ sys.path.insert(0, ROOT)
 sys.path.insert(0, TESTS)
 
 from ha_stubs import install
+
 install()
 
 # ── Phase 1: ruff lint ────────────────────────────────────────────────────────
@@ -33,6 +39,8 @@ elif shutil.which("ruff"):
     print("── Ruff lint ────────────────────────────────────────────────────────")
     r1 = subprocess.run(["ruff", "check", TARGET], capture_output=False)
     r2 = subprocess.run(["ruff", "format", "--check", TARGET], capture_output=False)
+    # Note: ruff format is intentionally excluded from tests/ — the lazy-import
+    # and bootstrap patterns in test files are incompatible with ruff format.
     lint_ok = r1.returncode == 0 and r2.returncode == 0
     if lint_ok:
         print("Lint: OK\n")

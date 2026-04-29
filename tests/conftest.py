@@ -1,4 +1,5 @@
 """Shared test fixtures for the Dockhand integration."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -7,17 +8,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from custom_components.dockhand.const import (
-    CONF_API_URL,
     CONF_API_TOKEN,
+    CONF_API_URL,
+    CONF_ENABLE_IMAGES,
+    CONF_ENABLE_NETWORKS,
+    CONF_ENABLE_SCHEDULES,
+    CONF_ENABLE_VOLUMES,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
-    CONF_ENABLE_SCHEDULES,
-    CONF_ENABLE_IMAGES,
-    CONF_ENABLE_VOLUMES,
-    CONF_ENABLE_NETWORKS,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
-    DOMAIN,
 )
 
 # ---------------------------------------------------------------------------
@@ -64,12 +64,16 @@ MOCK_STATS: dict[str, Any] = {
         "cpuUsage": 12.3,
     },
     "containers": {
-        "total": 3, "running": 2, "stopped": 1,
-        "paused": 0, "restarting": 0, "unhealthy": 0,
+        "total": 3,
+        "running": 2,
+        "stopped": 1,
+        "paused": 0,
+        "restarting": 0,
+        "unhealthy": 0,
         "pendingUpdates": 0,
     },
     "stacks": {"total": 1, "running": 1, "partial": 0, "stopped": 0},
-    "images":  {"total": 4, "totalSize": 2_147_483_648},
+    "images": {"total": 4, "totalSize": 2_147_483_648},
     "volumes": {"total": 2, "totalSize": 536_870_912},
     "networks": {"total": 3, "totalSize": 0},
     "events": {"total": 17, "today": 3},
@@ -129,7 +133,9 @@ def make_fast_data(
     return {
         ENV_ID: {
             "stats": MOCK_STATS,
-            "containers": containers if containers is not None else [MOCK_CONTAINER_FREE],
+            "containers": containers
+            if containers is not None
+            else [MOCK_CONTAINER_FREE],
             "stacks": stacks if stacks is not None else [MOCK_STACK],
         }
     }
@@ -145,9 +151,9 @@ def make_slow_data(
         "environments": {
             ENV_ID: {
                 "env": {"id": ENV_ID, "name": ENV_NAME, "url": MOCK_API_URL},
-                "images":   images   if images   is not None else [],
+                "images": images if images is not None else [],
                 "networks": networks if networks is not None else [],
-                "volumes":  volumes  if volumes  is not None else [],
+                "volumes": volumes if volumes is not None else [],
             }
         },
         "schedules": schedules if schedules is not None else [],
@@ -157,6 +163,7 @@ def make_slow_data(
 # ---------------------------------------------------------------------------
 # Reusable mock for DockhandClient
 # ---------------------------------------------------------------------------
+
 
 def make_mock_client(
     raise_on_probe: Exception | None = None,
@@ -168,7 +175,9 @@ def make_mock_client(
     else:
         client.async_probe = AsyncMock(return_value=None)
 
-    client.async_get_environments = AsyncMock(return_value=[{"id": ENV_ID, "name": ENV_NAME}])
+    client.async_get_environments = AsyncMock(
+        return_value=[{"id": ENV_ID, "name": ENV_NAME}]
+    )
     client.async_get_dashboard_stats = AsyncMock(return_value=MOCK_STATS)
     client.async_get_containers = AsyncMock(return_value=[MOCK_CONTAINER_FREE])
     client.async_get_stacks = AsyncMock(return_value=[MOCK_STACK])

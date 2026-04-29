@@ -6,7 +6,6 @@ Entities are tested by directly instantiating the class with a mock coordinator
 and calling native_value / extra_state_attributes / is_on / async_press.
 This avoids needing a full platform setup while covering the business logic.
 """
-from __future__ import annotations
 import asyncio, sys, os, unittest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -648,7 +647,6 @@ class TestSlowSensors(unittest.TestCase):
 
     def test_activity_events_total(self):
         """DockhandEnvActivityEventsSensor returns the total event count."""
-        sc = _sensor_classes()
         coord = _fast_coord(env_data={
             "stats": {**STATS, "events": {"total": 42, "today": 7}},
             "containers": [], "stacks": [],
@@ -659,14 +657,12 @@ class TestSlowSensors(unittest.TestCase):
         self.assertEqual(sensor.extra_state_attributes["today"], 7)
 
     def test_activity_events_disabled_by_default(self):
-        sc = _sensor_classes()
         coord = _fast_coord()
         from custom_components.dockhand.sensor import DockhandEnvActivityEventsSensor
         sensor = DockhandEnvActivityEventsSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
         self.assertFalse(sensor._attr_entity_registry_enabled_default)
 
     def test_hawser_version_returns_string(self):
-        sc = _sensor_classes()
         coord = _slow_coord(env_data={
             "env": {"name": ENV_NAME, "hawserVersion": "1.4.2",
                     "hawserAgentName": "agent-1", "hawserAgentId": "abc",
@@ -681,7 +677,6 @@ class TestSlowSensors(unittest.TestCase):
         self.assertIn("last_seen", attrs)
 
     def test_hawser_version_none_when_absent(self):
-        sc = _sensor_classes()
         coord = _slow_coord(env_data={
             "env": {"name": ENV_NAME},
             "images": [], "networks": [], "volumes": [],

@@ -6,19 +6,23 @@ actionlint would flag, without requiring those tools to be installed.
 Runs as part of the normal unittest suite so CI failures are caught
 before push.
 """
+
 from __future__ import annotations
+
 import os
 import unittest
 
 try:
     import yaml
+
     HAS_YAML = True
 except ImportError:
     HAS_YAML = False
 
 WORKFLOWS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    ".github", "workflows",
+    ".github",
+    "workflows",
 )
 
 
@@ -59,7 +63,8 @@ class TestWorkflowPermissions(unittest.TestCase):
                 if "permissions" not in job:
                     failures.append(f"{fname}: job '{job_id}' has no permissions block")
         self.assertEqual(
-            failures, [],
+            failures,
+            [],
             "Jobs missing permissions (CodeQL 'Workflow does not contain permissions'):\n"
             + "\n".join(f"  - {f}" for f in failures),
         )
@@ -75,9 +80,12 @@ class TestWorkflowPermissions(unittest.TestCase):
                     continue
                 perms = job.get("permissions")
                 if perms == "write-all":
-                    failures.append(f"{fname}: job '{job_id}' uses write-all permissions")
+                    failures.append(
+                        f"{fname}: job '{job_id}' uses write-all permissions"
+                    )
         self.assertEqual(
-            failures, [],
+            failures,
+            [],
             "Jobs with overly broad write-all permissions:\n"
             + "\n".join(f"  - {f}" for f in failures),
         )
@@ -130,7 +138,8 @@ class TestWorkflowStructure(unittest.TestCase):
                         if uses.endswith("@main") or uses.endswith("@master"):
                             unpinned.append(f"{fname}/{job_id}: {uses}")
         self.assertEqual(
-            unpinned, [],
+            unpinned,
+            [],
             "Official actions should use a pinned version (e.g. @v6), not @main/@master:\n"
             + "\n".join(f"  - {u}" for u in unpinned),
         )

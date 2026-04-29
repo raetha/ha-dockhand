@@ -13,28 +13,50 @@ Covers:
 - _remove_stale_entities: removes stale image/network/volume entity registry entries
   with three safety guards (last_update_success, non-empty env data, per-env scoping)
 """
+
 from __future__ import annotations
-import asyncio, sys, os, unittest
+
+import asyncio
+import os
+import sys
+import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TESTS = os.path.join(ROOT, "tests")
-sys.path.insert(0, ROOT); sys.path.insert(0, TESTS)
+sys.path.insert(0, ROOT)
+sys.path.insert(0, TESTS)
 
-import ha_stubs as stubs; stubs.install()
+import ha_stubs as stubs
+
+stubs.install()
 from ha_stubs import (
-    HomeAssistant, ConfigEntry, ConfigEntryAuthFailed, ConfigEntryNotReady,
-    DeviceRegistry, DeviceEntry, reset_registry,
+    ConfigEntry,
+    ConfigEntryNotReady,
+    HomeAssistant,
+    reset_registry,
 )
-from custom_components.dockhand.api import DockhandAuthError
-from custom_components.dockhand import _register_devices, _remove_stale_devices, _remove_stale_entities, DockhandData
-from custom_components.dockhand.coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
+
+from custom_components.dockhand import (
+    DockhandData,
+    _register_devices,
+    _remove_stale_devices,
+    _remove_stale_entities,
+)
+from custom_components.dockhand.coordinator import (
+    DockhandFastCoordinator,
+    DockhandSlowCoordinator,
+)
 
 run = asyncio.run
 
 ENV1_STATS = {"name": "MyHost"}
 CONTAINER_FREE = {"id": "c1", "name": "nginx", "labels": {}}
-CONTAINER_COMPOSE = {"id": "c2", "name": "web", "labels": {"com.docker.compose.project": "myapp"}}
+CONTAINER_COMPOSE = {
+    "id": "c2",
+    "name": "web",
+    "labels": {"com.docker.compose.project": "myapp"},
+}
 STACK1 = {"name": "myapp", "status": "running"}
 
 
@@ -56,9 +78,14 @@ def _make_slow_coordinator(data, entry=None):
 
 
 def _make_entry(data=None, options=None):
-    d = {"api_url": "http://dh.test:3000", "api_token": "dh_test_token",
-         "enable_schedules": False, "enable_images": False,
-         "enable_volumes": False, "enable_networks": False}
+    d = {
+        "api_url": "http://dh.test:3000",
+        "api_token": "dh_test_token",
+        "enable_schedules": False,
+        "enable_images": False,
+        "enable_volumes": False,
+        "enable_networks": False,
+    }
     if data:
         d.update(data)
     return ConfigEntry(data=d, options=options or {})
@@ -67,14 +94,15 @@ def _make_entry(data=None, options=None):
 def _make_registry():
     reset_registry()
     from ha_stubs import async_get
+
     hass = HomeAssistant()
     return async_get(hass), hass
 
 
 # ── _register_devices ─────────────────────────────────────────────────────────
 
-class TestRegisterDevices(unittest.TestCase):
 
+class TestRegisterDevices(unittest.TestCase):
     def setUp(self):
         reset_registry()
 
@@ -93,41 +121,52 @@ class TestRegisterDevices(unittest.TestCase):
         return {list(d.identifiers)[0][1] for d in devs}
 
     def test_env_hub_always_created(self):
-        reg, entry = self._run({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+        reg, entry = self._run(
+            {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
+        )
         ids = self._identifiers(reg, entry)
         self.assertIn("env_1", ids)
 
     def test_env_hub_uses_stats_name(self):
-        reg, entry = self._run({1: {"stats": {"name": "MyHost"}, "containers": [], "stacks": []}})
-        devs = reg.async_entries_for_config_entry(entry.entry_id)
-        hub = next(d for d in devs if list(d.identifiers)[0][1] == "env_1")
-        created = next(c for c in reg._created
-                       if c["identifiers"] == {("dockhand", "env_1")})
+        reg, entry = self._run(
+            {1: {"stats": {"name": "MyHost"}, "containers": [], "stacks": []}}
+        )
+        created = next(
+            c for c in reg._created if c["identifiers"] == {("dockhand", "env_1")}
+        )
         self.assertEqual(created["name"], "MyHost")
 
     def test_containers_group_created_for_freestanding(self):
-        reg, entry = self._run({1: {"stats": ENV1_STATS,
-                                    "containers": [CONTAINER_FREE], "stacks": []}})
+        reg, entry = self._run(
+            {1: {"stats": ENV1_STATS, "containers": [CONTAINER_FREE], "stacks": []}}
+        )
         self.assertIn("env_1_Containers", self._identifiers(reg, entry))
 
     def test_containers_group_not_created_compose_only(self):
-        reg, entry = self._run({1: {"stats": ENV1_STATS,
-                                    "containers": [CONTAINER_COMPOSE], "stacks": []}})
+        reg, entry = self._run(
+            {1: {"stats": ENV1_STATS, "containers": [CONTAINER_COMPOSE], "stacks": []}}
+        )
         self.assertNotIn("env_1_Containers", self._identifiers(reg, entry))
 
     def test_stacks_group_created_when_stacks_exist(self):
-        reg, entry = self._run({1: {"stats": ENV1_STATS,
-                                    "containers": [], "stacks": [STACK1]}})
+        reg, entry = self._run(
+            {1: {"stats": ENV1_STATS, "containers": [], "stacks": [STACK1]}}
+        )
         self.assertIn("env_1_Stacks", self._identifiers(reg, entry))
 
     def test_stacks_group_not_created_when_empty(self):
-        reg, entry = self._run({1: {"stats": ENV1_STATS,
-                                    "containers": [], "stacks": []}})
+        reg, entry = self._run(
+            {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
+        )
         self.assertNotIn("env_1_Stacks", self._identifiers(reg, entry))
 
     def test_networks_group_when_enabled_and_data(self):
-        slow = {"environments": {1: {"env": {}, "networks": [{"id": "n1"}],
-                                     "images": [], "volumes": []}}, "schedules": []}
+        slow = {
+            "environments": {
+                1: {"env": {}, "networks": [{"id": "n1"}], "images": [], "volumes": []}
+            },
+            "schedules": [],
+        }
         reg, entry = self._run(
             {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
             slow_data=slow,
@@ -136,8 +175,12 @@ class TestRegisterDevices(unittest.TestCase):
         self.assertIn("env_1_Networks", self._identifiers(reg, entry))
 
     def test_networks_group_not_created_when_disabled(self):
-        slow = {"environments": {1: {"env": {}, "networks": [{"id": "n1"}],
-                                     "images": [], "volumes": []}}, "schedules": []}
+        slow = {
+            "environments": {
+                1: {"env": {}, "networks": [{"id": "n1"}], "images": [], "volumes": []}
+            },
+            "schedules": [],
+        }
         reg, entry = self._run(
             {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
             slow_data=slow,
@@ -146,8 +189,12 @@ class TestRegisterDevices(unittest.TestCase):
         self.assertNotIn("env_1_Networks", self._identifiers(reg, entry))
 
     def test_networks_group_not_created_when_enabled_but_empty(self):
-        slow = {"environments": {1: {"env": {}, "networks": [],
-                                     "images": [], "volumes": []}}, "schedules": []}
+        slow = {
+            "environments": {
+                1: {"env": {}, "networks": [], "images": [], "volumes": []}
+            },
+            "schedules": [],
+        }
         reg, entry = self._run(
             {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
             slow_data=slow,
@@ -179,7 +226,9 @@ class TestRegisterDevices(unittest.TestCase):
         """Calling _register_devices twice should not create duplicate devices."""
         reg, hass = _make_registry()
         entry = _make_entry()
-        fast = _make_fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+        fast = _make_fast_coordinator(
+            {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
+        )
         slow = _make_slow_coordinator({"environments": {}, "schedules": []})
         config = {**entry.data}
         _register_devices(hass, entry, fast, slow, config, "http://dh.test:3000")
@@ -191,14 +240,12 @@ class TestRegisterDevices(unittest.TestCase):
 
 # ── _remove_stale_devices ─────────────────────────────────────────────────────
 
-class TestRemoveStaleDevices(unittest.TestCase):
 
+class TestRemoveStaleDevices(unittest.TestCase):
     def setUp(self):
         reset_registry()
 
     def _make_runtime_data(self, fast_data, slow_data):
-        fast = _make_fast_coordinator(fast_data)
-        slow = _make_slow_coordinator(slow_data)
         rd = MagicMock()
         rd.fast_coordinator.data = fast_data
         rd.slow_coordinator.data = slow_data
@@ -263,8 +310,10 @@ class TestRemoveStaleDevices(unittest.TestCase):
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
             fast_data={},
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}},
-                       "schedules": []},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
         )
         # An old image device — _remove_stale_devices no longer touches image_ identifiers
         leftover = self._add_device(reg, entry, "image_1_deadbeef")
@@ -277,8 +326,10 @@ class TestRemoveStaleDevices(unittest.TestCase):
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
             fast_data={},
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}},
-                       "schedules": []},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
         )
         stale = self._add_device(reg, entry, "network_netXYZ")
         _remove_stale_devices(hass, entry)
@@ -290,8 +341,10 @@ class TestRemoveStaleDevices(unittest.TestCase):
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
             fast_data={},
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}},
-                       "schedules": []},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
         )
         stale = self._add_device(reg, entry, "volume_1_mydata")
         _remove_stale_devices(hass, entry)
@@ -314,7 +367,8 @@ class TestRemoveStaleDevices(unittest.TestCase):
         reg, hass = _make_registry()
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
-            fast_data={}, slow_data={"environments": {}, "schedules": []},
+            fast_data={},
+            slow_data={"environments": {}, "schedules": []},
         )
         group = self._add_device(reg, entry, "env_1_Stacks")
         _remove_stale_devices(hass, entry)
@@ -322,6 +376,7 @@ class TestRemoveStaleDevices(unittest.TestCase):
 
 
 # ── Individual stack device pre-registration ──────────────────────────────────
+
 
 class TestStackDevicePreRegistration(unittest.TestCase):
     """Verify that _register_devices pre-registers individual stack devices.
@@ -335,13 +390,19 @@ class TestStackDevicePreRegistration(unittest.TestCase):
         reset_registry()
         reg, hass = _make_registry()
         entry = _make_entry()
-        fast = _make_fast_coordinator({
-            1: {"stats": ENV1_STATS,
-                "containers": [CONTAINER_COMPOSE],
-                "stacks": [STACK1, {"name": "second", "status": "running"}]},
-        })
+        fast = _make_fast_coordinator(
+            {
+                1: {
+                    "stats": ENV1_STATS,
+                    "containers": [CONTAINER_COMPOSE],
+                    "stacks": [STACK1, {"name": "second", "status": "running"}],
+                },
+            }
+        )
         slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-        _register_devices(hass, entry, fast, slow, dict(entry.data), "http://dh.test:3000")
+        _register_devices(
+            hass, entry, fast, slow, dict(entry.data), "http://dh.test:3000"
+        )
         self.reg = reg
         self.entry = entry
 
@@ -373,28 +434,44 @@ class TestStackDevicePreRegistration(unittest.TestCase):
         reset_registry()
         reg, hass = _make_registry()
         entry = _make_entry()
-        fast = _make_fast_coordinator({
-            1: {"stats": ENV1_STATS, "containers": [], "stacks": []},
-        })
+        fast = _make_fast_coordinator(
+            {
+                1: {"stats": ENV1_STATS, "containers": [], "stacks": []},
+            }
+        )
         slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-        _register_devices(hass, entry, fast, slow, dict(entry.data), "http://dh.test:3000")
-        ids = {list(d.identifiers)[0][1]
-               for d in reg.async_entries_for_config_entry(entry.entry_id)}
+        _register_devices(
+            hass, entry, fast, slow, dict(entry.data), "http://dh.test:3000"
+        )
+        ids = {
+            list(d.identifiers)[0][1]
+            for d in reg.async_entries_for_config_entry(entry.entry_id)
+        }
         stack_devices = {i for i in ids if i.startswith("stack_")}
         self.assertEqual(stack_devices, set())
 
 
 # ── async_setup_entry ─────────────────────────────────────────────────────────
 
+
 class TestSetupEntry(unittest.TestCase):
     """Tests for async_setup_entry in __init__.py."""
 
-    def _make_mock_coordinators(self, fast_data=None, slow_data=None,
-                                 fast_side_effect=None, slow_side_effect=None):
+    def _make_mock_coordinators(
+        self,
+        fast_data=None,
+        slow_data=None,
+        fast_side_effect=None,
+        slow_side_effect=None,
+    ):
         fast = MagicMock(spec=DockhandFastCoordinator)
-        fast.data = fast_data or {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
+        fast.data = fast_data or {
+            1: {"stats": ENV1_STATS, "containers": [], "stacks": []}
+        }
         if fast_side_effect:
-            fast.async_config_entry_first_refresh = AsyncMock(side_effect=fast_side_effect)
+            fast.async_config_entry_first_refresh = AsyncMock(
+                side_effect=fast_side_effect
+            )
         else:
             fast.async_config_entry_first_refresh = AsyncMock()
         fast.async_add_listener = MagicMock(return_value=lambda: None)
@@ -403,7 +480,9 @@ class TestSetupEntry(unittest.TestCase):
         slow.data = slow_data or {"environments": {}, "schedules": []}
         slow.last_update_success = True
         if slow_side_effect:
-            slow.async_config_entry_first_refresh = AsyncMock(side_effect=slow_side_effect)
+            slow.async_config_entry_first_refresh = AsyncMock(
+                side_effect=slow_side_effect
+            )
         else:
             slow.async_config_entry_first_refresh = AsyncMock()
         slow.async_add_listener = MagicMock(return_value=lambda: None)
@@ -412,16 +491,28 @@ class TestSetupEntry(unittest.TestCase):
     def test_success_stores_runtime_data(self):
         """Happy path: runtime_data is set with client, fast, and slow coordinator."""
         from custom_components.dockhand import async_setup_entry
+
         reset_registry()
         hass = HomeAssistant()
         entry = _make_entry({"api_token": "dh_test_token"})
         fast, slow = self._make_mock_coordinators()
 
         mock_client = MagicMock()
-        with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
-             patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
-             patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
-             patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow):
+        with (
+            patch(
+                "custom_components.dockhand.async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.dockhand.DockhandClient", return_value=mock_client
+            ),
+            patch(
+                "custom_components.dockhand.DockhandFastCoordinator", return_value=fast
+            ),
+            patch(
+                "custom_components.dockhand.DockhandSlowCoordinator", return_value=slow
+            ),
+        ):
             run(async_setup_entry(hass, entry))
 
         self.assertIsNotNone(entry.runtime_data)
@@ -431,34 +522,58 @@ class TestSetupEntry(unittest.TestCase):
     def test_fast_coordinator_failure_raises_not_ready(self):
         """If the fast coordinator's first refresh fails, ConfigEntryNotReady is raised."""
         from custom_components.dockhand import async_setup_entry
+
         reset_registry()
         hass = HomeAssistant()
         entry = _make_entry({"api_token": "dh_test_token"})
         fast, slow = self._make_mock_coordinators(
-            fast_side_effect=ConfigEntryNotReady("timeout"))
+            fast_side_effect=ConfigEntryNotReady("timeout")
+        )
 
         mock_client = MagicMock()
-        with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
-             patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
-             patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
-             patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow):
+        with (
+            patch(
+                "custom_components.dockhand.async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.dockhand.DockhandClient", return_value=mock_client
+            ),
+            patch(
+                "custom_components.dockhand.DockhandFastCoordinator", return_value=fast
+            ),
+            patch(
+                "custom_components.dockhand.DockhandSlowCoordinator", return_value=slow
+            ),
+        ):
             with self.assertRaises(ConfigEntryNotReady):
                 run(async_setup_entry(hass, entry))
 
     def test_legacy_entry_without_token_raises_auth_failed(self):
         """A pre-1.2.0 entry with username/session_cookie but no api_token must
         raise ConfigEntryAuthFailed so HA prompts the user to provide a token."""
-        from custom_components.dockhand import async_setup_entry
         from ha_stubs import ConfigEntryAuthFailed as CEAFailed
+
+        from custom_components.dockhand import async_setup_entry
+
         reset_registry()
         hass = HomeAssistant()
-        entry = _make_entry({"username": "admin", "password": "pass", "session_cookie": "old_cookie"})
+        entry = _make_entry(
+            {"username": "admin", "password": "pass", "session_cookie": "old_cookie"}
+        )
         # Ensure no api_token present
         entry.data.pop("api_token", None)
 
         mock_client = MagicMock()
-        with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
-             patch("custom_components.dockhand.DockhandClient", return_value=mock_client):
+        with (
+            patch(
+                "custom_components.dockhand.async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.dockhand.DockhandClient", return_value=mock_client
+            ),
+        ):
             with self.assertRaises(CEAFailed):
                 run(async_setup_entry(hass, entry))
 
@@ -466,22 +581,36 @@ class TestSetupEntry(unittest.TestCase):
         """After reauth, a token is present alongside legacy keys. Setup must
         strip the legacy keys and continue normally rather than looping."""
         from custom_components.dockhand import async_setup_entry
+
         reset_registry()
         hass = HomeAssistant()
         # Simulate the state after reauth_confirm writes the token but leaves old keys
-        entry = _make_entry({
-            "username": "admin",
-            "password": "pass",
-            "session_cookie": "old_cookie",
-            "api_token": "dh_new_token",
-        })
+        entry = _make_entry(
+            {
+                "username": "admin",
+                "password": "pass",
+                "session_cookie": "old_cookie",
+                "api_token": "dh_new_token",
+            }
+        )
         fast, slow = self._make_mock_coordinators()
 
         mock_client = MagicMock()
-        with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
-             patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
-             patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
-             patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow):
+        with (
+            patch(
+                "custom_components.dockhand.async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.dockhand.DockhandClient", return_value=mock_client
+            ),
+            patch(
+                "custom_components.dockhand.DockhandFastCoordinator", return_value=fast
+            ),
+            patch(
+                "custom_components.dockhand.DockhandSlowCoordinator", return_value=slow
+            ),
+        ):
             run(async_setup_entry(hass, entry))
 
         # Legacy keys must have been stripped from the entry
@@ -495,24 +624,39 @@ class TestSetupEntry(unittest.TestCase):
 
     def test_slow_coordinator_failure_is_non_fatal(self):
         """Slow coordinator first-refresh failure should not prevent setup."""
-        from custom_components.dockhand import async_setup_entry
         from ha_stubs import UpdateFailed
+
+        from custom_components.dockhand import async_setup_entry
+
         reset_registry()
         hass = HomeAssistant()
         entry = _make_entry({"api_token": "dh_test_token"})
         fast, slow = self._make_mock_coordinators(
-            slow_side_effect=UpdateFailed("slow timeout"))
+            slow_side_effect=UpdateFailed("slow timeout")
+        )
 
         mock_client = MagicMock()
-        with patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()), \
-             patch("custom_components.dockhand.DockhandClient", return_value=mock_client), \
-             patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast), \
-             patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow):
+        with (
+            patch(
+                "custom_components.dockhand.async_get_clientsession",
+                return_value=MagicMock(),
+            ),
+            patch(
+                "custom_components.dockhand.DockhandClient", return_value=mock_client
+            ),
+            patch(
+                "custom_components.dockhand.DockhandFastCoordinator", return_value=fast
+            ),
+            patch(
+                "custom_components.dockhand.DockhandSlowCoordinator", return_value=slow
+            ),
+        ):
             run(async_setup_entry(hass, entry))
         self.assertIsNotNone(entry.runtime_data)
 
 
 # ── async_unload_entry ────────────────────────────────────────────────────────
+
 
 class TestUnloadEntry(unittest.TestCase):
     """Tests for async_unload_entry in __init__.py."""
@@ -520,22 +664,30 @@ class TestUnloadEntry(unittest.TestCase):
     def test_unload_returns_true_on_success(self):
         """async_unload_entry should return True when platform unloads succeed."""
         from custom_components.dockhand import async_unload_entry
+
         hass = HomeAssistant()
         entry = _make_entry()
 
-        with patch.object(hass.config_entries, "async_unload_platforms",
-                          new=AsyncMock(return_value=True)):
+        with patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=True),
+        ):
             result = run(async_unload_entry(hass, entry))
         self.assertTrue(result)
 
     def test_unload_returns_false_when_platform_fails(self):
         """async_unload_entry should propagate False from async_unload_platforms."""
         from custom_components.dockhand import async_unload_entry
+
         hass = HomeAssistant()
         entry = _make_entry()
 
-        with patch.object(hass.config_entries, "async_unload_platforms",
-                          new=AsyncMock(return_value=False)):
+        with patch.object(
+            hass.config_entries,
+            "async_unload_platforms",
+            new=AsyncMock(return_value=False),
+        ):
             result = run(async_unload_entry(hass, entry))
         self.assertFalse(result)
 
@@ -543,6 +695,7 @@ class TestUnloadEntry(unittest.TestCase):
         """async_unload_entry must unload exactly the PLATFORMS list."""
         from custom_components.dockhand import async_unload_entry
         from custom_components.dockhand.const import PLATFORMS
+
         hass = HomeAssistant()
         entry = _make_entry()
         called_with = []
@@ -565,6 +718,7 @@ if __name__ == "__main__":
 
 # ── _remove_stale_entities ────────────────────────────────────────────────────
 
+
 class TestRemoveStaleEntities(unittest.TestCase):
     """Covers the three safety guards and each resource type cleanup."""
 
@@ -575,7 +729,8 @@ class TestRemoveStaleEntities(unittest.TestCase):
         return coord
 
     def _setup(self, slow_data, last_update_success=True):
-        from ha_stubs import reset_entity_registry, er_async_get
+        from ha_stubs import er_async_get, reset_entity_registry
+
         reset_entity_registry()
         hass = HomeAssistant()
         entry = _make_entry()
@@ -592,8 +747,12 @@ class TestRemoveStaleEntities(unittest.TestCase):
     def test_guard1_skips_when_last_update_failed(self):
         """No entities removed if last slow poll failed."""
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
-            last_update_success=False)
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+            last_update_success=False,
+        )
         stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
         _remove_stale_entities(hass, entry)
         self.assertNotIn(stale.entity_id, er._removed)
@@ -608,7 +767,11 @@ class TestRemoveStaleEntities(unittest.TestCase):
     def test_guard3_skips_entities_for_absent_env(self):
         """Entities for env_id=2 are untouched when only env_id=1 is in data."""
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []})
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            }
+        )
         preserved = er._add(entry.entry_id, "dockhand_image_2_abc123")
         _remove_stale_entities(hass, entry)
         self.assertNotIn(preserved.entity_id, er._removed)
@@ -617,16 +780,28 @@ class TestRemoveStaleEntities(unittest.TestCase):
 
     def test_removes_stale_image_entity(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []})
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            }
+        )
         stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
         _remove_stale_entities(hass, entry)
         self.assertIn(stale.entity_id, er._removed)
 
     def test_preserves_live_image_entity(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {
-                "images": [{"id": "sha256:deadbeef"}], "networks": [], "volumes": []}},
-                "schedules": []})
+            slow_data={
+                "environments": {
+                    1: {
+                        "images": [{"id": "sha256:deadbeef"}],
+                        "networks": [],
+                        "volumes": [],
+                    }
+                },
+                "schedules": [],
+            }
+        )
         live = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
         _remove_stale_entities(hass, entry)
         self.assertNotIn(live.entity_id, er._removed)
@@ -635,16 +810,24 @@ class TestRemoveStaleEntities(unittest.TestCase):
 
     def test_removes_stale_network_entity(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []})
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            }
+        )
         stale = er._add(entry.entry_id, "dockhand_network_1_netXYZ")
         _remove_stale_entities(hass, entry)
         self.assertIn(stale.entity_id, er._removed)
 
     def test_preserves_live_network_entity(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {
-                "images": [], "networks": [{"id": "netXYZ"}], "volumes": []}},
-                "schedules": []})
+            slow_data={
+                "environments": {
+                    1: {"images": [], "networks": [{"id": "netXYZ"}], "volumes": []}
+                },
+                "schedules": [],
+            }
+        )
         live = er._add(entry.entry_id, "dockhand_network_1_netXYZ")
         _remove_stale_entities(hass, entry)
         self.assertNotIn(live.entity_id, er._removed)
@@ -653,17 +836,28 @@ class TestRemoveStaleEntities(unittest.TestCase):
 
     def test_removes_stale_volume_entity(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []})
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            }
+        )
         stale = er._add(entry.entry_id, "dockhand_volume_1_mydata")
         _remove_stale_entities(hass, entry)
         self.assertIn(stale.entity_id, er._removed)
 
     def test_preserves_live_volume_entity(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {
-                "images": [], "networks": [],
-                "volumes": [{"name": "mydata", "usedBy": []}]}},
-                "schedules": []})
+            slow_data={
+                "environments": {
+                    1: {
+                        "images": [],
+                        "networks": [],
+                        "volumes": [{"name": "mydata", "usedBy": []}],
+                    }
+                },
+                "schedules": [],
+            }
+        )
         live = er._add(entry.entry_id, "dockhand_volume_1_mydata")
         _remove_stale_entities(hass, entry)
         self.assertNotIn(live.entity_id, er._removed)
@@ -672,12 +866,19 @@ class TestRemoveStaleEntities(unittest.TestCase):
 
     def test_removes_stale_but_preserves_live_in_same_env(self):
         hass, entry, er = self._setup(
-            slow_data={"environments": {1: {
-                "images": [{"id": "sha256:aabbccdd"}], "networks": [], "volumes": []}},
-                "schedules": []})
+            slow_data={
+                "environments": {
+                    1: {
+                        "images": [{"id": "sha256:aabbccdd"}],
+                        "networks": [],
+                        "volumes": [],
+                    }
+                },
+                "schedules": [],
+            }
+        )
         live = er._add(entry.entry_id, "dockhand_image_1_aabbccdd")
         stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
         _remove_stale_entities(hass, entry)
         self.assertNotIn(live.entity_id, er._removed)
         self.assertIn(stale.entity_id, er._removed)
-

@@ -47,6 +47,7 @@ jobs:
         run: ruff check custom_components/dockhand/
       - name: Run ruff format check
         run: ruff format --check custom_components/dockhand/
+        # tests/ excluded — see [format] exclude in .ruff.toml
 
   # ── Test suite ──────────────────────────────────────────────────────────
   # Uses stdlib unittest + ha_stubs (no external HA installation required).

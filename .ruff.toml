@@ -37,9 +37,18 @@ ignore = [
     "D401",
 ]
 
+[format]
+exclude = ["tests/*"]
+
 [lint.per-file-ignores]
 "tests/**" = [
     "S101",   # assert is fine in tests
     "D",      # no docstring requirements in tests
     "ANN",    # no annotation requirements in tests
+    "E401",   # multi-import lines are intentional in test bootstrap headers
+    "E402",   # sys.path bootstrap must precede ha_stubs import — structurally unavoidable
+    "E501",   # long assertion messages and mock constructor calls are normal in tests
+    "E702",   # import ha_stubs as stubs; stubs.install() must be one line for bootstrap ordering
+    "F401",   # imports inside _sensor_classes()/_switch_classes() are captured via locals()
+    "I001",   # import order cannot be fully sorted due to bootstrap requirements
 ]

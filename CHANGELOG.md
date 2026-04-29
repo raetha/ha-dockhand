@@ -60,6 +60,22 @@ action.
 - GitHub Actions bumped: `actions/checkout@v6`, `actions/setup-python@v6`
 - `manifest.json` now declares `"homeassistant": "2026.3.0"` minimum version
 
+**Fixes**
+- Removed invalid `homeassistant` key from `manifest.json` — hassfest rejects
+  this key in custom integrations; minimum HA version is correctly expressed
+  in `hacs.json` only
+- Fixed `asyncio.get_event_loop()` usage in all test files — Python 3.14 no
+  longer implicitly creates an event loop in the main thread; replaced with
+  `asyncio.run` throughout
+- Fixed `ha_stubs.py` Python 2-style `except ValueError, AttributeError:` to
+  parenthesised form `except (ValueError, AttributeError):`
+- Bumped `actions/stale@v9 → v10` and `softprops/action-gh-release@v2 → v3`
+  (Dependabot)
+- Cleaned up unused local variables in test files (`sc`, `hub`, `devs`,
+  `fast`, `slow`) and tightened `.ruff.toml` test suppressions to properly
+  accommodate the `locals()`-based lazy-import pattern and bootstrap ordering
+  constraints
+
 ## 1.1.0 — 2026-03-19
 
 Adds support for Dockhand instances running without authentication, and redesigns the config flow to auto-detect whether credentials are needed.
