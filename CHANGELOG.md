@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.2.0 — 2026-04-28
+## [1.2.0] — 2026-04-28
 
 **Breaking change** — session-cookie authentication (username + password + MFA) has been
 removed. The integration now authenticates exclusively via Dockhand API tokens or requires
@@ -76,7 +76,7 @@ action.
   accommodate the `locals()`-based lazy-import pattern and bootstrap ordering
   constraints
 
-## 1.1.0 — 2026-03-19
+## [1.1.0] — 2026-03-19
 
 Adds support for Dockhand instances running without authentication, and redesigns the config flow to auto-detect whether credentials are needed.
 
@@ -92,7 +92,7 @@ Adds support for Dockhand instances running without authentication, and redesign
 - Fixed: `async_setup_entry` called `async_login()` even for no-auth installs (no username stored), causing HTTP 400 `Authentication is not enabled` errors on startup
 - Fixed: MFA token submission failed after the config flow rewrite because credentials were not preserved in `_connection_data` before redirecting to the MFA step
 
-## 1.0.1 — 2026-03-19
+## [1.0.1] — 2026-03-19
 
 Patch release fixing entity ID suffix accumulation, stale entity cleanup, and icons.
 
@@ -107,7 +107,7 @@ Patch release fixing entity ID suffix accumulation, stale entity cleanup, and ic
 - README: added session timeout guidance — Dockhand defaults to 24 h; instructions to extend via Settings → Authentication → General → Session timeout
 - README: added troubleshooting entry for `_2`/`_3` entity ID suffixes and how to resolve with Recreate entity IDs after a prune cycle
 
-## 1.0.0 — 2026-03-08
+## [1.0.0] — 2026-03-08
 
 Initial stable release of the Dockhand integration for Home Assistant.
 
@@ -137,3 +137,8 @@ Initial stable release of the Dockhand integration for Home Assistant.
 - 211 unit tests covering API client, config flow, coordinators, entities, and setup/teardown
 - Passes hassfest and HACS validation
 - Ruff lint clean
+
+[1.2.0]: https://github.com/raetha/ha-dockhand/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/raetha/ha-dockhand/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/raetha/ha-dockhand/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/raetha/ha-dockhand/releases/tag/v1.0.0
