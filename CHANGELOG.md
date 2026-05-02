@@ -1,6 +1,22 @@
 # Changelog
 
+## [1.3.0] — 2026-05-01
+
+### Changes
+
+**Localization**
+- Added machine-generated translations for 10 languages: German (`de`), Spanish (`es`),
+  French (`fr`), Italian (`it`), Norwegian Bokmål (`nb`), Dutch (`nl`), Polish (`pl`),
+  Portuguese (`pt`), Swedish (`sv`), and Chinese Simplified (`zh-Hans`). All 91
+  translatable strings are covered in each language
+- Updated `CONTRIBUTING.md` with guidance for correcting existing translations and
+  submitting new languages — no Python or test-suite knowledge required for
+  translation-only PRs
+- Added `## Translations` section to `README.md` summarising supported languages and
+  linking to the contribution guide
+
 ## [1.2.0] — 2026-04-28
+
 
 **Breaking change** — session-cookie authentication (username + password + MFA) has been
 removed. The integration now authenticates exclusively via Dockhand API tokens or requires
@@ -138,6 +154,7 @@ Initial stable release of the Dockhand integration for Home Assistant.
 - Passes hassfest and HACS validation
 - Ruff lint clean
 
+[1.3.0]: https://github.com/raetha/ha-dockhand/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/raetha/ha-dockhand/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/raetha/ha-dockhand/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/raetha/ha-dockhand/compare/v1.0.0...v1.0.1

@@ -279,6 +279,12 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 
 ---
 
+## Translations
+
+The integration ships with machine-generated translations for German, Spanish, French, Italian, Norwegian, Dutch, Polish, Portuguese, Swedish, and Chinese (Simplified), alongside the primary English strings. Native speaker corrections and new language additions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+
+---
+
 ## Attribution
 
 This integration was developed by **[@raetha](https://github.com/raetha)** with design assistance and code generation by **[Claude](https://claude.ai)** (Anthropic). The integration architecture and entity model are inspired by the official [Portainer integration](https://www.home-assistant.io/integrations/portainer/) added to Home Assistant core in 2025.10.

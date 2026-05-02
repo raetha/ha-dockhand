@@ -1,0 +1,201 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Połącz z Dockhand",
+        "description": "Wprowadź adres URL serwera Dockhand i ustawienia. Token API zostanie poproszony, jeśli uwierzytelnianie jest włączone w Dockhand.",
+        "data": {
+          "api_url": "URL API",
+          "poll_interval": "Szybki interwał odpytywania (sekundy) — statystyki, kontenery i stosy",
+          "poll_interval_slow": "Wolny interwał odpytywania (sekundy) — obrazy, wolumeny, sieci, harmonogramy",
+          "enable_schedules": "Włącz czujniki harmonogramów",
+          "enable_images": "Włącz czujniki obrazów",
+          "enable_volumes": "Włącz czujniki wolumenów",
+          "enable_networks": "Włącz czujniki sieci",
+          "verify_ssl": "Weryfikuj certyfikat SSL"
+        },
+        "data_description": {
+          "api_url": "Podstawowy adres URL instancji Dockhand.",
+          "poll_interval": "Jak często odświeżać statystyki kontenerów, stosów i środowisk. Niższe wartości zwiększają obciążenie. Domyślnie: 60.",
+          "poll_interval_slow": "Jak często odświeżać obrazy, wolumeny, sieci i harmonogramy. Domyślnie: 600.",
+          "enable_schedules": "Włącza czujniki dla harmonogramów konserwacji Dockhand.",
+          "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
+          "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
+          "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
+          "verify_ssl": "Odznacz, aby zezwolić na certyfikaty SSL z własnym podpisem lub niezaufane. Wyłącz tylko jeśli Twoja instancja Dockhand używa certyfikatu z własnym podpisem."
+        }
+      },
+      "token": {
+        "title": "Token API Dockhand",
+        "description": "Twój serwer Dockhand wymaga uwierzytelnienia. Wygeneruj token API w Dockhand w **Profil → Tokeny API**, a następnie wklej go tutaj.",
+        "data": {
+          "api_token": "Token API"
+        },
+        "data_description": {
+          "api_token": "Token API Dockhand zaczynający się od dh_. Wygeneruj go w Profil → Tokeny API w interfejsie Dockhand."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Ponowne uwierzytelnienie z Dockhand",
+        "description": "Twój token API jest już nieważny. Wygeneruj nowy token w Dockhand w **Profil → Tokeny API** i wprowadź go poniżej.",
+        "data": {
+          "api_token": "Token API"
+        },
+        "data_description": {
+          "api_token": "Token API Dockhand zaczynający się od dh_."
+        }
+      },
+      "reconfigure": {
+        "title": "Rekonfiguracja Dockhand",
+        "description": "Zaktualizuj adres URL serwera i ustawienia. Token API zostanie poproszony, jeśli wymagane jest uwierzytelnienie.",
+        "data": {
+          "api_url": "URL API",
+          "poll_interval": "Szybki interwał odpytywania (sekundy) — statystyki, kontenery i stosy",
+          "poll_interval_slow": "Wolny interwał odpytywania (sekundy) — obrazy, wolumeny, sieci, harmonogramy",
+          "enable_schedules": "Włącz czujniki harmonogramów",
+          "enable_images": "Włącz czujniki obrazów",
+          "enable_volumes": "Włącz czujniki wolumenów",
+          "enable_networks": "Włącz czujniki sieci",
+          "verify_ssl": "Weryfikuj certyfikat SSL"
+        },
+        "data_description": {
+          "api_url": "Podstawowy adres URL instancji Dockhand.",
+          "poll_interval": "Jak często odświeżać statystyki. Domyślnie: 60.",
+          "poll_interval_slow": "Jak często odświeżać obrazy, wolumeny, sieci i harmonogramy. Domyślnie: 600.",
+          "enable_schedules": "Włącza czujniki dla harmonogramów konserwacji Dockhand.",
+          "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
+          "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
+          "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
+          "verify_ssl": "Odznacz, aby zezwolić na certyfikaty SSL z własnym podpisem lub niezaufane."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Nie można połączyć się z Dockhand. Sprawdź adres URL API i połączenie sieciowe.",
+      "invalid_auth": "Nieprawidłowy token API. Upewnij się, że skopiowałeś pełny token zaczynający się od dh_."
+    },
+    "abort": {
+      "already_configured": "Ta instancja Dockhand jest już skonfigurowana.",
+      "reauth_successful": "Ponowne uwierzytelnienie zakończyło się sukcesem.",
+      "reconfigure_successful": "Rekonfiguracja zakończyła się sukcesem."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opcje Dockhand",
+        "description": "Dostosuj interwały odpytywania i opcjonalne źródła danych. Aby zmienić URL lub token API, użyj Rekonfiguruj.",
+        "data": {
+          "poll_interval": "Szybki interwał odpytywania (sekundy) — statystyki, kontenery i stosy",
+          "poll_interval_slow": "Wolny interwał odpytywania (sekundy) — obrazy, wolumeny, sieci, harmonogramy",
+          "enable_schedules": "Włącz czujniki harmonogramów",
+          "enable_images": "Włącz czujniki obrazów",
+          "enable_volumes": "Włącz czujniki wolumenów",
+          "enable_networks": "Włącz czujniki sieci"
+        },
+        "data_description": {
+          "poll_interval": "Jak często odświeżać statystyki. Domyślnie: 60.",
+          "poll_interval_slow": "Jak często odświeżać obrazy, wolumeny, sieci i harmonogramy. Domyślnie: 600.",
+          "enable_schedules": "Włącza czujniki dla harmonogramów konserwacji Dockhand.",
+          "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
+          "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
+          "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cpu_usage": {
+        "name": "Użycie CPU"
+      },
+      "memory_usage": {
+        "name": "Użycie pamięci"
+      },
+      "containers": {
+        "name": "Kontenery"
+      },
+      "stacks": {
+        "name": "Stosy"
+      },
+      "image_count": {
+        "name": "Liczba obrazów"
+      },
+      "volume_count": {
+        "name": "Liczba wolumenów"
+      },
+      "network_count": {
+        "name": "Liczba sieci"
+      },
+      "containers_disk_usage": {
+        "name": "Użycie dysku kontenerów"
+      },
+      "build_cache_size": {
+        "name": "Rozmiar pamięci podręcznej kompilacji"
+      },
+      "activity_events": {
+        "name": "Zdarzenia aktywności"
+      },
+      "state": {
+        "name": "Stan"
+      },
+      "health": {
+        "name": "Zdrowie"
+      },
+      "image": {
+        "name": "Obraz"
+      },
+      "status": {
+        "name": "Status"
+      },
+      "containers_in_stack": {
+        "name": "Kontenery"
+      },
+      "hawser_agent_version": {
+        "name": "Wersja agenta Hawser"
+      },
+      "next_run": {
+        "name": "Następne uruchomienie"
+      },
+      "last_status": {
+        "name": "Ostatni status"
+      }
+    },
+    "binary_sensor": {
+      "online": {
+        "name": "Online"
+      },
+      "activity_logging": {
+        "name": "Rejestrowanie aktywności"
+      },
+      "metrics_collection": {
+        "name": "Zbieranie metryk"
+      },
+      "vulnerability_scanning": {
+        "name": "Skanowanie podatności"
+      },
+      "update_checks": {
+        "name": "Sprawdzanie aktualizacji"
+      },
+      "auto_update": {
+        "name": "Automatyczna aktualizacja"
+      },
+      "image_pruning": {
+        "name": "Czyszczenie obrazów"
+      }
+    },
+    "switch": {
+      "running": {
+        "name": "Kontener"
+      },
+      "stack": {
+        "name": "Stos"
+      }
+    },
+    "button": {
+      "restart": {
+        "name": "Uruchom ponownie"
+      }
+    }
+  }
+}

@@ -1,0 +1,201 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar a Dockhand",
+        "description": "Introduce la URL de tu servidor Dockhand y la configuración. Se solicitará un token de API si la autenticación está habilitada en Dockhand.",
+        "data": {
+          "api_url": "URL de la API",
+          "poll_interval": "Intervalo de sondeo rápido (segundos) — estadísticas, contenedores y stacks",
+          "poll_interval_slow": "Intervalo de sondeo lento (segundos) — imágenes, volúmenes, redes, planificaciones",
+          "enable_schedules": "Habilitar sensores de planificación",
+          "enable_images": "Habilitar sensores de imágenes",
+          "enable_volumes": "Habilitar sensores de volúmenes",
+          "enable_networks": "Habilitar sensores de redes",
+          "verify_ssl": "Verificar certificado SSL"
+        },
+        "data_description": {
+          "api_url": "La URL base de tu instancia de Dockhand.",
+          "poll_interval": "Con qué frecuencia actualizar estadísticas de contenedores, stacks y entornos. Valores más bajos aumentan la carga. Predeterminado: 60.",
+          "poll_interval_slow": "Con qué frecuencia actualizar imágenes, volúmenes, redes y planificaciones. Predeterminado: 600.",
+          "enable_schedules": "Activa sensores para las planificaciones de mantenimiento de Dockhand.",
+          "enable_images": "Activa sensores para imágenes Docker por entorno.",
+          "enable_volumes": "Activa sensores para volúmenes Docker por entorno.",
+          "enable_networks": "Activa sensores para redes Docker por entorno.",
+          "verify_ssl": "Desmarcar para permitir certificados SSL autofirmados o no confiables. Solo deshabilitar si tu instancia de Dockhand usa un certificado autofirmado."
+        }
+      },
+      "token": {
+        "title": "Token de API de Dockhand",
+        "description": "Tu servidor Dockhand requiere autenticación. Genera un token de API en Dockhand en **Perfil → Tokens de API**, luego pégalo aquí.",
+        "data": {
+          "api_token": "Token de API"
+        },
+        "data_description": {
+          "api_token": "Un token de API de Dockhand que comienza con dh_. Genera uno en Perfil → Tokens de API en la interfaz de Dockhand."
+        }
+      },
+      "reauth_confirm": {
+        "title": "Volver a autenticar con Dockhand",
+        "description": "Tu token de API ya no es válido. Genera un nuevo token en Dockhand en **Perfil → Tokens de API** e introdúcelo a continuación.",
+        "data": {
+          "api_token": "Token de API"
+        },
+        "data_description": {
+          "api_token": "Un token de API de Dockhand que comienza con dh_."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigurar Dockhand",
+        "description": "Actualizar la URL del servidor y la configuración. Se solicitará un token de API si se requiere autenticación.",
+        "data": {
+          "api_url": "URL de la API",
+          "poll_interval": "Intervalo de sondeo rápido (segundos) — estadísticas, contenedores y stacks",
+          "poll_interval_slow": "Intervalo de sondeo lento (segundos) — imágenes, volúmenes, redes, planificaciones",
+          "enable_schedules": "Habilitar sensores de planificación",
+          "enable_images": "Habilitar sensores de imágenes",
+          "enable_volumes": "Habilitar sensores de volúmenes",
+          "enable_networks": "Habilitar sensores de redes",
+          "verify_ssl": "Verificar certificado SSL"
+        },
+        "data_description": {
+          "api_url": "La URL base de tu instancia de Dockhand.",
+          "poll_interval": "Con qué frecuencia actualizar estadísticas. Predeterminado: 60.",
+          "poll_interval_slow": "Con qué frecuencia actualizar imágenes, volúmenes, redes y planificaciones. Predeterminado: 600.",
+          "enable_schedules": "Activa sensores para las planificaciones de mantenimiento de Dockhand.",
+          "enable_images": "Activa sensores para imágenes Docker por entorno.",
+          "enable_volumes": "Activa sensores para volúmenes Docker por entorno.",
+          "enable_networks": "Activa sensores para redes Docker por entorno.",
+          "verify_ssl": "Desmarcar para permitir certificados SSL autofirmados o no confiables."
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "No se puede conectar a Dockhand. Comprueba la URL de la API y la conectividad de red.",
+      "invalid_auth": "Token de API inválido. Asegúrate de haber copiado el token completo que comienza con dh_."
+    },
+    "abort": {
+      "already_configured": "Esta instancia de Dockhand ya está configurada.",
+      "reauth_successful": "La reautenticación fue exitosa.",
+      "reconfigure_successful": "La reconfiguración fue exitosa."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Opciones de Dockhand",
+        "description": "Ajusta los intervalos de sondeo y las fuentes de datos opcionales. Para cambiar la URL o el token de API, usa Reconfigurar.",
+        "data": {
+          "poll_interval": "Intervalo de sondeo rápido (segundos) — estadísticas, contenedores y stacks",
+          "poll_interval_slow": "Intervalo de sondeo lento (segundos) — imágenes, volúmenes, redes, planificaciones",
+          "enable_schedules": "Habilitar sensores de planificación",
+          "enable_images": "Habilitar sensores de imágenes",
+          "enable_volumes": "Habilitar sensores de volúmenes",
+          "enable_networks": "Habilitar sensores de redes"
+        },
+        "data_description": {
+          "poll_interval": "Con qué frecuencia actualizar estadísticas. Predeterminado: 60.",
+          "poll_interval_slow": "Con qué frecuencia actualizar imágenes, volúmenes, redes y planificaciones. Predeterminado: 600.",
+          "enable_schedules": "Activa sensores para las planificaciones de mantenimiento de Dockhand.",
+          "enable_images": "Activa sensores para imágenes Docker por entorno.",
+          "enable_volumes": "Activa sensores para volúmenes Docker por entorno.",
+          "enable_networks": "Activa sensores para redes Docker por entorno."
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cpu_usage": {
+        "name": "Uso de CPU"
+      },
+      "memory_usage": {
+        "name": "Uso de memoria"
+      },
+      "containers": {
+        "name": "Contenedores"
+      },
+      "stacks": {
+        "name": "Stacks"
+      },
+      "image_count": {
+        "name": "Número de imágenes"
+      },
+      "volume_count": {
+        "name": "Número de volúmenes"
+      },
+      "network_count": {
+        "name": "Número de redes"
+      },
+      "containers_disk_usage": {
+        "name": "Uso de disco de contenedores"
+      },
+      "build_cache_size": {
+        "name": "Tamaño del caché de compilación"
+      },
+      "activity_events": {
+        "name": "Eventos de actividad"
+      },
+      "state": {
+        "name": "Estado"
+      },
+      "health": {
+        "name": "Salud"
+      },
+      "image": {
+        "name": "Imagen"
+      },
+      "status": {
+        "name": "Estado"
+      },
+      "containers_in_stack": {
+        "name": "Contenedores"
+      },
+      "hawser_agent_version": {
+        "name": "Versión del agente Hawser"
+      },
+      "next_run": {
+        "name": "Próxima ejecución"
+      },
+      "last_status": {
+        "name": "Último estado"
+      }
+    },
+    "binary_sensor": {
+      "online": {
+        "name": "En línea"
+      },
+      "activity_logging": {
+        "name": "Registro de actividad"
+      },
+      "metrics_collection": {
+        "name": "Recopilación de métricas"
+      },
+      "vulnerability_scanning": {
+        "name": "Análisis de vulnerabilidades"
+      },
+      "update_checks": {
+        "name": "Comprobación de actualizaciones"
+      },
+      "auto_update": {
+        "name": "Actualización automática"
+      },
+      "image_pruning": {
+        "name": "Limpieza de imágenes"
+      }
+    },
+    "switch": {
+      "running": {
+        "name": "Contenedor"
+      },
+      "stack": {
+        "name": "Stack"
+      }
+    },
+    "button": {
+      "restart": {
+        "name": "Reiniciar"
+      }
+    }
+  }
+}

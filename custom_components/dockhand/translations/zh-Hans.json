@@ -1,0 +1,201 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "连接到 Dockhand",
+        "description": "输入你的 Dockhand 服务器 URL 和设置。如果 Dockhand 中启用了身份验证，将请求 API 令牌。",
+        "data": {
+          "api_url": "API URL",
+          "poll_interval": "快速轮询间隔（秒）— 统计信息、容器和堆栈",
+          "poll_interval_slow": "慢速轮询间隔（秒）— 镜像、卷、网络、调度",
+          "enable_schedules": "启用调度传感器",
+          "enable_images": "启用镜像传感器",
+          "enable_volumes": "启用卷传感器",
+          "enable_networks": "启用网络传感器",
+          "verify_ssl": "验证 SSL 证书"
+        },
+        "data_description": {
+          "api_url": "你的 Dockhand 实例的基础 URL。",
+          "poll_interval": "刷新容器、堆栈和环境统计信息的频率。值越低，负载越高。默认值：60。",
+          "poll_interval_slow": "刷新镜像、卷、网络和调度的频率。默认值：600。",
+          "enable_schedules": "启用 Dockhand 维护调度的传感器。",
+          "enable_images": "启用每个环境的 Docker 镜像传感器。",
+          "enable_volumes": "启用每个环境的 Docker 卷传感器。",
+          "enable_networks": "启用每个环境的 Docker 网络传感器。",
+          "verify_ssl": "取消勾选以允许自签名或不受信任的 SSL 证书。仅在你的 Dockhand 实例使用自签名证书时禁用。"
+        }
+      },
+      "token": {
+        "title": "Dockhand API 令牌",
+        "description": "你的 Dockhand 服务器需要身份验证。在 Dockhand 的 **个人资料 → API 令牌** 中生成 API 令牌，然后粘贴到这里。",
+        "data": {
+          "api_token": "API 令牌"
+        },
+        "data_description": {
+          "api_token": "以 dh_ 开头的 Dockhand API 令牌。在 Dockhand 界面的个人资料 → API 令牌下生成一个。"
+        }
+      },
+      "reauth_confirm": {
+        "title": "重新验证 Dockhand",
+        "description": "你的 API 令牌不再有效。在 Dockhand 的 **个人资料 → API 令牌** 中生成新令牌并在下方输入。",
+        "data": {
+          "api_token": "API 令牌"
+        },
+        "data_description": {
+          "api_token": "以 dh_ 开头的 Dockhand API 令牌。"
+        }
+      },
+      "reconfigure": {
+        "title": "重新配置 Dockhand",
+        "description": "更新服务器 URL 和设置。如果需要身份验证，将请求 API 令牌。",
+        "data": {
+          "api_url": "API URL",
+          "poll_interval": "快速轮询间隔（秒）— 统计信息、容器和堆栈",
+          "poll_interval_slow": "慢速轮询间隔（秒）— 镜像、卷、网络、调度",
+          "enable_schedules": "启用调度传感器",
+          "enable_images": "启用镜像传感器",
+          "enable_volumes": "启用卷传感器",
+          "enable_networks": "启用网络传感器",
+          "verify_ssl": "验证 SSL 证书"
+        },
+        "data_description": {
+          "api_url": "你的 Dockhand 实例的基础 URL。",
+          "poll_interval": "刷新统计信息的频率。默认值：60。",
+          "poll_interval_slow": "刷新镜像、卷、网络和调度的频率。默认值：600。",
+          "enable_schedules": "启用 Dockhand 维护调度的传感器。",
+          "enable_images": "启用每个环境的 Docker 镜像传感器。",
+          "enable_volumes": "启用每个环境的 Docker 卷传感器。",
+          "enable_networks": "启用每个环境的 Docker 网络传感器。",
+          "verify_ssl": "取消勾选以允许自签名或不受信任的 SSL 证书。"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接到 Dockhand。请检查 API URL 和网络连接。",
+      "invalid_auth": "无效的 API 令牌。请确保复制了以 dh_ 开头的完整令牌。"
+    },
+    "abort": {
+      "already_configured": "此 Dockhand 实例已配置。",
+      "reauth_successful": "重新验证成功。",
+      "reconfigure_successful": "重新配置成功。"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dockhand 选项",
+        "description": "调整轮询间隔和可选数据源。要更改 URL 或 API 令牌，请使用重新配置。",
+        "data": {
+          "poll_interval": "快速轮询间隔（秒）— 统计信息、容器和堆栈",
+          "poll_interval_slow": "慢速轮询间隔（秒）— 镜像、卷、网络、调度",
+          "enable_schedules": "启用调度传感器",
+          "enable_images": "启用镜像传感器",
+          "enable_volumes": "启用卷传感器",
+          "enable_networks": "启用网络传感器"
+        },
+        "data_description": {
+          "poll_interval": "刷新统计信息的频率。默认值：60。",
+          "poll_interval_slow": "刷新镜像、卷、网络和调度的频率。默认值：600。",
+          "enable_schedules": "启用 Dockhand 维护调度的传感器。",
+          "enable_images": "启用每个环境的 Docker 镜像传感器。",
+          "enable_volumes": "启用每个环境的 Docker 卷传感器。",
+          "enable_networks": "启用每个环境的 Docker 网络传感器。"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "cpu_usage": {
+        "name": "CPU 使用率"
+      },
+      "memory_usage": {
+        "name": "内存使用率"
+      },
+      "containers": {
+        "name": "容器"
+      },
+      "stacks": {
+        "name": "堆栈"
+      },
+      "image_count": {
+        "name": "镜像数量"
+      },
+      "volume_count": {
+        "name": "卷数量"
+      },
+      "network_count": {
+        "name": "网络数量"
+      },
+      "containers_disk_usage": {
+        "name": "容器磁盘使用量"
+      },
+      "build_cache_size": {
+        "name": "构建缓存大小"
+      },
+      "activity_events": {
+        "name": "活动事件"
+      },
+      "state": {
+        "name": "状态"
+      },
+      "health": {
+        "name": "健康状况"
+      },
+      "image": {
+        "name": "镜像"
+      },
+      "status": {
+        "name": "状态"
+      },
+      "containers_in_stack": {
+        "name": "容器"
+      },
+      "hawser_agent_version": {
+        "name": "Hawser 代理版本"
+      },
+      "next_run": {
+        "name": "下次运行"
+      },
+      "last_status": {
+        "name": "上次状态"
+      }
+    },
+    "binary_sensor": {
+      "online": {
+        "name": "在线"
+      },
+      "activity_logging": {
+        "name": "活动日志记录"
+      },
+      "metrics_collection": {
+        "name": "指标收集"
+      },
+      "vulnerability_scanning": {
+        "name": "漏洞扫描"
+      },
+      "update_checks": {
+        "name": "更新检查"
+      },
+      "auto_update": {
+        "name": "自动更新"
+      },
+      "image_pruning": {
+        "name": "镜像清理"
+      }
+    },
+    "switch": {
+      "running": {
+        "name": "容器"
+      },
+      "stack": {
+        "name": "堆栈"
+      }
+    },
+    "button": {
+      "restart": {
+        "name": "重新启动"
+      }
+    }
+  }
+}
