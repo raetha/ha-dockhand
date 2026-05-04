@@ -467,6 +467,16 @@ class EntityCategory:
     CONFIG = "config"
 
 
+class UnitOfInformation:
+    BYTES = "B"
+    KILOBYTES = "kB"
+    MEGABYTES = "MB"
+    GIGABYTES = "GB"
+    KIBIBYTES = "KiB"
+    MEBIBYTES = "MiB"
+    GIBIBYTES = "GiB"
+
+
 # ---------------------------------------------------------------------------
 # homeassistant.data_entry_flow
 # ---------------------------------------------------------------------------
@@ -616,7 +626,7 @@ def install() -> None:
     ha_switch = _mod("homeassistant.components.switch", SwitchEntity=SwitchEntity)
     ha_button = _mod("homeassistant.components.button", ButtonEntity=ButtonEntity)
 
-    ha_const = _mod("homeassistant.const", EntityCategory=EntityCategory)
+    ha_const = _mod("homeassistant.const", EntityCategory=EntityCategory, UnitOfInformation=UnitOfInformation)
     ha_dt = _mod(
         "homeassistant.util.dt",
         utc_from_timestamp=dt_util.utc_from_timestamp,

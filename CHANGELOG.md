@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.3.1] — 2026-05-03
+
+### Changed
+
+- **Storage sensors now use bytes as the native unit** — `Containers disk usage` and
+  `Build cache size` previously divided the API byte values by 1,048,576 and stored
+  the result as `MiB`. They now store the raw byte value returned by the API
+  (`native_unit_of_measurement = B`) and declare `suggested_unit_of_measurement = MiB`
+  so Home Assistant displays MiB by default while allowing users to change the display
+  unit freely per-entity. This is consistent with how HA core handles data-size sensors
+  and eliminates the precision loss from pre-converting to MiB.
+  **Migration note:** automations or templates that compared the raw numeric state of
+  these sensors against a MiB threshold (e.g. `> 500`) will need to be updated to use
+  byte values (e.g. `> 524288000`) or switch to using the entity's display value.
+
+### Fixed
+
+- **CPU usage sensor reporting inflated values** — `cpuPercent` from the Dockhand API is
+  already a true percentage (e.g. `23.5` for 23.5% CPU). The sensor was incorrectly
+  multiplying it by 100, causing values up to 100× too high. The value is now passed
+  through with only a `round()`, consistent with how `memoryPercent` has always been
+  handled. Fixes [#7](https://github.com/raetha/ha-dockhand/issues/7).
+
 ## [1.3.0] — 2026-05-01
 
 ### Changes
@@ -154,6 +177,7 @@ Initial stable release of the Dockhand integration for Home Assistant.
 - Passes hassfest and HACS validation
 - Ruff lint clean
 
+[1.3.1]: https://github.com/raetha/ha-dockhand/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/raetha/ha-dockhand/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/raetha/ha-dockhand/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/raetha/ha-dockhand/compare/v1.0.1...v1.1.0

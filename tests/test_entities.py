@@ -28,7 +28,7 @@ STATS = {
     "name": "MyHost",
     "online": True,
     "metrics": {"memoryPercent": 45.2, "memoryUsed": 4724464640, "memoryTotal": 8589934592,
-                "cpuPercent": 0.235},  # sensor multiplies by 100 → 23.5
+                "cpuPercent": 23.5},
     "containers": {"total": 4, "running": 3, "stopped": 1, "paused": 0, "restarting": 0,
                    "unhealthy": 0, "pendingUpdates": 1},
     "stacks": {"total": 2, "running": 2, "partial": 0, "stopped": 0},
@@ -291,16 +291,16 @@ class TestEnvSensors(unittest.TestCase):
     def test_networks_count(self):
         self.assertEqual(self.networks.native_value, 3)
 
-    def test_disk_value_mib(self):
-        # containersSize = 524288000 bytes → 500.0 MiB
-        self.assertAlmostEqual(self.disk.native_value, 500.0, places=1)
+    def test_disk_value_bytes(self):
+        # containersSize returned as raw bytes; HA displays in MiB via suggested_unit
+        self.assertEqual(self.disk.native_value, 524288000)
 
     def test_disk_disabled_by_default(self):
         self.assertFalse(self.disk._attr_entity_registry_enabled_default)
 
-    def test_cache_value_mib(self):
-        # buildCacheSize = 104857600 bytes → 100.0 MiB
-        self.assertAlmostEqual(self.cache.native_value, 100.0, places=1)
+    def test_cache_value_bytes(self):
+        # buildCacheSize returned as raw bytes; HA displays in MiB via suggested_unit
+        self.assertEqual(self.cache.native_value, 104857600)
 
     def test_cache_disabled_by_default(self):
         self.assertFalse(self.cache._attr_entity_registry_enabled_default)

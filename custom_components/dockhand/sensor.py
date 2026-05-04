@@ -8,7 +8,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory
+from homeassistant.const import EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceEntryType
@@ -500,7 +500,7 @@ class DockhandEnvCpuSensor(BaseFastEnvSensor):
     @property
     def native_value(self) -> float | None:
         cpu = self._stats().get("metrics", {}).get("cpuPercent")
-        return round(cpu * 100, 2) if cpu is not None else None
+        return round(cpu, 2) if cpu is not None else None
 
 
 class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
@@ -683,7 +683,8 @@ class DockhandEnvNetworksSensor(BaseFastEnvSensor):
 class DockhandEnvContainersDiskSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
-    _attr_native_unit_of_measurement = "MiB"
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "containers_disk_usage"
@@ -700,15 +701,16 @@ class DockhandEnvContainersDiskSensor(BaseFastEnvSensor):
         self._attr_unique_id = f"dockhand_env_{env_id}_containers_size"
 
     @property
-    def native_value(self) -> float | None:
+    def native_value(self) -> int | None:
         v = self._stats().get("containersSize")
-        return round(v / 1_048_576, 3) if isinstance(v, int) else None
+        return v if isinstance(v, int) else None
 
 
 class DockhandEnvBuildCacheSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
-    _attr_native_unit_of_measurement = "MiB"
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "build_cache_size"
@@ -725,9 +727,9 @@ class DockhandEnvBuildCacheSensor(BaseFastEnvSensor):
         self._attr_unique_id = f"dockhand_env_{env_id}_build_cache_size"
 
     @property
-    def native_value(self) -> float | None:
+    def native_value(self) -> int | None:
         v = self._stats().get("buildCacheSize")
-        return round(v / 1_048_576, 3) if isinstance(v, int) else None
+        return v if isinstance(v, int) else None
 
 
 class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
