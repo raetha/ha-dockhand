@@ -12,7 +12,9 @@
           "enable_images": "Włącz czujniki obrazów",
           "enable_volumes": "Włącz czujniki wolumenów",
           "enable_networks": "Włącz czujniki sieci",
-          "verify_ssl": "Weryfikuj certyfikat SSL"
+          "verify_ssl": "Weryfikuj certyfikat SSL",
+          "enable_updates": "Włącz encje aktualizacji kontenerów",
+          "poll_interval_updates": "Interwał sprawdzania aktualizacji (sekundy)"
         },
         "data_description": {
           "api_url": "Podstawowy adres URL instancji Dockhand.",
@@ -22,7 +24,9 @@
           "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
           "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
           "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
-          "verify_ssl": "Odznacz, aby zezwolić na certyfikaty SSL z własnym podpisem lub niezaufane. Wyłącz tylko jeśli Twoja instancja Dockhand używa certyfikatu z własnym podpisem."
+          "verify_ssl": "Odznacz, aby zezwolić na certyfikaty SSL z własnym podpisem lub niezaufane. Wyłącz tylko jeśli Twoja instancja Dockhand używa certyfikatu z własnym podpisem.",
+          "enable_updates": "Włącza encje aktualizacji dla każdego kontenera pokazujące dostępność aktualizacji obrazu. Wyzwala rzeczywiste zapytania do rejestru — patrz poll_interval_updates.",
+          "poll_interval_updates": "Jak często sprawdzać rejestry kontenerów pod kątem aktualizacji obrazów (sekundy). Każde sprawdzenie odpytuje rejestr dla każdego kontenera. Domyślnie: 86400 (24 godziny)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Włącz czujniki obrazów",
           "enable_volumes": "Włącz czujniki wolumenów",
           "enable_networks": "Włącz czujniki sieci",
-          "verify_ssl": "Weryfikuj certyfikat SSL"
+          "verify_ssl": "Weryfikuj certyfikat SSL",
+          "enable_updates": "Włącz encje aktualizacji kontenerów",
+          "poll_interval_updates": "Interwał sprawdzania aktualizacji (sekundy)"
         },
         "data_description": {
           "api_url": "Podstawowy adres URL instancji Dockhand.",
@@ -66,7 +72,9 @@
           "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
           "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
           "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
-          "verify_ssl": "Odznacz, aby zezwolić na certyfikaty SSL z własnym podpisem lub niezaufane."
+          "verify_ssl": "Odznacz, aby zezwolić na certyfikaty SSL z własnym podpisem lub niezaufane.",
+          "enable_updates": "Włącza encje aktualizacji dla każdego kontenera pokazujące dostępność aktualizacji obrazu. Wyzwala rzeczywiste zapytania do rejestru — patrz poll_interval_updates.",
+          "poll_interval_updates": "Jak często sprawdzać rejestry kontenerów pod kątem aktualizacji obrazów (sekundy). Każde sprawdzenie odpytuje rejestr dla każdego kontenera. Domyślnie: 86400 (24 godziny)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Włącz czujniki harmonogramów",
           "enable_images": "Włącz czujniki obrazów",
           "enable_volumes": "Włącz czujniki wolumenów",
-          "enable_networks": "Włącz czujniki sieci"
+          "enable_networks": "Włącz czujniki sieci",
+          "enable_updates": "Włącz encje aktualizacji kontenerów",
+          "poll_interval_updates": "Interwał sprawdzania aktualizacji (sekundy)"
         },
         "data_description": {
           "poll_interval": "Jak często odświeżać statystyki. Domyślnie: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Włącza czujniki dla harmonogramów konserwacji Dockhand.",
           "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
           "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
-          "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko."
+          "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
+          "enable_updates": "Włącza encje aktualizacji dla każdego kontenera pokazujące dostępność aktualizacji obrazu. Wyzwala rzeczywiste zapytania do rejestru — patrz poll_interval_updates.",
+          "poll_interval_updates": "Jak często sprawdzać rejestry kontenerów pod kątem aktualizacji obrazów (sekundy). Każde sprawdzenie odpytuje rejestr dla każdego kontenera. Domyślnie: 86400 (24 godziny)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Uruchom ponownie"
+      },
+      "check_updates": {
+        "name": "Sprawdź aktualizacje obrazów"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Aktualizacja obrazu"
       }
     }
   }

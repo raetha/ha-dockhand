@@ -12,7 +12,9 @@
           "enable_images": "Activer les capteurs d'images",
           "enable_volumes": "Activer les capteurs de volumes",
           "enable_networks": "Activer les capteurs de réseaux",
-          "verify_ssl": "Vérifier le certificat SSL"
+          "verify_ssl": "Vérifier le certificat SSL",
+          "enable_updates": "Activer les entités de mise à jour des conteneurs",
+          "poll_interval_updates": "Intervalle de vérification des mises à jour (secondes)"
         },
         "data_description": {
           "api_url": "L'URL de base de votre instance Dockhand.",
@@ -22,7 +24,9 @@
           "enable_images": "Active les capteurs pour les images Docker par environnement.",
           "enable_volumes": "Active les capteurs pour les volumes Docker par environnement.",
           "enable_networks": "Active les capteurs pour les réseaux Docker par environnement.",
-          "verify_ssl": "Décochez pour autoriser les certificats SSL auto-signés ou non fiables. Désactivez uniquement si votre instance Dockhand utilise un certificat auto-signé."
+          "verify_ssl": "Décochez pour autoriser les certificats SSL auto-signés ou non fiables. Désactivez uniquement si votre instance Dockhand utilise un certificat auto-signé.",
+          "enable_updates": "Active les entités de mise à jour pour chaque conteneur indiquant la disponibilité des mises à jour d'image. Déclenche de vraies requêtes vers le registre — voir poll_interval_updates.",
+          "poll_interval_updates": "Fréquence de vérification des mises à jour d'image dans les registres de conteneurs (secondes). Chaque vérification interroge le registre pour chaque conteneur. Défaut : 86400 (24 heures)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Activer les capteurs d'images",
           "enable_volumes": "Activer les capteurs de volumes",
           "enable_networks": "Activer les capteurs de réseaux",
-          "verify_ssl": "Vérifier le certificat SSL"
+          "verify_ssl": "Vérifier le certificat SSL",
+          "enable_updates": "Activer les entités de mise à jour des conteneurs",
+          "poll_interval_updates": "Intervalle de vérification des mises à jour (secondes)"
         },
         "data_description": {
           "api_url": "L'URL de base de votre instance Dockhand.",
@@ -66,7 +72,9 @@
           "enable_images": "Active les capteurs pour les images Docker par environnement.",
           "enable_volumes": "Active les capteurs pour les volumes Docker par environnement.",
           "enable_networks": "Active les capteurs pour les réseaux Docker par environnement.",
-          "verify_ssl": "Décochez pour autoriser les certificats SSL auto-signés ou non fiables."
+          "verify_ssl": "Décochez pour autoriser les certificats SSL auto-signés ou non fiables.",
+          "enable_updates": "Active les entités de mise à jour pour chaque conteneur indiquant la disponibilité des mises à jour d'image. Déclenche de vraies requêtes vers le registre — voir poll_interval_updates.",
+          "poll_interval_updates": "Fréquence de vérification des mises à jour d'image dans les registres de conteneurs (secondes). Chaque vérification interroge le registre pour chaque conteneur. Défaut : 86400 (24 heures)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Activer les capteurs de planification",
           "enable_images": "Activer les capteurs d'images",
           "enable_volumes": "Activer les capteurs de volumes",
-          "enable_networks": "Activer les capteurs de réseaux"
+          "enable_networks": "Activer les capteurs de réseaux",
+          "enable_updates": "Activer les entités de mise à jour des conteneurs",
+          "poll_interval_updates": "Intervalle de vérification des mises à jour (secondes)"
         },
         "data_description": {
           "poll_interval": "Fréquence d'actualisation des conteneurs, stacks et statistiques. Défaut : 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Active les capteurs pour les planifications de maintenance Dockhand.",
           "enable_images": "Active les capteurs pour les images Docker par environnement.",
           "enable_volumes": "Active les capteurs pour les volumes Docker par environnement.",
-          "enable_networks": "Active les capteurs pour les réseaux Docker par environnement."
+          "enable_networks": "Active les capteurs pour les réseaux Docker par environnement.",
+          "enable_updates": "Active les entités de mise à jour pour chaque conteneur indiquant la disponibilité des mises à jour d'image. Déclenche de vraies requêtes vers le registre — voir poll_interval_updates.",
+          "poll_interval_updates": "Fréquence de vérification des mises à jour d'image dans les registres de conteneurs (secondes). Chaque vérification interroge le registre pour chaque conteneur. Défaut : 86400 (24 heures)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Redémarrer"
+      },
+      "check_updates": {
+        "name": "Rechercher des mises à jour d'images"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Mise à jour de l'image"
       }
     }
   }

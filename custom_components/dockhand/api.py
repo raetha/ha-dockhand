@@ -80,6 +80,18 @@ class DockhandClient:
     async def async_get_dashboard_stats(self, env_id: int) -> dict[str, Any]:
         return await self._request("GET", f"/api/dashboard/stats?env={env_id}")
 
+    async def async_get_all_dashboard_stats(self) -> list[dict[str, Any]]:
+        """Fetch dashboard stats for all environments in a single call.
+
+        GET /api/dashboard/stats (no env parameter)
+
+        Returns a list of environment stat objects, each identical in shape
+        to the single-env response, with an 'id' field for correlation.
+        More efficient than N per-environment calls on each fast poll cycle.
+        """
+        result = await self._request("GET", "/api/dashboard/stats")
+        return result if isinstance(result, list) else []
+
     async def async_get_containers(self, env_id: int) -> list[dict[str, Any]]:
         return await self._request("GET", f"/api/containers?env={env_id}")
 
@@ -121,6 +133,54 @@ class DockhandClient:
         """Restart a running container. POST /api/containers/[id]/restart?env=X"""
         await self._request(
             "POST", f"/api/containers/{container_id}/restart?env={env_id}"
+        )
+
+    async def async_check_container_updates(self, env_id: int) -> list[dict[str, Any]]:
+        """Check for available image updates for all containers in an environment.
+
+        POST /api/containers/check-updates?env=X
+
+        Sending Accept: application/json (set by _request default) causes
+        Dockhand to run the registry check synchronously and return results
+        directly rather than a job-ID reference for async polling.
+
+        Response shape (confirmed fields):
+          containerId     str        — Docker container ID
+          containerName   str        — Container name
+          imageName       str        — Full image reference
+          hasUpdate       bool       — True when a newer digest is available
+          currentDigest   str        — Current image digest.
+                                       Format: "image@sha256:<hex>"
+          newDigest       str        — New image digest.
+                                       Format: "sha256:<hex>".
+                                       Only present when hasUpdate=True.
+          systemContainer str | None — Non-null for Dockhand infrastructure containers
+                                       (e.g. "hawser"). These cannot be updated via
+                                       batch-update even when hasUpdate=True.
+          updateDisabled  bool       — True when dockhand.update=false label is set
+        """
+        data = await self._request(
+            "POST", f"/api/containers/check-updates?env={env_id}"
+        )
+        results = data.get("results") if isinstance(data, dict) else data
+        return results if isinstance(results, list) else []
+
+    async def async_batch_update_container(
+        self, env_id: int, container_id: str
+    ) -> None:
+        """Trigger a safe-pull image update for a single container.
+
+        POST /api/containers/batch-update?env=X
+        Body: {"containerIds": [container_id]}
+
+        Dockhand's safe-pull workflow: pulls new image, restores original tag,
+        scans if vulnerability scanning is configured, then applies or blocks
+        the update based on configured vulnerability criteria.
+        """
+        await self._request(
+            "POST",
+            f"/api/containers/batch-update?env={env_id}",
+            json={"containerIds": [container_id]},
         )
 
     # ------------------------------------------------------------------ #

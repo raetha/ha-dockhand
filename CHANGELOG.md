@@ -1,5 +1,52 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.4.0] — 2026-05-06
+
+### Added
+
+- **Container update entities** — an optional `update` platform adds one
+  [`UpdateEntity`](https://developers.home-assistant.io/docs/core/entity/update/)
+  per container. Enable via **Configure → Enable container update entities**.
+  - Update availability is checked on a configurable interval (default 24 h)
+    by calling Dockhand's `POST /api/containers/check-updates`, which performs
+    real registry queries — kept infrequent to avoid unnecessary load on the
+    Docker host
+  - Installed and latest versions are displayed as short digest hashes (first
+    12 hex chars of the sha256)
+  - **Install** triggers Dockhand's safe-pull workflow, including vulnerability
+    scanning if configured in Dockhand
+  - Install is suppressed for Dockhand system containers (e.g. `hawser`) and
+    containers with the `dockhand.update=false` label
+- **"Check for image updates" button** — each environment device gains a
+  button to trigger an immediate update check on demand, without waiting for
+  the next scheduled poll. Only visible when container update entities are
+  enabled.
+
+### Fixed
+
+- Entity names now correctly use translated strings in all supported languages.
+  A hardcoded English `_attr_name` was overriding the translation system on 26
+  entity classes across sensors, binary sensors, switches, buttons, and the new
+  update entity. Non-English users would have seen English entity names
+  regardless of their HA language setting.
+
+### Changed
+
+- Dashboard stats are now fetched in a single `GET /api/dashboard/stats` call
+  per poll cycle instead of one call per environment, reducing API calls
+  proportionally to the number of connected environments.
+- Registry cleanup (stale containers, stacks, environments, schedules, images,
+  networks, volumes, and update entities) is now handled by a single unified
+  function called from all coordinator listeners, replacing three separate
+  functions with inconsistent guard logic. Environment hub devices, group
+  devices, and schedule devices are now properly removed when permanently
+  deleted from Dockhand (previously only containers and stacks were cleaned up).
+- The update coordinator no longer makes a redundant `GET /api/environments`
+  call on each poll — it reuses the fast coordinator's already-fetched
+  environment list.
+
 ## [1.3.1] — 2026-05-03
 
 ### Changed
@@ -177,6 +224,8 @@ Initial stable release of the Dockhand integration for Home Assistant.
 - Passes hassfest and HACS validation
 - Ruff lint clean
 
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/raetha/ha-dockhand/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/raetha/ha-dockhand/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/raetha/ha-dockhand/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/raetha/ha-dockhand/compare/v1.1.0...v1.2.0

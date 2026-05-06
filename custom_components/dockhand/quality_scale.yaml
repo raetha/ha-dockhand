@@ -9,9 +9,13 @@ rules:
   appropriate-polling:
     status: done
     comment: >
-      Both coordinators use DataUpdateCoordinator with user-configurable
+      All three coordinators use DataUpdateCoordinator with user-configurable
       intervals. Fast coordinator defaults to 60 s (stats, containers, stacks);
-      slow coordinator defaults to 600 s (images, volumes, networks, schedules).
+      slow coordinator defaults to 600 s (images, volumes, networks, schedules);
+      update coordinator defaults to 86400 s / 24 h (registry update checks —
+      deliberately infrequent to avoid unnecessary load on the Docker host).
+      Dashboard stats are fetched in a single API call per fast poll cycle
+      rather than one call per environment.
 
   brands:
     status: done
@@ -87,15 +91,20 @@ rules:
   has-entity-name:
     status: done
     comment: >
-      All entity classes set _attr_has_entity_name = True and _attr_name to
-      a short name relative to their parent device.
+      All entity classes set _attr_has_entity_name = True. Static entity names
+      are provided via _attr_translation_key (not _attr_name) so that HA uses
+      the translated string from strings.json / translations/*.json. Dynamic
+      names (image repo name, network name, volume name) use self._attr_name
+      in __init__ since they are data-driven and cannot be expressed as
+      translation keys.
 
   runtime-data:
     status: done
     comment: >
       DockhandData dataclass is stored on entry.runtime_data. Contains client,
-      fast_coordinator, and slow_coordinator. Typed alias DockhandConfigEntry
-      used throughout so runtime_data is typed without casting.
+      fast_coordinator, slow_coordinator, and update_coordinator (None when the
+      update platform is disabled). Typed alias DockhandConfigEntry used
+      throughout so runtime_data is typed without casting.
 
   test-before-configure:
     status: done
@@ -135,10 +144,11 @@ rules:
     status: done
     comment: >
       README "Configuration parameters" section documents all fields: API URL,
-      API token (when auth is enabled), fast and slow poll intervals, and all
-      four optional feature flags (schedules, images, volumes, networks).
-      Separate subsections cover setup-time fields, the Options flow (adjustable
-      via Configure), and Reconfigure (for changing URL/token).
+      API token (when auth is enabled), fast poll interval, slow poll interval,
+      all five optional feature flags (schedules, images, volumes, networks,
+      container updates), update check interval, and SSL verification. Separate
+      subsections cover setup-time fields, the Options flow (adjustable via
+      Configure), and Reconfigure (for changing URL/token).
 
   docs-installation-parameters:
     status: done
@@ -169,9 +179,9 @@ rules:
   parallel-updates:
     status: done
     comment: >
-      PARALLEL_UPDATES = 0 set in all four platform files (sensor.py,
-      binary_sensor.py, switch.py, button.py). Coordinator-based platforms
-      use 0 to indicate updates are managed by the coordinator.
+      PARALLEL_UPDATES = 0 set in all five platform files (sensor.py,
+      binary_sensor.py, switch.py, button.py, update.py). Coordinator-based
+      platforms use 0 to indicate updates are managed by the coordinator.
 
   reauthentication-flow:
     status: done
@@ -184,12 +194,13 @@ rules:
   test-coverage:
     status: done
     comment: >
-      215 tests across five files: test_api.py (28), test_config_flow.py (23),
-      test_coordinator.py (25), test_entities.py (89), test_init.py (44).
+      216 tests across five files: test_api.py (28), test_config_flow.py (23),
+      test_coordinator.py (22), test_entities.py (89), test_init.py (54).
       Covers all API methods, Bearer token header, Accept header, all config
-      flow steps, legacy migration paths, both coordinators, all entity types,
-      device registration, stale cleanup, setup, and unload.
-      Zero external dependencies — runs in ~0.2 s with stdlib only.
+      flow steps, legacy migration paths, all three coordinators, all entity
+      types, device registration, unified stale cleanup (_cleanup_stale_registry),
+      setup, and unload. Zero external dependencies — runs in ~0.2 s with
+      stdlib only.
 
   # ── Gold ──────────────────────────────────────────────────────────────────
 
@@ -269,13 +280,14 @@ rules:
   dynamic-devices:
     status: done
     comment: >
-      _ensure_fast_group_devices() runs on every fast coordinator update and
-      idempotently creates env hub, Containers, and Stacks group devices as
-      data appears. _ensure_slow_group_devices() does the same for Networks,
-      Images, and Volumes on every slow update. All four platform modules
-      register coordinator listeners that call async_add_entities for newly
-      discovered resources. Listeners are cleaned up on unload via
-      entry.async_on_unload.
+      _register_devices() runs at startup and idempotently pre-registers env
+      hub, group, stack, and schedule devices from initial coordinator data.
+      All four platform modules register coordinator listeners that call
+      async_add_entities for newly discovered resources (containers, stacks,
+      images, networks, volumes, schedules, update entities). Stale devices and
+      entities are cleaned up by _cleanup_stale_registry(), which is registered
+      on all three coordinator listeners and runs once at startup. Listeners are
+      cleaned up on unload via entry.async_on_unload.
 
   entity-category:
     status: done
@@ -305,22 +317,22 @@ rules:
       scanning, update checks, auto update, image pruning).
 
   entity-translations:
-    status: todo
+    status: done
     comment: >
-      All entities still use hardcoded _attr_name strings. Requires
-      converting all 28 unique names to translation_key references and
-      adding entity blocks to strings.json and translations/en.json.
+      All statically-named entities use _attr_translation_key referencing entries
+      in strings.json and translations/*.json. Dynamic-name entities (image repo,
+      network name, volume name) use self._attr_name in __init__ since their
+      names are data-driven. Translation keys are defined for all 11 supported
+      locales (en + 10 machine-translated languages).
 
   exception-translations:
     status: exempt
     comment: >
       No HomeAssistantError or ServiceValidationError is raised anywhere in
       entity methods or service actions. Config flow errors already use
-      translated error keys (cannot_connect, invalid_auth) via
-      strings.json. The integration has no custom service actions that would
-      surface exception messages to the user.
-      Requires an 'exceptions' block in strings.json and translations/en.json.
-      Low priority until non-English support is actively needed.
+      translated error keys (cannot_connect, invalid_auth) via strings.json.
+      The integration has no custom service actions that would surface exception
+      messages to the user, so there is nothing to translate.
 
   icon-translations:
     status: done
@@ -345,14 +357,20 @@ rules:
   stale-devices:
     status: done
     comment: >
-      _remove_stale_devices() runs on every coordinator update and removes device
-      registry entries for stale containers and stacks. _remove_stale_entities()
-      runs on every slow update and removes entity registry entries for images,
-      networks, and volumes that no longer exist. Three safety guards prevent
-      mass-deletion on API failure: (1) last_update_success must be True,
-      (2) coordinator must have returned ≥1 environment, (3) only entities
-      belonging to currently-present environments are considered for removal.
-      Environment, group, and schedule devices are intentionally preserved.
+      All registry cleanup is handled by a single _cleanup_stale_registry
+      function called from all three coordinator listeners and once at startup.
+      It makes one pass over the device registry and one pass over the entity
+      registry per call, driven by live sets built from current coordinator data
+      via _build_live_sets. Container, stack, env hub, env group, and schedule
+      devices are removed when absent from current API data. Standalone entities
+      (images, networks, volumes, update entities) are cleaned up explicitly.
+      Device-attached entities (container/stack/env sensors, buttons, switches)
+      are handled automatically by HA's device removal cascade.
+      Safety guards: (1) fast data must be non-empty before any removal;
+      (2) slow-derived sets only populated when slow coordinator last succeeded;
+      (3) update-derived sets only populated when update coordinator succeeded;
+      (4) env removal uses fast env_ids — offline envs still appear in the API
+      and are preserved.
 
   # ── Platinum ──────────────────────────────────────────────────────────────
 
@@ -373,7 +391,7 @@ rules:
   strict-typing:
     status: done
     comment: >
-      from __future__ import annotations present in all Python modules.
-      py.typed marker added. Full mypy --strict validation is not yet
-      configured but the codebase uses consistent return type annotations
-      throughout.
+      py.typed marker present. from __future__ import annotations was removed
+      in 1.2.0 (Python 3.14 makes lazy annotation evaluation the default).
+      The codebase uses consistent return type annotations throughout. Full
+      mypy --strict validation is not yet configured.

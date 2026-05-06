@@ -16,8 +16,10 @@ from .const import (
     CONF_ENABLE_VOLUMES,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
+    CONF_POLL_INTERVAL_UPDATES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
+    DEFAULT_POLL_INTERVAL_UPDATES,
     DOMAIN,
 )
 
@@ -26,10 +28,6 @@ _LOGGER = logging.getLogger(__name__)
 
 def _safe_list(value: Any) -> list:
     return value if isinstance(value, list) else []
-
-
-def _safe_dict(value: Any) -> dict:
-    return value if isinstance(value, dict) else {}
 
 
 def _unwrap(val: Any, default: Any, label: str) -> Any:
@@ -53,7 +51,6 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry | None = None,
     ) -> None:
         self.client = client
-        self._entry = entry
         super().__init__(
             hass,
             _LOGGER,
@@ -67,43 +64,46 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             return await self._fetch()
-        except DockhandAuthError:
+        except DockhandAuthError as err:
             # Token is invalid or revoked — surface immediately so HA prompts
             # the user to re-authenticate. No retry is possible without a new token.
-            await self._handle_reauth()
-            # _handle_reauth always raises ConfigEntryAuthFailed; this is unreachable
-            # but satisfies the type checker.
-            raise UpdateFailed("Unreachable") from None  # pragma: no cover
+            raise ConfigEntryAuthFailed(
+                "Dockhand API token is invalid or was revoked. "
+                "Go to Settings → Devices & Services → Dockhand → Re-authenticate."
+            ) from err
         except Exception as err:
             raise UpdateFailed(f"Fast data error: {err}") from err
-
-    async def _handle_reauth(self) -> None:
-        # A 401 means the API token is invalid or was revoked, or authentication
-        # was re-enabled on a previously no-auth Dockhand instance.
-        # Surface as ConfigEntryAuthFailed so HA prompts the user to provide
-        # a new token via the re-authentication flow.
-        raise ConfigEntryAuthFailed(
-            "Dockhand API token is invalid or was revoked. "
-            "Go to Settings → Devices & Services → Dockhand → Re-authenticate."
-        )
 
     async def _fetch(self) -> dict[str, Any]:
         environments_list = _safe_list(await self.client.async_get_environments())
 
+        # Fetch stats for all environments in a single API call, then index by id.
+        # Failure here is non-fatal — containers/stacks still update, stats
+        # entities show unavailable until the next successful poll.
+        try:
+            all_stats_list = _safe_list(
+                await self.client.async_get_all_dashboard_stats()
+            )
+        except Exception as err:
+            _LOGGER.warning("Dockhand: error fetching dashboard stats: %s", err)
+            all_stats_list = []
+        all_stats: dict[int, dict] = {
+            s["id"]: s for s in all_stats_list if isinstance(s, dict) and "id" in s
+        }
+
         async def _fetch_env(env: dict) -> tuple[int, dict]:
             eid = env["id"]
             results = await asyncio.gather(
-                self.client.async_get_dashboard_stats(eid),
                 self.client.async_get_containers(eid),
                 self.client.async_get_stacks(eid),
                 return_exceptions=True,
             )
             return eid, {
-                "stats": _safe_dict(_unwrap(results[0], {}, f"stats env={eid}")),
+                "stats": all_stats.get(eid, {}),
                 "containers": _safe_list(
-                    _unwrap(results[1], [], f"containers env={eid}")
+                    _unwrap(results[0], [], f"containers env={eid}")
                 ),
-                "stacks": _safe_list(_unwrap(results[2], [], f"stacks env={eid}")),
+                "stacks": _safe_list(_unwrap(results[1], [], f"stacks env={eid}")),
             }
 
         out: dict[int, dict] = {}
@@ -137,7 +137,6 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         entry: ConfigEntry | None = None,
     ) -> None:
         self.client = client
-        self._entry = entry
         self._enable_schedules = bool(config.get(CONF_ENABLE_SCHEDULES, False))
         self._enable_images = bool(config.get(CONF_ENABLE_IMAGES, False))
         self._enable_volumes = bool(config.get(CONF_ENABLE_VOLUMES, False))
@@ -158,6 +157,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         try:
             return await self._fetch()
         except DockhandAuthError as err:
+            # Let the fast coordinator own reauth — just surface as transient failure.
             raise UpdateFailed(
                 "API token rejected — fast coordinator will surface reauth"
             ) from err
@@ -169,46 +169,42 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if self._enable_schedules:
             top_coros.append(self.client.async_get_schedules())
         top_results = await asyncio.gather(*top_coros, return_exceptions=True)
-        # Re-raise exceptions from the environments call — these are fatal since
-        # we cannot proceed without the environment list. asyncio.gather with
-        # return_exceptions=True returns exceptions as values, so we must check.
+
+        # Environments are required — re-raise any exception from that call.
         if isinstance(top_results[0], BaseException):
             raise top_results[0]
-        environments_list = _safe_list(_unwrap(top_results[0], [], "environments"))
-        schedules: list = []
-        if self._enable_schedules and len(top_results) > 1:
-            schedules = _safe_list(_unwrap(top_results[1], [], "schedules"))
+        environments_list = _safe_list(top_results[0])
+        schedules = (
+            _safe_list(_unwrap(top_results[1], [], "schedules"))
+            if self._enable_schedules and len(top_results) > 1
+            else []
+        )
 
         async def _fetch_env(env: dict) -> tuple[int, dict]:
             eid = env["id"]
-            coros, labels = [], []
-            if self._enable_images:
-                coros.append(self.client.async_get_images(eid))
-                labels.append(f"images env={eid}")
-            if self._enable_networks:
-                coros.append(self.client.async_get_networks(eid))
-                labels.append(f"networks env={eid}")
-            if self._enable_volumes:
-                coros.append(self.client.async_get_volumes(eid))
-                labels.append(f"volumes env={eid}")
 
-            results = await asyncio.gather(*coros, return_exceptions=True)
-            idx = 0
-            images, networks, volumes = [], [], []
+            # Build a named mapping of coroutines so result indexing is
+            # explicit rather than fragile positional arithmetic.
+            named: dict[str, Any] = {}
             if self._enable_images:
-                images = _safe_list(_unwrap(results[idx], [], labels[idx]))
-                idx += 1
+                named["images"] = self.client.async_get_images(eid)
             if self._enable_networks:
-                networks = _safe_list(_unwrap(results[idx], [], labels[idx]))
-                idx += 1
+                named["networks"] = self.client.async_get_networks(eid)
             if self._enable_volumes:
-                volumes = _safe_list(_unwrap(results[idx], [], labels[idx]))
-                idx += 1
+                named["volumes"] = self.client.async_get_volumes(eid)
+
+            results: dict[str, list] = {}
+            if named:
+                keys = list(named)
+                gathered = await asyncio.gather(*named.values(), return_exceptions=True)
+                for key, val in zip(keys, gathered, strict=False):
+                    results[key] = _safe_list(_unwrap(val, [], f"{key} env={eid}"))
+
             return eid, {
                 "env": env,
-                "images": images,
-                "networks": networks,
-                "volumes": volumes,
+                "images": results.get("images", []),
+                "networks": results.get("networks", []),
+                "volumes": results.get("volumes", []),
             }
 
         environments: dict[int, dict] = {}
@@ -221,3 +217,96 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 eid, data = result
                 environments[eid] = data
         return {"environments": environments, "schedules": schedules}
+
+
+class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    """Polls for container image update availability.
+
+    Default interval: 86400s (24 hours). Only created when the user enables
+    the update platform (CONF_ENABLE_UPDATES). Each poll calls
+    POST /api/containers/check-updates for every environment, which performs
+    real registry queries — deliberately infrequent to avoid bogging down
+    the Docker host.
+
+    Requires a reference to the fast coordinator so it can reuse the already-
+    fetched environment list rather than making a redundant API call.
+
+    Data shape:
+        {
+            env_id: {
+                container_id: {
+                    "containerName": str,
+                    "imageName": str,
+                    "hasUpdate": bool,
+                    "currentDigest": str,
+                    "newDigest": str,          # only present when hasUpdate=True
+                    "systemContainer": str | None,
+                    "updateDisabled": bool,
+                }
+            }
+        }
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: DockhandClient,
+        fast_coordinator: DockhandFastCoordinator,
+        config: dict[str, Any],
+        entry: ConfigEntry | None = None,
+    ) -> None:
+        self.client = client
+        self._fast = fast_coordinator
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_updates",
+            update_interval=timedelta(
+                seconds=int(
+                    config.get(
+                        CONF_POLL_INTERVAL_UPDATES, DEFAULT_POLL_INTERVAL_UPDATES
+                    )
+                )
+            ),
+            config_entry=entry,
+        )
+
+    async def _async_update_data(self) -> dict[str, Any]:
+        try:
+            return await self._fetch()
+        except DockhandAuthError as err:
+            raise UpdateFailed(
+                "API token rejected — fast coordinator will surface reauth"
+            ) from err
+        except Exception as err:
+            raise UpdateFailed(f"Update check error: {err}") from err
+
+    async def _fetch(self) -> dict[str, Any]:
+        # Reuse the fast coordinator's environment list — it is always fresher
+        # than making a separate async_get_environments() call and avoids a
+        # redundant API round trip on every update check.
+        env_ids = list(self._fast.data.keys()) if self._fast.data else []
+
+        async def _fetch_env(eid: int) -> tuple[int, dict[str, dict]]:
+            try:
+                results = await self.client.async_check_container_updates(eid)
+            except Exception as exc:
+                _LOGGER.warning(
+                    "Dockhand: update check failed for env %s: %s", eid, exc
+                )
+                results = []
+            # Index by container ID for O(1) lookup by update entities.
+            return eid, {
+                item["containerId"]: item for item in results if item.get("containerId")
+            }
+
+        out: dict[int, dict] = {}
+        for result in await asyncio.gather(
+            *[_fetch_env(eid) for eid in env_ids], return_exceptions=True
+        ):
+            if isinstance(result, Exception):
+                _LOGGER.warning("Dockhand update env error: %s", result)
+            else:
+                eid, data = result
+                out[eid] = data
+        return out

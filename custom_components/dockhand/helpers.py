@@ -209,6 +209,11 @@ def _image_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInfo
     )
 
 
+def _sched_key(sched: dict) -> str:
+    """Return a stable composite key for a schedule: '<id>_<type>'."""
+    return f"{sched['id']}_{sched['type']}"
+
+
 # --------------------------------------------------------------------------- #
 # Container helpers
 # --------------------------------------------------------------------------- #

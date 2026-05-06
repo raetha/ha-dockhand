@@ -12,7 +12,9 @@
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
           "enable_networks": "Aktivera nätverkssensorer",
-          "verify_ssl": "Verifiera SSL-certifikat"
+          "verify_ssl": "Verifiera SSL-certifikat",
+          "enable_updates": "Aktivera uppdateringsentiteter för containrar",
+          "poll_interval_updates": "Intervall för uppdateringskontroll (sekunder)"
         },
         "data_description": {
           "api_url": "Bas-URL:en för din Dockhand-instans.",
@@ -22,7 +24,9 @@
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
-          "verify_ssl": "Avmarkera för att tillåta självsignerade eller ej betrodda SSL-certifikat. Inaktivera endast om din Dockhand-instans använder ett självsignerat certifikat."
+          "verify_ssl": "Avmarkera för att tillåta självsignerade eller ej betrodda SSL-certifikat. Inaktivera endast om din Dockhand-instans använder ett självsignerat certifikat.",
+          "enable_updates": "Aktiverar uppdateringsentiteter för varje container som visar tillgängligheten för image-uppdateringar. Utlöser riktiga registerfrågor — se poll_interval_updates.",
+          "poll_interval_updates": "Hur ofta containerregister kontrolleras för image-uppdateringar (sekunder). Varje kontroll frågar registret för varje container. Standard: 86400 (24 timmar)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
           "enable_networks": "Aktivera nätverkssensorer",
-          "verify_ssl": "Verifiera SSL-certifikat"
+          "verify_ssl": "Verifiera SSL-certifikat",
+          "enable_updates": "Aktivera uppdateringsentiteter för containrar",
+          "poll_interval_updates": "Intervall för uppdateringskontroll (sekunder)"
         },
         "data_description": {
           "api_url": "Bas-URL:en för din Dockhand-instans.",
@@ -66,7 +72,9 @@
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
-          "verify_ssl": "Avmarkera för att tillåta självsignerade eller ej betrodda SSL-certifikat."
+          "verify_ssl": "Avmarkera för att tillåta självsignerade eller ej betrodda SSL-certifikat.",
+          "enable_updates": "Aktiverar uppdateringsentiteter för varje container som visar tillgängligheten för image-uppdateringar. Utlöser riktiga registerfrågor — se poll_interval_updates.",
+          "poll_interval_updates": "Hur ofta containerregister kontrolleras för image-uppdateringar (sekunder). Varje kontroll frågar registret för varje container. Standard: 86400 (24 timmar)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Aktivera schemasensorer",
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
-          "enable_networks": "Aktivera nätverkssensorer"
+          "enable_networks": "Aktivera nätverkssensorer",
+          "enable_updates": "Aktivera uppdateringsentiteter för containrar",
+          "poll_interval_updates": "Intervall för uppdateringskontroll (sekunder)"
         },
         "data_description": {
           "poll_interval": "Hur ofta statistik uppdateras. Standard: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Aktiverar sensorer för Dockhands underhållsscheman.",
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
-          "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö."
+          "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
+          "enable_updates": "Aktiverar uppdateringsentiteter för varje container som visar tillgängligheten för image-uppdateringar. Utlöser riktiga registerfrågor — se poll_interval_updates.",
+          "poll_interval_updates": "Hur ofta containerregister kontrolleras för image-uppdateringar (sekunder). Varje kontroll frågar registret för varje container. Standard: 86400 (24 timmar)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Starta om"
+      },
+      "check_updates": {
+        "name": "Sök efter image-uppdateringar"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image-uppdatering"
       }
     }
   }

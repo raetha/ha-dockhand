@@ -12,7 +12,9 @@
           "enable_images": "Abilita sensori immagini",
           "enable_volumes": "Abilita sensori volumi",
           "enable_networks": "Abilita sensori reti",
-          "verify_ssl": "Verifica certificato SSL"
+          "verify_ssl": "Verifica certificato SSL",
+          "enable_updates": "Abilita entità di aggiornamento contenitori",
+          "poll_interval_updates": "Intervallo di controllo aggiornamenti (secondi)"
         },
         "data_description": {
           "api_url": "L'URL base della tua istanza Dockhand.",
@@ -22,7 +24,9 @@
           "enable_images": "Abilita i sensori per le immagini Docker per ogni ambiente.",
           "enable_volumes": "Abilita i sensori per i volumi Docker per ogni ambiente.",
           "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente.",
-          "verify_ssl": "Deseleziona per consentire certificati SSL autofirmati o non attendibili. Disabilita solo se la tua istanza Dockhand usa un certificato autofirmato."
+          "verify_ssl": "Deseleziona per consentire certificati SSL autofirmati o non attendibili. Disabilita solo se la tua istanza Dockhand usa un certificato autofirmato.",
+          "enable_updates": "Abilita entità di aggiornamento per ogni contenitore che mostrano la disponibilità di aggiornamenti dell'immagine. Attiva query reali al registro — vedere poll_interval_updates.",
+          "poll_interval_updates": "Con quale frequenza controllare i registri dei contenitori per aggiornamenti delle immagini (secondi). Ogni controllo interroga il registro per ogni contenitore. Predefinito: 86400 (24 ore)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Abilita sensori immagini",
           "enable_volumes": "Abilita sensori volumi",
           "enable_networks": "Abilita sensori reti",
-          "verify_ssl": "Verifica certificato SSL"
+          "verify_ssl": "Verifica certificato SSL",
+          "enable_updates": "Abilita entità di aggiornamento contenitori",
+          "poll_interval_updates": "Intervallo di controllo aggiornamenti (secondi)"
         },
         "data_description": {
           "api_url": "L'URL base della tua istanza Dockhand.",
@@ -66,7 +72,9 @@
           "enable_images": "Abilita i sensori per le immagini Docker per ogni ambiente.",
           "enable_volumes": "Abilita i sensori per i volumi Docker per ogni ambiente.",
           "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente.",
-          "verify_ssl": "Deseleziona per consentire certificati SSL autofirmati o non attendibili."
+          "verify_ssl": "Deseleziona per consentire certificati SSL autofirmati o non attendibili.",
+          "enable_updates": "Abilita entità di aggiornamento per ogni contenitore che mostrano la disponibilità di aggiornamenti dell'immagine. Attiva query reali al registro — vedere poll_interval_updates.",
+          "poll_interval_updates": "Con quale frequenza controllare i registri dei contenitori per aggiornamenti delle immagini (secondi). Ogni controllo interroga il registro per ogni contenitore. Predefinito: 86400 (24 ore)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Abilita sensori pianificazione",
           "enable_images": "Abilita sensori immagini",
           "enable_volumes": "Abilita sensori volumi",
-          "enable_networks": "Abilita sensori reti"
+          "enable_networks": "Abilita sensori reti",
+          "enable_updates": "Abilita entità di aggiornamento contenitori",
+          "poll_interval_updates": "Intervallo di controllo aggiornamenti (secondi)"
         },
         "data_description": {
           "poll_interval": "Con quale frequenza aggiornare le statistiche. Predefinito: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Abilita i sensori per le pianificazioni di manutenzione Dockhand.",
           "enable_images": "Abilita i sensori per le immagini Docker per ogni ambiente.",
           "enable_volumes": "Abilita i sensori per i volumi Docker per ogni ambiente.",
-          "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente."
+          "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente.",
+          "enable_updates": "Abilita entità di aggiornamento per ogni contenitore che mostrano la disponibilità di aggiornamenti dell'immagine. Attiva query reali al registro — vedere poll_interval_updates.",
+          "poll_interval_updates": "Con quale frequenza controllare i registri dei contenitori per aggiornamenti delle immagini (secondi). Ogni controllo interroga il registro per ogni contenitore. Predefinito: 86400 (24 ore)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Riavvia"
+      },
+      "check_updates": {
+        "name": "Controlla aggiornamenti immagini"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Aggiornamento immagine"
       }
     }
   }

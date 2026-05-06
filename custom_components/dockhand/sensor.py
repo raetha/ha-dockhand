@@ -37,6 +37,7 @@ from .helpers import (
     _image_url,
     _network_group_device,
     _network_url,
+    _sched_key,
     _schedules_url,
     _stack_device,
     _stack_url,
@@ -45,10 +46,6 @@ from .helpers import (
 )
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _sched_key(sched: dict) -> str:
-    return f"{sched['id']}_{sched['type']}"
 
 
 def _parse_dt(value: str | int | float | None) -> datetime | None:
@@ -485,7 +482,6 @@ class DockhandEnvCpuSensor(BaseFastEnvSensor):
     _attr_native_unit_of_measurement = "%"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "cpu_usage"
-    _attr_name = "CPU usage"
 
     def __init__(
         self,
@@ -508,7 +504,6 @@ class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
     _attr_native_unit_of_measurement = "%"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "memory_usage"
-    _attr_name = "Memory usage"
 
     def __init__(
         self,
@@ -544,7 +539,6 @@ class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
     """
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_name = "Containers"
 
     def __init__(
         self,
@@ -577,7 +571,6 @@ class DockhandEnvStacksSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "stacks"
-    _attr_name = "Stacks"
 
     def __init__(
         self,
@@ -607,7 +600,6 @@ class DockhandEnvImagesSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "image_count"
-    _attr_name = "Image count"
 
     def __init__(
         self,
@@ -635,7 +627,6 @@ class DockhandEnvVolumesSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "volume_count"
-    _attr_name = "Volume count"
 
     def __init__(
         self,
@@ -663,7 +654,6 @@ class DockhandEnvNetworksSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "network_count"
-    _attr_name = "Network count"
 
     def __init__(
         self,
@@ -688,7 +678,6 @@ class DockhandEnvContainersDiskSensor(BaseFastEnvSensor):
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "containers_disk_usage"
-    _attr_name = "Containers disk usage"
 
     def __init__(
         self,
@@ -714,7 +703,6 @@ class DockhandEnvBuildCacheSensor(BaseFastEnvSensor):
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "build_cache_size"
-    _attr_name = "Build cache size"
 
     def __init__(
         self,
@@ -737,7 +725,6 @@ class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
     _attr_entity_registry_enabled_default = False
     _attr_state_class = SensorStateClass.TOTAL_INCREASING
     _attr_translation_key = "activity_events"
-    _attr_name = "Activity events"
 
     def __init__(
         self,
@@ -769,7 +756,6 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
     """Container state sensor — aligned with Portainer's sensor.container_state."""
 
     _attr_translation_key = "state"
-    _attr_name = "State"
 
     def __init__(
         self,
@@ -808,7 +794,6 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "health"
-    _attr_name = "Health"
 
     def __init__(
         self,
@@ -833,7 +818,6 @@ class DockhandContainerImageSensor(BaseFastContainerSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "image"
-    _attr_name = "Image"
 
     def __init__(
         self,
@@ -860,7 +844,6 @@ class DockhandContainerImageSensor(BaseFastContainerSensor):
 
 class DockhandStackStatusSensor(BaseFastStackSensor):
     _attr_translation_key = "status"
-    _attr_name = "Status"
 
     def __init__(
         self,
@@ -889,7 +872,6 @@ class DockhandStackContainerCountSensor(BaseFastStackSensor):
     """Count of containers belonging to this stack."""
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_name = "Containers"
 
     def __init__(
         self,
@@ -959,7 +941,6 @@ class DockhandEnvHawserVersionSensor(BaseSlowEnvConfigSensor):
     """Hawser agent version string — None until the agent first checks in."""
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
-    _attr_name = "Hawser agent version"
 
     def __init__(
         self,
@@ -1297,7 +1278,6 @@ class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
     clean ``trigger: state`` automations against the timestamp directly.
     """
     _attr_device_class = SensorDeviceClass.TIMESTAMP
-    _attr_name = "Next run"
 
     def __init__(
         self, coordinator: DockhandSlowCoordinator, sched: dict, base_url: str
@@ -1336,7 +1316,6 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
     Template triggers on attributes are fragile and hard to read.
     """
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_name = "Last status"
 
     def __init__(
         self, coordinator: DockhandSlowCoordinator, sched: dict, base_url: str

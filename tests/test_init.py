@@ -1,5 +1,5 @@
 """
-Tests for async_setup_entry, _register_devices, _remove_stale_devices (__init__.py).
+Tests for async_setup_entry, _register_devices, _cleanup_stale_registry (__init__.py).
 
 Covers:
 - async_setup_entry: success path, no-cookie triggers login, auth failure raises
@@ -8,10 +8,9 @@ Covers:
 - _register_devices: env hub always created, Containers group only for freestanding,
   Stacks group only when stacks exist, optional groups gated on slow data + enable flag,
   Schedules hub when enable_schedules=True
-- _remove_stale_devices: removes stale container/stack device registry entries,
-  preserves env and group devices, preserves live resource devices
-- _remove_stale_entities: removes stale image/network/volume entity registry entries
-  with three safety guards (last_update_success, non-empty env data, per-env scoping)
+- _cleanup_stale_registry: single unified function covering containers, stacks,
+  env/group devices, schedule devices, and standalone image/network/volume/update
+  entities — with consistent safety guards across all resource types
 """
 
 from __future__ import annotations
@@ -39,9 +38,8 @@ from ha_stubs import (
 
 from custom_components.dockhand import (
     DockhandData,
+    _cleanup_stale_registry,
     _register_devices,
-    _remove_stale_devices,
-    _remove_stale_entities,
 )
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
@@ -241,14 +239,28 @@ class TestRegisterDevices(unittest.TestCase):
 # ── _remove_stale_devices ─────────────────────────────────────────────────────
 
 
-class TestRemoveStaleDevices(unittest.TestCase):
+class TestCleanupStaleRegistry(unittest.TestCase):
+    """Tests for _cleanup_stale_registry — unified device and entity cleanup."""
+
     def setUp(self):
         reset_registry()
 
-    def _make_runtime_data(self, fast_data, slow_data):
+    def _make_runtime_data(self, fast_data, slow_data, update_data=None):
+        """Build a DockhandData-like mock with all three coordinators."""
         rd = MagicMock()
         rd.fast_coordinator.data = fast_data
+        rd.fast_coordinator.last_update_success = True
         rd.slow_coordinator.data = slow_data
+        # slow_valid requires last_update_success=True AND schedules key present
+        rd.slow_coordinator.last_update_success = (
+            slow_data.get("schedules") is not None
+        )
+        if update_data is not None:
+            rd.update_coordinator = MagicMock()
+            rd.update_coordinator.data = update_data
+            rd.update_coordinator.last_update_success = True
+        else:
+            rd.update_coordinator = None
         return rd
 
     def _add_device(self, reg, entry, identifier):
@@ -258,6 +270,31 @@ class TestRemoveStaleDevices(unittest.TestCase):
             name=identifier,
         )
 
+    # ── Guard: empty fast data ────────────────────────────────────────────
+
+    def test_guard_empty_fast_data_skips_all_cleanup(self):
+        """When fast data is empty, nothing is removed regardless of other data."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        stale_dev = self._add_device(reg, entry, "container_old")
+        er = er_async_get(hass)
+        stale_ent = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(stale_dev.id, reg._removed)
+        self.assertNotIn(stale_ent.entity_id, er._removed)
+
+    # ── Container devices ─────────────────────────────────────────────────
+
     def test_removes_stale_container(self):
         reg, hass = _make_registry()
         entry = _make_entry()
@@ -266,7 +303,7 @@ class TestRemoveStaleDevices(unittest.TestCase):
             slow_data={"environments": {}, "schedules": []},
         )
         stale = self._add_device(reg, entry, "container_old")
-        _remove_stale_devices(hass, entry)
+        _cleanup_stale_registry(hass, entry)
         self.assertIn(stale.id, reg._removed)
 
     def test_preserves_live_container(self):
@@ -277,8 +314,10 @@ class TestRemoveStaleDevices(unittest.TestCase):
             slow_data={"environments": {}, "schedules": []},
         )
         live = self._add_device(reg, entry, "container_c1")
-        _remove_stale_devices(hass, entry)
+        _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.id, reg._removed)
+
+    # ── Stack devices ─────────────────────────────────────────────────────
 
     def test_removes_stale_stack(self):
         reg, hass = _make_registry()
@@ -288,7 +327,7 @@ class TestRemoveStaleDevices(unittest.TestCase):
             slow_data={"environments": {}, "schedules": []},
         )
         stale = self._add_device(reg, entry, "stack_1_oldapp")
-        _remove_stale_devices(hass, entry)
+        _cleanup_stale_registry(hass, entry)
         self.assertIn(stale.id, reg._removed)
 
     def test_preserves_live_stack(self):
@@ -299,59 +338,12 @@ class TestRemoveStaleDevices(unittest.TestCase):
             slow_data={"environments": {}, "schedules": []},
         )
         live = self._add_device(reg, entry, "stack_1_myapp")
-        _remove_stale_devices(hass, entry)
+        _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.id, reg._removed)
 
-    def test_image_devices_not_cleaned_up(self):
-        """Images are entities under the Images group device, not individual devices.
-        Any legacy 'image_*' device entries are preserved (user can remove manually)
-        since the integration no longer creates or manages them."""
-        reg, hass = _make_registry()
-        entry = _make_entry()
-        entry.runtime_data = self._make_runtime_data(
-            fast_data={},
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            },
-        )
-        # An old image device — _remove_stale_devices no longer touches image_ identifiers
-        leftover = self._add_device(reg, entry, "image_1_deadbeef")
-        _remove_stale_devices(hass, entry)
-        self.assertNotIn(leftover.id, reg._removed)
+    # ── Env / group devices ───────────────────────────────────────────────
 
-    def test_removes_stale_network_device(self):
-        """Legacy network_ device entries are still cleaned up if present."""
-        reg, hass = _make_registry()
-        entry = _make_entry()
-        entry.runtime_data = self._make_runtime_data(
-            fast_data={},
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            },
-        )
-        stale = self._add_device(reg, entry, "network_netXYZ")
-        _remove_stale_devices(hass, entry)
-        self.assertIn(stale.id, reg._removed)
-
-    def test_removes_stale_volume_device(self):
-        """Legacy volume_ device entries are still cleaned up if present."""
-        reg, hass = _make_registry()
-        entry = _make_entry()
-        entry.runtime_data = self._make_runtime_data(
-            fast_data={},
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            },
-        )
-        stale = self._add_device(reg, entry, "volume_1_mydata")
-        _remove_stale_devices(hass, entry)
-        self.assertIn(stale.id, reg._removed)
-
-    def test_preserves_env_device(self):
-        """Env hub devices should never be auto-removed."""
+    def test_preserves_env_device_when_env_present(self):
         reg, hass = _make_registry()
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
@@ -359,20 +351,286 @@ class TestRemoveStaleDevices(unittest.TestCase):
             slow_data={"environments": {}, "schedules": []},
         )
         env_dev = self._add_device(reg, entry, "env_1")
-        _remove_stale_devices(hass, entry)
+        _cleanup_stale_registry(hass, entry)
         self.assertNotIn(env_dev.id, reg._removed)
 
-    def test_preserves_group_device(self):
-        """Group devices (env_1_Stacks, etc.) should never be auto-removed."""
+    def test_removes_env_device_when_env_gone(self):
         reg, hass = _make_registry()
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
-            fast_data={},
+            fast_data={2: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "env_1")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    def test_preserves_group_device_when_env_present(self):
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
             slow_data={"environments": {}, "schedules": []},
         )
         group = self._add_device(reg, entry, "env_1_Stacks")
-        _remove_stale_devices(hass, entry)
+        _cleanup_stale_registry(hass, entry)
         self.assertNotIn(group.id, reg._removed)
+
+    def test_removes_group_device_when_env_gone(self):
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={2: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        group = self._add_device(reg, entry, "env_1_Stacks")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(group.id, reg._removed)
+
+    # ── Schedule devices ──────────────────────────────────────────────────
+
+    def test_removes_stale_schedule_device(self):
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "schedule_99")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    def test_preserves_live_schedule_device(self):
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": [{"id": 5}]},
+        )
+        live = self._add_device(reg, entry, "schedule_5")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(live.id, reg._removed)
+
+    def test_preserves_schedule_device_when_slow_data_invalid(self):
+        """Schedule devices are not removed when slow coordinator hasn't run yet."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        rd = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        rd.slow_coordinator.last_update_success = False
+        entry.runtime_data = rd
+        dev = self._add_device(reg, entry, "schedule_99")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(dev.id, reg._removed)
+
+    # ── Legacy devices ────────────────────────────────────────────────────
+
+    def test_removes_legacy_network_device(self):
+        """Legacy network_ device entries are cleaned up unconditionally."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "network_netXYZ")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    def test_removes_legacy_volume_device(self):
+        """Legacy volume_ device entries are cleaned up unconditionally."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "volume_1_mydata")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    # ── Standalone entity cleanup ─────────────────────────────────────────
+
+    def test_guard_slow_invalid_skips_entity_cleanup(self):
+        """Image/network/volume entities are not removed when slow data is invalid."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        rd = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        rd.slow_coordinator.last_update_success = False
+        entry.runtime_data = rd
+        er = er_async_get(hass)
+        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(stale.entity_id, er._removed)
+
+    def test_guard_absent_env_skips_entity_cleanup(self):
+        """Entities for an env not in slow data are not removed."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        preserved = er._add(entry.entry_id, "dockhand_image_2_abc123")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.entity_id, er._removed)
+
+    def test_removes_stale_image_entity(self):
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.entity_id, er._removed)
+
+    def test_preserves_live_image_entity(self):
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {
+                    1: {
+                        "images": [{"id": "sha256:deadbeef"}],
+                        "networks": [],
+                        "volumes": [],
+                    }
+                },
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        live = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(live.entity_id, er._removed)
+
+    def test_removes_stale_network_entity(self):
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        stale = er._add(entry.entry_id, "dockhand_network_1_netXYZ")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.entity_id, er._removed)
+
+    def test_removes_stale_volume_entity(self):
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        stale = er._add(entry.entry_id, "dockhand_volume_1_mydata")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.entity_id, er._removed)
+
+    def test_removes_stale_update_entity(self):
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+            update_data={1: {}},  # no containers — stale update entity
+        )
+        er = er_async_get(hass)
+        stale = er._add(entry.entry_id, "dockhand_update_deadcontainer")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.entity_id, er._removed)
+
+    def test_preserves_live_update_entity(self):
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+            update_data={1: {"c1abc": {"containerName": "traefik"}}},
+        )
+        er = er_async_get(hass)
+        live = er._add(entry.entry_id, "dockhand_update_c1abc")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(live.entity_id, er._removed)
+
+    def test_stale_and_live_in_same_env(self):
+        """Stale entities are removed while live ones in the same env are preserved."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={
+                "environments": {
+                    1: {
+                        "images": [{"id": "sha256:aabbccdd"}],
+                        "networks": [],
+                        "volumes": [],
+                    }
+                },
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        live = er._add(entry.entry_id, "dockhand_image_1_aabbccdd")
+        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(live.entity_id, er._removed)
+        self.assertIn(stale.entity_id, er._removed)
+
+
 
 
 # ── Individual stack device pre-registration ──────────────────────────────────
@@ -712,173 +970,6 @@ class TestUnloadEntry(unittest.TestCase):
         self.assertNotIn("diagnostics", called_with)
 
 
+
 if __name__ == "__main__":
     unittest.main()
-
-
-# ── _remove_stale_entities ────────────────────────────────────────────────────
-
-
-class TestRemoveStaleEntities(unittest.TestCase):
-    """Covers the three safety guards and each resource type cleanup."""
-
-    def _make_slow_coord(self, data, last_update_success=True):
-        coord = MagicMock()
-        coord.data = data
-        coord.last_update_success = last_update_success
-        return coord
-
-    def _setup(self, slow_data, last_update_success=True):
-        from ha_stubs import er_async_get, reset_entity_registry
-
-        reset_entity_registry()
-        hass = HomeAssistant()
-        entry = _make_entry()
-        er = er_async_get(hass)
-        entry.runtime_data = DockhandData(
-            client=MagicMock(),
-            fast_coordinator=MagicMock(),
-            slow_coordinator=self._make_slow_coord(slow_data, last_update_success),
-        )
-        return hass, entry, er
-
-    # ── Safety guards ────────────────────────────────────────────────────
-
-    def test_guard1_skips_when_last_update_failed(self):
-        """No entities removed if last slow poll failed."""
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            },
-            last_update_success=False,
-        )
-        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(stale.entity_id, er._removed)
-
-    def test_guard2_skips_when_no_environments(self):
-        """No entities removed if coordinator returned zero environments."""
-        hass, entry, er = self._setup(slow_data={"environments": {}, "schedules": []})
-        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(stale.entity_id, er._removed)
-
-    def test_guard3_skips_entities_for_absent_env(self):
-        """Entities for env_id=2 are untouched when only env_id=1 is in data."""
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            }
-        )
-        preserved = er._add(entry.entry_id, "dockhand_image_2_abc123")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(preserved.entity_id, er._removed)
-
-    # ── Image cleanup ────────────────────────────────────────────────────
-
-    def test_removes_stale_image_entity(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            }
-        )
-        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
-        _remove_stale_entities(hass, entry)
-        self.assertIn(stale.entity_id, er._removed)
-
-    def test_preserves_live_image_entity(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {
-                    1: {
-                        "images": [{"id": "sha256:deadbeef"}],
-                        "networks": [],
-                        "volumes": [],
-                    }
-                },
-                "schedules": [],
-            }
-        )
-        live = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(live.entity_id, er._removed)
-
-    # ── Network cleanup ──────────────────────────────────────────────────
-
-    def test_removes_stale_network_entity(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            }
-        )
-        stale = er._add(entry.entry_id, "dockhand_network_1_netXYZ")
-        _remove_stale_entities(hass, entry)
-        self.assertIn(stale.entity_id, er._removed)
-
-    def test_preserves_live_network_entity(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {
-                    1: {"images": [], "networks": [{"id": "netXYZ"}], "volumes": []}
-                },
-                "schedules": [],
-            }
-        )
-        live = er._add(entry.entry_id, "dockhand_network_1_netXYZ")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(live.entity_id, er._removed)
-
-    # ── Volume cleanup ───────────────────────────────────────────────────
-
-    def test_removes_stale_volume_entity(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {1: {"images": [], "networks": [], "volumes": []}},
-                "schedules": [],
-            }
-        )
-        stale = er._add(entry.entry_id, "dockhand_volume_1_mydata")
-        _remove_stale_entities(hass, entry)
-        self.assertIn(stale.entity_id, er._removed)
-
-    def test_preserves_live_volume_entity(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {
-                    1: {
-                        "images": [],
-                        "networks": [],
-                        "volumes": [{"name": "mydata", "usedBy": []}],
-                    }
-                },
-                "schedules": [],
-            }
-        )
-        live = er._add(entry.entry_id, "dockhand_volume_1_mydata")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(live.entity_id, er._removed)
-
-    # ── Mixed: stale + live in same env ──────────────────────────────────
-
-    def test_removes_stale_but_preserves_live_in_same_env(self):
-        hass, entry, er = self._setup(
-            slow_data={
-                "environments": {
-                    1: {
-                        "images": [{"id": "sha256:aabbccdd"}],
-                        "networks": [],
-                        "volumes": [],
-                    }
-                },
-                "schedules": [],
-            }
-        )
-        live = er._add(entry.entry_id, "dockhand_image_1_aabbccdd")
-        stale = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
-        _remove_stale_entities(hass, entry)
-        self.assertNotIn(live.entity_id, er._removed)
-        self.assertIn(stale.entity_id, er._removed)

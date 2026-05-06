@@ -8,6 +8,8 @@ CONF_ENABLE_SCHEDULES = "enable_schedules"
 CONF_ENABLE_IMAGES = "enable_images"
 CONF_ENABLE_VOLUMES = "enable_volumes"
 CONF_ENABLE_NETWORKS = "enable_networks"
+CONF_ENABLE_UPDATES = "enable_updates"
+CONF_POLL_INTERVAL_UPDATES = "poll_interval_updates"
 CONF_VERIFY_SSL = "verify_ssl"
 
 # Removed in 1.2.0 (breaking change) — session-cookie auth replaced by API tokens.
@@ -18,9 +20,11 @@ _LEGACY_CONF_SESSION_COOKIE = "session_cookie"
 
 DEFAULT_POLL_INTERVAL = 60
 DEFAULT_POLL_INTERVAL_SLOW = 600
+DEFAULT_POLL_INTERVAL_UPDATES = 86400  # 24 hours
 DEFAULT_ENABLE_SCHEDULES = False
 DEFAULT_ENABLE_IMAGES = False
 DEFAULT_ENABLE_VOLUMES = False
 DEFAULT_ENABLE_NETWORKS = False
+DEFAULT_ENABLE_UPDATES = False
 
-PLATFORMS = ["sensor", "switch", "binary_sensor", "button"]
+PLATFORMS = ["sensor", "switch", "binary_sensor", "button", "update"]

@@ -12,7 +12,9 @@
           "enable_images": "Aktiver imagesensorer",
           "enable_volumes": "Aktiver volumsensorer",
           "enable_networks": "Aktiver nettverkssensorer",
-          "verify_ssl": "Bekreft SSL-sertifikat"
+          "verify_ssl": "Bekreft SSL-sertifikat",
+          "enable_updates": "Aktiver oppdateringsentiteter for containere",
+          "poll_interval_updates": "Intervall for oppdateringssjekk (sekunder)"
         },
         "data_description": {
           "api_url": "Basis-URL-en til din Dockhand-instans.",
@@ -22,7 +24,9 @@
           "enable_images": "Aktiverer sensorer for Docker-images per miljø.",
           "enable_volumes": "Aktiverer sensorer for Docker-volumer per miljø.",
           "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø.",
-          "verify_ssl": "Fjern avmerkingen for å tillate selvsignerte eller ikke-klarerte SSL-sertifikater. Deaktiver bare hvis Dockhand-instansen din bruker et selvsignert sertifikat."
+          "verify_ssl": "Fjern avmerkingen for å tillate selvsignerte eller ikke-klarerte SSL-sertifikater. Deaktiver bare hvis Dockhand-instansen din bruker et selvsignert sertifikat.",
+          "enable_updates": "Aktiverer oppdateringsentiteter for hver container som viser tilgjengeligheten av image-oppdateringer. Utløser ekte registerforespørsler — se poll_interval_updates.",
+          "poll_interval_updates": "Hvor ofte containerregistre sjekkes for image-oppdateringer (sekunder). Hver sjekk spør registeret for hver container. Standard: 86400 (24 timer)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Aktiver imagesensorer",
           "enable_volumes": "Aktiver volumsensorer",
           "enable_networks": "Aktiver nettverkssensorer",
-          "verify_ssl": "Bekreft SSL-sertifikat"
+          "verify_ssl": "Bekreft SSL-sertifikat",
+          "enable_updates": "Aktiver oppdateringsentiteter for containere",
+          "poll_interval_updates": "Intervall for oppdateringssjekk (sekunder)"
         },
         "data_description": {
           "api_url": "Basis-URL-en til din Dockhand-instans.",
@@ -66,7 +72,9 @@
           "enable_images": "Aktiverer sensorer for Docker-images per miljø.",
           "enable_volumes": "Aktiverer sensorer for Docker-volumer per miljø.",
           "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø.",
-          "verify_ssl": "Fjern avmerkingen for å tillate selvsignerte eller ikke-klarerte SSL-sertifikater."
+          "verify_ssl": "Fjern avmerkingen for å tillate selvsignerte eller ikke-klarerte SSL-sertifikater.",
+          "enable_updates": "Aktiverer oppdateringsentiteter for hver container som viser tilgjengeligheten av image-oppdateringer. Utløser ekte registerforespørsler — se poll_interval_updates.",
+          "poll_interval_updates": "Hvor ofte containerregistre sjekkes for image-oppdateringer (sekunder). Hver sjekk spør registeret for hver container. Standard: 86400 (24 timer)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Aktiver tidsplansensorer",
           "enable_images": "Aktiver imagesensorer",
           "enable_volumes": "Aktiver volumsensorer",
-          "enable_networks": "Aktiver nettverkssensorer"
+          "enable_networks": "Aktiver nettverkssensorer",
+          "enable_updates": "Aktiver oppdateringsentiteter for containere",
+          "poll_interval_updates": "Intervall for oppdateringssjekk (sekunder)"
         },
         "data_description": {
           "poll_interval": "Hvor ofte statistikk oppdateres. Standard: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Aktiverer sensorer for Dockhands vedlikeholdsplaner.",
           "enable_images": "Aktiverer sensorer for Docker-images per miljø.",
           "enable_volumes": "Aktiverer sensorer for Docker-volumer per miljø.",
-          "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø."
+          "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø.",
+          "enable_updates": "Aktiverer oppdateringsentiteter for hver container som viser tilgjengeligheten av image-oppdateringer. Utløser ekte registerforespørsler — se poll_interval_updates.",
+          "poll_interval_updates": "Hvor ofte containerregistre sjekkes for image-oppdateringer (sekunder). Hver sjekk spør registeret for hver container. Standard: 86400 (24 timer)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Start på nytt"
+      },
+      "check_updates": {
+        "name": "Se etter image-oppdateringer"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image-oppdatering"
       }
     }
   }

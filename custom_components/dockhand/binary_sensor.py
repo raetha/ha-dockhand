@@ -90,7 +90,6 @@ class BaseEnvBinarySensor(
 class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_translation_key = "online"
-    _attr_name = "Online"
 
     def __init__(
         self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
@@ -107,7 +106,6 @@ class DockhandEnvCollectActivitySensor(BaseEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "activity_logging"
-    _attr_name = "Activity logging"
 
     def __init__(
         self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
@@ -125,7 +123,6 @@ class DockhandEnvCollectMetricsSensor(BaseEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "metrics_collection"
-    _attr_name = "Metrics collection"
 
     def __init__(
         self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
@@ -143,7 +140,6 @@ class DockhandEnvScannerEnabledSensor(BaseEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "vulnerability_scanning"
-    _attr_name = "Vulnerability scanning"
 
     def __init__(
         self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
@@ -161,7 +157,6 @@ class DockhandEnvUpdateCheckSensor(BaseEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "update_checks"
-    _attr_name = "Update checks"
 
     def __init__(
         self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
@@ -179,7 +174,6 @@ class DockhandEnvAutoUpdateSensor(BaseEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "auto_update"
-    _attr_name = "Auto update"
 
     def __init__(
         self, coordinator: DockhandFastCoordinator, env_id: int, base_url: str
@@ -223,7 +217,6 @@ class DockhandEnvImagePruneBinarySensor(BaseSlowEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
     _attr_translation_key = "image_pruning"
-    _attr_name = "Image pruning"
 
     def __init__(
         self, coordinator: DockhandSlowCoordinator, env_id: int, base_url: str

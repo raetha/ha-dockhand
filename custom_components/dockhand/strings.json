@@ -12,6 +12,8 @@
           "enable_images": "Enable image sensors",
           "enable_volumes": "Enable volume sensors",
           "enable_networks": "Enable network sensors",
+          "enable_updates": "Enable container update entities",
+          "poll_interval_updates": "Update check interval (seconds)",
           "verify_ssl": "Verify SSL certificate"
         },
         "data_description": {
@@ -22,6 +24,8 @@
           "enable_images": "Enables sensors for Docker images on each environment.",
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",
           "enable_networks": "Enables sensors for Docker networks on each environment.",
+          "enable_updates": "Enables update entities for each container showing image update availability. Triggers real registry queries — see poll_interval_updates.",
+          "poll_interval_updates": "How often to check container registries for image updates (seconds). Each check queries the registry for every container. Default: 86400 (24 hours).",
           "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
         }
       },
@@ -56,6 +60,8 @@
           "enable_images": "Enable image sensors",
           "enable_volumes": "Enable volume sensors",
           "enable_networks": "Enable network sensors",
+          "enable_updates": "Enable container update entities",
+          "poll_interval_updates": "Update check interval (seconds)",
           "verify_ssl": "Verify SSL certificate"
         },
         "data_description": {
@@ -66,6 +72,8 @@
           "enable_images": "Enables sensors for Docker images on each environment.",
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",
           "enable_networks": "Enables sensors for Docker networks on each environment.",
+          "enable_updates": "Enables update entities for each container showing image update availability. Triggers real registry queries — see poll_interval_updates.",
+          "poll_interval_updates": "How often to check container registries for image updates (seconds). Default: 86400 (24 hours).",
           "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
         }
       }
@@ -91,7 +99,9 @@
           "enable_schedules": "Enable schedule sensors",
           "enable_images": "Enable image sensors",
           "enable_volumes": "Enable volume sensors",
-          "enable_networks": "Enable network sensors"
+          "enable_networks": "Enable network sensors",
+          "enable_updates": "Enable container update entities",
+          "poll_interval_updates": "Update check interval (seconds)"
         },
         "data_description": {
           "poll_interval": "How often to refresh container, stack, and environment stats. Default: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
           "enable_images": "Enables sensors for Docker images on each environment.",
           "enable_volumes": "Enables sensors for Docker volumes on each environment.",
-          "enable_networks": "Enables sensors for Docker networks on each environment."
+          "enable_networks": "Enables sensors for Docker networks on each environment.",
+          "enable_updates": "Enables update entities for each container showing image update availability. Triggers real registry queries — see poll_interval_updates.",
+          "poll_interval_updates": "How often to check container registries for image updates (seconds). Default: 86400 (24 hours)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Restart"
+      },
+      "check_updates": {
+        "name": "Check for image updates"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image update"
       }
     }
   }

@@ -12,16 +12,20 @@ from .const import (
     CONF_ENABLE_IMAGES,
     CONF_ENABLE_NETWORKS,
     CONF_ENABLE_SCHEDULES,
+    CONF_ENABLE_UPDATES,
     CONF_ENABLE_VOLUMES,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
+    CONF_POLL_INTERVAL_UPDATES,
     CONF_VERIFY_SSL,
     DEFAULT_ENABLE_IMAGES,
     DEFAULT_ENABLE_NETWORKS,
     DEFAULT_ENABLE_SCHEDULES,
+    DEFAULT_ENABLE_UPDATES,
     DEFAULT_ENABLE_VOLUMES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
+    DEFAULT_POLL_INTERVAL_UPDATES,
     DOMAIN,
 )
 
@@ -58,6 +62,16 @@ def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_ENABLE_NETWORKS,
                 default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS),
             ): bool,
+            vol.Optional(
+                CONF_ENABLE_UPDATES,
+                default=d.get(CONF_ENABLE_UPDATES, DEFAULT_ENABLE_UPDATES),
+            ): bool,
+            vol.Optional(
+                CONF_POLL_INTERVAL_UPDATES,
+                default=d.get(
+                    CONF_POLL_INTERVAL_UPDATES, DEFAULT_POLL_INTERVAL_UPDATES
+                ),
+            ): int,
             vol.Optional(
                 CONF_VERIFY_SSL, default=d.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             ): bool,
@@ -102,6 +116,16 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 CONF_ENABLE_NETWORKS,
                 default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS),
             ): bool,
+            vol.Optional(
+                CONF_ENABLE_UPDATES,
+                default=d.get(CONF_ENABLE_UPDATES, DEFAULT_ENABLE_UPDATES),
+            ): bool,
+            vol.Optional(
+                CONF_POLL_INTERVAL_UPDATES,
+                default=d.get(
+                    CONF_POLL_INTERVAL_UPDATES, DEFAULT_POLL_INTERVAL_UPDATES
+                ),
+            ): int,
         }
     )
 

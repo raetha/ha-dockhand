@@ -26,7 +26,6 @@ from custom_components.dockhand.api import (
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
-    _safe_dict,
     _safe_list,
     _unwrap,
 )
@@ -57,7 +56,13 @@ def _make_client(
     c.async_get_environments = AsyncMock(
         return_value=envs if envs is not None else [ENV1]
     )
-    c.async_get_dashboard_stats = AsyncMock(return_value=stats or STATS1)
+    # async_get_all_dashboard_stats returns a list indexed by env id;
+    # default wraps STATS1 as a single-env list keyed to ENV1's id.
+    _stats = stats or STATS1
+    _envs = envs if envs is not None else [ENV1]
+    c.async_get_all_dashboard_stats = AsyncMock(
+        return_value=[{**_stats, "id": e["id"]} for e in _envs]
+    )
     c.async_get_containers = AsyncMock(
         return_value=containers if containers is not None else [CONTAINER1]
     )
@@ -103,15 +108,6 @@ class TestHelpers(unittest.TestCase):
     def test_safe_list_with_dict(self):
         self.assertEqual(_safe_list({"a": 1}), [])
 
-    def test_safe_dict_with_dict(self):
-        self.assertEqual(_safe_dict({"a": 1}), {"a": 1})
-
-    def test_safe_dict_with_list(self):
-        self.assertEqual(_safe_dict([1, 2]), {})
-
-    def test_safe_dict_with_none(self):
-        self.assertEqual(_safe_dict(None), {})
-
     def test_unwrap_value(self):
         self.assertEqual(_unwrap("ok", "d", "t"), "ok")
 
@@ -127,14 +123,18 @@ class TestFastData(unittest.TestCase):
         coord = _fast(_make_client(stacks=[STACK1]))
         run(coord.async_config_entry_first_refresh())
         self.assertIn(1, coord.data)
-        self.assertEqual(coord.data[1]["stats"], STATS1)
+        # Stats include 'id' from the all-environments response; check the
+        # fields we care about rather than exact equality with STATS1.
+        stats = coord.data[1]["stats"]
+        self.assertEqual(stats["name"], STATS1["name"])
+        self.assertEqual(stats["cpu"], STATS1["cpu"])
         self.assertEqual(coord.data[1]["containers"], [CONTAINER1])
         self.assertEqual(coord.data[1]["stacks"], [STACK1])
 
     def test_multiple_envs(self):
         client = _make_client(envs=[ENV1, ENV2])
-        client.async_get_dashboard_stats = AsyncMock(
-            side_effect=lambda eid: {"name": f"env{eid}"}
+        client.async_get_all_dashboard_stats = AsyncMock(
+            return_value=[{"id": 1, "name": "env1"}, {"id": 2, "name": "env2"}]
         )
         client.async_get_containers = AsyncMock(return_value=[])
         client.async_get_stacks = AsyncMock(return_value=[])
@@ -152,7 +152,7 @@ class TestFastData(unittest.TestCase):
 
     def test_stats_failure_returns_empty_dict(self):
         client = _make_client()
-        client.async_get_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
+        client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
         coord = _fast(client)
         run(coord.async_config_entry_first_refresh())
         self.assertEqual(coord.data[1]["stats"], {})

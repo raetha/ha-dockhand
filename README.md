@@ -62,6 +62,8 @@ After setup, use **Configure** (the cog) to adjust poll intervals and feature fl
 | **Enable images** | Create entities for Docker images on each host | off |
 | **Enable volumes** | Create entities for Docker volumes on each host | off |
 | **Enable networks** | Create entities for Docker networks on each host | off |
+| **Enable container updates** | Create update entities for each container, showing image update availability and allowing one-click updates via Dockhand's safe-pull workflow | off |
+| **Update check interval** | How often (seconds) to check container registries for image updates. Each check queries the registry for every container — keep this infrequent. Only shown when container updates are enabled | 86400 |
 | **Verify SSL certificate** | Validate the server's SSL/TLS certificate. Uncheck only if your Dockhand instance uses a self-signed certificate | on |
 
 ### Options (adjustable via Configure without removing the integration)
@@ -101,33 +103,35 @@ If a token is revoked or expires, the integration will surface a re-authenticati
 The integration uses a **grouped device hierarchy** that keeps the device list manageable regardless of how many containers and stacks you have.
 
 ```
-Heimdall                               ← Environment device
+docker-host-1                          ← Environment device
 │   model: Dockhand Environment
-├── Heimdall – Containers              ← Group device
-│   ├── Heimdall – traefik             ← Container device
+├── docker-host-1 – Containers         ← Group device
+│   ├── docker-host-1 – traefik         ← Container device
 │   │   model: Docker Container
 │   │   ├── sensor.State
 │   │   ├── sensor.Health
 │   │   ├── switch.Container
-│   │   └── button.Restart
-│   └── Heimdall – nginx  (same)
-├── Heimdall – Stacks                  ← Group device
-│   ├── Heimdall – proxy               ← Stack device
+│   │   ├── button.Restart
+│   │   └── update.Image update        ← if container updates enabled
+│   └── docker-host-1 – nginx  (same)
+├── docker-host-1 – Stacks             ← Group device
+│   ├── docker-host-1 – proxy           ← Stack device
 │   │   model: Compose Stack
 │   │   ├── sensor.Status
 │   │   ├── switch.Running
 │   │   └── button.Restart
-│   └── Heimdall – monitoring  (same)
-├── Heimdall – Networks  (if enabled)  ← Group device
+│   └── docker-host-1 – monitoring  (same)
+├── docker-host-1 – Networks  (if enabled)  ← Group device
 │   └── sensor.bridge                  ← one entity per network (no sub-devices)
 │   └── sensor.host
-├── Heimdall – Volumes  (if enabled)   ← Group device
+├── docker-host-1 – Volumes  (if enabled)   ← Group device
 │   └── sensor.my_volume               ← one entity per volume (no sub-devices)
-└── Heimdall – Images  (if enabled)    ← Group device
+└── docker-host-1 – Images  (if enabled)    ← Group device
     └── sensor.traefik_latest          ← one entity per image (no sub-devices)
 
 sensor.CPU_usage, sensor.Memory_usage, sensor.Containers_running
 binary_sensor.Online                   ← on the Environment device
+button.Check_for_image_updates         ← if container updates enabled
 
 Schedules  (if enabled)                ← Global hub device (not env-specific)
 └── auto-update                        ← per-schedule device
@@ -137,10 +141,10 @@ Schedules  (if enabled)                ← Global hub device (not env-specific)
 
 Each device in the list shows its **Type** (`model` field), so it's easy to distinguish containers from stacks, and group devices from individual ones. Every device also has a direct **open in Dockhand** link that takes you straight to the corresponding page.
 
-Individual resource devices (containers, stacks, networks, volumes) are prefixed with their environment name — for example `Heimdall – traefik` rather than just `traefik`. This makes it easy to identify which host a resource belongs to in the entity picker and automation editor, especially when multiple environments run containers or stacks with the same name.
+Individual resource devices (containers, stacks, networks, volumes) are prefixed with their environment name — for example `docker-host-1 – traefik` rather than just `traefik`. This makes it easy to identify which host a resource belongs to in the entity picker and automation editor, especially when multiple environments run containers or stacks with the same name.
 
 ### Portainer users
-If you're migrating from the Portainer integration, this integration follows the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and per stack. Container and stack devices are named `{env} – {resource}` (e.g. `Heimdall – traefik`) to disambiguate across environments.
+If you're migrating from the Portainer integration, this integration follows the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and per stack. Container and stack devices are named `{env} – {resource}` (e.g. `docker-host-1 – traefik`) to disambiguate across environments.
 
 ---
 
@@ -162,6 +166,7 @@ If you're migrating from the Portainer integration, this integration follows the
 | Health | sensor | healthy / unhealthy / starting / none |
 | Container | switch | turn on = start, turn off = stop |
 | Restart | button | restarts running container (use Container to start stopped) |
+| Image update | update | Shows when a newer image digest is available. Install triggers Dockhand's safe-pull workflow, including vulnerability scanning if configured. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
 
 ### Stack (always on, 60 s)
 | Entity | Type | Notes |
@@ -233,16 +238,19 @@ automation:
 
 ## Data Updates
 
-Dockhand uses two polling coordinators with independent intervals to balance responsiveness against API load:
+Dockhand uses three polling coordinators with independent intervals:
 
 **Fast coordinator** (default 60 s, configurable) fetches:
-- Environment dashboard stats (CPU, memory, container/stack/image/volume/network counts)
+- Environment dashboard stats for all environments in a single API call (CPU, memory, container/stack/image/volume/network counts)
 - Full container list with state, image, and resource details
 - Full stack list with status and container counts
 
 **Slow coordinator** (default 600 s, configurable) fetches:
 - Per-environment detailed data for optional features: Images, Networks, Volumes
 - Global schedule list
+
+**Update coordinator** (default 86400 s / 24 h, configurable) — only active when container update entities are enabled:
+- Per-environment image update availability via `POST /api/containers/check-updates`, which performs real registry queries against each container's image source. Kept infrequent to avoid unnecessary load on the Docker host. Use the **Check for image updates** button on any environment device to trigger an immediate check on demand.
 
 Entities update automatically when their coordinator refreshes. If a fetch fails, entities remain at their last known value and are marked unavailable after the coordinator's built-in retry threshold. Both coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
 

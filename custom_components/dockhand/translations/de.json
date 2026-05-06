@@ -12,7 +12,9 @@
           "enable_images": "Image-Sensoren aktivieren",
           "enable_volumes": "Volume-Sensoren aktivieren",
           "enable_networks": "Netzwerk-Sensoren aktivieren",
-          "verify_ssl": "SSL-Zertifikat prüfen"
+          "verify_ssl": "SSL-Zertifikat prüfen",
+          "enable_updates": "Container-Update-Entitäten aktivieren",
+          "poll_interval_updates": "Update-Prüfintervall (Sekunden)"
         },
         "data_description": {
           "api_url": "Die Basis-URL deiner Dockhand-Instanz.",
@@ -22,7 +24,9 @@
           "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
           "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
           "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
-          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet."
+          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet.",
+          "enable_updates": "Aktiviert Update-Entitäten für jeden Container, die die Verfügbarkeit von Image-Updates anzeigen. Löst echte Registry-Abfragen aus – siehe poll_interval_updates.",
+          "poll_interval_updates": "Wie oft Container-Registries auf Image-Updates geprüft werden (Sekunden). Jede Prüfung fragt die Registry für jeden Container ab. Standard: 86400 (24 Stunden)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Image-Sensoren aktivieren",
           "enable_volumes": "Volume-Sensoren aktivieren",
           "enable_networks": "Netzwerk-Sensoren aktivieren",
-          "verify_ssl": "SSL-Zertifikat prüfen"
+          "verify_ssl": "SSL-Zertifikat prüfen",
+          "enable_updates": "Container-Update-Entitäten aktivieren",
+          "poll_interval_updates": "Update-Prüfintervall (Sekunden)"
         },
         "data_description": {
           "api_url": "Die Basis-URL deiner Dockhand-Instanz.",
@@ -66,7 +72,9 @@
           "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
           "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
           "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
-          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet."
+          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet.",
+          "enable_updates": "Aktiviert Update-Entitäten für jeden Container, die die Verfügbarkeit von Image-Updates anzeigen. Löst echte Registry-Abfragen aus – siehe poll_interval_updates.",
+          "poll_interval_updates": "Wie oft Container-Registries auf Image-Updates geprüft werden (Sekunden). Jede Prüfung fragt die Registry für jeden Container ab. Standard: 86400 (24 Stunden)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Schedule-Sensoren aktivieren",
           "enable_images": "Image-Sensoren aktivieren",
           "enable_volumes": "Volume-Sensoren aktivieren",
-          "enable_networks": "Netzwerk-Sensoren aktivieren"
+          "enable_networks": "Netzwerk-Sensoren aktivieren",
+          "enable_updates": "Container-Update-Entitäten aktivieren",
+          "poll_interval_updates": "Update-Prüfintervall (Sekunden)"
         },
         "data_description": {
           "poll_interval": "Wie oft Container-, Stack- und Umgebungsstatistiken aktualisiert werden. Standard: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Aktiviert Sensoren für Dockhand-Wartungspläne.",
           "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
           "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
-          "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung."
+          "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
+          "enable_updates": "Aktiviert Update-Entitäten für jeden Container, die die Verfügbarkeit von Image-Updates anzeigen. Löst echte Registry-Abfragen aus – siehe poll_interval_updates.",
+          "poll_interval_updates": "Wie oft Container-Registries auf Image-Updates geprüft werden (Sekunden). Jede Prüfung fragt die Registry für jeden Container ab. Standard: 86400 (24 Stunden)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Neustart"
+      },
+      "check_updates": {
+        "name": "Nach Image-Updates suchen"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image-Update"
       }
     }
   }

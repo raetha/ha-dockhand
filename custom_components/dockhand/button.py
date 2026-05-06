@@ -9,8 +9,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
 from .const import CONF_API_URL
-from .coordinator import DockhandFastCoordinator
-from .helpers import _container_device, _stack_device
+from .coordinator import DockhandFastCoordinator, DockhandUpdateCoordinator
+from .helpers import _container_device, _env_device, _stack_device
 
 # Buttons make action calls — limit to 1 parallel update.
 PARALLEL_UPDATES = 0
@@ -22,17 +22,31 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     fast: DockhandFastCoordinator = entry.runtime_data.fast_coordinator
+    update_coordinator: DockhandUpdateCoordinator | None = (
+        entry.runtime_data.update_coordinator
+    )
     client = entry.runtime_data.client
     base_url: str = entry.data.get(CONF_API_URL, "")
 
     known_container_ids: set[str] = set()
     known_stack_ids: set[str] = set()
+    known_env_update_ids: set[int] = set()
 
     def _build_entities() -> list[ButtonEntity]:
         new: list[ButtonEntity] = []
         for env_id, env_data in (fast.data or {}).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
+
+            # Per-environment "Check for image updates" button — only when
+            # the update coordinator is active.
+            if update_coordinator is not None and env_id not in known_env_update_ids:
+                known_env_update_ids.add(env_id)
+                new.append(
+                    DockhandCheckUpdatesButton(
+                        fast, update_coordinator, env_id, env_name, base_url
+                    )
+                )
 
             for container in env_data.get("containers") or []:
                 cid = container["id"]
@@ -143,7 +157,6 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_translation_key = "restart"
-    _attr_name = "Restart"
 
     def __init__(
         self,
@@ -167,7 +180,6 @@ class DockhandStackRestartButton(_BaseFastStackButton):
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_translation_key = "restart"
-    _attr_name = "Restart"
 
     def __init__(
         self,
@@ -186,3 +198,44 @@ class DockhandStackRestartButton(_BaseFastStackButton):
     async def async_press(self) -> None:
         await self._client.async_restart_stack(self._env_id, self._stack_name)
         await self.coordinator.async_request_refresh()
+
+
+class DockhandCheckUpdatesButton(
+    CoordinatorEntity[DockhandFastCoordinator], ButtonEntity
+):
+    """Trigger an immediate image update check for all containers in an environment.
+
+    Attached to the environment device. Pressing it calls
+    async_request_refresh() on the DockhandUpdateCoordinator, which runs
+    POST /api/containers/check-updates for all environments (the coordinator
+    always fetches all envs in one gather), so pressing any environment's
+    button effectively refreshes update state across all environments.
+
+    Only created when CONF_ENABLE_UPDATES is True.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "check_updates"
+
+    def __init__(
+        self,
+        fast_coordinator: DockhandFastCoordinator,
+        update_coordinator: DockhandUpdateCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(fast_coordinator)
+        self._update_coordinator = update_coordinator
+        self._env_id = env_id
+        self._env_name = env_name
+        self._base_url = base_url
+        self._attr_unique_id = f"dockhand_env_{env_id}_check_updates"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _env_device(self._env_id, self._env_name, self._base_url)
+
+    async def async_press(self) -> None:
+        await self._update_coordinator.async_request_refresh()

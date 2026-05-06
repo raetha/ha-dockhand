@@ -12,7 +12,9 @@
           "enable_images": "Image-sensoren inschakelen",
           "enable_volumes": "Volume-sensoren inschakelen",
           "enable_networks": "Netwerksensoren inschakelen",
-          "verify_ssl": "SSL-certificaat verifiëren"
+          "verify_ssl": "SSL-certificaat verifiëren",
+          "enable_updates": "Container-update-entiteiten inschakelen",
+          "poll_interval_updates": "Controle-interval voor updates (seconden)"
         },
         "data_description": {
           "api_url": "De basis-URL van je Dockhand-instantie.",
@@ -22,7 +24,9 @@
           "enable_images": "Schakelt sensoren in voor Docker-images per omgeving.",
           "enable_volumes": "Schakelt sensoren in voor Docker-volumes per omgeving.",
           "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving.",
-          "verify_ssl": "Uitvinken om zelfondertekende of niet-vertrouwde SSL-certificaten toe te staan. Alleen uitschakelen als je Dockhand-instantie een zelfondertekend certificaat gebruikt."
+          "verify_ssl": "Uitvinken om zelfondertekende of niet-vertrouwde SSL-certificaten toe te staan. Alleen uitschakelen als je Dockhand-instantie een zelfondertekend certificaat gebruikt.",
+          "enable_updates": "Schakelt update-entiteiten in voor elke container die de beschikbaarheid van image-updates weergeeft. Activeert echte registerquery's — zie poll_interval_updates.",
+          "poll_interval_updates": "Hoe vaak containerregisters worden gecontroleerd op image-updates (seconden). Elke controle ondervraagt het register voor elke container. Standaard: 86400 (24 uur)."
         }
       },
       "token": {
@@ -56,7 +60,9 @@
           "enable_images": "Image-sensoren inschakelen",
           "enable_volumes": "Volume-sensoren inschakelen",
           "enable_networks": "Netwerksensoren inschakelen",
-          "verify_ssl": "SSL-certificaat verifiëren"
+          "verify_ssl": "SSL-certificaat verifiëren",
+          "enable_updates": "Container-update-entiteiten inschakelen",
+          "poll_interval_updates": "Controle-interval voor updates (seconden)"
         },
         "data_description": {
           "api_url": "De basis-URL van je Dockhand-instantie.",
@@ -66,7 +72,9 @@
           "enable_images": "Schakelt sensoren in voor Docker-images per omgeving.",
           "enable_volumes": "Schakelt sensoren in voor Docker-volumes per omgeving.",
           "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving.",
-          "verify_ssl": "Uitvinken om zelfondertekende of niet-vertrouwde SSL-certificaten toe te staan."
+          "verify_ssl": "Uitvinken om zelfondertekende of niet-vertrouwde SSL-certificaten toe te staan.",
+          "enable_updates": "Schakelt update-entiteiten in voor elke container die de beschikbaarheid van image-updates weergeeft. Activeert echte registerquery's — zie poll_interval_updates.",
+          "poll_interval_updates": "Hoe vaak containerregisters worden gecontroleerd op image-updates (seconden). Elke controle ondervraagt het register voor elke container. Standaard: 86400 (24 uur)."
         }
       }
     },
@@ -91,7 +99,9 @@
           "enable_schedules": "Planningssensoren inschakelen",
           "enable_images": "Image-sensoren inschakelen",
           "enable_volumes": "Volume-sensoren inschakelen",
-          "enable_networks": "Netwerksensoren inschakelen"
+          "enable_networks": "Netwerksensoren inschakelen",
+          "enable_updates": "Container-update-entiteiten inschakelen",
+          "poll_interval_updates": "Controle-interval voor updates (seconden)"
         },
         "data_description": {
           "poll_interval": "Hoe vaak statistieken worden vernieuwd. Standaard: 60.",
@@ -99,7 +109,9 @@
           "enable_schedules": "Schakelt sensoren in voor Dockhand-onderhoudsplanningen.",
           "enable_images": "Schakelt sensoren in voor Docker-images per omgeving.",
           "enable_volumes": "Schakelt sensoren in voor Docker-volumes per omgeving.",
-          "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving."
+          "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving.",
+          "enable_updates": "Schakelt update-entiteiten in voor elke container die de beschikbaarheid van image-updates weergeeft. Activeert echte registerquery's — zie poll_interval_updates.",
+          "poll_interval_updates": "Hoe vaak containerregisters worden gecontroleerd op image-updates (seconden). Elke controle ondervraagt het register voor elke container. Standaard: 86400 (24 uur)."
         }
       }
     }
@@ -195,6 +207,14 @@
     "button": {
       "restart": {
         "name": "Herstarten"
+      },
+      "check_updates": {
+        "name": "Controleren op image-updates"
+      }
+    },
+    "update": {
+      "image_update": {
+        "name": "Image-update"
       }
     }
   }

@@ -150,7 +150,6 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
     """Start/stop switch for a container — on=running, off=stopped."""
 
     _attr_translation_key = "running"
-    _attr_name = "Container"
 
     def __init__(
         self,
@@ -187,7 +186,6 @@ class DockhandStackRunningSwitch(_BaseFastStackSwitch):
     """
 
     _attr_translation_key = "stack"
-    _attr_name = "Stack"
 
     def __init__(
         self,

@@ -32,6 +32,7 @@ async def async_get_config_entry_diagnostics(
     """
     fast = entry.runtime_data.fast_coordinator
     slow = entry.runtime_data.slow_coordinator
+    update = entry.runtime_data.update_coordinator
 
     fast_data = fast.data or {}
     slow_data = slow.data or {}
@@ -65,6 +66,17 @@ async def async_get_config_entry_diagnostics(
             ),
         }
 
+    # Build a lightweight update summary
+    update_data = update.data if update is not None else {}
+    update_summary: dict[str, Any] = {}
+    for env_id, by_container in (update_data or {}).items():
+        update_summary[str(env_id)] = {
+            "container_count": len(by_container),
+            "updates_available": sum(
+                1 for item in by_container.values() if item.get("hasUpdate")
+            ),
+        }
+
     return {
         "config_entry": async_redact_data(dict(entry.data), TO_REDACT),
         "options": async_redact_data(dict(entry.options), TO_REDACT),
@@ -84,6 +96,16 @@ async def async_get_config_entry_diagnostics(
                 if slow.last_exception
                 else None,
                 "data": slow_data,
+            },
+            "update": {
+                "enabled": update is not None,
+                "last_update_success": update.last_update_success
+                if update is not None
+                else None,
+                "last_exception": str(update.last_exception)
+                if update is not None and update.last_exception
+                else None,
+                "summary": update_summary,
             },
         },
     }
