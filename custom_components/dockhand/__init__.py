@@ -151,6 +151,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     base_url = entry.data.get(CONF_API_URL, "")
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
 
+    # Migrate update entity unique_ids from the 1.4.0 container-ID-based scheme
+    # to the 1.4.1 name-based scheme. Must run after coordinators have data and
+    # before platforms load so the new unique_ids are in place before entities
+    # attempt to register.
+    _migrate_update_entity_unique_ids(hass, entry, fast_coordinator)
+
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
     # Without this, entities pruned between reloads persist in the registry
@@ -183,6 +189,67 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
+
+
+def _migrate_update_entity_unique_ids(
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+    fast_coordinator: DockhandFastCoordinator,
+) -> None:
+    """Migrate update entity unique_ids from 1.4.0 format to 1.4.1 format.
+
+    1.4.0 used: dockhand_update_{container_id}  (64-char Docker hash — unstable)
+    1.4.1 uses: dockhand_update_{env_id}_{container_name}  (stable across rebuilds)
+
+    Builds a reverse map of container_id → (env_id, container_name) from the
+    fast coordinator data, then rewrites any matching entity unique_ids in the
+    entity registry. Runs once at setup time; is a no-op after the first run
+    since old-format unique_ids will no longer exist.
+    """
+    fast_data = fast_coordinator.data or {}
+
+    # Build reverse map: container_id → (env_id, name)
+    id_to_name: dict[str, tuple[int, str]] = {}
+    for env_id, env_data in fast_data.items():
+        for c in env_data.get("containers") or []:
+            cid = c.get("id", "")
+            name = c.get("name", "")
+            if cid and name:
+                id_to_name[cid] = (env_id, name)
+
+    if not id_to_name:
+        return
+
+    ent_registry = er.async_get(hass)
+    migrated = 0
+    for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
+        uid = entity_entry.unique_id or ""
+        if not uid.startswith("dockhand_update_"):
+            continue
+        # Old format: "dockhand_update_" + 64-char hex container ID.
+        # New format: "dockhand_update_" + digits + "_" + name.
+        suffix = uid[len("dockhand_update_") :]
+        # If suffix contains no underscore it's a plain container ID (old format).
+        # If it starts with digits followed by underscore, it's already new format.
+        if "_" in suffix:
+            continue  # Already new format — skip.
+        container_id = suffix
+        if container_id not in id_to_name:
+            # Container no longer running — will be cleaned up by stale registry pass.
+            continue
+        env_id, name = id_to_name[container_id]
+        new_uid = f"dockhand_update_{env_id}_{name}"
+        ent_registry.async_update_entity(entity_entry.entity_id, new_unique_id=new_uid)
+        _LOGGER.debug(
+            "Dockhand: migrated update entity unique_id %s → %s", uid, new_uid
+        )
+        migrated += 1
+
+    if migrated:
+        _LOGGER.info(
+            "Dockhand: migrated %d update entity unique_id(s) to name-based scheme",
+            migrated,
+        )
 
 
 def _register_devices(
@@ -397,9 +464,11 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     )
     update_uids: set[str] = set()
     if update_valid and update is not None:
-        for by_container in (update.data or {}).values():
-            for container_id in by_container:
-                update_uids.add(f"dockhand_update_{container_id}")
+        for env_id, by_container in (update.data or {}).items():
+            for item in by_container.values():
+                name = item.get("containerName", "")
+                if name:
+                    update_uids.add(f"dockhand_update_{env_id}_{name}")
 
     return {
         "env_ids": env_ids,

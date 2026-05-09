@@ -168,14 +168,16 @@ class DockhandClient:
     async def async_batch_update_container(
         self, env_id: int, container_id: str
     ) -> None:
-        """Trigger a safe-pull image update for a single container.
+        """Trigger an image pull and container recreation for a single container.
 
         POST /api/containers/batch-update?env=X
         Body: {"containerIds": [container_id]}
 
-        Dockhand's safe-pull workflow: pulls new image, restores original tag,
-        scans if vulnerability scanning is configured, then applies or blocks
-        the update based on configured vulnerability criteria.
+        Pulls the latest image, then recreates the container preserving all
+        settings. Note: vulnerability scanning and criteria evaluation are not
+        applied by this endpoint — that workflow is only available through the
+        Dockhand UI. A warning is surfaced in the HA update entity's release
+        summary when scanning is enabled on the environment.
         """
         await self._request(
             "POST",

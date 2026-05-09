@@ -583,7 +583,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
             update_data={1: {}},  # no containers — stale update entity
         )
         er = er_async_get(hass)
-        stale = er._add(entry.entry_id, "dockhand_update_deadcontainer")
+        stale = er._add(entry.entry_id, "dockhand_update_1_oldcontainer")
         _cleanup_stale_registry(hass, entry)
         self.assertIn(stale.entity_id, er._removed)
 
@@ -599,7 +599,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
             update_data={1: {"c1abc": {"containerName": "traefik"}}},
         )
         er = er_async_get(hass)
-        live = er._add(entry.entry_id, "dockhand_update_c1abc")
+        live = er._add(entry.entry_id, "dockhand_update_1_traefik")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.entity_id, er._removed)
 

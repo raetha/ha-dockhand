@@ -62,7 +62,7 @@ After setup, use **Configure** (the cog) to adjust poll intervals and feature fl
 | **Enable images** | Create entities for Docker images on each host | off |
 | **Enable volumes** | Create entities for Docker volumes on each host | off |
 | **Enable networks** | Create entities for Docker networks on each host | off |
-| **Enable container updates** | Create update entities for each container, showing image update availability and allowing one-click updates via Dockhand's safe-pull workflow | off |
+| **Enable container updates** | Create update entities for each container, showing image update availability and allowing one-click updates via Dockhand's `batch-update` API | off |
 | **Update check interval** | How often (seconds) to check container registries for image updates. Each check queries the registry for every container — keep this infrequent. Only shown when container updates are enabled | 86400 |
 | **Verify SSL certificate** | Validate the server's SSL/TLS certificate. Uncheck only if your Dockhand instance uses a self-signed certificate | on |
 
@@ -166,7 +166,7 @@ If you're migrating from the Portainer integration, this integration follows the
 | Health | sensor | healthy / unhealthy / starting / none |
 | Container | switch | turn on = start, turn off = stop |
 | Restart | button | restarts running container (use Container to start stopped) |
-| Image update | update | Shows when a newer image digest is available. Install triggers Dockhand's safe-pull workflow, including vulnerability scanning if configured. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
+| Image update | update | Shows when a newer image digest is available. Install triggers a pull-and-recreate via Dockhand's `batch-update` API. Note: vulnerability scanning is not applied by this API endpoint — a warning is shown in the entity when scanning is enabled on the environment. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
 
 ### Stack (always on, 60 s)
 | Entity | Type | Notes |

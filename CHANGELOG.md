@@ -2,6 +2,32 @@
 
 ## [Unreleased]
 
+## [1.4.1] — 2026-05-08
+
+### Fixed
+
+- Update entities no longer disappear with "This entity is unavailable" after
+  triggering an image update. The root cause was that container IDs (Docker
+  hashes) change every time a container is recreated — which Dockhand does on
+  every safe-pull update. Update entities were keyed on container ID, so the
+  stale-cleanup logic would remove them on the next coordinator poll. Entity
+  identity is now keyed on `(env_id, container_name)` which is stable across
+  container recreation. Docker enforces unique container names per host, so
+  this is a safe and reliable key.
+- Update entity unique_ids are automatically migrated from the 1.4.0
+  container-ID-based scheme to the new name-based scheme on first load.
+  No manual entity cleanup is required when upgrading from 1.4.0.
+
+### Added
+
+- Update entities now display a warning at the top of their release summary
+  when vulnerability scanning is enabled on the environment. The Dockhand
+  `batch-update` API endpoint does not apply vulnerability scanning or
+  criteria evaluation — that workflow is only available through the Dockhand
+  UI. The Install button remains available so users can still trigger the
+  update if they choose to, but are advised to verify the result in Dockhand
+  afterwards.
+
 ## [1.4.0] — 2026-05-06
 
 ### Added
@@ -15,8 +41,9 @@
     Docker host
   - Installed and latest versions are displayed as short digest hashes (first
     12 hex chars of the sha256)
-  - **Install** triggers Dockhand's safe-pull workflow, including vulnerability
-    scanning if configured in Dockhand
+  - **Install** triggers a pull-and-recreate via Dockhand's `batch-update`
+    API. Note: vulnerability scanning is not applied by this endpoint — a
+    warning is shown in the entity's release summary when scanning is enabled
   - Install is suppressed for Dockhand system containers (e.g. `hawser`) and
     containers with the `dockhand.update=false` label
 - **"Check for image updates" button** — each environment device gains a
@@ -224,7 +251,8 @@ Initial stable release of the Dockhand integration for Home Assistant.
 - Passes hassfest and HACS validation
 - Ruff lint clean
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.4.1...HEAD
+[1.4.1]: https://github.com/raetha/ha-dockhand/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/raetha/ha-dockhand/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/raetha/ha-dockhand/compare/v1.3.0...v1.3.1
 [1.3.0]: https://github.com/raetha/ha-dockhand/compare/v1.2.0...v1.3.0
