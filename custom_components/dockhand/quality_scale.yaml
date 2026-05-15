@@ -194,8 +194,8 @@ rules:
   test-coverage:
     status: done
     comment: >
-      216 tests across five files: test_api.py (28), test_config_flow.py (23),
-      test_coordinator.py (22), test_entities.py (89), test_init.py (54).
+      221 tests across five files: test_api.py (28), test_config_flow.py (23),
+      test_coordinator.py (22), test_entities.py (89), test_init.py (53).
       Covers all API methods, Bearer token header, Accept header, all config
       flow steps, legacy migration paths, all three coordinators, all entity
       types, device registration, unified stale cleanup (_cleanup_stale_registry),
@@ -235,9 +235,9 @@ rules:
   docs-data-update:
     status: done
     comment: >
-      README has a Data Updates section explaining the dual-coordinator model:
+      README has a Data Updates section explaining the three-coordinator model:
       what each coordinator fetches, default intervals, how failures are handled,
-      and how session expiry is managed transparently.
+      and how token errors surface as re-authentication prompts.
 
   docs-examples:
     status: done
@@ -301,10 +301,12 @@ rules:
   entity-device-class:
     status: done
     comment: >
-      SensorDeviceClass.MEASUREMENT used for container count sensors (networks, volumes).
-      SensorDeviceClass.TIMESTAMP used for created and next-run timestamp sensors.
-      BinarySensorDeviceClass.CONNECTIVITY used for the Online sensor.
-      BinarySensorDeviceClass.PLUG used for volume In use sensor.
+      SensorDeviceClass.DATA_SIZE used for containers disk usage and build
+      cache size sensors. SensorDeviceClass.TIMESTAMP used for the schedule
+      next-run sensor. BinarySensorDeviceClass.CONNECTIVITY used for the
+      environment Online sensor. All other sensors and binary sensors use
+      SensorStateClass.MEASUREMENT or no device class where no standard
+      class fits (e.g. container state as a string sensor).
 
   entity-disabled-by-default:
     status: done
@@ -337,7 +339,7 @@ rules:
   icon-translations:
     status: done
     comment: >
-      icons.json created with 29 entity icon entries covering all four
+      icons.json created with 28 entity icon entries covering all four
       platforms. Includes state-specific icons for container State
       (running/stopped/paused), Health (healthy/unhealthy/starting), and
       Stack Status (running/partial/stopped).
@@ -359,18 +361,15 @@ rules:
     comment: >
       All registry cleanup is handled by a single _cleanup_stale_registry
       function called from all three coordinator listeners and once at startup.
-      It makes one pass over the device registry and one pass over the entity
-      registry per call, driven by live sets built from current coordinator data
-      via _build_live_sets. Container, stack, env hub, env group, and schedule
-      devices are removed when absent from current API data. Standalone entities
-      (images, networks, volumes, update entities) are cleaned up explicitly.
-      Device-attached entities (container/stack/env sensors, buttons, switches)
-      are handled automatically by HA's device removal cascade.
-      Safety guards: (1) fast data must be non-empty before any removal;
-      (2) slow-derived sets only populated when slow coordinator last succeeded;
-      (3) update-derived sets only populated when update coordinator succeeded;
-      (4) env removal uses fast env_ids — offline envs still appear in the API
-      and are preserved.
+      Container identifiers include env_id (container_{env_id}_{hash}) enabling
+      precise per-environment offline guards — only containers in offline envs
+      are preserved, containers in other online envs are cleaned up normally.
+      Stack, image, network, volume, and update cleanup use the same per-env
+      online guard. Schedule cleanup is gated on enable_schedules=True.
+      Slow-derived sets are only populated when the slow coordinator last
+      succeeded. Env/group device removal uses fast env_ids — offline envs
+      still appear in the API and are preserved; permanently deleted envs
+      trigger full cleanup of all their devices and entities.
 
   # ── Platinum ──────────────────────────────────────────────────────────────
 

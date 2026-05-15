@@ -136,16 +136,20 @@ def _container_device(
 ) -> DeviceInfo:
     """Device info for a container.
 
-    If stack_name is provided the container is compose-managed and is parented
-    to the stack device.  Freestanding containers (no compose project label)
-    are parented to the env Containers group device instead.
+    Identifier format: container_{env_id}_{container_id}
+    The env_id prefix scopes container devices to their environment, enabling
+    precise per-environment cleanup without conservative cross-env guards.
+
+    If stack_name is provided the container is compose-managed and parented
+    to its stack device. Freestanding containers are parented to the env
+    Containers group device.
     """
     if stack_name:
         parent: tuple = (DOMAIN, f"stack_{env_id}_{stack_name}")
     else:
         parent = (DOMAIN, f"env_{env_id}_Containers")
     return DeviceInfo(
-        identifiers={(DOMAIN, f"container_{container_id}")},
+        identifiers={(DOMAIN, f"container_{env_id}_{container_id}")},
         name=f"{env_name} – {container_name}",
         manufacturer="Dockhand",
         model="Container",

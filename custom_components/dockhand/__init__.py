@@ -137,8 +137,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
                 err,
             )
 
-    # Store runtime data on the entry itself (modern pattern — no hass.data).
-    # Cleaned up automatically by HA when the entry is unloaded.
     entry.runtime_data = DockhandData(
         client=client,
         fast_coordinator=fast_coordinator,
@@ -152,10 +150,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
 
     # Migrate update entity unique_ids from the 1.4.0 container-ID-based scheme
-    # to the 1.4.1 name-based scheme. Must run after coordinators have data and
-    # before platforms load so the new unique_ids are in place before entities
-    # attempt to register.
+    # to the 1.4.1 name-based scheme.
     _migrate_update_entity_unique_ids(hass, entry, fast_coordinator)
+
+    # Migrate container device identifiers from the 1.4.x format (no env_id)
+    # to the 1.5.0 format (env_id prefix for precise per-env cleanup).
+    _migrate_container_device_identifiers(hass, entry, fast_coordinator)
 
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
@@ -163,12 +163,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     # and cause _2/_3/etc suffixes when new entities with the same name register.
     _cleanup_stale_registry(hass, entry)
 
-    # Register the cleanup listener on all three coordinators. The single
-    # _cleanup_stale_registry function checks guard conditions internally and
-    # handles all resource types, so all listeners share one implementation.
-    # Listeners are registered BEFORE platform setup so cleanup fires before
-    # async_add_entities on each update — preventing _2 suffix collisions when
-    # a container is recreated with a new Docker ID but the same name.
+    # All three coordinators share the same cleanup listener — guard logic is
+    # handled inside _cleanup_stale_registry.
     entry.async_on_unload(
         fast_coordinator.async_add_listener(
             lambda: _cleanup_stale_registry(hass, entry)
@@ -248,6 +244,72 @@ def _migrate_update_entity_unique_ids(
     if migrated:
         _LOGGER.info(
             "Dockhand: migrated %d update entity unique_id(s) to name-based scheme",
+            migrated,
+        )
+
+
+def _migrate_container_device_identifiers(
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+    fast_coordinator: DockhandFastCoordinator,
+) -> None:
+    """Migrate container device identifiers from 1.4.x to 1.5.0 format.
+
+    1.4.x used: container_{docker_hash}  (no env_id — conservative cleanup)
+    1.5.0 uses: container_{env_id}_{docker_hash}  (precise per-env cleanup)
+
+    Builds a map of container_id → env_id from the fast coordinator data,
+    then updates any old-format device identifiers in the device registry.
+    Runs once at setup time; is a no-op after the first run since old-format
+    identifiers will no longer exist.
+    """
+    fast_data = fast_coordinator.data or {}
+
+    # Build reverse map: container_id → env_id
+    id_to_env: dict[str, int] = {}
+    for env_id, env_data in fast_data.items():
+        for c in env_data.get("containers") or []:
+            cid = c.get("id", "")
+            if cid:
+                id_to_env[cid] = env_id
+
+    if not id_to_env:
+        return
+
+    dev_registry = dr.async_get(hass)
+    migrated = 0
+    for device in dr.async_entries_for_config_entry(dev_registry, entry.entry_id):
+        for domain, identifier in device.identifiers:
+            if domain != DOMAIN:
+                continue
+            if not identifier.startswith("container_"):
+                continue
+            suffix = identifier[len("container_") :]
+            # Old format: no underscore in suffix (plain docker hash).
+            # New format: starts with digits followed by underscore (env_id prefix).
+            if "_" in suffix:
+                continue  # Already new format.
+            container_id = suffix
+            if container_id not in id_to_env:
+                continue  # Container gone — cleanup will handle it.
+            env_id = id_to_env[container_id]
+            new_identifier = f"container_{env_id}_{container_id}"
+            new_identifiers = {
+                (d, new_identifier if d == DOMAIN and i == identifier else i)
+                for d, i in device.identifiers
+            }
+            dev_registry.async_update_device(device.id, new_identifiers=new_identifiers)
+            _LOGGER.debug(
+                "Dockhand: migrated container device %s → %s",
+                identifier,
+                new_identifier,
+            )
+            migrated += 1
+            break  # Only one identifier per device.
+
+    if migrated:
+        _LOGGER.info(
+            "Dockhand: migrated %d container device identifier(s) to env-scoped scheme",
             migrated,
         )
 
@@ -405,7 +467,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     Returns a dict with keys:
         env_ids          set[int]   — environments currently in fast data
-        containers       set[str]   — live device identifiers (container_<id>)
+        online_env_ids   set[int]   — environments with online=True (or unknown)
+        containers       set[str]   — live device identifiers (container_<env_id>_<id>)
         stacks           set[str]   — live device identifiers (stack_<env>_<name>)
         schedules        set[str]   — live device identifiers (schedule_<id>)
         image_uids       set[str]   — live entity unique_ids
@@ -427,14 +490,31 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     for env_id, env_data in fast_data.items():
         for c in env_data.get("containers") or []:
-            containers.add(f"container_{c['id']}")
+            containers.add(f"container_{env_id}_{c['id']}")
         for s in env_data.get("stacks") or []:
             stacks.add(f"stack_{env_id}_{s['name']}")
 
+    # Environments that are offline have unreachable Docker daemons — their
+    # container and stack lists will be empty but that is not ground truth.
+    # Track which envs are confirmed online so cleanup skips offline ones.
+    online_env_ids: set[int] = {
+        env_id
+        for env_id, env_data in fast_data.items()
+        if env_data.get("stats", {}).get("online", True)
+    }
+
     # Slow-coordinator-derived sets — only meaningful when slow data is valid.
-    slow_valid = slow.last_update_success and slow_data.get("schedules") is not None
+    # slow_valid: slow coordinator has run successfully and returned data.
+    slow_valid = slow.last_update_success and bool(slow_data)
     slow_env_map = slow_data.get("environments", {})
     slow_env_ids: set[int] = set(slow_env_map.keys())
+
+    # Only populate schedule live set when schedules are enabled.
+    # When disabled, slow_data has schedules=[] — treat as "not loaded", not "deleted".
+    entry_config = {**entry.data, **entry.options}
+    schedules_enabled = slow.last_update_success and bool(
+        entry_config.get(CONF_ENABLE_SCHEDULES, False)
+    )
 
     schedules: set[str] = set()
     image_uids: set[str] = set()
@@ -442,10 +522,11 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     volume_uids: set[str] = set()
 
     if slow_valid:
-        for sched in slow_data.get("schedules") or []:
-            sid = sched.get("id")
-            if sid is not None:
-                schedules.add(f"schedule_{sid}")
+        # Only populate when enabled — empty list when disabled is not "deleted".
+        if schedules_enabled:
+            for sched in slow_data.get("schedules") or []:
+                if sched.get("id") is not None:
+                    schedules.add(f"schedule_{_sched_key(sched)}")
 
         for env_id, env_data in slow_env_map.items():
             for img in env_data.get("images") or []:
@@ -472,9 +553,11 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     return {
         "env_ids": env_ids,
+        "online_env_ids": online_env_ids,
         "containers": containers,
         "stacks": stacks,
         "schedules": schedules,
+        "schedules_enabled": schedules_enabled,
         "image_uids": image_uids,
         "network_uids": network_uids,
         "volume_uids": volume_uids,
@@ -497,20 +580,20 @@ def _cleanup_stale_registry(
 
     Safety guards — data ambiguity is handled in _build_live_sets:
     - Fast coordinator data must be non-empty (≥1 environment) before any
-      device or entity removal is attempted. If fast data is empty we have no
-      ground truth and must not wipe anything.
-    - Slow-derived sets (schedules, images, networks, volumes) are only
-      populated when the slow coordinator's last poll succeeded.
-    - Update-derived sets are only populated when the update coordinator
-      exists and its last poll succeeded.
+      device or entity removal is attempted.
+    - Container and stack device cleanup is scoped per-environment using the
+      env_id embedded in their identifiers. Only devices whose environment is
+      confirmed online are candidates for removal — offline environments
+      (host rebooting, Hawser temporarily unreachable) are preserved until
+      they come back online.
+    - Image, network, volume, and update entity cleanup uses the same per-env
+      online guard. Schedule cleanup is gated on schedules being enabled.
+    - Slow-derived sets are only populated when the slow coordinator's last
+      poll succeeded.
     - Env/group device removal uses the fast env_ids set — an environment
-      offline in Dockhand still appears in async_get_environments() so it
-      will remain in env_ids and its devices will be preserved.
-
-    Device removal cascades to all attached entities automatically (HA
-    behaviour), so container/stack/env entities do not need explicit cleanup.
-    Standalone entities (images, networks, volumes, update entities) have no
-    device and are cleaned up explicitly in the entity registry pass.
+      offline in Dockhand still appears in async_get_environments() and is
+      preserved. A permanently deleted environment disappears from env_ids
+      and all its devices and entities are cleaned up.
     """
     fast_data = entry.runtime_data.fast_coordinator.data or {}
     if not fast_data:
@@ -528,18 +611,43 @@ def _cleanup_stale_registry(
                 continue
 
             if identifier.startswith("container_"):
+                # Container identifiers are now "container_{env_id}_{docker_hash}".
+                # Extract env_id from position [1] to scope the offline guard
+                # precisely — only skip cleanup for containers in offline envs.
+                try:
+                    env_id = int(identifier.split("_")[1])
+                except ValueError:
+                    continue
                 if identifier not in live["containers"]:
-                    _LOGGER.debug(
-                        "Dockhand: removing stale container device %s", identifier
-                    )
-                    dev_registry.async_remove_device(device.id)
+                    if env_id in live["online_env_ids"]:
+                        _LOGGER.debug(
+                            "Dockhand: removing stale container device %s", identifier
+                        )
+                        dev_registry.async_remove_device(device.id)
+                    else:
+                        _LOGGER.debug(
+                            "Dockhand: env offline, skipping container cleanup: %s",
+                            identifier,
+                        )
 
             elif identifier.startswith("stack_"):
+                # Stack identifiers are "stack_{env_id}_{name}" — extract env_id
+                # for the same precise per-env offline guard.
+                try:
+                    env_id = int(identifier.split("_")[1])
+                except ValueError:
+                    continue
                 if identifier not in live["stacks"]:
-                    _LOGGER.debug(
-                        "Dockhand: removing stale stack device %s", identifier
-                    )
-                    dev_registry.async_remove_device(device.id)
+                    if env_id in live["online_env_ids"]:
+                        _LOGGER.debug(
+                            "Dockhand: removing stale stack device %s", identifier
+                        )
+                        dev_registry.async_remove_device(device.id)
+                    else:
+                        _LOGGER.debug(
+                            "Dockhand: env offline, skipping stack cleanup: %s",
+                            identifier,
+                        )
 
             elif identifier.startswith("env_"):
                 # Covers both env hub devices ("env_5") and group devices
@@ -555,21 +663,23 @@ def _cleanup_stale_registry(
                     )
                     dev_registry.async_remove_device(device.id)
 
+            elif identifier == "schedules_hub":
+                # Remove the schedules hub device when schedules are disabled
+                # in the config. It has no cleanup path otherwise since it has
+                # no env_id and is not in any live set.
+                if not live["schedules_enabled"]:
+                    _LOGGER.debug("Dockhand: removing stale schedules_hub device")
+                    dev_registry.async_remove_device(device.id)
+
             elif identifier.startswith("schedule_"):
-                if live["slow_valid"] and identifier not in live["schedules"]:
+                # Only clean up schedule devices when schedules are enabled and
+                # the slow coordinator has valid data. When disabled, the live
+                # set is empty but that means "not loaded", not "deleted".
+                if live["schedules_enabled"] and identifier not in live["schedules"]:
                     _LOGGER.debug(
                         "Dockhand: removing stale schedule device %s", identifier
                     )
                     dev_registry.async_remove_device(device.id)
-
-            elif identifier.startswith(("network_", "volume_")):
-                # Legacy *device* entries from pre-entity-rollup installs.
-                # Note: current networks and volumes are *entities* (not devices)
-                # with unique_ids prefixed "dockhand_network_" / "dockhand_volume_".
-                # These two namespaces are distinct — this branch only handles
-                # old device registry entries, never current entity unique_ids.
-                _LOGGER.debug("Dockhand: removing legacy device %s", identifier)
-                dev_registry.async_remove_device(device.id)
 
     # ── Entity registry pass ─────────────────────────────────────────────────
     # Only standalone entities (no device) need explicit cleanup here;
@@ -584,7 +694,12 @@ def _cleanup_stale_registry(
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            if env_id in live["slow_env_ids"] and uid not in live["image_uids"]:
+            # Only clean up if env is present in slow data AND online.
+            if (
+                env_id in live["slow_env_ids"]
+                and env_id in live["online_env_ids"]
+                and uid not in live["image_uids"]
+            ):
                 _LOGGER.debug("Dockhand: removing stale image entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
@@ -595,7 +710,11 @@ def _cleanup_stale_registry(
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            if env_id in live["slow_env_ids"] and uid not in live["network_uids"]:
+            if (
+                env_id in live["slow_env_ids"]
+                and env_id in live["online_env_ids"]
+                and uid not in live["network_uids"]
+            ):
                 _LOGGER.debug("Dockhand: removing stale network entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
@@ -606,12 +725,24 @@ def _cleanup_stale_registry(
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            if env_id in live["slow_env_ids"] and uid not in live["volume_uids"]:
+            if (
+                env_id in live["slow_env_ids"]
+                and env_id in live["online_env_ids"]
+                and uid not in live["volume_uids"]
+            ):
                 _LOGGER.debug("Dockhand: removing stale volume entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid.startswith("dockhand_update_"):
-            if live["update_valid"] and uid not in live["update_uids"]:
+            if not live["update_valid"]:
+                continue
+            # uid format: dockhand_update_{env_id}_{name}
+            try:
+                env_id = int(uid.split("_")[2])
+            except ValueError:
+                continue
+            # Only clean up update entities for online environments.
+            if env_id in live["online_env_ids"] and uid not in live["update_uids"]:
                 _LOGGER.debug("Dockhand: removing stale update entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 

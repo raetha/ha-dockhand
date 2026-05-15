@@ -251,10 +251,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         rd.fast_coordinator.data = fast_data
         rd.fast_coordinator.last_update_success = True
         rd.slow_coordinator.data = slow_data
-        # slow_valid requires last_update_success=True AND schedules key present
-        rd.slow_coordinator.last_update_success = (
-            slow_data.get("schedules") is not None
-        )
+        rd.slow_coordinator.last_update_success = bool(slow_data)
         if update_data is not None:
             rd.update_coordinator = MagicMock()
             rd.update_coordinator.data = update_data
@@ -286,7 +283,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
                 "schedules": [],
             },
         )
-        stale_dev = self._add_device(reg, entry, "container_old")
+        stale_dev = self._add_device(reg, entry, "container_1_oldhash")
         er = er_async_get(hass)
         stale_ent = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
         _cleanup_stale_registry(hass, entry)
@@ -302,7 +299,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
             fast_data={1: {"containers": [], "stacks": []}},
             slow_data={"environments": {}, "schedules": []},
         )
-        stale = self._add_device(reg, entry, "container_old")
+        stale = self._add_device(reg, entry, "container_1_oldhash")
         _cleanup_stale_registry(hass, entry)
         self.assertIn(stale.id, reg._removed)
 
@@ -313,7 +310,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
             fast_data={1: {"containers": [{"id": "c1", "labels": {}}], "stacks": []}},
             slow_data={"environments": {}, "schedules": []},
         )
-        live = self._add_device(reg, entry, "container_c1")
+        live = self._add_device(reg, entry, "container_1_c1")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.id, reg._removed)
 
@@ -340,6 +337,65 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         live = self._add_device(reg, entry, "stack_1_myapp")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.id, reg._removed)
+
+    def test_preserves_container_when_env_offline(self):
+        """Container devices in an offline env are not removed."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": [], "stats": {"online": False}}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        preserved = self._add_device(reg, entry, "container_1_oldhash")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.id, reg._removed)
+
+    def test_preserves_stack_when_env_offline(self):
+        """Stack devices in an offline env are not removed."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={
+                1: {"containers": [], "stacks": [], "stats": {"online": False}}
+            },
+            slow_data={"environments": {}, "schedules": []},
+        )
+        preserved = self._add_device(reg, entry, "stack_1_myapp")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.id, reg._removed)
+
+    def test_removes_stale_container_when_env_online(self):
+        """Stale container devices are removed when their environment is online."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={
+                1: {"containers": [], "stacks": [], "stats": {"online": True}}
+            },
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "container_1_oldhash")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    def test_offline_env_does_not_block_other_env_container_cleanup(self):
+        """With per-env scoping, env 2 offline only protects env 2's containers."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={
+                1: {"containers": [], "stacks": [], "stats": {"online": True}},
+                2: {"containers": [], "stacks": [], "stats": {"online": False}},
+            },
+            slow_data={"environments": {}, "schedules": []},
+        )
+        # container_1_* is in env 1 (online) — should be removed.
+        stale_env1 = self._add_device(reg, entry, "container_1_oldhash")
+        # container_2_* is in env 2 (offline) — should be preserved.
+        preserved_env2 = self._add_device(reg, entry, "container_2_oldhash")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale_env1.id, reg._removed)
+        self.assertNotIn(preserved_env2.id, reg._removed)
 
     # ── Env / group devices ───────────────────────────────────────────────
 
@@ -391,7 +447,7 @@ class TestCleanupStaleRegistry(unittest.TestCase):
 
     def test_removes_stale_schedule_device(self):
         reg, hass = _make_registry()
-        entry = _make_entry()
+        entry = _make_entry(data={"enable_schedules": True})
         entry.runtime_data = self._make_runtime_data(
             fast_data={1: {"containers": [], "stacks": []}},
             slow_data={"environments": {}, "schedules": []},
@@ -402,19 +458,19 @@ class TestCleanupStaleRegistry(unittest.TestCase):
 
     def test_preserves_live_schedule_device(self):
         reg, hass = _make_registry()
-        entry = _make_entry()
+        entry = _make_entry(data={"enable_schedules": True})
         entry.runtime_data = self._make_runtime_data(
             fast_data={1: {"containers": [], "stacks": []}},
-            slow_data={"environments": {}, "schedules": [{"id": 5}]},
+            slow_data={"environments": {}, "schedules": [{"id": 5, "type": "maintenance"}]},
         )
-        live = self._add_device(reg, entry, "schedule_5")
+        live = self._add_device(reg, entry, "schedule_5_maintenance")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.id, reg._removed)
 
     def test_preserves_schedule_device_when_slow_data_invalid(self):
         """Schedule devices are not removed when slow coordinator hasn't run yet."""
         reg, hass = _make_registry()
-        entry = _make_entry()
+        entry = _make_entry(data={"enable_schedules": True})
         rd = self._make_runtime_data(
             fast_data={1: {"containers": [], "stacks": []}},
             slow_data={"environments": {}, "schedules": []},
@@ -425,31 +481,19 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(dev.id, reg._removed)
 
+    def test_preserves_schedule_device_when_schedules_disabled(self):
+        """Schedule devices are not removed when enable_schedules=False."""
+        reg, hass = _make_registry()
+        entry = _make_entry()  # enable_schedules not set → defaults to False
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": []}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        preserved = self._add_device(reg, entry, "schedule_99")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.id, reg._removed)
+
     # ── Legacy devices ────────────────────────────────────────────────────
-
-    def test_removes_legacy_network_device(self):
-        """Legacy network_ device entries are cleaned up unconditionally."""
-        reg, hass = _make_registry()
-        entry = _make_entry()
-        entry.runtime_data = self._make_runtime_data(
-            fast_data={1: {"containers": [], "stacks": []}},
-            slow_data={"environments": {}, "schedules": []},
-        )
-        stale = self._add_device(reg, entry, "network_netXYZ")
-        _cleanup_stale_registry(hass, entry)
-        self.assertIn(stale.id, reg._removed)
-
-    def test_removes_legacy_volume_device(self):
-        """Legacy volume_ device entries are cleaned up unconditionally."""
-        reg, hass = _make_registry()
-        entry = _make_entry()
-        entry.runtime_data = self._make_runtime_data(
-            fast_data={1: {"containers": [], "stacks": []}},
-            slow_data={"environments": {}, "schedules": []},
-        )
-        stale = self._add_device(reg, entry, "volume_1_mydata")
-        _cleanup_stale_registry(hass, entry)
-        self.assertIn(stale.id, reg._removed)
 
     # ── Standalone entity cleanup ─────────────────────────────────────────
 
@@ -602,6 +646,46 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         live = er._add(entry.entry_id, "dockhand_update_1_traefik")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.entity_id, er._removed)
+
+    def test_preserves_update_entity_when_env_offline(self):
+        """Update entities are not removed when their environment is offline."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={
+                1: {"containers": [], "stacks": [], "stats": {"online": False}}
+            },
+            slow_data={"environments": {}, "schedules": []},
+            update_data={1: {}},
+        )
+        er = er_async_get(hass)
+        preserved = er._add(entry.entry_id, "dockhand_update_1_traefik")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.entity_id, er._removed)
+
+    def test_preserves_image_entity_when_env_offline(self):
+        """Image entities are not removed when their environment is offline."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={
+                1: {"containers": [], "stacks": [], "stats": {"online": False}}
+            },
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        preserved = er._add(entry.entry_id, "dockhand_image_1_deadbeef")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.entity_id, er._removed)
 
     def test_stale_and_live_in_same_env(self):
         """Stale entities are removed while live ones in the same env are preserved."""

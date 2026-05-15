@@ -149,12 +149,10 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         self._attr_unique_id = f"dockhand_update_{env_id}_{container_name}"
         self._attr_translation_key = "image_update"
 
-        # Device attachment: use the current container_id from the item to find
-        # the container device. This is updated on each coordinator refresh via
-        # _handle_coordinator_update calling _update_device_info(), so that after
-        # an image update the entity re-attaches to the new container device.
+        # Device attachment: use env_id + current container_id.
+        # Format matches helpers._container_device: container_{env_id}_{container_id}
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"container_{item.get('containerId', '')}")},
+            identifiers={(DOMAIN, f"container_{env_id}_{item.get('containerId', '')}")},
         )
 
         self._update_supported_features()
@@ -179,9 +177,11 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         update_disabled = item.get("updateDisabled", False)
         is_system = item.get("systemContainer") is not None
         if update_disabled or is_system:
-            self._attr_supported_features = UpdateEntityFeature(0)
+            self._attr_supported_features = UpdateEntityFeature.RELEASE_NOTES
         else:
-            self._attr_supported_features = UpdateEntityFeature.INSTALL
+            self._attr_supported_features = (
+                UpdateEntityFeature.INSTALL | UpdateEntityFeature.RELEASE_NOTES
+            )
 
     @property
     def installed_version(self) -> str | None:
@@ -207,28 +207,45 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
 
     @property
     def release_summary(self) -> str | None:
+        """Brief summary shown in the entity state attribute — max 255 chars."""
         item = self._item()
         if not item:
             return None
         parts = []
-        # Scanning warning always appears first so it's visible without scrolling.
+        image_name = item.get("imageName", "")
+        if image_name:
+            parts.append(f"Image: {image_name}")
         if self._scanner_enabled():
             parts.append(
-                "⚠ Vulnerability scanning is enabled on this environment but is "
-                "not applied when updating via Home Assistant. Verify the update "
-                "in Dockhand after applying."
+                "⚠️ Vulnerability scanning will not be performed via this update method."
             )
+        return " ".join(parts) if parts else None
+
+    async def async_release_notes(self) -> str | None:
+        """Full release notes shown in the more-info dialog — supports Markdown."""
+        item = self._item()
+        if not item:
+            return None
+        parts = []
+
         image_name = item.get("imageName")
         if image_name:
             parts.append(f"Image: {image_name}")
+
+        if self._scanner_enabled():
+            parts.append(
+                "⚠️ Vulnerability scanning will not be performed via this update method."
+            )
+
         if item.get("systemContainer"):
             parts.append(
-                "Dockhand system container — update must be applied"
-                " outside of Home Assistant."
+                "⚠️ This is a system container and must be updated"
+                " directly on the docker host."
             )
         elif item.get("updateDisabled"):
-            parts.append("Updates disabled via dockhand.update=false label.")
-        return "\n".join(parts) if parts else None
+            parts.append("Updates disabled via `dockhand.update=false` label.")
+
+        return "\n\n".join(parts) if parts else None
 
     @property
     def available(self) -> bool:
@@ -246,7 +263,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         container_id = item.get("containerId", "")
         if container_id:
             self._attr_device_info = DeviceInfo(
-                identifiers={(DOMAIN, f"container_{container_id}")},
+                identifiers={(DOMAIN, f"container_{self._env_id}_{container_id}")},
             )
 
     def _handle_coordinator_update(self) -> None:

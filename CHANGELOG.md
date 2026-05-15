@@ -2,31 +2,61 @@
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-05-15
+
+### Added
+
+- Container device identifiers now include the environment ID
+  (`container_{env_id}_{docker_hash}`), enabling precise per-environment
+  cleanup. Previously the identifier was `container_{docker_hash}` with no
+  env scoping, which required a conservative "any env offline = skip all
+  container cleanup" rule. Now only containers belonging to an offline
+  environment are protected — containers on other online environments are
+  cleaned up normally.
+- Automatic migration of existing container device identifiers from the old
+  format to the new format on first load. No manual action required.
+- Update entity release notes now display in full via HA's more-info dialog.
+  The `release_summary` attribute has a 255-character limit; all content is
+  now in `async_release_notes` (full Markdown, no length limit) with a brief
+  one-liner kept in `release_summary`.
+
+### Fixed
+
+- Schedule devices and entities are no longer removed ~60 seconds after a
+  reload or HA restart. Two bugs: (1) the live set used `schedule_{id}` as
+  the device identifier, but devices are registered as `schedule_{id}_{type}`
+  — so every schedule always appeared stale; (2) when `enable_schedules=False`,
+  the empty schedule list was treated as "all schedules deleted."
+- Container, stack, image, network, volume, and update entities are no longer
+  removed when a Docker host is temporarily offline (e.g. during a reboot).
+  The fix checks the `online` field from each environment's dashboard stats
+  and skips cleanup for any offline environment. Permanently deleting an
+  environment from Dockhand still triggers a full cleanup.
+- The `schedules_hub` device is now removed when `enable_schedules` is
+  disabled, closing a cleanup gap where it had no removal path.
+
+### Changed
+
+- Removed legacy network and volume *device* cleanup code that handled
+  pre-1.2.0 installs.
+
 ## [1.4.1] — 2026-05-08
 
 ### Fixed
 
-- Update entities no longer disappear with "This entity is unavailable" after
-  triggering an image update. The root cause was that container IDs (Docker
-  hashes) change every time a container is recreated — which Dockhand does on
-  every safe-pull update. Update entities were keyed on container ID, so the
-  stale-cleanup logic would remove them on the next coordinator poll. Entity
-  identity is now keyed on `(env_id, container_name)` which is stable across
-  container recreation. Docker enforces unique container names per host, so
-  this is a safe and reliable key.
+- Update entities no longer disappear after triggering an image update.
+  Container IDs (Docker hashes) change on every container recreation, so
+  update entities keyed on container ID were removed by the cleanup routine
+  after each update. Entity identity is now keyed on `(env_id,
+  container_name)` which is stable across recreation.
 - Update entity unique_ids are automatically migrated from the 1.4.0
-  container-ID-based scheme to the new name-based scheme on first load.
-  No manual entity cleanup is required when upgrading from 1.4.0.
+  container-ID-based scheme on first load.
 
 ### Added
 
-- Update entities now display a warning at the top of their release summary
-  when vulnerability scanning is enabled on the environment. The Dockhand
-  `batch-update` API endpoint does not apply vulnerability scanning or
-  criteria evaluation — that workflow is only available through the Dockhand
-  UI. The Install button remains available so users can still trigger the
-  update if they choose to, but are advised to verify the result in Dockhand
-  afterwards.
+- Update entities display a warning when vulnerability scanning is enabled on
+  the environment. The `batch-update` API endpoint does not apply scanning —
+  that workflow is only available through the Dockhand UI.
 
 ## [1.4.0] — 2026-05-06
 
@@ -36,222 +66,115 @@
   [`UpdateEntity`](https://developers.home-assistant.io/docs/core/entity/update/)
   per container. Enable via **Configure → Enable container update entities**.
   - Update availability is checked on a configurable interval (default 24 h)
-    by calling Dockhand's `POST /api/containers/check-updates`, which performs
-    real registry queries — kept infrequent to avoid unnecessary load on the
-    Docker host
-  - Installed and latest versions are displayed as short digest hashes (first
-    12 hex chars of the sha256)
-  - **Install** triggers a pull-and-recreate via Dockhand's `batch-update`
-    API. Note: vulnerability scanning is not applied by this endpoint — a
-    warning is shown in the entity's release summary when scanning is enabled
-  - Install is suppressed for Dockhand system containers (e.g. `hawser`) and
-    containers with the `dockhand.update=false` label
-- **"Check for image updates" button** — each environment device gains a
-  button to trigger an immediate update check on demand, without waiting for
-  the next scheduled poll. Only visible when container update entities are
-  enabled.
+    via `POST /api/containers/check-updates`
+  - Installed and latest versions shown as short digest hashes
+  - **Install** triggers a pull-and-recreate via `batch-update`. Note:
+    vulnerability scanning is not applied by this endpoint
+  - Install is suppressed for system containers and containers with the
+    `dockhand.update=false` label
+- **"Check for image updates" button** on each environment device, for
+  on-demand update checks without waiting for the scheduled poll.
 
 ### Fixed
 
 - Entity names now correctly use translated strings in all supported languages.
-  A hardcoded English `_attr_name` was overriding the translation system on 26
-  entity classes across sensors, binary sensors, switches, buttons, and the new
-  update entity. Non-English users would have seen English entity names
-  regardless of their HA language setting.
+  26 entity classes had a hardcoded `_attr_name` overriding the translation
+  system, so non-English users always saw English names.
 
 ### Changed
 
 - Dashboard stats are now fetched in a single `GET /api/dashboard/stats` call
-  per poll cycle instead of one call per environment, reducing API calls
-  proportionally to the number of connected environments.
-- Registry cleanup (stale containers, stacks, environments, schedules, images,
-  networks, volumes, and update entities) is now handled by a single unified
-  function called from all coordinator listeners, replacing three separate
-  functions with inconsistent guard logic. Environment hub devices, group
-  devices, and schedule devices are now properly removed when permanently
-  deleted from Dockhand (previously only containers and stacks were cleaned up).
-- The update coordinator no longer makes a redundant `GET /api/environments`
-  call on each poll — it reuses the fast coordinator's already-fetched
-  environment list.
+  per poll cycle instead of one call per environment.
+- Registry cleanup consolidated into a single function covering all resource
+  types, replacing three separate functions with inconsistent guard logic.
+  Environment, group, and schedule devices are now properly removed when
+  permanently deleted from Dockhand.
+- The update coordinator reuses the fast coordinator's environment list
+  instead of making a redundant `GET /api/environments` call.
 
 ## [1.3.1] — 2026-05-03
 
 ### Changed
 
-- **Storage sensors now use bytes as the native unit** — `Containers disk usage` and
-  `Build cache size` previously divided the API byte values by 1,048,576 and stored
-  the result as `MiB`. They now store the raw byte value returned by the API
-  (`native_unit_of_measurement = B`) and declare `suggested_unit_of_measurement = MiB`
-  so Home Assistant displays MiB by default while allowing users to change the display
-  unit freely per-entity. This is consistent with how HA core handles data-size sensors
-  and eliminates the precision loss from pre-converting to MiB.
-  **Migration note:** automations or templates that compared the raw numeric state of
-  these sensors against a MiB threshold (e.g. `> 500`) will need to be updated to use
-  byte values (e.g. `> 524288000`) or switch to using the entity's display value.
+- Storage sensors now use bytes as the native unit. `Containers disk usage`
+  and `Build cache size` previously converted to MiB before storing. They now
+  store the raw byte value with `suggested_unit_of_measurement = MiB`, letting
+  HA handle display conversion and allowing users to change the unit per-entity.
+  **Note:** automations comparing raw sensor state values in MiB need updating
+  to use byte values.
 
 ### Fixed
 
-- **CPU usage sensor reporting inflated values** — `cpuPercent` from the Dockhand API is
-  already a true percentage (e.g. `23.5` for 23.5% CPU). The sensor was incorrectly
-  multiplying it by 100, causing values up to 100× too high. The value is now passed
-  through with only a `round()`, consistent with how `memoryPercent` has always been
-  handled. Fixes [#7](https://github.com/raetha/ha-dockhand/issues/7).
+- CPU usage sensor reported values up to 100× too high. `cpuPercent` from the
+  API is already a percentage; the sensor was incorrectly multiplying by 100.
 
 ## [1.3.0] — 2026-05-01
 
-### Changes
+### Added
 
-**Localization**
-- Added machine-generated translations for 10 languages: German (`de`), Spanish (`es`),
-  French (`fr`), Italian (`it`), Norwegian Bokmål (`nb`), Dutch (`nl`), Polish (`pl`),
-  Portuguese (`pt`), Swedish (`sv`), and Chinese Simplified (`zh-Hans`). All 91
-  translatable strings are covered in each language
-- Updated `CONTRIBUTING.md` with guidance for correcting existing translations and
-  submitting new languages — no Python or test-suite knowledge required for
-  translation-only PRs
-- Added `## Translations` section to `README.md` summarising supported languages and
-  linking to the contribution guide
+- Machine-generated translations for 10 languages: German, Spanish, French,
+  Italian, Norwegian Bokmål, Dutch, Polish, Portuguese, Swedish, and
+  Simplified Chinese. All translatable strings are covered.
+- `CONTRIBUTING.md` with guidance for correcting translations and submitting
+  new languages.
 
 ## [1.2.0] — 2026-04-28
 
+**Breaking change** — session-cookie authentication has been removed. The
+integration now uses Dockhand API tokens exclusively.
 
-**Breaking change** — session-cookie authentication (username + password + MFA) has been
-removed. The integration now authenticates exclusively via Dockhand API tokens or requires
-no authentication at all (when Dockhand authentication is disabled).
-
-Requires **Dockhand ≥ 1.0.26** for reliable token authentication.
+Requires **Dockhand ≥ 1.0.26**.
 
 ### Migration
 
-Existing installations using username/password will be flagged for re-authentication on
-the next HA restart. Go to **Settings → Devices & Services → Dockhand → Re-authenticate**,
-then generate an API token in Dockhand under **Profile → API tokens** and paste it in.
+Existing installations will be flagged for re-authentication on the next HA
+restart. Go to **Settings → Devices & Services → Dockhand →
+Re-authenticate**, generate a token under **Profile → API tokens** in
+Dockhand, and paste it in.
 
-No-auth installations (Dockhand authentication disabled) are unaffected and require no
-action.
+No-auth installations are unaffected.
 
-### Changes
+### Changed
 
-**Authentication**
-- **Token authentication**: all API requests now use `Authorization: Bearer dh_...`
-  instead of session cookies. Tokens do not expire on a 24-hour session timeout,
-  eliminating the periodic re-authentication prompts that affected MFA users
-- **Removed**: username, password, and MFA fields from the config flow. Setup now
-  probes the server first; a token is only requested if the server returns 401
-- **Removed**: `DockhandMFARequiredError`, `DockhandAuthError` login path, and all
-  `async_login()` logic from the API client
-- **Fixed**: legacy config entries (pre-1.2.0) that stored a session cookie alongside
-  a newly provided API token no longer loop on startup — the legacy keys are stripped
-  on first successful setup after re-authentication
-
-**API**
-- **Fixed**: stack start/stop/restart actions now send `Accept: application/json`,
-  causing Dockhand to execute the operation synchronously and return a real result
-  rather than a job-ID for async polling. Switch and button entities now correctly
-  surface failures instead of silently succeeding
-
-**Code quality**
-- **Python 3.14**: minimum Python version raised to 3.14 (matching Home Assistant
-  2026.3). `from __future__ import annotations` removed from all files — lazy
-  annotation evaluation is now the default interpreter behaviour
-- **Ruff format**: code is now fully formatted with `ruff format` in addition to
-  passing `ruff check`. Both checks run in CI and in the local test runner
-- **Ruff config**: lint configuration moved from inline CI flags to `.ruff.toml` at
-  repo root, with a documented rule set and per-file ignores for tests
-- **Dead code removed**: unreachable retry block after `_handle_reauth` in the fast
-  coordinator collapsed; unused imports (`DockhandAuthError` in `__init__.py`,
-  `DockhandError` in `config_flow.py`) removed
-
-**Repository**
-- Added `.github/ISSUE_TEMPLATE/` with bug report, feature request, and blank issue
-  configuration templates
-- Added `dependabot.yml` for automated weekly updates of GitHub Actions and pip
-  dependencies
-- Added `CONTRIBUTING.md` with development setup, test/lint instructions, and
-  pre-PR checklist
-- Added `.gitattributes` enforcing LF line endings across all platforms
-- GitHub Actions bumped: `actions/checkout@v6`, `actions/setup-python@v6`
-- `manifest.json` now declares `"homeassistant": "2026.3.0"` minimum version
-
-**Fixes**
-- Removed invalid `homeassistant` key from `manifest.json` — hassfest rejects
-  this key in custom integrations; minimum HA version is correctly expressed
-  in `hacs.json` only
-- Fixed `asyncio.get_event_loop()` usage in all test files — Python 3.14 no
-  longer implicitly creates an event loop in the main thread; replaced with
-  `asyncio.run` throughout
-- Fixed `ha_stubs.py` Python 2-style `except ValueError, AttributeError:` to
-  parenthesised form `except (ValueError, AttributeError):`
-- Bumped `actions/stale@v9 → v10` and `softprops/action-gh-release@v2 → v3`
-  (Dependabot)
-- Cleaned up unused local variables in test files (`sc`, `hub`, `devs`,
-  `fast`, `slow`) and tightened `.ruff.toml` test suppressions to properly
-  accommodate the `locals()`-based lazy-import pattern and bootstrap ordering
-  constraints
+- Token authentication via `Authorization: Bearer dh_...` replaces session
+  cookies. Tokens do not expire, eliminating periodic re-auth prompts.
+- Setup flow probes the server first; a token is only requested on 401.
+- Stack start/stop/restart actions now send `Accept: application/json`,
+  causing Dockhand to execute synchronously and return real results.
+- Minimum Python version raised to 3.14 (matching HA 2026.3).
 
 ## [1.1.0] — 2026-03-19
 
-Adds support for Dockhand instances running without authentication, and redesigns the config flow to auto-detect whether credentials are needed.
+### Added
 
-### New features
-- **No-auth support**: the integration now works when Dockhand authentication is fully disabled. The setup flow probes the server first — if it responds without a 401, credentials are skipped entirely and no username or password is stored
-- **Auto-detecting config flow**: setup and reconfigure no longer show a username/password screen by default. Credentials are only requested if the server returns a 401, mirroring how the MFA screen already worked. The `auth_enabled` checkbox from the previous approach has been removed entirely
+- No-auth support for Dockhand instances with authentication disabled. The
+  setup flow probes the server first and skips credentials if no 401 is
+  returned.
 
-### Behaviour changes
-- Reconfigure now detects auth state from the server: if Dockhand authentication was disabled since the last setup, stored credentials are automatically removed on reconfigure
-- If a no-auth install receives a 401 (e.g. authentication was re-enabled in Dockhand), the integration surfaces a clear reconfigure prompt rather than silently failing
+### Fixed
 
-### Bug fixes
-- Fixed: `async_setup_entry` called `async_login()` even for no-auth installs (no username stored), causing HTTP 400 `Authentication is not enabled` errors on startup
-- Fixed: MFA token submission failed after the config flow rewrite because credentials were not preserved in `_connection_data` before redirecting to the MFA step
+- Setup called `async_login()` even for no-auth installs, causing 400 errors.
+- MFA token submission failed after the config flow rewrite.
 
 ## [1.0.1] — 2026-03-19
 
-Patch release fixing entity ID suffix accumulation, stale entity cleanup, and icons.
+### Fixed
 
-### Bug fixes
-- Fixed: stack devices pre-registered with bare name instead of environment-prefixed name (e.g. `traefik` instead of `Heimdall – traefik`), causing entity IDs for compose-managed containers to be generated without the environment prefix and colliding across environments
-- Fixed: stale cleanup listeners were registered after platform setup, so cleanup fired after `async_add_entities` rather than before — allowing old and new container/image devices to briefly coexist and trigger `_2` suffixes on entity IDs
-- Fixed: stale image, network, and volume entities were not cleaned up until the next slow coordinator poll (up to 600 s after reload); cleanup now runs immediately on integration setup so pruned resources are removed before new entities are registered
-- Fixed: `icons.json` entries were never applied because no entity had `_attr_translation_key` set and `strings.json` lacked the required `entity` section; all 22 statically-named entities now declare their translation key
-- Fixed: image and network sensors were missing `_attr_icon`; all three dynamic-name sensor types (image, network, volume) now have correct fallback icons
-
-### Documentation
-- README: added session timeout guidance — Dockhand defaults to 24 h; instructions to extend via Settings → Authentication → General → Session timeout
-- README: added troubleshooting entry for `_2`/`_3` entity ID suffixes and how to resolve with Recreate entity IDs after a prune cycle
+- Stack devices pre-registered with bare name instead of environment-prefixed
+  name, causing entity ID collisions across environments.
+- Stale cleanup listeners registered after platform setup, allowing old and
+  new devices to briefly coexist and trigger `_2` suffixes.
+- Stale image, network, and volume entities not cleaned up until the next slow
+  poll; cleanup now runs immediately on setup.
+- `icons.json` entries never applied due to missing `entity` section in
+  `strings.json` and missing `_attr_translation_key` on entities.
 
 ## [1.0.0] — 2026-03-08
 
-Initial stable release of the Dockhand integration for Home Assistant.
+Initial stable release.
 
-### Architecture
-- Dual-coordinator polling: fast (default 60 s) for containers, stacks, and environment stats; slow (default 600 s) for images, volumes, networks, and schedules
-- Grouped device hierarchy per environment: `<Env> – Containers`, `<Env> – Stacks`, `<Env> – Networks`, `<Env> – Images`, `<Env> – Volumes`
-- All resource devices prefixed with environment name (e.g. `Heimdall – traefik`) to disambiguate across environments
-- `model` field on every device for type display in the HA device list
-- Deep links from every device to its corresponding page in the Dockhand UI
-- Stale device cleanup on coordinator refresh
-
-### Authentication
-- Local Dockhand user authentication with session-cookie persistence
-- Full MFA (TOTP) support during setup, reconfigure, and re-authentication
-- Options and Reconfigure flows to change poll intervals, feature flags, URL, or credentials without reinstalling
-
-### Entities
-- **Environment:** Online (binary_sensor), CPU usage, Memory usage, Containers running
-- **Container:** State sensor, Health sensor (omitted if no healthcheck), Running switch (start/stop), Restart button
-- **Stack:** Status sensor, Running switch (start/stop), Restart button
-- **Network:** Connected container count with driver, scope, subnet, and container list attributes (optional)
-- **Volume:** Connected container count with driver, mountpoint, and size attributes (optional)
-- **Image:** Repository name with tag as state, size and container usage as attributes (optional)
-- **Schedule:** Next run timestamp, Last status with error detail (optional, read-only)
-
-### Quality
-- 211 unit tests covering API client, config flow, coordinators, entities, and setup/teardown
-- Passes hassfest and HACS validation
-- Ruff lint clean
-
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.4.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.5.0...HEAD
+[1.5.0]: https://github.com/raetha/ha-dockhand/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/raetha/ha-dockhand/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/raetha/ha-dockhand/compare/v1.3.1...v1.4.0
 [1.3.1]: https://github.com/raetha/ha-dockhand/compare/v1.3.0...v1.3.1
