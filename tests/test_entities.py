@@ -369,11 +369,11 @@ class TestContainerSensors(unittest.TestCase):
             self.assertTrue(s._attr_has_entity_name,
                             f"{type(s).__name__} must have _attr_has_entity_name=True")
 
-    def test_unique_ids_include_container_id(self):
-        cid = CONTAINER["id"]
-        self.assertIn(cid, self.state._attr_unique_id)
-        self.assertIn(cid, self.image._attr_unique_id)
-        self.assertIn(cid, self.health._attr_unique_id)
+    def test_unique_ids_include_container_name(self):
+        name = CONTAINER["name"]
+        self.assertIn(name, self.state._attr_unique_id)
+        self.assertIn(name, self.image._attr_unique_id)
+        self.assertIn(name, self.health._attr_unique_id)
 
 
 # ── Stack sensors ─────────────────────────────────────────────────────────────

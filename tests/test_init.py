@@ -307,10 +307,10 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         reg, hass = _make_registry()
         entry = _make_entry()
         entry.runtime_data = self._make_runtime_data(
-            fast_data={1: {"containers": [{"id": "c1", "labels": {}}], "stacks": []}},
+            fast_data={1: {"containers": [{"id": "c1", "name": "nginx", "labels": {}}], "stacks": []}},
             slow_data={"environments": {}, "schedules": []},
         )
-        live = self._add_device(reg, entry, "container_1_c1")
+        live = self._add_device(reg, entry, "container_1_nginx")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(live.id, reg._removed)
 

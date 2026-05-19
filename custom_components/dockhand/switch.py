@@ -25,7 +25,7 @@ async def async_setup_entry(
     client = entry.runtime_data.client
     base_url: str = entry.data.get(CONF_API_URL, "")
 
-    known_container_ids: set[str] = set()
+    known_container_keys: set[str] = set()
     known_stack_ids: set[str] = set()
 
     def _build_entities() -> list[SwitchEntity]:
@@ -35,9 +35,9 @@ async def async_setup_entry(
             env_name = stats.get("name", f"Environment {env_id}")
 
             for container in env_data.get("containers") or []:
-                cid = container["id"]
-                if cid not in known_container_ids:
-                    known_container_ids.add(cid)
+                key = f"{env_id}_{container.get('name', '')}"
+                if key not in known_container_keys:
+                    known_container_keys.add(key)
                     new.append(
                         DockhandContainerRunningSwitch(
                             fast, client, env_id, env_name, base_url, container
@@ -83,14 +83,13 @@ class _BaseFastContainerSwitch(
         self._env_id = env_id
         self._env_name = env_name
         self._base_url = base_url
-        self._container_id = container.get("id", "")
         self._container_name = container.get("name", "")
 
     def _container(self) -> dict | None:
         for c in (self.coordinator.data or {}).get(self._env_id, {}).get(
             "containers"
         ) or []:
-            if c.get("id") == self._container_id:
+            if c.get("name") == self._container_name:
                 return c
         return None
 
@@ -101,7 +100,6 @@ class _BaseFastContainerSwitch(
             (c.get("labels") or {}).get("com.docker.compose.project") if c else None
         )
         return _container_device(
-            self._container_id,
             self._container_name,
             self._env_id,
             self._env_name,
@@ -161,7 +159,9 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
         container: dict,
     ) -> None:
         super().__init__(coordinator, client, env_id, env_name, base_url, container)
-        self._attr_unique_id = f"dockhand_container_{self._container_id}_running"
+        self._attr_unique_id = (
+            f"dockhand_container_{self._env_id}_{self._container_name}_running"
+        )
 
     @property
     def is_on(self) -> bool:
@@ -169,12 +169,16 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
         return c.get("state") == "running" if c else False
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self._client.async_start_container(self._env_id, self._container_id)
-        await self.coordinator.async_request_refresh()
+        c = self._container()
+        if c:
+            await self._client.async_start_container(self._env_id, c["id"])
+            await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._client.async_stop_container(self._env_id, self._container_id)
-        await self.coordinator.async_request_refresh()
+        c = self._container()
+        if c:
+            await self._client.async_stop_container(self._env_id, c["id"])
+            await self.coordinator.async_request_refresh()
 
 
 class DockhandStackRunningSwitch(_BaseFastStackSwitch):

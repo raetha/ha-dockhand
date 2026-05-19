@@ -97,7 +97,7 @@ async def async_setup_entry(
     # Track unique_ids already registered so the coordinator listener can
     # add entities for containers/stacks/images created after initial setup
     # without duplicating existing ones.
-    known_container_ids: set[str] = set()
+    known_container_keys: set[str] = set()
     known_stack_ids: set[str] = set()
     known_env_ids: set[int] = set()
     known_slow_env_ids: set[int] = set()
@@ -133,9 +133,9 @@ async def async_setup_entry(
 
             # Per-container sensors
             for container in env_data.get("containers") or []:
-                cid = container["id"]
-                if cid not in known_container_ids:
-                    known_container_ids.add(cid)
+                key = f"{env_id}_{container.get('name', '')}"
+                if key not in known_container_keys:
+                    known_container_keys.add(key)
                     new += [
                         DockhandContainerStateSensor(
                             fast, env_id, env_name, base_url, container
@@ -416,14 +416,13 @@ class BaseFastContainerSensor(CoordinatorEntity[DockhandFastCoordinator], Sensor
         self._env_id = env_id
         self._env_name = env_name
         self._base_url = base_url
-        self._container_id = container.get("id", "")
         self._container_name = container.get("name", "")
 
     def _container(self) -> dict | None:
         for c in (self.coordinator.data or {}).get(self._env_id, {}).get(
             "containers"
         ) or []:
-            if c.get("id") == self._container_id:
+            if c.get("name") == self._container_name:
                 return c
         return None
 
@@ -434,7 +433,6 @@ class BaseFastContainerSensor(CoordinatorEntity[DockhandFastCoordinator], Sensor
             (c.get("labels") or {}).get("com.docker.compose.project") if c else None
         )
         return _container_device(
-            self._container_id,
             self._container_name,
             self._env_id,
             self._env_name,
@@ -766,7 +764,9 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
         container: dict,
     ) -> None:
         super().__init__(coordinator, env_id, env_name, base_url, container)
-        self._attr_unique_id = f"dockhand_container_{self._container_id}_state"
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_state"
+        )
 
     @property
     def native_value(self) -> str | None:
@@ -804,7 +804,9 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
         container: dict,
     ) -> None:
         super().__init__(coordinator, env_id, env_name, base_url, container)
-        self._attr_unique_id = f"dockhand_container_{self._container_id}_health"
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_health"
+        )
 
     @property
     def native_value(self) -> str | None:
@@ -828,7 +830,9 @@ class DockhandContainerImageSensor(BaseFastContainerSensor):
         container: dict,
     ) -> None:
         super().__init__(coordinator, env_id, env_name, base_url, container)
-        self._attr_unique_id = f"dockhand_container_{self._container_id}_image"
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_image"
+        )
 
     @property
     def native_value(self) -> str | None:

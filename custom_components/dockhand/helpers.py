@@ -127,7 +127,6 @@ def _volume_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInf
 
 
 def _container_device(
-    container_id: str,
     container_name: str,
     env_id: int,
     env_name: str,
@@ -136,20 +135,16 @@ def _container_device(
 ) -> DeviceInfo:
     """Device info for a container.
 
-    Identifier format: container_{env_id}_{container_id}
-    The env_id prefix scopes container devices to their environment, enabling
-    precise per-environment cleanup without conservative cross-env guards.
-
-    If stack_name is provided the container is compose-managed and parented
-    to its stack device. Freestanding containers are parented to the env
-    Containers group device.
+    Identifier format: container_{env_id}_{container_name}
+    Name-based so devices persist across container recreation (image updates).
+    Docker enforces unique container names per host, making this a safe key.
     """
     if stack_name:
         parent: tuple = (DOMAIN, f"stack_{env_id}_{stack_name}")
     else:
         parent = (DOMAIN, f"env_{env_id}_Containers")
     return DeviceInfo(
-        identifiers={(DOMAIN, f"container_{env_id}_{container_id}")},
+        identifiers={(DOMAIN, f"container_{env_id}_{container_name}")},
         name=f"{env_name} – {container_name}",
         manufacturer="Dockhand",
         model="Container",
@@ -169,34 +164,6 @@ def _stack_device(
         model="Stack",
         configuration_url=_stack_url(base_url),
         via_device=(DOMAIN, f"env_{env_id}_Stacks"),
-        entry_type=DeviceEntryType.SERVICE,
-    )
-
-
-def _network_device(
-    network_id: str, network_name: str, env_id: int, env_name: str, base_url: str
-) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"network_{network_id}")},
-        name=f"{env_name} – {network_name}",
-        manufacturer="Dockhand",
-        model="Network",
-        configuration_url=_network_url(base_url),
-        via_device=(DOMAIN, f"env_{env_id}_Networks"),
-        entry_type=DeviceEntryType.SERVICE,
-    )
-
-
-def _volume_device(
-    volume_name: str, env_id: int, env_name: str, base_url: str
-) -> DeviceInfo:
-    return DeviceInfo(
-        identifiers={(DOMAIN, f"volume_{env_id}_{volume_name}")},
-        name=f"{env_name} – {volume_name}",
-        manufacturer="Dockhand",
-        model="Volume",
-        configuration_url=_volume_url(base_url),
-        via_device=(DOMAIN, f"env_{env_id}_Volumes"),
         entry_type=DeviceEntryType.SERVICE,
     )
 

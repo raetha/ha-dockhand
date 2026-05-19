@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+## [1.5.1] — 2026-05-19
+
+### Fixed
+
+- Container devices, sensors, switches, and buttons now persist across image
+  updates and container recreation. Container devices previously used the
+  Docker hash ID as their identifier — this changed on every container
+  recreation, removing all container entities and losing historical data,
+  automation history, and area assignments. Devices are now keyed on
+  `container_{env_id}_{name}`, which is stable. Docker enforces unique
+  container names per host, making this a safe key.
+- Update entities no longer disappear after triggering an image update. With
+  container devices now name-based and stable, update entities correctly
+  remain attached to their container device across recreation.
+- All API calls that act on a container (start, stop, restart, update) now
+  look up the current container ID from coordinator data at call time, rather
+  than using the ID stored at entity creation time.
+- Automatic migration of existing container device identifiers and entity
+  unique_ids from all pre-1.5.1 formats. No manual action required.
+
 ## [1.5.0] — 2026-05-15
 
 ### Added
@@ -173,7 +193,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.5.1...HEAD
+[1.5.1]: https://github.com/raetha/ha-dockhand/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/raetha/ha-dockhand/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/raetha/ha-dockhand/compare/v1.4.0...v1.4.1
 [1.4.0]: https://github.com/raetha/ha-dockhand/compare/v1.3.1...v1.4.0

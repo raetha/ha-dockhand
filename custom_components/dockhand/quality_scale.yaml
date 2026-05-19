@@ -361,15 +361,13 @@ rules:
     comment: >
       All registry cleanup is handled by a single _cleanup_stale_registry
       function called from all three coordinator listeners and once at startup.
-      Container identifiers include env_id (container_{env_id}_{hash}) enabling
-      precise per-environment offline guards — only containers in offline envs
-      are preserved, containers in other online envs are cleaned up normally.
-      Stack, image, network, volume, and update cleanup use the same per-env
-      online guard. Schedule cleanup is gated on enable_schedules=True.
-      Slow-derived sets are only populated when the slow coordinator last
-      succeeded. Env/group device removal uses fast env_ids — offline envs
-      still appear in the API and are preserved; permanently deleted envs
-      trigger full cleanup of all their devices and entities.
+      Container identifiers use container_{env_id}_{name} — name-based so
+      devices survive container recreation. Per-env online guard: only containers
+      in offline envs are preserved, online envs clean up normally. Stack,
+      image, network, volume, and update cleanup use the same per-env online
+      guard. Schedule cleanup gated on enable_schedules=True. Slow-derived sets
+      only populated when slow coordinator last succeeded. Env/group devices
+      removed when env deleted from Dockhand; offline envs preserved.
 
   # ── Platinum ──────────────────────────────────────────────────────────────
 

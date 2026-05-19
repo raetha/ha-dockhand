@@ -253,64 +253,112 @@ def _migrate_container_device_identifiers(
     entry: DockhandConfigEntry,
     fast_coordinator: DockhandFastCoordinator,
 ) -> None:
-    """Migrate container device identifiers from 1.4.x to 1.5.0 format.
+    """Migrate container device identifiers and entity unique_ids to name-based format.
 
-    1.4.x used: container_{docker_hash}  (no env_id — conservative cleanup)
-    1.5.0 uses: container_{env_id}_{docker_hash}  (precise per-env cleanup)
+    Handles all historical formats:
+      Devices:  container_{hash}  /  container_{env_id}_{hash}
+      Entities: dockhand_container_{hash}_{suffix}
+                dockhand_container_{env_id}_{hash}_{suffix}
+    Target:
+      Devices:  container_{env_id}_{name}
+      Entities: dockhand_container_{env_id}_{name}_{suffix}
 
-    Builds a map of container_id → env_id from the fast coordinator data,
-    then updates any old-format device identifiers in the device registry.
-    Runs once at setup time; is a no-op after the first run since old-format
-    identifiers will no longer exist.
+    Builds a reverse map of docker_hash → (env_id, name) from coordinator data.
+    Is a no-op once all entries are in the new format.
     """
     fast_data = fast_coordinator.data or {}
 
-    # Build reverse map: container_id → env_id
-    id_to_env: dict[str, int] = {}
+    # Build reverse map: docker_hash → (env_id, container_name)
+    id_to_env_name: dict[str, tuple[int, str]] = {}
     for env_id, env_data in fast_data.items():
         for c in env_data.get("containers") or []:
             cid = c.get("id", "")
-            if cid:
-                id_to_env[cid] = env_id
+            name = c.get("name", "")
+            if cid and name:
+                id_to_env_name[cid] = (env_id, name)
 
-    if not id_to_env:
+    if not id_to_env_name:
         return
 
     dev_registry = dr.async_get(hass)
-    migrated = 0
+    ent_registry = er.async_get(hass)
+    migrated_devices = 0
+    migrated_entities = 0
+
+    def _is_hex64(s: str) -> bool:
+        return len(s) == 64 and all(c in "0123456789abcdef" for c in s)
+
+    # ── Device registry ───────────────────────────────────────────────────
     for device in dr.async_entries_for_config_entry(dev_registry, entry.entry_id):
         for domain, identifier in device.identifiers:
-            if domain != DOMAIN:
-                continue
-            if not identifier.startswith("container_"):
+            if domain != DOMAIN or not identifier.startswith("container_"):
                 continue
             suffix = identifier[len("container_") :]
-            # Old format: no underscore in suffix (plain docker hash).
-            # New format: starts with digits followed by underscore (env_id prefix).
-            if "_" in suffix:
-                continue  # Already new format.
-            container_id = suffix
-            if container_id not in id_to_env:
-                continue  # Container gone — cleanup will handle it.
-            env_id = id_to_env[container_id]
-            new_identifier = f"container_{env_id}_{container_id}"
+            parts = suffix.split("_", 1)
+            if len(parts) == 1 and _is_hex64(parts[0]):
+                # pre-1.5.0: container_{hash}
+                container_hash = parts[0]
+                if container_hash not in id_to_env_name:
+                    continue
+                env_id, name = id_to_env_name[container_hash]
+            elif len(parts) == 2 and parts[0].isdigit() and _is_hex64(parts[1]):
+                # 1.5.0: container_{env_id}_{hash}
+                env_id, container_hash = int(parts[0]), parts[1]
+                if container_hash not in id_to_env_name:
+                    continue
+                _, name = id_to_env_name[container_hash]
+            else:
+                continue  # Already name-based or unknown — skip.
+            new_id = f"container_{env_id}_{name}"
             new_identifiers = {
-                (d, new_identifier if d == DOMAIN and i == identifier else i)
+                (d, new_id if d == DOMAIN and i == identifier else i)
                 for d, i in device.identifiers
             }
             dev_registry.async_update_device(device.id, new_identifiers=new_identifiers)
-            _LOGGER.debug(
-                "Dockhand: migrated container device %s → %s",
-                identifier,
-                new_identifier,
-            )
-            migrated += 1
-            break  # Only one identifier per device.
+            _LOGGER.debug("Dockhand: migrated device %s → %s", identifier, new_id)
+            migrated_devices += 1
+            break
 
-    if migrated:
+    # ── Entity registry ───────────────────────────────────────────────────
+    _suffixes = ("_state", "_health", "_image", "_running", "_restart")
+    for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
+        uid = entity_entry.unique_id or ""
+        if not uid.startswith("dockhand_container_"):
+            continue
+        rest = uid[len("dockhand_container_") :]
+        for sfx in _suffixes:
+            if not rest.endswith(sfx):
+                continue
+            middle = rest[: -len(sfx)]
+            parts = middle.split("_", 1)
+            if len(parts) == 2 and parts[0].isdigit() and _is_hex64(parts[1]):
+                # 1.5.0 entity: dockhand_container_{env_id}_{hash}_{suffix}
+                env_id, container_hash = int(parts[0]), parts[1]
+                if container_hash not in id_to_env_name:
+                    continue
+                _, name = id_to_env_name[container_hash]
+            elif _is_hex64(middle):
+                # pre-1.5.0: dockhand_container_{hash}_{suffix}
+                container_hash = middle
+                if container_hash not in id_to_env_name:
+                    continue
+                env_id, name = id_to_env_name[container_hash]
+            else:
+                continue  # Already name-based — skip.
+            new_uid = f"dockhand_container_{env_id}_{name}{sfx}"
+            ent_registry.async_update_entity(
+                entity_entry.entity_id, new_unique_id=new_uid
+            )
+            _LOGGER.debug("Dockhand: migrated entity %s → %s", uid, new_uid)
+            migrated_entities += 1
+            break
+
+    if migrated_devices or migrated_entities:
         _LOGGER.info(
-            "Dockhand: migrated %d container device identifier(s) to env-scoped scheme",
-            migrated,
+            "Dockhand: migrated %d container device(s) and %d entity unique_id(s)"
+            " to name-based scheme",
+            migrated_devices,
+            migrated_entities,
         )
 
 
@@ -468,7 +516,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     Returns a dict with keys:
         env_ids          set[int]   — environments currently in fast data
         online_env_ids   set[int]   — environments with online=True (or unknown)
-        containers       set[str]   — live device identifiers (container_<env_id>_<id>)
+        containers       set[str]   — live device identifiers
+                                       (container_<env_id>_<name>)
         stacks           set[str]   — live device identifiers (stack_<env>_<name>)
         schedules        set[str]   — live device identifiers (schedule_<id>)
         image_uids       set[str]   — live entity unique_ids
@@ -490,7 +539,9 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     for env_id, env_data in fast_data.items():
         for c in env_data.get("containers") or []:
-            containers.add(f"container_{env_id}_{c['id']}")
+            name = c.get("name", "")
+            if name:
+                containers.add(f"container_{env_id}_{name}")
         for s in env_data.get("stacks") or []:
             stacks.add(f"stack_{env_id}_{s['name']}")
 
@@ -611,9 +662,9 @@ def _cleanup_stale_registry(
                 continue
 
             if identifier.startswith("container_"):
-                # Container identifiers are now "container_{env_id}_{docker_hash}".
-                # Extract env_id from position [1] to scope the offline guard
-                # precisely — only skip cleanup for containers in offline envs.
+                # Container identifiers: container_{env_id}_{name}
+                # Name-based so devices survive container recreation.
+                # Extract env_id from position [1] for the per-env offline guard.
                 try:
                     env_id = int(identifier.split("_")[1])
                 except ValueError:

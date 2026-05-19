@@ -85,13 +85,10 @@ async def async_setup_entry(
             stats = env_fast.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
 
-            for container_id, item in by_container_id.items():
+            for _container_id, item in by_container_id.items():
                 container_name = item.get("containerName", "")
                 if not container_name:
                     continue
-                # Key on env_id + container_name, not container_id.
-                # Container IDs change every time a container is recreated
-                # (e.g. after an image update), but the name is stable.
                 uid = f"dockhand_update_{env_id}_{container_name}"
                 if uid in seen:
                     continue
@@ -102,7 +99,6 @@ async def async_setup_entry(
                         update_coordinator=update_coordinator,
                         env_id=env_id,
                         env_name=env_name,
-                        container_id=container_id,
                         container_name=container_name,
                         item=item,
                     )
@@ -121,11 +117,10 @@ async def async_setup_entry(
 class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], UpdateEntity):
     """Update entity for a single container's image update status.
 
-    Identity is keyed on (env_id, container_name) rather than container_id.
-    Container IDs (Docker hashes) change every time a container is recreated —
-    which happens during every image update — so using the ID would cause the
-    entity to be destroyed and recreated on each update. Container names are
-    stable across updates and are the correct identity key here.
+    Both identity (unique_id) and device attachment use (env_id, container_name).
+    Docker enforces unique container names per host, so this is stable across
+    container recreation (image updates), preserving historical entity data and
+    automations.
     """
 
     _attr_has_entity_name = True
@@ -136,7 +131,6 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         update_coordinator: DockhandUpdateCoordinator,
         env_id: int,
         env_name: str,
-        container_id: str,
         container_name: str,
         item: dict,
     ) -> None:
@@ -149,10 +143,10 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         self._attr_unique_id = f"dockhand_update_{env_id}_{container_name}"
         self._attr_translation_key = "image_update"
 
-        # Device attachment: use env_id + current container_id.
-        # Format matches helpers._container_device: container_{env_id}_{container_id}
+        # Attach to the container device — stable because the device identifier
+        # is name-based (container_{env_id}_{name}).
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"container_{env_id}_{item.get('containerId', '')}")},
+            identifiers={(DOMAIN, f"container_{env_id}_{container_name}")},
         )
 
         self._update_supported_features()
@@ -257,18 +251,8 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         )
         return container_exists and super().available
 
-    def _update_device_info(self) -> None:
-        """Re-attach to the current container device after a container recreation."""
-        item = self._item()
-        container_id = item.get("containerId", "")
-        if container_id:
-            self._attr_device_info = DeviceInfo(
-                identifiers={(DOMAIN, f"container_{self._env_id}_{container_id}")},
-            )
-
     def _handle_coordinator_update(self) -> None:
         self._update_supported_features()
-        self._update_device_info()
         super()._handle_coordinator_update()
 
     async def async_install(self, version: str | None, backup: bool, **kwargs) -> None:
