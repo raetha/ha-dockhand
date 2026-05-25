@@ -403,7 +403,6 @@ def _register_devices(
             enable_volumes=enable_volumes,
         )
 
-    registry = dr.async_get(hass)
     if enable_schedules:
         _ensure_hub_devices(
             hass,
@@ -421,10 +420,11 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         online_env_ids           set[int]   — environments with online=True (or unknown)
         containers               set[str]   — live device identifiers
                                               (container_<env_id>_<name>)
-        stacks                   set[str]   — live device identifiers (stack_<env>_<name>)
-        containers_group_env_ids set[int]   — env_ids that have ≥1 freestanding container;
-                                              the Containers group device is only valid for
-                                              these envs
+        stacks                   set[str]   — live device identifiers
+                                              (stack_<env_id>_<name>)
+        containers_group_env_ids set[int]   — env_ids with ≥1 freestanding
+                                              container; the Containers group
+                                              device is only valid for these
         schedules                set[str]   — live device identifiers (schedule_<id>)
         image_uids               set[str]   — live entity unique_ids
         network_uids             set[str]   — live entity unique_ids

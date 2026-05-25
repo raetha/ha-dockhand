@@ -21,7 +21,6 @@ from .const import (
     CONF_ENABLE_NETWORKS,
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_VOLUMES,
-    DOMAIN,
 )
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import (
@@ -893,7 +892,8 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_has_entity_name = True  # device is "{env} - Images" → entity_id = sensor.{env}_images_{name}
+    # has_entity_name=True: device name "{env} – Images" prefixes the entity_id
+    _attr_has_entity_name = True
     _attr_icon = "mdi:package-variant-closed"
 
     def __init__(
@@ -1010,7 +1010,8 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "containers"
-    _attr_has_entity_name = True  # device is "{env} - Networks" → entity_id = sensor.{env}_networks_{name}
+    # has_entity_name=True: device name "{env} – Networks" prefixes the entity_id
+    _attr_has_entity_name = True
     _attr_icon = "mdi:lan"
 
     def __init__(
@@ -1076,7 +1077,8 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
     _attr_native_unit_of_measurement = "containers"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:database"
-    _attr_has_entity_name = True  # device is "{env} - Volumes" → entity_id = sensor.{env}_volumes_{name}
+    # has_entity_name=True: device name "{env} – Volumes" prefixes the entity_id
+    _attr_has_entity_name = True
 
     def __init__(
         self,
