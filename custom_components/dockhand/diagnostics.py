@@ -58,9 +58,7 @@ async def async_get_config_entry_diagnostics(
             "freestanding_containers": sum(
                 1 for c in containers if not _compose_project(c)
             ),
-            "compose_containers": sum(
-                1 for c in containers if _compose_project(c)
-            ),
+            "compose_containers": sum(1 for c in containers if _compose_project(c)),
         }
 
     # Build a lightweight update summary
