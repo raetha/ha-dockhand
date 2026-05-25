@@ -13,6 +13,7 @@ from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import DockhandConfigEntry
+from .helpers import _compose_project
 
 # Fields to redact from config entry data before including in diagnostics
 TO_REDACT = {"api_token"}
@@ -55,14 +56,10 @@ async def async_get_config_entry_diagnostics(
             "network_count": len(slow_env.get("networks") or []),
             # Include freestanding vs compose-managed breakdown
             "freestanding_containers": sum(
-                1
-                for c in containers
-                if not (c.get("labels") or {}).get("com.docker.compose.project")
+                1 for c in containers if not _compose_project(c)
             ),
             "compose_containers": sum(
-                1
-                for c in containers
-                if (c.get("labels") or {}).get("com.docker.compose.project")
+                1 for c in containers if _compose_project(c)
             ),
         }
 

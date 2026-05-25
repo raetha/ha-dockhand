@@ -154,9 +154,6 @@
       "health": {
         "name": "Zdrowie"
       },
-      "image": {
-        "name": "Obraz"
-      },
       "status": {
         "name": "Status"
       },
@@ -196,26 +193,27 @@
         "name": "Czyszczenie obrazów"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Kontener"
-      },
-      "stack": {
-        "name": "Stos"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Uruchom ponownie"
-      },
       "check_updates": {
         "name": "Sprawdź aktualizacje obrazów"
+      },
+      "restart": {
+        "name": "Uruchom ponownie"
       }
     },
     "update": {
       "image_update": {
         "name": "Aktualizacja obrazu"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Akcja nie powiodła się: {error}"
+    },
+    "container_not_found": {
+      "message": "Kontener nie znaleziony — mógł zostać usunięty"
     }
   }
 }

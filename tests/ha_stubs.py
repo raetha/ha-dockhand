@@ -28,6 +28,17 @@ class ConfigEntryNotReady(Exception):
     pass
 
 
+class HomeAssistantError(Exception):
+    """Base exception for HA errors; supports translatable messages."""
+
+    def __init__(self, *args, translation_domain=None, translation_key=None,
+                 translation_placeholders=None, **kwargs):
+        super().__init__(*args)
+        self.translation_domain = translation_domain
+        self.translation_key = translation_key
+        self.translation_placeholders = translation_placeholders or {}
+
+
 class UpdateFailed(Exception):
     pass
 
@@ -355,6 +366,25 @@ class EntityRegistry:
             if ent in entries:
                 entries.remove(ent)
 
+    def async_update_entity(
+        self,
+        entity_id: str,
+        *,
+        new_entity_id: str | None = None,
+        new_unique_id: str | None = None,
+        **kwargs,
+    ) -> None:
+        """Stub for HA's entity registry update — supports entity_id and unique_id rename."""
+        ent = self._entities.get(entity_id)
+        if ent is None:
+            return
+        if new_entity_id and new_entity_id != entity_id:
+            self._entities.pop(entity_id)
+            ent.entity_id = new_entity_id
+            self._entities[new_entity_id] = ent
+        if new_unique_id:
+            ent.unique_id = new_unique_id
+
     def async_entries_for_config_entry(self, config_entry_id: str) -> list[EntityEntry]:
         return list(self._by_config_entry.get(config_entry_id, []))
 
@@ -562,6 +592,7 @@ def install() -> None:
         "homeassistant.exceptions",
         ConfigEntryAuthFailed=ConfigEntryAuthFailed,
         ConfigEntryNotReady=ConfigEntryNotReady,
+        HomeAssistantError=HomeAssistantError,
     )
 
     # config_entries module — needs ConfigFlow and OptionsFlow as real classes

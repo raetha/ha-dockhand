@@ -27,6 +27,7 @@ import logging
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -259,15 +260,21 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         """Trigger a pull-and-recreate update for this container via Dockhand."""
         # Find the current container_id by name — it may have changed since init.
         item = self._item()
-        container_id = item.get("containerId", "")
+        container_id = item.get("containerId", "") if item else ""
         if not container_id:
-            _LOGGER.warning(
-                "Dockhand: cannot update %s — container not found in update data",
-                self._container_name,
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="container_not_found",
             )
-            return
-        await self.coordinator.client.async_batch_update_container(
-            self._env_id, container_id
-        )
+        try:
+            await self.coordinator.client.async_batch_update_container(
+                self._env_id, container_id
+            )
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         # Request a refresh so the entity state reflects the result.
         await self.coordinator.async_request_refresh()

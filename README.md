@@ -103,48 +103,45 @@ If a token is revoked or expires, the integration will surface a re-authenticati
 The integration uses a **grouped device hierarchy** that keeps the device list manageable regardless of how many containers and stacks you have.
 
 ```
-docker-host-1                          ← Environment device
-│   model: Dockhand Environment
-├── docker-host-1 – Containers         ← Group device
-│   ├── docker-host-1 – traefik         ← Container device
-│   │   model: Docker Container
-│   │   ├── sensor.State
-│   │   ├── sensor.Health
-│   │   ├── switch.Container
-│   │   ├── button.Restart
-│   │   └── update.Image update        ← if container updates enabled
-│   └── docker-host-1 – nginx  (same)
-├── docker-host-1 – Stacks             ← Group device
-│   ├── docker-host-1 – proxy           ← Stack device
-│   │   model: Compose Stack
-│   │   ├── sensor.Status
-│   │   ├── switch.Running
-│   │   └── button.Restart
-│   └── docker-host-1 – monitoring  (same)
-├── docker-host-1 – Networks  (if enabled)  ← Group device
+myenv                                       ← Environment device
+├── myenv – Containers                      ← Group device (freestanding containers only)
+│   └── myenv – Containers – mycontainer   ← Container device
+│       ├── switch  (primary — no suffix)
+│       ├── sensor.State
+│       ├── sensor.Health              ← only if container has a healthcheck
+│       ├── button.Restart
+│       └── update.Image update        ← if container updates enabled
+├── myenv – Stacks                          ← Group device
+│   └── myenv – Stacks – mystack      ← Stack device
+│       ├── switch  (primary — no suffix)
+│       ├── sensor.Status
+│       ├── sensor.Containers
+│       └── button.Restart
+├── myenv – Networks  (if enabled)          ← Group device
 │   └── sensor.bridge                  ← one entity per network (no sub-devices)
-│   └── sensor.host
-├── docker-host-1 – Volumes  (if enabled)   ← Group device
-│   └── sensor.my_volume               ← one entity per volume (no sub-devices)
-└── docker-host-1 – Images  (if enabled)    ← Group device
-    └── sensor.traefik_latest          ← one entity per image (no sub-devices)
+├── myenv – Volumes  (if enabled)           ← Group device
+│   └── sensor.myvolume                ← one entity per volume (no sub-devices)
+└── myenv – Images  (if enabled)            ← Group device
+    └── sensor.nginx                   ← one entity per image (no sub-devices)
 
-sensor.CPU_usage, sensor.Memory_usage, sensor.Containers_running
-binary_sensor.Online                   ← on the Environment device
-button.Check_for_image_updates         ← if container updates enabled
+sensor.CPU usage, sensor.Memory usage, sensor.Containers  ← on env device
+binary_sensor.Online
+button.Check for updates               ← if container updates enabled
 
-Schedules  (if enabled)                ← Global hub device (not env-specific)
-└── auto-update                        ← per-schedule device
-    ├── sensor.Next_run
-    └── sensor.Last_status
+Dockhand – Schedules  (if enabled)         ← Global hub device (not env-specific)
+└── Dockhand – Schedules – nightly-backup ← per-schedule device
+    ├── sensor.Next run
+    └── sensor.Last status
 ```
+
+**Entity ID convention:** `<platform>.<env>_<type>_<name>_<attribute>` — for example `sensor.myenv_containers_mycontainer_state` or `switch.myenv_stacks_mystack`. The type segment (`containers`, `stacks`, `images`, etc.) makes entity_ids unambiguous even when a container and stack share the same name.
 
 Each device in the list shows its **Type** (`model` field), so it's easy to distinguish containers from stacks, and group devices from individual ones. Every device also has a direct **open in Dockhand** link that takes you straight to the corresponding page.
 
-Individual resource devices (containers, stacks, networks, volumes) are prefixed with their environment name — for example `docker-host-1 – traefik` rather than just `traefik`. This makes it easy to identify which host a resource belongs to in the entity picker and automation editor, especially when multiple environments run containers or stacks with the same name.
+Container and stack switches are **primary entities** — the entity name equals the device name with no suffix, following HA convention for the principal on/off control of a device.
 
 ### Portainer users
-If you're migrating from the Portainer integration, this integration follows the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and per stack. Container and stack devices are named `{env} – {resource}` (e.g. `docker-host-1 – traefik`) to disambiguate across environments.
+If you're migrating from the Portainer integration, this integration follows the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and per stack.
 
 ---
 
@@ -163,7 +160,7 @@ If you're migrating from the Portainer integration, this integration follows the
 | Entity | Type | Notes |
 |---|---|---|
 | State | sensor | running / exited / paused / etc. |
-| Health | sensor | healthy / unhealthy / starting / none |
+| Health | sensor | healthy / unhealthy / starting. Only created for containers with a Docker healthcheck configured — enabled by default |
 | Container | switch | turn on = start, turn off = stop |
 | Restart | button | restarts running container (use Container to start stopped) |
 | Image update | update | Shows when a newer image digest is available. Install triggers a pull-and-recreate via Dockhand's `batch-update` API. Note: vulnerability scanning is not applied by this API endpoint — a warning is shown in the entity when scanning is enabled on the environment. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
@@ -281,9 +278,10 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 ## Notes
 
 - All data is fetched locally — no external cloud services
-- The API token is stored securely in the HA config entry; credentials (username/password) are never stored
+- Only the API token is stored in the HA config entry; no username or password is ever stored
 - The Restart button only works on *running* containers/stacks
 - Disable **Verify SSL certificate** only if using a self-signed certificate on the Dockhand server
+- Containers with the `dockhand.hidden=true` label are filtered from Dockhand's API responses and will not appear in HA
 
 ---
 

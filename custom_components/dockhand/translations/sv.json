@@ -154,9 +154,6 @@
       "health": {
         "name": "Hälsa"
       },
-      "image": {
-        "name": "Image"
-      },
       "status": {
         "name": "Status"
       },
@@ -196,26 +193,27 @@
         "name": "Rensning av images"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Container"
-      },
-      "stack": {
-        "name": "Stack"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Starta om"
-      },
       "check_updates": {
         "name": "Sök efter image-uppdateringar"
+      },
+      "restart": {
+        "name": "Starta om"
       }
     },
     "update": {
       "image_update": {
         "name": "Image-uppdatering"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Åtgärden misslyckades: {error}"
+    },
+    "container_not_found": {
+      "message": "Container hittades inte — den kan ha tagits bort"
     }
   }
 }

@@ -10,8 +10,6 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import device_registry as dr
-from homeassistant.helpers.device_registry import DeviceEntryType
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -27,22 +25,19 @@ from .const import (
 )
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import (
+    _compose_project,
     _container_device,
     _container_has_healthcheck,
-    _container_url,
+    _ensure_env_devices,
+    _ensure_hub_devices,
     _env_device,
-    _env_url,
     _image_display_name,
     _image_group_device,
-    _image_url,
     _network_group_device,
-    _network_url,
+    _sched_device,
     _sched_key,
-    _schedules_url,
     _stack_device,
-    _stack_url,
     _volume_group_device,
-    _volume_url,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -136,14 +131,11 @@ async def async_setup_entry(
                 key = f"{env_id}_{container.get('name', '')}"
                 if key not in known_container_keys:
                     known_container_keys.add(key)
-                    new += [
+                    new.append(
                         DockhandContainerStateSensor(
                             fast, env_id, env_name, base_url, container
-                        ),
-                        DockhandContainerImageSensor(
-                            fast, env_id, env_name, base_url, container
-                        ),
-                    ]
+                        )
+                    )
                     if _container_has_healthcheck(container):
                         new.append(
                             DockhandContainerHealthSensor(
@@ -170,90 +162,33 @@ async def async_setup_entry(
     def _ensure_fast_group_devices() -> None:
         """Ensure env hub, group, and individual stack devices exist for each live env.
 
-        Called on every fast coordinator update so that these devices are created
+        Called on every fast coordinator update so that devices are created
         the moment an environment or its containers/stacks first appear — including
         on a brand-new Docker host that was empty at integration setup time.
-        async_get_or_create is idempotent: calling it when the device already
-        exists is a no-op.
-
-        Individual stack devices are registered here (not just the Stacks group)
-        because compose-managed container entities reference them as via_device.
-        HA logs a warning if via_device points to a non-existent device, so we
-        must ensure every stack device is registered before any container entity
-        that uses it as a parent is added.
+        Delegates to _ensure_env_devices (helpers.py), the single source of truth
+        for device names, models, entry_type, and via_device relationships.
         """
-        registry = dr.async_get(hass)
-
         for env_id, env_data in (fast.data or {}).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
-
-            # Environment hub — always ensure it exists
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"env_{env_id}")},
-                name=env_name,
-                manufacturer="Dockhand",
-                model="Environment",
-                configuration_url=_env_url(base_url),
-                entry_type=DeviceEntryType.SERVICE,
+            _ensure_env_devices(
+                hass,
+                entry.entry_id,
+                base_url,
+                env_id,
+                env_name,
+                containers=env_data.get("containers") or [],
+                stacks=env_data.get("stacks") or [],
             )
 
-            # Containers group — only when freestanding (non-Compose) containers exist
-            freestanding = [
-                c
-                for c in (env_data.get("containers") or [])
-                if not (c.get("labels") or {}).get("com.docker.compose.project")
-            ]
-            if freestanding:
-                registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={(DOMAIN, f"env_{env_id}_Containers")},
-                    name=f"{env_name} – Containers",
-                    manufacturer="Dockhand",
-                    model="Environment",
-                    configuration_url=_container_url(base_url),
-                    via_device=(DOMAIN, f"env_{env_id}"),
-                    entry_type=DeviceEntryType.SERVICE,
-                )
-
-            # Stacks group and individual stack devices — must be registered before
-            # any compose-managed container entity (which uses the stack device as
-            # via_device) is passed to async_add_entities.
-            stacks = env_data.get("stacks") or []
-            if stacks:
-                registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={(DOMAIN, f"env_{env_id}_Stacks")},
-                    name=f"{env_name} – Stacks",
-                    manufacturer="Dockhand",
-                    model="Environment",
-                    configuration_url=_stack_url(base_url),
-                    via_device=(DOMAIN, f"env_{env_id}"),
-                    entry_type=DeviceEntryType.SERVICE,
-                )
-                for stack in stacks:
-                    stack_name = stack.get("name", "")
-                    if stack_name:
-                        registry.async_get_or_create(
-                            config_entry_id=entry.entry_id,
-                            identifiers={(DOMAIN, f"stack_{env_id}_{stack_name}")},
-                            name=f"{env_name} – {stack_name}",
-                            manufacturer="Dockhand",
-                            model="Stack",
-                            configuration_url=_stack_url(base_url),
-                            via_device=(DOMAIN, f"env_{env_id}_Stacks"),
-                            entry_type=DeviceEntryType.SERVICE,
-                        )
-
     def _ensure_slow_group_devices() -> None:
-        """Ensure group devices exist for each env that has optional resources.
+        """Ensure optional resource group devices exist for each env.
 
         Called on every slow coordinator update so that group devices are created
-        the first time resources appear (e.g. first volume added after setup) and
-        remain correct as the inventory changes. async_get_or_create is idempotent.
+        the first time resources appear (e.g. first volume added after setup).
+        Delegates to _ensure_env_devices (helpers.py), the single source of truth
+        for device names, models, entry_type, and via_device relationships.
         """
-        registry = dr.async_get(hass)
         slow_envs = (slow.data or {}).get("environments", {})
         fast_data = fast.data or {}
 
@@ -264,44 +199,30 @@ async def async_setup_entry(
             env_name = fast_stats.get("name") or slow_env_obj.get(
                 "name", f"Environment {env_id}"
             )
-
-            if enable_networks and env_data.get("networks"):
-                registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={(DOMAIN, f"env_{env_id}_Networks")},
-                    name=f"{env_name} – Networks",
-                    manufacturer="Dockhand",
-                    model="Environment",
-                    configuration_url=_network_url(base_url),
-                    via_device=(DOMAIN, f"env_{env_id}"),
-                    entry_type=DeviceEntryType.SERVICE,
-                )
-            if enable_images and env_data.get("images"):
-                registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={(DOMAIN, f"env_{env_id}_Images")},
-                    name=f"{env_name} – Images",
-                    manufacturer="Dockhand",
-                    model="Environment",
-                    configuration_url=_image_url(base_url),
-                    via_device=(DOMAIN, f"env_{env_id}"),
-                    entry_type=DeviceEntryType.SERVICE,
-                )
-            if enable_volumes and env_data.get("volumes"):
-                registry.async_get_or_create(
-                    config_entry_id=entry.entry_id,
-                    identifiers={(DOMAIN, f"env_{env_id}_Volumes")},
-                    name=f"{env_name} – Volumes",
-                    manufacturer="Dockhand",
-                    model="Environment",
-                    configuration_url=_volume_url(base_url),
-                    via_device=(DOMAIN, f"env_{env_id}"),
-                    entry_type=DeviceEntryType.SERVICE,
-                )
+            _ensure_env_devices(
+                hass,
+                entry.entry_id,
+                base_url,
+                env_id,
+                env_name,
+                networks=env_data.get("networks"),
+                images=env_data.get("images"),
+                volumes=env_data.get("volumes"),
+                enable_networks=enable_networks,
+                enable_images=enable_images,
+                enable_volumes=enable_volumes,
+            )
 
     def _build_slow_entities() -> list[SensorEntity]:
         """Return new slow-coordinator entities not yet registered."""
         _ensure_slow_group_devices()
+        if enable_schedules:
+            _ensure_hub_devices(
+                hass,
+                entry.entry_id,
+                base_url,
+                (slow.data or {}).get("schedules") or [],
+            )
         new: list[SensorEntity] = []
         slow_envs = (slow.data or {}).get("environments", {})
 
@@ -429,15 +350,12 @@ class BaseFastContainerSensor(CoordinatorEntity[DockhandFastCoordinator], Sensor
     @property
     def device_info(self) -> DeviceInfo:
         c = self._container()
-        stack_name = (
-            (c.get("labels") or {}).get("com.docker.compose.project") if c else None
-        )
         return _container_device(
             self._container_name,
             self._env_id,
             self._env_name,
             self._base_url,
-            stack_name,
+            _compose_project(c),
         )
 
 
@@ -529,12 +447,13 @@ class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
 
 
 class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
-    _attr_translation_key = "containers"
     """Containers sensor — state is total count, all sub-states as attributes.
 
     unique_id kept as containers_running for backwards compatibility with
     any existing automations referencing the old entity.
     """
+
+    _attr_translation_key = "containers"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -721,7 +640,7 @@ class DockhandEnvBuildCacheSensor(BaseFastEnvSensor):
 class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
-    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "activity_events"
 
     def __init__(
@@ -789,10 +708,15 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
 
 
 class DockhandContainerHealthSensor(BaseFastContainerSensor):
-    """Container health sensor — mirrors Portainer's health check attribute."""
+    """Container health sensor — only created when the container has a healthcheck.
+
+    Enabled by default: when a container exposes health data it is immediately
+    actionable (automations on unhealthy, dashboards, alerts). Containers
+    without a healthcheck never get this entity, so the sensor is never
+    permanently-unknown for containers that don't report health.
+    """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "health"
 
     def __init__(
@@ -814,30 +738,12 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
         return c.get("health") if c else None
 
 
-class DockhandContainerImageSensor(BaseFastContainerSensor):
-    """Image tag sensor for a container — mirrors Portainer's image attribute sensor."""
-
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_translation_key = "image"
-
-    def __init__(
-        self,
-        coordinator: DockhandFastCoordinator,
-        env_id: int,
-        env_name: str,
-        base_url: str,
-        container: dict,
-    ) -> None:
-        super().__init__(coordinator, env_id, env_name, base_url, container)
-        self._attr_unique_id = (
-            f"dockhand_container_{env_id}_{self._container_name}_image"
-        )
-
-    @property
-    def native_value(self) -> str | None:
-        c = self._container()
-        return c.get("image") if c else None
+# DockhandContainerImageSensor was removed in 1.6.0.
+# The image name is already surfaced as the `image` attribute on
+# DockhandContainerStateSensor, making a dedicated sensor redundant.
+# The "_image" suffix is kept in __init__._migrate_container_device_identifiers
+# until 1.7.0 so that stale entities from users who had enabled the sensor
+# are cleaned up automatically on upgrade. Remove it then.
 
 
 # --------------------------------------------------------------------------- #
@@ -872,8 +778,9 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
 
 
 class DockhandStackContainerCountSensor(BaseFastStackSensor):
-    _attr_translation_key = "containers_in_stack"
     """Count of containers belonging to this stack."""
+
+    _attr_translation_key = "containers_in_stack"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -941,8 +848,9 @@ class BaseSlowEnvConfigSensor(BaseSlowEnvSensor):
 
 
 class DockhandEnvHawserVersionSensor(BaseSlowEnvConfigSensor):
-    _attr_translation_key = "hawser_agent_version"
     """Hawser agent version string — None until the agent first checks in."""
+
+    _attr_translation_key = "hawser_agent_version"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
 
@@ -985,9 +893,7 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_has_entity_name = (
-        False  # standalone name — not prefixed by Images group device
-    )
+    _attr_has_entity_name = True  # device is "{env} - Images" → entity_id = sensor.{env}_images_{name}
     _attr_icon = "mdi:package-variant-closed"
 
     def __init__(
@@ -1104,9 +1010,7 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "containers"
-    _attr_has_entity_name = (
-        False  # standalone name — not prefixed by Networks group device
-    )
+    _attr_has_entity_name = True  # device is "{env} - Networks" → entity_id = sensor.{env}_networks_{name}
     _attr_icon = "mdi:lan"
 
     def __init__(
@@ -1172,9 +1076,7 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
     _attr_native_unit_of_measurement = "containers"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:database"
-    _attr_has_entity_name = (
-        False  # standalone name — not prefixed by Volumes group device
-    )
+    _attr_has_entity_name = True  # device is "{env} - Volumes" → entity_id = sensor.{env}_volumes_{name}
 
     def __init__(
         self,
@@ -1262,25 +1164,19 @@ class _BaseScheduleSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorEnti
 
     @property
     def device_info(self) -> DeviceInfo:
-        key = _sched_key({"id": self._sched_id, "type": self._sched_type})
-        return DeviceInfo(
-            identifiers={(DOMAIN, f"schedule_{key}")},
-            name=self._sched_name,
-            manufacturer="Dockhand",
-            model="Schedule",
-            configuration_url=_schedules_url(self._base_url),
-            via_device=(DOMAIN, "schedules_hub"),
-            entry_type=DeviceEntryType.SERVICE,
+        return _sched_device(
+            self._sched_id, self._sched_type, self._sched_name, self._base_url
         )
 
 
 class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
-    _attr_translation_key = "next_run"
     """Next scheduled run — TIMESTAMP sensor for time-based automations.
 
     Keeping this as a first-class entity (not an attribute) lets users write
     clean ``trigger: state`` automations against the timestamp directly.
     """
+
+    _attr_translation_key = "next_run"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
     def __init__(
@@ -1308,7 +1204,6 @@ class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
 
 
 class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
-    _attr_translation_key = "last_status"
     """Last execution status — string sensor for failure-alert automations.
 
     A dedicated string sensor (rather than an attribute on Next run) lets users
@@ -1319,6 +1214,8 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
             to: "failed"
     Template triggers on attributes are fragile and hard to read.
     """
+
+    _attr_translation_key = "last_status"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
 
     def __init__(

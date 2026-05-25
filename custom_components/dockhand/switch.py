@@ -2,6 +2,7 @@ from typing import Any
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -9,10 +10,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import CONF_API_URL
 from .coordinator import DockhandFastCoordinator
-from .helpers import _container_device, _stack_device
+from .helpers import _compose_project, _container_device, _stack_device
 
-# Switches make action calls — limit to 1 parallel update to avoid
-# overwhelming the Dockhand API with concurrent start/stop requests.
+# Coordinator-based platform. 0 = no HA-level parallel update limit;
+# the coordinator serialises data access.
 PARALLEL_UPDATES = 0
 
 
@@ -96,15 +97,12 @@ class _BaseFastContainerSwitch(
     @property
     def device_info(self) -> DeviceInfo:
         c = self._container()
-        stack_name = (
-            (c.get("labels") or {}).get("com.docker.compose.project") if c else None
-        )
         return _container_device(
             self._container_name,
             self._env_id,
             self._env_name,
             self._base_url,
-            stack_name,
+            _compose_project(c),
         )
 
 
@@ -145,9 +143,13 @@ class _BaseFastStackSwitch(CoordinatorEntity[DockhandFastCoordinator], SwitchEnt
 
 
 class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
-    """Start/stop switch for a container — on=running, off=stopped."""
+    """Start/stop switch for a container — the primary entity for a Container device.
 
-    _attr_translation_key = "running"
+    No translation_key: with _attr_has_entity_name=True and no translation_key,
+    the entity name equals the device name, making this the canonical on/off
+    control. Entity_id becomes switch.{env}_containers_{name} with no suffix.
+    on=running, off=stopped.
+    """
 
     def __init__(
         self,
@@ -170,26 +172,46 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         c = self._container()
-        if c:
+        if not c:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="container_not_found",
+            )
+        try:
             await self._client.async_start_container(self._env_id, c["id"])
-            await self.coordinator.async_request_refresh()
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
+        await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         c = self._container()
-        if c:
+        if not c:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="container_not_found",
+            )
+        try:
             await self._client.async_stop_container(self._env_id, c["id"])
-            await self.coordinator.async_request_refresh()
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
+        await self.coordinator.async_request_refresh()
 
 
 class DockhandStackRunningSwitch(_BaseFastStackSwitch):
     """Start/stop switch for a compose stack — the primary entity for a Stack device.
 
-    Named 'Stack' (not 'Running') to match the convention that the primary
-    entity of a device shares the device's name, making it the canonical
-    on/off control in dashboards and automations.
+    No translation_key: with _attr_has_entity_name=True and no translation_key,
+    the entity name equals the device name, making this the canonical on/off
+    control. Entity_id becomes switch.{env}_stacks_{name} with no suffix.
     """
-
-    _attr_translation_key = "stack"
 
     def __init__(
         self,
@@ -211,9 +233,23 @@ class DockhandStackRunningSwitch(_BaseFastStackSwitch):
         return s.get("status") in ("running", "partial") if s else False
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        await self._client.async_start_stack(self._env_id, self._stack_name)
+        try:
+            await self._client.async_start_stack(self._env_id, self._stack_name)
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         await self.coordinator.async_request_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        await self._client.async_stop_stack(self._env_id, self._stack_name)
+        try:
+            await self._client.async_stop_stack(self._env_id, self._stack_name)
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         await self.coordinator.async_request_refresh()

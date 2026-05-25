@@ -378,7 +378,49 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         _cleanup_stale_registry(hass, entry)
         self.assertIn(stale.id, reg._removed)
 
-    def test_offline_env_does_not_block_other_env_container_cleanup(self):
+    def test_removes_container_when_env_deleted(self):
+        """Container devices are removed when their environment is deleted from Dockhand.
+
+        This is the bug fixed in 1.6.1 — previously the online guard prevented
+        cleanup because a deleted env is also absent from online_env_ids.
+        """
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        # env_id 1 is completely absent from fast_data (deleted from Dockhand)
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={2: {"containers": [], "stacks": [], "stats": {"online": True}}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "container_1_nginx")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    def test_removes_stack_when_env_deleted(self):
+        """Stack devices are removed when their environment is deleted from Dockhand."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={2: {"containers": [], "stacks": [], "stats": {"online": True}}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        stale = self._add_device(reg, entry, "stack_1_myapp")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.id, reg._removed)
+
+    def test_offline_guard_still_protects_existing_env(self):
+        """The offline guard still protects containers when the env exists but is offline."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        # env_id 1 exists in fast_data but is offline
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": [], "stats": {"online": False}}},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        preserved = self._add_device(reg, entry, "container_1_nginx")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(preserved.id, reg._removed)
+
+
         """With per-env scoping, env 2 offline only protects env 2's containers."""
         reg, hass = _make_registry()
         entry = _make_entry()
@@ -442,6 +484,64 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         group = self._add_device(reg, entry, "env_1_Stacks")
         _cleanup_stale_registry(hass, entry)
         self.assertIn(group.id, reg._removed)
+
+    def test_removes_containers_group_when_no_freestanding_containers(self):
+        """Containers group device is removed when all containers are Compose-managed."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        compose_container = {
+            "name": "web", "id": "abc", "state": "running",
+            "labels": {"com.docker.compose.project": "mystack"},
+        }
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {
+                "containers": [compose_container],
+                "stacks": [{"name": "mystack", "containers": []}],
+                "stats": {"online": True},
+            }},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        # Containers group device exists from a previous setup (before all containers
+        # were moved to a stack).
+        group = self._add_device(reg, entry, "env_1_Containers")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(group.id, reg._removed)
+
+    def test_preserves_containers_group_when_freestanding_exists(self):
+        """Containers group device is kept when at least one freestanding container exists."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        freestanding = {
+            "name": "mycontainer", "id": "abc", "state": "running",
+            "labels": {},
+        }
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {
+                "containers": [freestanding],
+                "stacks": [],
+                "stats": {"online": True},
+            }},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        group = self._add_device(reg, entry, "env_1_Containers")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(group.id, reg._removed)
+
+    def test_preserves_containers_group_when_env_offline(self):
+        """Containers group is not removed when env is offline (container list unreliable)."""
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {
+                "containers": [],
+                "stacks": [],
+                "stats": {"online": False},
+            }},
+            slow_data={"environments": {}, "schedules": []},
+        )
+        group = self._add_device(reg, entry, "env_1_Containers")
+        _cleanup_stale_registry(hass, entry)
+        self.assertNotIn(group.id, reg._removed)
 
     # ── Schedule devices ──────────────────────────────────────────────────
 
@@ -518,24 +618,45 @@ class TestCleanupStaleRegistry(unittest.TestCase):
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(stale.entity_id, er._removed)
 
-    def test_guard_absent_env_skips_entity_cleanup(self):
-        """Entities for an env not in slow data are not removed."""
+    def test_guard_offline_env_skips_image_entity_cleanup(self):
+        """Image entities for an env that exists but is offline are not removed."""
         from ha_stubs import er_async_get, reset_entity_registry
 
         reset_entity_registry()
         reg, hass = _make_registry()
         entry = _make_entry()
+        # env_id 1 exists in fast_data but is offline
         entry.runtime_data = self._make_runtime_data(
-            fast_data={1: {"containers": [], "stacks": []}},
+            fast_data={1: {"containers": [], "stacks": [], "stats": {"online": False}}},
             slow_data={
                 "environments": {1: {"images": [], "networks": [], "volumes": []}},
                 "schedules": [],
             },
         )
         er = er_async_get(hass)
-        preserved = er._add(entry.entry_id, "dockhand_image_2_abc123")
+        preserved = er._add(entry.entry_id, "dockhand_image_1_abc123")
         _cleanup_stale_registry(hass, entry)
         self.assertNotIn(preserved.entity_id, er._removed)
+
+    def test_removes_image_entity_when_env_deleted(self):
+        """Image entities for a deleted environment (absent from fast_data) are removed."""
+        from ha_stubs import er_async_get, reset_entity_registry
+
+        reset_entity_registry()
+        reg, hass = _make_registry()
+        entry = _make_entry()
+        # env_id 2 is completely absent from fast_data (deleted)
+        entry.runtime_data = self._make_runtime_data(
+            fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
+            slow_data={
+                "environments": {1: {"images": [], "networks": [], "volumes": []}},
+                "schedules": [],
+            },
+        )
+        er = er_async_get(hass)
+        stale = er._add(entry.entry_id, "dockhand_image_2_abc123")
+        _cleanup_stale_registry(hass, entry)
+        self.assertIn(stale.entity_id, er._removed)
 
     def test_removes_stale_image_entity(self):
         from ha_stubs import er_async_get, reset_entity_registry

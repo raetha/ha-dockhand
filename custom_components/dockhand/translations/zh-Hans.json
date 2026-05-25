@@ -154,9 +154,6 @@
       "health": {
         "name": "健康状况"
       },
-      "image": {
-        "name": "镜像"
-      },
       "status": {
         "name": "状态"
       },
@@ -196,26 +193,27 @@
         "name": "镜像清理"
       }
     },
-    "switch": {
-      "running": {
-        "name": "容器"
-      },
-      "stack": {
-        "name": "堆栈"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "重新启动"
-      },
       "check_updates": {
         "name": "检查镜像更新"
+      },
+      "restart": {
+        "name": "重启"
       }
     },
     "update": {
       "image_update": {
         "name": "镜像更新"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "操作失败：{error}"
+    },
+    "container_not_found": {
+      "message": "未找到容器 — 它可能已被删除"
     }
   }
 }

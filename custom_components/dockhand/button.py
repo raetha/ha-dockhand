@@ -3,6 +3,7 @@ from typing import Any
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -10,9 +11,10 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import CONF_API_URL
 from .coordinator import DockhandFastCoordinator, DockhandUpdateCoordinator
-from .helpers import _container_device, _env_device, _stack_device
+from .helpers import _compose_project, _container_device, _env_device, _stack_device
 
-# Buttons make action calls — limit to 1 parallel update.
+# Coordinator-based platform. 0 = no HA-level parallel update limit;
+# the coordinator serialises data access.
 PARALLEL_UPDATES = 0
 
 
@@ -110,15 +112,12 @@ class _BaseFastContainerButton(
     @property
     def device_info(self) -> DeviceInfo:
         c = self._container()
-        stack_name = (
-            (c.get("labels") or {}).get("com.docker.compose.project") if c else None
-        )
         return _container_device(
             self._container_name,
             self._env_id,
             self._env_name,
             self._base_url,
-            stack_name,
+            _compose_project(c),
         )
 
 
@@ -151,7 +150,7 @@ class _BaseFastStackButton(CoordinatorEntity[DockhandFastCoordinator], ButtonEnt
 
 
 class DockhandContainerRestartButton(_BaseFastContainerButton):
-    """Restart a running container — mirrors Portainer's restart button entity."""
+    """Restart a running container."""
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_translation_key = "restart"
@@ -172,8 +171,19 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
 
     async def async_press(self) -> None:
         c = self._container()
-        if c:
+        if not c:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="container_not_found",
+            )
+        try:
             await self._client.async_restart_container(self._env_id, c["id"])
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         await self.coordinator.async_request_refresh()
 
 
@@ -198,7 +208,14 @@ class DockhandStackRestartButton(_BaseFastStackButton):
         )
 
     async def async_press(self) -> None:
-        await self._client.async_restart_stack(self._env_id, self._stack_name)
+        try:
+            await self._client.async_restart_stack(self._env_id, self._stack_name)
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err
         await self.coordinator.async_request_refresh()
 
 
@@ -240,4 +257,11 @@ class DockhandCheckUpdatesButton(
         return _env_device(self._env_id, self._env_name, self._base_url)
 
     async def async_press(self) -> None:
-        await self._update_coordinator.async_request_refresh()
+        try:
+            await self._update_coordinator.async_request_refresh()
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="action_failed",
+                translation_placeholders={"error": str(err)},
+            ) from err

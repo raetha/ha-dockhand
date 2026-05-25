@@ -6,8 +6,8 @@
         "description": "Enter your Dockhand server URL and settings. An API token will be requested if authentication is enabled in Dockhand.",
         "data": {
           "api_url": "API URL",
-          "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
-          "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
+          "poll_interval": "Fast poll interval (seconds) — stats, containers & stacks",
+          "poll_interval_slow": "Slow poll interval (seconds) — images, volumes, networks, schedules",
           "enable_schedules": "Enable schedule sensors",
           "enable_images": "Enable image sensors",
           "enable_volumes": "Enable volume sensors",
@@ -31,17 +31,17 @@
       },
       "token": {
         "title": "Dockhand API Token",
-        "description": "Your Dockhand server requires authentication. Generate an API token in Dockhand under **Profile \u2192 API tokens**, then paste it here.",
+        "description": "Your Dockhand server requires authentication. Generate an API token in Dockhand under **Profile → API tokens**, then paste it here.",
         "data": {
           "api_token": "API Token"
         },
         "data_description": {
-          "api_token": "A Dockhand API token starting with dh_. Generate one under Profile \u2192 API tokens in the Dockhand UI."
+          "api_token": "A Dockhand API token starting with dh_. Generate one under Profile → API tokens in the Dockhand UI."
         }
       },
       "reauth_confirm": {
         "title": "Re-authenticate with Dockhand",
-        "description": "Your API token is no longer valid. Generate a new token in Dockhand under **Profile \u2192 API tokens** and enter it below.",
+        "description": "Your API token is no longer valid. Generate a new token in Dockhand under **Profile → API tokens** and enter it below.",
         "data": {
           "api_token": "API Token"
         },
@@ -54,8 +54,8 @@
         "description": "Update server URL and settings. An API token will be requested if authentication is required.",
         "data": {
           "api_url": "API URL",
-          "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
-          "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
+          "poll_interval": "Fast poll interval (seconds) — stats, containers & stacks",
+          "poll_interval_slow": "Slow poll interval (seconds) — images, volumes, networks, schedules",
           "enable_schedules": "Enable schedule sensors",
           "enable_images": "Enable image sensors",
           "enable_volumes": "Enable volume sensors",
@@ -94,8 +94,8 @@
         "title": "Dockhand Options",
         "description": "Adjust polling intervals and optional data sources. To change the URL or API token, use Reconfigure instead.",
         "data": {
-          "poll_interval": "Fast poll interval (seconds) \u2014 stats, containers & stacks",
-          "poll_interval_slow": "Slow poll interval (seconds) \u2014 images, volumes, networks, schedules",
+          "poll_interval": "Fast poll interval (seconds) — stats, containers & stacks",
+          "poll_interval_slow": "Slow poll interval (seconds) — images, volumes, networks, schedules",
           "enable_schedules": "Enable schedule sensors",
           "enable_images": "Enable image sensors",
           "enable_volumes": "Enable volume sensors",
@@ -154,9 +154,6 @@
       "health": {
         "name": "Health"
       },
-      "image": {
-        "name": "Image"
-      },
       "status": {
         "name": "Status"
       },
@@ -196,26 +193,27 @@
         "name": "Image pruning"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Container"
-      },
-      "stack": {
-        "name": "Stack"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Restart"
-      },
       "check_updates": {
         "name": "Check for image updates"
+      },
+      "restart": {
+        "name": "Restart"
       }
     },
     "update": {
       "image_update": {
         "name": "Image update"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Action failed: {error}"
+    },
+    "container_not_found": {
+      "message": "Container not found — it may have been removed"
     }
   }
 }

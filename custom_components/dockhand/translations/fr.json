@@ -154,9 +154,6 @@
       "health": {
         "name": "Santé"
       },
-      "image": {
-        "name": "Image"
-      },
       "status": {
         "name": "Statut"
       },
@@ -196,26 +193,27 @@
         "name": "Élagage des images"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Conteneur"
-      },
-      "stack": {
-        "name": "Stack"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Redémarrer"
-      },
       "check_updates": {
         "name": "Rechercher des mises à jour d'images"
+      },
+      "restart": {
+        "name": "Redémarrer"
       }
     },
     "update": {
       "image_update": {
         "name": "Mise à jour de l'image"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Action échouée : {error}"
+    },
+    "container_not_found": {
+      "message": "Conteneur introuvable — il a peut-être été supprimé"
     }
   }
 }

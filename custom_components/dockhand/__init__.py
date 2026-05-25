@@ -8,7 +8,6 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.device_registry import DeviceEntryType
 
 from .api import DockhandClient
 from .const import (
@@ -32,14 +31,10 @@ from .coordinator import (
     DockhandUpdateCoordinator,
 )
 from .helpers import (
-    _container_url,
-    _env_url,
-    _image_url,
-    _network_url,
+    _compose_project,
+    _ensure_env_devices,
+    _ensure_hub_devices,
     _sched_key,
-    _schedules_url,
-    _stack_url,
-    _volume_url,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -376,8 +371,11 @@ def _register_devices(
     Networks/Images/Volumes group devices are only created when that feature is
     enabled AND the slow coordinator has confirmed the resources actually exist.
     The Containers group is still governed by fast data (compose vs freestanding).
+
+    Delegates all per-env device creation to _ensure_env_devices (helpers.py),
+    which is the single source of truth for device names, models, entry_type,
+    and via_device relationships.
     """
-    registry = dr.async_get(hass)
     enable_schedules = bool(config.get(CONF_ENABLE_SCHEDULES, False))
     enable_images = bool(config.get(CONF_ENABLE_IMAGES, False))
     enable_volumes = bool(config.get(CONF_ENABLE_VOLUMES, False))
@@ -386,147 +384,55 @@ def _register_devices(
     for env_id, env_data in (fast_coordinator.data or {}).items():
         stats = env_data.get("stats") or {}
         env_name = stats.get("name", f"Environment {env_id}")
-
-        registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, f"env_{env_id}")},
-            name=env_name,
-            manufacturer="Dockhand",
-            model="Environment",
-            configuration_url=_env_url(base_url),
-        )
-
-        # Only create the Containers group if there are freestanding containers
-        # (containers not managed by Compose). Compose containers are parented
-        # directly to their Stack device, so the group would otherwise be empty.
-        freestanding = [
-            c
-            for c in (env_data.get("containers") or [])
-            if not (c.get("labels") or {}).get("com.docker.compose.project")
-        ]
-        if freestanding:
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"env_{env_id}_Containers")},
-                name=f"{env_name} – Containers",
-                manufacturer="Dockhand",
-                model="Environment",
-                configuration_url=_container_url(base_url),
-                via_device=(DOMAIN, f"env_{env_id}"),
-                entry_type=DeviceEntryType.SERVICE,
-            )
-
-        stacks = env_data.get("stacks") or []
-        if stacks:
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"env_{env_id}_Stacks")},
-                name=f"{env_name} – Stacks",
-                manufacturer="Dockhand",
-                model="Environment",
-                configuration_url=_stack_url(base_url),
-                via_device=(DOMAIN, f"env_{env_id}"),
-                entry_type=DeviceEntryType.SERVICE,
-            )
-            # Pre-register individual stack devices so that compose-managed
-            # container entities can safely reference them as via_device.
-            for stack in stacks:
-                stack_name = stack.get("name", "")
-                if stack_name:
-                    registry.async_get_or_create(
-                        config_entry_id=entry.entry_id,
-                        identifiers={(DOMAIN, f"stack_{env_id}_{stack_name}")},
-                        name=f"{env_name} – {stack_name}",
-                        manufacturer="Dockhand",
-                        model="Stack",
-                        configuration_url=_stack_url(base_url),
-                        via_device=(DOMAIN, f"env_{env_id}_Stacks"),
-                        entry_type=DeviceEntryType.SERVICE,
-                    )
-
-        # Optional resource group devices — only created when the feature is
-        # enabled AND the slow coordinator confirmed that resources exist.
         slow_env = (slow_coordinator.data or {}).get("environments", {}).get(
             env_id
         ) or {}
-        if enable_networks and slow_env.get("networks"):
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"env_{env_id}_Networks")},
-                name=f"{env_name} – Networks",
-                manufacturer="Dockhand",
-                model="Environment",
-                configuration_url=_network_url(base_url),
-                via_device=(DOMAIN, f"env_{env_id}"),
-                entry_type=DeviceEntryType.SERVICE,
-            )
-        if enable_images and slow_env.get("images"):
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"env_{env_id}_Images")},
-                name=f"{env_name} – Images",
-                manufacturer="Dockhand",
-                model="Environment",
-                configuration_url=_image_url(base_url),
-                via_device=(DOMAIN, f"env_{env_id}"),
-                entry_type=DeviceEntryType.SERVICE,
-            )
-        if enable_volumes and slow_env.get("volumes"):
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"env_{env_id}_Volumes")},
-                name=f"{env_name} – Volumes",
-                manufacturer="Dockhand",
-                model="Environment",
-                configuration_url=_volume_url(base_url),
-                via_device=(DOMAIN, f"env_{env_id}"),
-                entry_type=DeviceEntryType.SERVICE,
-            )
-
-    if enable_schedules:
-        registry.async_get_or_create(
-            config_entry_id=entry.entry_id,
-            identifiers={(DOMAIN, "schedules_hub")},
-            name="Schedules",
-            manufacturer="Dockhand",
-            model="Service",
-            configuration_url=_schedules_url(base_url),
-            entry_type=DeviceEntryType.SERVICE,
+        _ensure_env_devices(
+            hass,
+            entry.entry_id,
+            base_url,
+            env_id,
+            env_name,
+            containers=env_data.get("containers") or [],
+            stacks=env_data.get("stacks") or [],
+            networks=slow_env.get("networks"),
+            images=slow_env.get("images"),
+            volumes=slow_env.get("volumes"),
+            enable_networks=enable_networks,
+            enable_images=enable_images,
+            enable_volumes=enable_volumes,
         )
-        # Pre-register individual schedule devices so cleanup can compare
-        # against registry entries consistently — same pattern as stacks.
-        for sched in (slow_coordinator.data or {}).get("schedules") or []:
-            key = _sched_key(sched)
-            sched_name = sched.get("name", f"Schedule {key}")
-            registry.async_get_or_create(
-                config_entry_id=entry.entry_id,
-                identifiers={(DOMAIN, f"schedule_{key}")},
-                name=sched_name,
-                manufacturer="Dockhand",
-                model="Schedule",
-                configuration_url=_schedules_url(base_url),
-                via_device=(DOMAIN, "schedules_hub"),
-                entry_type=DeviceEntryType.SERVICE,
-            )
+
+    registry = dr.async_get(hass)
+    if enable_schedules:
+        _ensure_hub_devices(
+            hass,
+            entry.entry_id,
+            base_url,
+            (slow_coordinator.data or {}).get("schedules") or [],
+        )
 
 
 def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     """Derive the complete set of live identifiers from all coordinator data.
 
     Returns a dict with keys:
-        env_ids          set[int]   — environments currently in fast data
-        online_env_ids   set[int]   — environments with online=True (or unknown)
-        containers       set[str]   — live device identifiers
-                                       (container_<env_id>_<name>)
-        stacks           set[str]   — live device identifiers (stack_<env>_<name>)
-        schedules        set[str]   — live device identifiers (schedule_<id>)
-        image_uids       set[str]   — live entity unique_ids
-        network_uids     set[str]   — live entity unique_ids
-        volume_uids      set[str]   — live entity unique_ids
-        update_uids      set[str]   — live entity unique_ids
-        slow_valid       bool       — slow coordinator last poll succeeded
-        update_valid     bool       — update coordinator last poll succeeded
-        slow_env_ids     set[int]   — envs present in slow data (for Guard 3)
+        env_ids                  set[int]   — environments currently in fast data
+        online_env_ids           set[int]   — environments with online=True (or unknown)
+        containers               set[str]   — live device identifiers
+                                              (container_<env_id>_<name>)
+        stacks                   set[str]   — live device identifiers (stack_<env>_<name>)
+        containers_group_env_ids set[int]   — env_ids that have ≥1 freestanding container;
+                                              the Containers group device is only valid for
+                                              these envs
+        schedules                set[str]   — live device identifiers (schedule_<id>)
+        image_uids               set[str]   — live entity unique_ids
+        network_uids             set[str]   — live entity unique_ids
+        volume_uids              set[str]   — live entity unique_ids
+        update_uids              set[str]   — live entity unique_ids
+        slow_valid               bool       — slow coordinator last poll succeeded
+        update_valid             bool       — update coordinator last poll succeeded
+        slow_env_ids             set[int]   — envs present in slow data (for Guard 3)
     """
     fast_data = entry.runtime_data.fast_coordinator.data or {}
     slow = entry.runtime_data.slow_coordinator
@@ -536,12 +442,20 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     env_ids: set[int] = set(fast_data.keys())
     containers: set[str] = set()
     stacks: set[str] = set()
+    # Env IDs that have at least one freestanding (non-Compose) container.
+    # The Containers group device is only valid when this set includes the env_id.
+    containers_group_env_ids: set[int] = set()
 
     for env_id, env_data in fast_data.items():
+        has_freestanding = False
         for c in env_data.get("containers") or []:
             name = c.get("name", "")
             if name:
                 containers.add(f"container_{env_id}_{name}")
+            if not _compose_project(c):
+                has_freestanding = True
+        if has_freestanding:
+            containers_group_env_ids.add(env_id)
         for s in env_data.get("stacks") or []:
             stacks.add(f"stack_{env_id}_{s['name']}")
 
@@ -607,6 +521,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         "online_env_ids": online_env_ids,
         "containers": containers,
         "stacks": stacks,
+        "containers_group_env_ids": containers_group_env_ids,
         "schedules": schedules,
         "schedules_enabled": schedules_enabled,
         "image_uids": image_uids,
@@ -629,22 +544,25 @@ def _cleanup_stale_registry(
     single pass over the device registry and a single pass over the entity
     registry, both driven by live sets built from the current coordinator data.
 
-    Safety guards — data ambiguity is handled in _build_live_sets:
-    - Fast coordinator data must be non-empty (≥1 environment) before any
-      device or entity removal is attempted.
-    - Container and stack device cleanup is scoped per-environment using the
-      env_id embedded in their identifiers. Only devices whose environment is
-      confirmed online are candidates for removal — offline environments
-      (host rebooting, Hawser temporarily unreachable) are preserved until
-      they come back online.
-    - Image, network, volume, and update entity cleanup uses the same per-env
-      online guard. Schedule cleanup is gated on schedules being enabled.
-    - Slow-derived sets are only populated when the slow coordinator's last
-      poll succeeded.
-    - Env/group device removal uses the fast env_ids set — an environment
-      offline in Dockhand still appears in async_get_environments() and is
-      preserved. A permanently deleted environment disappears from env_ids
-      and all its devices and entities are cleaned up.
+    Safety guards:
+    - Fast coordinator data must be non-empty before any removal is attempted.
+    - Container and stack devices are removed when (a) the environment no longer
+      exists in Dockhand (deleted — env_id absent from env_ids), or (b) the
+      environment exists and is confirmed online but the specific item is gone.
+      Offline environments (host rebooting, Hawser temporarily unreachable) are
+      preserved until confirmed online, to avoid false-positive cleanup.
+    - Image, network, volume, and update entity cleanup uses the same two-case
+      logic. Guarded additionally by slow/update coordinator validity so a failed
+      poll doesn't trigger false cleanup.
+    - Env hub and group device removal is driven by env_ids — a deleted
+      environment disappears from env_ids and all its devices cascade away.
+    - Schedule cleanup is gated on schedules being enabled and slow coordinator
+      validity.
+    - Entities with config_entry_id=None (orphaned by HA when their device was
+      removed) are outside the scope of async_entries_for_config_entry and are
+      left to HA's periodic 30-day purge cycle. Our primary cleanup prevents
+      orphaning in the first place by removing devices cleanly via the device
+      registry, which cascades entity removal automatically.
     """
     fast_data = entry.runtime_data.fast_coordinator.data or {}
     if not fast_data:
@@ -670,7 +588,15 @@ def _cleanup_stale_registry(
                 except ValueError:
                     continue
                 if identifier not in live["containers"]:
-                    if env_id in live["online_env_ids"]:
+                    if env_id not in live["env_ids"]:
+                        # Environment deleted from Dockhand — remove unconditionally.
+                        _LOGGER.debug(
+                            "Dockhand: env deleted, removing container device %s",
+                            identifier,
+                        )
+                        dev_registry.async_remove_device(device.id)
+                    elif env_id in live["online_env_ids"]:
+                        # Env exists and is online — container was removed.
                         _LOGGER.debug(
                             "Dockhand: removing stale container device %s", identifier
                         )
@@ -689,7 +615,15 @@ def _cleanup_stale_registry(
                 except ValueError:
                     continue
                 if identifier not in live["stacks"]:
-                    if env_id in live["online_env_ids"]:
+                    if env_id not in live["env_ids"]:
+                        # Environment deleted from Dockhand — remove unconditionally.
+                        _LOGGER.debug(
+                            "Dockhand: env deleted, removing stack device %s",
+                            identifier,
+                        )
+                        dev_registry.async_remove_device(device.id)
+                    elif env_id in live["online_env_ids"]:
+                        # Env exists and is online — stack was removed.
                         _LOGGER.debug(
                             "Dockhand: removing stale stack device %s", identifier
                         )
@@ -711,6 +645,21 @@ def _cleanup_stale_registry(
                 if env_id not in live["env_ids"]:
                     _LOGGER.debug(
                         "Dockhand: removing stale env/group device %s", identifier
+                    )
+                    dev_registry.async_remove_device(device.id)
+                elif (
+                    identifier == f"env_{env_id}_Containers"
+                    and env_id in live["online_env_ids"]
+                    and env_id not in live["containers_group_env_ids"]
+                ):
+                    # The environment exists and is online but has no freestanding
+                    # containers — the Containers group device is now empty and
+                    # should be removed. Guarded by online_env_ids to avoid
+                    # removing the device when the host is temporarily unreachable
+                    # and the container list came back empty.
+                    _LOGGER.debug(
+                        "Dockhand: removing empty Containers group device for env %s",
+                        env_id,
                     )
                     dev_registry.async_remove_device(device.id)
 
@@ -739,29 +688,32 @@ def _cleanup_stale_registry(
         uid = entity_entry.unique_id or ""
 
         if uid.startswith("dockhand_image_"):
-            if not live["slow_valid"]:
-                continue
             try:
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            # Only clean up if env is present in slow data AND online.
-            if (
+            if env_id not in live["env_ids"]:
+                # Env deleted — remove regardless of slow coordinator state.
+                _LOGGER.debug("Dockhand: removing stale image entity %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+            elif live["slow_valid"] and (
                 env_id in live["slow_env_ids"]
                 and env_id in live["online_env_ids"]
                 and uid not in live["image_uids"]
             ):
+                # Env exists, is online, slow data is fresh — entity is gone.
                 _LOGGER.debug("Dockhand: removing stale image entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid.startswith("dockhand_network_"):
-            if not live["slow_valid"]:
-                continue
             try:
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            if (
+            if env_id not in live["env_ids"]:
+                _LOGGER.debug("Dockhand: removing stale network entity %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+            elif live["slow_valid"] and (
                 env_id in live["slow_env_ids"]
                 and env_id in live["online_env_ids"]
                 and uid not in live["network_uids"]
@@ -770,13 +722,14 @@ def _cleanup_stale_registry(
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid.startswith("dockhand_volume_"):
-            if not live["slow_valid"]:
-                continue
             try:
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            if (
+            if env_id not in live["env_ids"]:
+                _LOGGER.debug("Dockhand: removing stale volume entity %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+            elif live["slow_valid"] and (
                 env_id in live["slow_env_ids"]
                 and env_id in live["online_env_ids"]
                 and uid not in live["volume_uids"]
@@ -792,8 +745,10 @@ def _cleanup_stale_registry(
                 env_id = int(uid.split("_")[2])
             except ValueError:
                 continue
-            # Only clean up update entities for online environments.
-            if env_id in live["online_env_ids"] and uid not in live["update_uids"]:
+            # Remove if env deleted, or if env is online and update entity is gone.
+            if env_id not in live["env_ids"] or (
+                env_id in live["online_env_ids"] and uid not in live["update_uids"]
+            ):
                 _LOGGER.debug("Dockhand: removing stale update entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 

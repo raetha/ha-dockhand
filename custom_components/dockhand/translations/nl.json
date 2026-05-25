@@ -154,9 +154,6 @@
       "health": {
         "name": "Gezondheid"
       },
-      "image": {
-        "name": "Image"
-      },
       "status": {
         "name": "Status"
       },
@@ -196,26 +193,27 @@
         "name": "Image-opschoning"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Container"
-      },
-      "stack": {
-        "name": "Stack"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Herstarten"
-      },
       "check_updates": {
         "name": "Controleren op image-updates"
+      },
+      "restart": {
+        "name": "Herstart"
       }
     },
     "update": {
       "image_update": {
         "name": "Image-update"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Actie mislukt: {error}"
+    },
+    "container_not_found": {
+      "message": "Container niet gevonden — het is mogelijk verwijderd"
     }
   }
 }

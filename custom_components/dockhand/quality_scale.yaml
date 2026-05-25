@@ -25,9 +25,14 @@ rules:
   common-modules:
     status: done
     comment: >
-      helpers.py contains all shared URL helpers (_env_url, _container_url,
-      _stack_url, etc.) and DeviceInfo factory functions (_env_device,
-      _container_device, etc.) used across all platform modules.
+      helpers.py is the single source of truth for shared URL helpers
+      (_env_url, _container_url, _stack_url, etc.), DeviceInfo factory
+      functions (_env_device, _container_device, _stack_device, _sched_device,
+      etc.), device registration (_ensure_env_devices, _ensure_hub_devices),
+      and utility helpers (_compose_project, _container_has_healthcheck).
+      coordinator.py contains all DataUpdateCoordinator subclasses. All
+      async_get_or_create calls are consolidated in helpers.py so device
+      attributes are always consistent regardless of which call path runs first.
 
   config-flow:
     status: done
@@ -194,26 +199,34 @@ rules:
   test-coverage:
     status: done
     comment: >
-      221 tests across five files: test_api.py (28), test_config_flow.py (23),
-      test_coordinator.py (22), test_entities.py (89), test_init.py (53).
-      Covers all API methods, Bearer token header, Accept header, all config
-      flow steps, legacy migration paths, all three coordinators, all entity
-      types, device registration, unified stale cleanup (_cleanup_stale_registry),
-      setup, and unload. Zero external dependencies — runs in ~0.2 s with
-      stdlib only.
+      260 tests across six files: test_api.py (28), test_config_flow.py (23),
+      test_coordinator.py (22), test_entities.py (122), test_init.py (59),
+      test_workflows.py (6). Covers all API methods, Bearer token and Accept
+      headers, all config flow steps, legacy migration paths, all three
+      coordinators, all entity types and platforms, device registration,
+      _ensure_env_devices / _ensure_hub_devices, _compose_project /
+      _container_has_healthcheck helpers, HomeAssistantError propagation for
+      all action methods (action_failed and container_not_found translation
+      keys), Containers group device lifecycle (freestanding vs Compose-only
+      vs offline), unified stale cleanup (_cleanup_stale_registry), setup, and
+      unload. Zero external dependencies — runs in ~0.2 s with stdlib only.
 
   # ── Gold ──────────────────────────────────────────────────────────────────
 
   devices:
     status: done
     comment: >
-      All entities create DeviceInfo via helpers in helpers.py. Device hierarchy:
-      Environment hub → Containers/Stacks/Networks/Images/Volumes group →
-      individual container/stack devices (env-prefixed names).
-      Images, networks, and volumes are entities directly under their group device —
-      no per-resource sub-devices. Schedules hub is a top-level device with one
-      per-schedule child device (two entities: Next run + Last status) —
-      future-proofed for run-now/enable-disable action entities.
+      All device registration is centralised in helpers.py via two functions:
+      _ensure_env_devices (env hub, Containers/Stacks/Networks/Images/Volumes
+      group devices, and individual stack devices) and _ensure_hub_devices
+      (Schedules hub and per-schedule devices). Both functions are called from
+      _register_devices at startup and from coordinator listeners on live
+      updates, ensuring device attributes are always consistent. Device
+      hierarchy: Environment hub → Containers/Stacks/Networks/Images/Volumes
+      group → individual container/stack devices (env-prefixed names).
+      Images, networks, and volumes are entities directly under their group
+      device — no per-resource sub-devices. Schedules hub is a top-level
+      device with one per-schedule child device.
 
   diagnostics:
     status: done
@@ -280,14 +293,17 @@ rules:
   dynamic-devices:
     status: done
     comment: >
-      _register_devices() runs at startup and idempotently pre-registers env
-      hub, group, stack, and schedule devices from initial coordinator data.
-      All four platform modules register coordinator listeners that call
-      async_add_entities for newly discovered resources (containers, stacks,
-      images, networks, volumes, schedules, update entities). Stale devices and
-      entities are cleaned up by _cleanup_stale_registry(), which is registered
-      on all three coordinator listeners and runs once at startup. Listeners are
-      cleaned up on unload via entry.async_on_unload.
+      _register_devices() runs at startup and delegates to _ensure_env_devices
+      and _ensure_hub_devices (both in helpers.py) to idempotently
+      pre-register all devices from initial coordinator data. All platform
+      modules register coordinator listeners that call async_add_entities for
+      newly discovered resources (containers, stacks, images, networks, volumes,
+      schedules, update entities). The Containers group device is only created
+      when at least one freestanding (non-Compose) container exists, and is
+      removed when an online environment transitions to all-Compose. Stale
+      devices and entities are cleaned up by _cleanup_stale_registry(), which
+      runs on all three coordinator listeners and once at startup. Listeners
+      are cleaned up on unload via entry.async_on_unload.
 
   entity-category:
     status: done
@@ -311,12 +327,15 @@ rules:
   entity-disabled-by-default:
     status: done
     comment: >
-      12 niche or verbose entities are disabled by default via
+      Niche or verbose entities are disabled by default via
       _attr_entity_registry_enabled_default = False: build cache size,
-      containers disk usage, activity events, Hawser agent version,
-      per-container Image and Health sensors, and the six config-mirror
-      binary sensors (activity logging, metrics collection, vulnerability
-      scanning, update checks, auto update, image pruning).
+      containers disk usage, activity events, Hawser agent version, and the
+      six config-mirror binary sensors (activity logging, metrics collection,
+      vulnerability scanning, update checks, auto update, image pruning).
+      The container Health sensor is enabled by default — it is only ever
+      created when the container has a Docker healthcheck configured, so it
+      is never permanently unavailable. The container Image sensor was
+      removed in 1.6.0 (image name is an attribute on the State sensor).
 
   entity-translations:
     status: done
@@ -328,21 +347,30 @@ rules:
       locales (en + 10 machine-translated languages).
 
   exception-translations:
-    status: exempt
+    status: done
     comment: >
-      No HomeAssistantError or ServiceValidationError is raised anywhere in
-      entity methods or service actions. Config flow errors already use
-      translated error keys (cannot_connect, invalid_auth) via strings.json.
-      The integration has no custom service actions that would surface exception
-      messages to the user, so there is nothing to translate.
+      All entity action methods (async_press in button.py, async_turn_on /
+      async_turn_off in switch.py, async_install in update.py) catch API
+      errors and re-raise as HomeAssistantError with translation_domain=
+      "dockhand" and a translation_key referencing entries in strings.json.
+      Two exception keys are defined: action_failed (wraps the API error
+      message via a {error} placeholder) and container_not_found (raised
+      when the coordinator no longer has the container at action time).
+      Config flow errors use translated error keys (cannot_connect,
+      invalid_auth) via strings.json.
 
   icon-translations:
     status: done
     comment: >
-      icons.json created with 28 entity icon entries covering all four
-      platforms. Includes state-specific icons for container State
-      (running/stopped/paused), Health (healthy/unhealthy/starting), and
-      Stack Status (running/partial/stopped).
+      icons.json provides MDI icons for all sensor, binary_sensor, button, and
+      switch entities via _attr_translation_key. Includes state-specific icons
+      for container State (running/stopped/paused), Health
+      (healthy/unhealthy/starting), and Stack Status (running/partial/stopped).
+      The update platform (image_update) intentionally has no icon entry — HA's
+      frontend always displays the integration icon for update entities
+      regardless of icons.json, matching standard HA behavior. Per the quality
+      scale docs, icons should not override the platform default when context
+      is identical.
 
   reconfiguration-flow:
     status: done

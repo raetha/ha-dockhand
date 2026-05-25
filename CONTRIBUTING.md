@@ -2,6 +2,21 @@
 
 Contributions are welcome via pull requests at [github.com/raetha/ha-dockhand](https://github.com/raetha/ha-dockhand).
 
+## Compatibility baseline
+
+The table below records the last version of each upstream project that was
+reviewed for API changes, breaking changes, and new features relevant to this
+integration. Before starting new development work, check for releases newer
+than the versions listed here.
+
+| Project | Last reviewed | Where to check |
+|---|---|---|
+| Home Assistant Core | 2026.3 | https://github.com/home-assistant/core/releases |
+| Dockhand | v1.0.29 | https://github.com/Finsys/dockhand/releases |
+
+Update this table (and the corresponding project memory entry) after each
+review session.
+
 ## Development setup
 
 1. Clone the repository

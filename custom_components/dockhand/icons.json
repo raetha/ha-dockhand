@@ -46,9 +46,6 @@
           "starting": "mdi:heart-half"
         }
       },
-      "image": {
-        "default": "mdi:package-variant-closed"
-      },
       "status": {
         "default": "mdi:layers-triple",
         "state": {
@@ -100,15 +97,11 @@
         "default": "mdi:broom"
       }
     },
-    "switch": {
-      "running": {
-        "default": "mdi:docker"
-      },
-      "stack": {
-        "default": "mdi:layers-triple"
-      }
-    },
+    "switch": {},
     "button": {
+      "check_updates": {
+        "default": "mdi:cloud-search"
+      },
       "restart": {
         "default": "mdi:restart"
       }

@@ -154,9 +154,6 @@
       "health": {
         "name": "Salud"
       },
-      "image": {
-        "name": "Imagen"
-      },
       "status": {
         "name": "Estado"
       },
@@ -196,26 +193,27 @@
         "name": "Limpieza de imágenes"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Contenedor"
-      },
-      "stack": {
-        "name": "Stack"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Reiniciar"
-      },
       "check_updates": {
         "name": "Comprobar actualizaciones de imágenes"
+      },
+      "restart": {
+        "name": "Reiniciar"
       }
     },
     "update": {
       "image_update": {
         "name": "Actualización de imagen"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Acción fallida: {error}"
+    },
+    "container_not_found": {
+      "message": "Contenedor no encontrado — puede haber sido eliminado"
     }
   }
 }

@@ -154,9 +154,6 @@
       "health": {
         "name": "Helse"
       },
-      "image": {
-        "name": "Image"
-      },
       "status": {
         "name": "Status"
       },
@@ -196,26 +193,27 @@
         "name": "Rydding av images"
       }
     },
-    "switch": {
-      "running": {
-        "name": "Beholder"
-      },
-      "stack": {
-        "name": "Stack"
-      }
-    },
+    "switch": {},
     "button": {
-      "restart": {
-        "name": "Start på nytt"
-      },
       "check_updates": {
         "name": "Se etter image-oppdateringer"
+      },
+      "restart": {
+        "name": "Start på nytt"
       }
     },
     "update": {
       "image_update": {
         "name": "Image-oppdatering"
       }
+    }
+  },
+  "exceptions": {
+    "action_failed": {
+      "message": "Handlingen mislyktes: {error}"
+    },
+    "container_not_found": {
+      "message": "Container ikke funnet — den kan ha blitt fjernet"
     }
   }
 }

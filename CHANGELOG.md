@@ -2,6 +2,182 @@
 
 ## [Unreleased]
 
+## [1.7.0] — TBD
+
+### Maintenance
+
+- Remove `"_image"` from `_suffixes` in `_migrate_container_device_identifiers`
+  (`__init__.py`). Kept through 1.6.x to clean up stale image entities on
+  upgrade; no longer needed in 1.7.0.
+
+## [1.6.0] — 2026-05-22
+
+> **Action recommended for all existing users:** After upgrading to 1.6.0,
+> go to **Settings → Entities**, filter by the Dockhand integration, select
+> all entities, open the **⋮ menu**, and choose **"Recreate entity IDs of
+> selected"**. This refreshes all entity_ids to the new naming convention
+> (see *Entity naming redesign* below). Without this step, new entities
+> (e.g. from new containers or stacks) will use the new convention while
+> existing entities keep their old ids, causing inconsistency.
+>
+> **Note:** Recreating entity_ids will temporarily break any dashboards,
+> automations, or templates that reference the old entity_ids. Update those
+> references after running the recreate step. The change is a one-time
+> migration — entity_ids are stable after this point.
+
+**Additional breaking changes** — see full notes below.
+
+### Migration
+
+**Container image sensor removed.** If you had manually enabled the per-container
+`Image` sensor (disabled by default), it will disappear after upgrading. The same
+value is available as the `image` attribute on the container's `State` sensor:
+
+```yaml
+{{ state_attr('sensor.mycontainer_state', 'image') }}
+```
+
+**Container health sensor now enabled by default.** Containers with a Docker
+healthcheck configured will now have their `Health` sensor enabled. Note: if
+you upgraded from an earlier version, already-registered health sensors will
+not be auto-enabled — enable them once manually in Settings → Entities. New
+installations and new containers will have the sensor enabled automatically.
+
+**Activity events sensor state class changed.** Changed from `TOTAL_INCREASING`
+to `MEASUREMENT` (disabled by default). Existing long-term statistics may show
+a chart discontinuity at the upgrade point.
+
+**Restart button entity_ids renamed** ([#8](https://github.com/raetha/ha-dockhand/issues/8)).
+Container restart buttons are now `button.<env>_containers_<name>_restart` and
+stack restart buttons are `button.<env>_stacks_<name>_restart`. See **Entity
+naming redesign** below for full details and migration instructions.
+
+### Entity naming redesign ([#8](https://github.com/raetha/ha-dockhand/issues/8))
+
+All container, stack, image, network, and volume entity_ids now include the
+object type as a segment, making them unambiguous without looking up which
+device they belong to.
+
+**New convention: `<platform>.<env>_<type>_<name>_<attribute>`**
+
+| Entity | Old entity_id | New entity_id |
+|---|---|---|
+| Container state | `sensor.myenv_mycontainer_state` | `sensor.myenv_containers_mycontainer_state` |
+| Container health | `sensor.myenv_mycontainer_health` | `sensor.myenv_containers_mycontainer_health` |
+| Container switch | `switch.myenv_mycontainer` | `switch.myenv_containers_mycontainer` |
+| Container restart | `button.myenv_mycontainer_restart` | `button.myenv_containers_mycontainer_restart` |
+| Container update | `update.myenv_mycontainer_image_update` | `update.myenv_containers_mycontainer_image_update` |
+| Stack status | `sensor.myenv_mystack_status` | `sensor.myenv_stacks_mystack_status` |
+| Stack count | `sensor.myenv_mystack_containers` | `sensor.myenv_stacks_mystack_containers` |
+| Stack switch | `switch.myenv_mystack` | `switch.myenv_stacks_mystack` |
+| Stack restart | `button.myenv_mystack_restart` | `button.myenv_stacks_mystack_restart` |
+| Image | `sensor.mycontainer` | `sensor.myenv_images_mycontainer` |
+| Network | `sensor.mynetwork` | `sensor.myenv_networks_mynetwork` |
+| Volume | `sensor.myvolume` | `sensor.myenv_volumes_myvolume` |
+
+Env-level entities (CPU, memory, container count, etc.) and schedule entities
+are unchanged.
+
+**What drives the change:** Container and stack devices are now named
+`""{Env} – Containers – {name}""` and `"{Env} – Stacks – {name}"`. HA slugifies
+these device names to form the entity_id prefix. Image/network/volume sensors
+now use `has_entity_name = True` so their group device names
+(`"{Env} – Images"`, etc.) prefix their entity_ids. Container and stack switches
+are now primary entities with no name suffix — the device name carries full
+context (`switch.myenv_containers_mycontainer` rather than
+`switch.myenv_mycontainer`), following HA convention for the principal
+on/off entity of a device.
+
+**Migration:** Entity_ids are not automatically migrated — unique_ids are stable
+so no data is lost. To refresh entity_ids to the new convention: go to
+**Settings → Entities**, filter by the Dockhand integration, select all
+entities, open the **⋮ menu**, and choose **"Recreate entity IDs of selected"**.
+Update any automations or templates that reference old entity_ids after the
+refresh.
+
+### Changed
+
+- **Device registration consolidated.** All `async_get_or_create` calls
+  previously duplicated between `__init__.py` and `sensor.py` are now
+  exclusively in `helpers.py` via `_ensure_env_devices` and
+  `_ensure_hub_devices`. A side-effect of the duplication was the
+  environment hub device being registered without `entry_type=SERVICE` in one
+  path, causing it to appear as physical hardware in the HA device registry.
+- **Compose label check centralised.** The inline `com.docker.compose.project`
+  label extraction appeared in six places across five files. Replaced with a
+  single `_compose_project(container)` helper in `helpers.py`.
+- **Container health sensor** is now enabled by default. It is only ever created
+  when the container has a Docker healthcheck, so it is never
+  permanently unavailable.
+- **Containers group device** (`<Environment> – Containers`) is now removed when
+  all containers in an online environment are Compose-managed. Previously the
+  empty group device persisted indefinitely.
+- `docs/device_class_matrix.md` fully updated: correct model names, all entity
+  types, enabled/disabled defaults, three-coordinator architecture.
+
+### Fixed
+
+- **Action exception handling:** all action methods in `button.py`, `switch.py`,
+  and `update.py` now raise `HomeAssistantError` with a translatable message on
+  failure. Previously, raw API exceptions propagated unhandled. Two exception
+  translation keys added to `strings.json`: `action_failed` and
+  `container_not_found`.
+- **Environment deletion left container and stack devices orphaned**
+  ([#9](https://github.com/raetha/ha-dockhand/issues/9)). When a Dockhand
+  environment was deleted, the env hub and group devices were correctly removed
+  but container and stack child devices and their entities were left behind. The
+  cleanup guard `env_id in online_env_ids` evaluated to false for deleted
+  environments (which are absent from both `env_ids` and `online_env_ids`), so
+  cleanup was skipped. The fix checks `env_id not in env_ids` first (deleted →
+  remove unconditionally) before applying the offline guard (exists but offline →
+  preserve). The same two-case logic is applied to image, network, volume, and
+  update entity cleanup, and the `slow_valid` guard no longer blocks
+  deleted-environment entity removal.
+- **Restart button entity_id collision when container and stack share a name**
+  ([#8](https://github.com/raetha/ha-dockhand/issues/8)). When a container and
+  stack shared the same name, both restart buttons produced the same entity_id
+  (e.g. `button.myenv_mycontainer_restart` for both), with HA assigning `_2` to
+  the second. Resolved by the entity naming redesign — container and stack devices
+  now carry the type in their name (`myenv – Containers – mycontainer` vs
+  `myenv – Stacks – mycontainer`), so the entity_ids are inherently distinct
+  (`button.myenv_containers_mycontainer_restart` vs
+  `button.myenv_stacks_mycontainer_restart`) without any translation key changes.
+- **Activity events sensor** used `TOTAL_INCREASING`, causing HA to log errors
+  when the Docker daemon restarted and the event count reset. Changed to
+  `MEASUREMENT`.
+- **Schedule device naming.** Schedule devices were previously named only by
+  their task name, so they did not group together visually in the HA device
+  list. Now named `"Dockhand – Schedules – {task name}"` so all schedule
+  devices sort and group together. Entity_ids become
+  `sensor.dockhand_schedules_{name}_next_run` etc. HA intentionally displays
+  the integration icon for all update entities — custom icon entries have no
+  effect and are contrary to HA quality scale guidance.
+- `icons.json` was missing an entry for the `check_updates` button. Added
+  `mdi:cloud-search`.
+- Five sensor classes had docstrings placed after a class attribute, so Python
+  did not treat them as class docstrings. Corrected.
+- README: model names in device diagram corrected (`Container`, `Stack`);
+  stale credential wording removed; `dockhand.hidden=true` container note added;
+  `Health` entity description updated.
+
+### Removed
+
+- **Container image sensor** (`DockhandContainerImageSensor`). The image name
+  is already the `image` attribute on each container's `State` sensor.
+- Dead helpers `_container_group_device()` and `_stack_group_device()` from
+  `helpers.py` (defined but never called).
+- `image` translation key from `strings.json`, all translation files, and
+  `icons.json`.
+
+### Tests
+
+- `test_entities.py` refactored: 8 classes → 15, 89 tests → 119. Logically
+  unrelated tests moved out of `TestSlowSensors` into their own classes.
+- New coverage: `HomeAssistantError` propagation for all action methods,
+  `_compose_project` helper (6 cases), `_container_has_healthcheck` (7 cases),
+  container state `image` attribute, stack status `container_count` attribute.
+- Test count: 222 → 254.
+
 ## [1.5.1] — 2026-05-19
 
 ### Fixed
@@ -193,7 +369,9 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.5.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/raetha/ha-dockhand/compare/v1.6.0...v1.7.0
+[1.6.0]: https://github.com/raetha/ha-dockhand/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/raetha/ha-dockhand/compare/v1.5.0...v1.5.1
 [1.5.0]: https://github.com/raetha/ha-dockhand/compare/v1.4.1...v1.5.0
 [1.4.1]: https://github.com/raetha/ha-dockhand/compare/v1.4.0...v1.4.1
