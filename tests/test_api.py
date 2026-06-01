@@ -9,17 +9,9 @@ Covers: _request (all paths), async_probe, API endpoint URL construction,
 from __future__ import annotations
 
 import asyncio
-import os
-import sys
 import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, os.path.dirname(__file__))
-import ha_stubs as stubs
-
-stubs.install()
 
 from custom_components.dockhand.api import (
     DockhandAuthError,

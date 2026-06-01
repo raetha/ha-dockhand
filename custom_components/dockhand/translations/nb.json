@@ -168,6 +168,30 @@
       },
       "last_status": {
         "name": "Siste status"
+      },
+      "container_cpu_percent": {
+        "name": "CPU-bruk"
+      },
+      "container_memory_usage": {
+        "name": "Minnebruk"
+      },
+      "container_memory_percent": {
+        "name": "Minnebruk %"
+      },
+      "container_memory_limit": {
+        "name": "Minnegrense"
+      },
+      "container_network_rx": {
+        "name": "Nettverk inn"
+      },
+      "container_network_tx": {
+        "name": "Nettverk ut"
+      },
+      "container_block_read": {
+        "name": "Disk lese"
+      },
+      "container_block_write": {
+        "name": "Disk skrive"
       }
     },
     "binary_sensor": {

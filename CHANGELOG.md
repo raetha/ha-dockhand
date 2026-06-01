@@ -2,13 +2,53 @@
 
 ## [Unreleased]
 
-## [1.7.0] — TBD
+## [1.8.0] — TBD
 
 ### Maintenance
 
 - Remove `"_image"` from `_suffixes` in `_migrate_container_device_identifiers`
-  (`__init__.py`). Kept through 1.6.x to clean up stale image entities on
-  upgrade; no longer needed in 1.7.0.
+  (`__init__.py`). Kept through 1.6.x to allow time for stale image entities
+  to be cleaned up on upgrade. Deferred from 1.7.0 to give users more time
+  given the close release cadence.
+
+## [1.7.0] — 2026-06-01
+
+### Added
+
+- **Container resource stats sensors** — eight new diagnostic sensors are now
+  created for every container, all disabled by default. Enable only the ones
+  you care about; enabled/disabled state survives container recreation
+  (entity registry is keyed on `env_id` + container name, both stable).
+  - **CPU usage** (`%`) — current CPU as a percentage of total host capacity
+  - **Memory usage** (bytes, displayed in MiB) — effective memory in use
+    (cache excluded); includes `memory_cache_bytes` as a state attribute
+  - **Memory usage %** — memory used relative to the configured limit (or host
+    RAM when no limit is set)
+  - **Memory limit** (bytes, displayed in MiB) — configured container memory
+    limit, or host RAM when unconstrained; useful when explicit limits are set
+  - **Network in / Network out** (bytes, displayed in MiB) — cumulative bytes
+    received/transmitted; resets to zero on container restart
+    (`TOTAL_INCREASING` state class)
+  - **Disk read / Disk write** (bytes, displayed in MiB) — cumulative block
+    I/O; resets on restart (`TOTAL_INCREASING` state class)
+
+  Stats are fetched via a single bulk API call per environment
+  (`GET /api/containers/stats?env=N`) on every fast-coordinator cycle (60 s
+  default), rather than one call per container. Stopped, exited, or created
+  containers are absent from the stats response and show as unavailable until
+  running again.
+
+  Resolves https://github.com/raetha/ha-dockhand/issues/10
+
+### Maintenance
+
+- Migrate test suite from `ha_stubs.py` to `pytest-homeassistant-custom-component`
+  (PHCC 0.13.333, pinned to HA 2026.5.4). Eliminates 700-line hand-rolled stub
+  layer; all tests now run against real HA internals. `test_api.py` and
+  `test_workflows.py` remain HA-independent unit tests runnable anywhere.
+  `pytest.ini` updated with `asyncio_mode = auto`. Full suite requires Python
+  3.14.2+ — run locally via `pytest tests/` in a PHCC venv (see
+  `docs/development.md`), or rely on CI for authoritative results.
 
 ## [1.6.0] — 2026-05-22
 

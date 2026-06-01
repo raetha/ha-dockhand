@@ -168,6 +168,30 @@
       },
       "last_status": {
         "name": "上次状态"
+      },
+      "container_cpu_percent": {
+        "name": "CPU使用率"
+      },
+      "container_memory_usage": {
+        "name": "内存使用量"
+      },
+      "container_memory_percent": {
+        "name": "内存使用率"
+      },
+      "container_memory_limit": {
+        "name": "内存限制"
+      },
+      "container_network_rx": {
+        "name": "网络接收"
+      },
+      "container_network_tx": {
+        "name": "网络发送"
+      },
+      "container_block_read": {
+        "name": "磁盘读取"
+      },
+      "container_block_write": {
+        "name": "磁盘写入"
       }
     },
     "binary_sensor": {

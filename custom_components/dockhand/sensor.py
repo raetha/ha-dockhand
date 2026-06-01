@@ -54,7 +54,7 @@ def _parse_dt(value: str | int | float | None) -> datetime | None:
         if isinstance(value, (int, float)):
             # Use stdlib directly — avoids HA utility dependency.
 
-            return datetime.utcfromtimestamp(float(value)).replace(tzinfo=UTC)
+            return datetime.fromtimestamp(float(value), tz=UTC)
         parsed = dt_util.parse_datetime(str(value))
         if parsed is not None and parsed.tzinfo is None:
             parsed = dt_util.as_utc(parsed)
@@ -141,6 +141,34 @@ async def async_setup_entry(
                                 fast, env_id, env_name, base_url, container
                             )
                         )
+                    # Resource stats sensors — created for every container but
+                    # disabled by default.  Users enable the ones they care about.
+                    new += [
+                        DockhandContainerCpuSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerMemoryUsageSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerMemoryPercentSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerMemoryLimitSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerNetworkRxSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerNetworkTxSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerBlockReadSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                        DockhandContainerBlockWriteSensor(
+                            fast, env_id, env_name, base_url, container
+                        ),
+                    ]
 
             # Per-stack sensors
             for stack in env_data.get("stacks") or []:
@@ -345,6 +373,21 @@ class BaseFastContainerSensor(CoordinatorEntity[DockhandFastCoordinator], Sensor
             if c.get("name") == self._container_name:
                 return c
         return None
+
+    def _container_stats(self) -> dict | None:
+        """Return the latest stats snapshot for this container, or None.
+
+        Returns None when the container is stopped, exited, or created —
+        the stats endpoint omits non-running containers entirely.  Sensor
+        native_value should return None in that case so HA marks the entity
+        unavailable rather than showing a stale or zero reading.
+        """
+        return (
+            (self.coordinator.data or {})
+            .get(self._env_id, {})
+            .get("container_stats", {})
+            .get(self._container_name)
+        )
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -743,6 +786,295 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
 # The "_image" suffix is kept in __init__._migrate_container_device_identifiers
 # until 1.7.0 so that stale entities from users who had enabled the sensor
 # are cleaned up automatically on upgrade. Remove it then.
+
+
+# --------------------------------------------------------------------------- #
+# Fast coordinator — container stats sensors
+#
+# All 8 sensors are created for every container but start disabled.
+# Users enable only the ones they care about — enabled/disabled state
+# survives container recreation because it is keyed on unique_id, which
+# is derived from env_id + container name (both stable across restarts).
+#
+# Sensors return None (→ unavailable) when a container is stopped or
+# exited; the stats endpoint omits non-running containers entirely.
+#
+# networkRx/Tx and blockRead/Write are cumulative counters that reset to
+# zero when the container restarts.  TOTAL_INCREASING state class lets HA
+# handle these correctly in long-term statistics — a reset simply begins
+# a new rising segment rather than being treated as an error.
+# --------------------------------------------------------------------------- #
+
+
+class DockhandContainerCpuSensor(BaseFastContainerSensor):
+    """Container CPU usage as a percentage of total host CPU capacity."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = "%"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "container_cpu_percent"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_cpu_percent"
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        cpu = s.get("cpuPercent")
+        return round(cpu, 2) if cpu is not None else None
+
+
+class DockhandContainerMemoryUsageSensor(BaseFastContainerSensor):
+    """Container effective memory usage in bytes (cache excluded)."""
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "container_memory_usage"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_memory_usage"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        usage = s.get("memoryUsage")
+        return int(usage) if usage is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        s = self._container_stats()
+        if not s:
+            return {}
+        cache = s.get("memoryCache")
+        return {"memory_cache_bytes": int(cache) if cache is not None else None}
+
+
+class DockhandContainerMemoryPercentSensor(BaseFastContainerSensor):
+    """Container memory usage as a percentage of its configured limit."""
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = "%"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "container_memory_percent"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_memory_percent"
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        pct = s.get("memoryPercent")
+        return round(pct, 2) if pct is not None else None
+
+
+class DockhandContainerMemoryLimitSensor(BaseFastContainerSensor):
+    """Container memory limit in bytes.
+
+    When no explicit limit is set, Dockhand reports the total host RAM.
+    """
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "container_memory_limit"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_memory_limit"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        limit = s.get("memoryLimit")
+        return int(limit) if limit is not None else None
+
+
+class DockhandContainerNetworkRxSensor(BaseFastContainerSensor):
+    """Cumulative bytes received by the container since last restart."""
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_translation_key = "container_network_rx"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_network_rx"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        rx = s.get("networkRx")
+        return int(rx) if rx is not None else None
+
+
+class DockhandContainerNetworkTxSensor(BaseFastContainerSensor):
+    """Cumulative bytes transmitted by the container since last restart."""
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_translation_key = "container_network_tx"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_network_tx"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        tx = s.get("networkTx")
+        return int(tx) if tx is not None else None
+
+
+class DockhandContainerBlockReadSensor(BaseFastContainerSensor):
+    """Cumulative bytes read from block devices since last restart."""
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_translation_key = "container_block_read"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_block_read"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        br = s.get("blockRead")
+        return int(br) if br is not None else None
+
+
+class DockhandContainerBlockWriteSensor(BaseFastContainerSensor):
+    """Cumulative bytes written to block devices since last restart."""
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_translation_key = "container_block_write"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+    ) -> None:
+        super().__init__(coordinator, env_id, env_name, base_url, container)
+        self._attr_unique_id = (
+            f"dockhand_container_{env_id}_{self._container_name}_block_write"
+        )
+
+    @property
+    def native_value(self) -> int | None:
+        s = self._container_stats()
+        if s is None:
+            return None
+        bw = s.get("blockWrite")
+        return int(bw) if bw is not None else None
 
 
 # --------------------------------------------------------------------------- #

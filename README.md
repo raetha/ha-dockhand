@@ -110,7 +110,14 @@ myenv                                       ← Environment device
 │       ├── sensor.State
 │       ├── sensor.Health              ← only if container has a healthcheck
 │       ├── button.Restart
-│       └── update.Image update        ← if container updates enabled
+│       ├── update.Image update        ← if container updates enabled
+│       └── (diagnostic, disabled by default)
+│           ├── sensor.CPU usage
+│           ├── sensor.Memory usage
+│           ├── sensor.Memory usage %
+│           ├── sensor.Memory limit
+│           ├── sensor.Network in / Network out
+│           └── sensor.Disk read / Disk write
 ├── myenv – Stacks                          ← Group device
 │   └── myenv – Stacks – mystack      ← Stack device
 │       ├── switch  (primary — no suffix)
@@ -164,6 +171,19 @@ If you're migrating from the Portainer integration, this integration follows the
 | Container | switch | turn on = start, turn off = stop |
 | Restart | button | restarts running container (use Container to start stopped) |
 | Image update | update | Shows when a newer image digest is available. Install triggers a pull-and-recreate via Dockhand's `batch-update` API. Note: vulnerability scanning is not applied by this API endpoint — a warning is shown in the entity when scanning is enabled on the environment. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
+
+The following **diagnostic sensors** are also created for every container but are **disabled by default**. Enable the ones you want individually in **Settings → Entities**. They show as unavailable when the container is stopped or exited.
+
+| Entity | Type | Unit | Notes |
+|---|---|---|---|
+| CPU usage | sensor | % | Percentage of total host CPU capacity |
+| Memory usage | sensor | bytes (displayed in MiB) | Effective memory in use; page cache excluded. Includes `memory_cache_bytes` state attribute |
+| Memory usage % | sensor | % | Memory used relative to configured limit (or host RAM if no limit is set) |
+| Memory limit | sensor | bytes (displayed in MiB) | Configured container memory limit, or host RAM when unconstrained |
+| Network in | sensor | bytes (displayed in MiB) | Cumulative bytes received; resets to 0 on container restart |
+| Network out | sensor | bytes (displayed in MiB) | Cumulative bytes transmitted; resets to 0 on container restart |
+| Disk read | sensor | bytes (displayed in MiB) | Cumulative block I/O reads; resets to 0 on container restart |
+| Disk write | sensor | bytes (displayed in MiB) | Cumulative block I/O writes; resets to 0 on container restart |
 
 ### Stack (always on, 60 s)
 | Entity | Type | Notes |
@@ -239,8 +259,9 @@ Dockhand uses three polling coordinators with independent intervals:
 
 **Fast coordinator** (default 60 s, configurable) fetches:
 - Environment dashboard stats for all environments in a single API call (CPU, memory, container/stack/image/volume/network counts)
-- Full container list with state, image, and resource details
+- Full container list with state, image, and label details
 - Full stack list with status and container counts
+- Container resource stats for all running containers per environment in a single bulk API call (`GET /api/containers/stats?env=N`) — one call per environment regardless of container count. Stopped, exited, or created containers are absent from this response; their stats sensors show unavailable until running again
 
 **Slow coordinator** (default 600 s, configurable) fetches:
 - Per-environment detailed data for optional features: Images, Networks, Volumes

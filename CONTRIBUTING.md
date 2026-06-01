@@ -11,7 +11,7 @@ than the versions listed here.
 
 | Project | Last reviewed | Where to check |
 |---|---|---|
-| Home Assistant Core | 2026.3 | https://github.com/home-assistant/core/releases |
+| Home Assistant Core | 2026.3 (minimum); tested against 2026.5.4 | https://github.com/home-assistant/core/releases |
 | Dockhand | v1.0.29 | https://github.com/Finsys/dockhand/releases |
 
 Update this table (and the corresponding project memory entry) after each
@@ -20,13 +20,20 @@ review session.
 ## Development setup
 
 1. Clone the repository
-2. Install test dependencies: `pip install ruff` (requires Python 3.14+)
-3. Run the full suite (lint + tests): `python3 tests/run_tests.py`
-4. Or use the venv script: `bash scripts/run_tests.sh`
+2. Install test dependencies in a Python 3.14.2+ venv:
+   ```bash
+   python3.14 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements_test.txt
+   ```
+3. Run the full suite (lint + tests): `bash scripts/run_tests.sh --full --venv .venv`
+4. Or if the venv is already active: `bash scripts/run_tests.sh --full`
+
+See [docs/development.md](docs/development.md) for full setup details, Docker alternative, and sandbox-mode usage.
 
 ## Before submitting a PR
 
-- All tests pass (`python3 tests/run_tests.py`)
+- All tests pass (`bash scripts/run_tests.sh --full`)
 - Ruff reports no lint issues (`ruff check custom_components/dockhand/`)
 - Ruff formatting is clean (`ruff format --check custom_components/dockhand/`)
 - If adding a new feature, update `CHANGELOG.md` under the current unreleased section
@@ -71,7 +78,10 @@ A few formatting rules to keep in mind:
 
 ## Testing approach
 
-The test suite uses Python's stdlib `unittest` with a lightweight `ha_stubs` module
-that provides accurate minimal stubs for all HA classes used by the integration.
-No Home Assistant installation or external test framework is required — tests run
-in plain Python with no network access needed.
+The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHCC), which provides the same testing infrastructure as Home Assistant core. Tests run against real HA internals pinned to a specific release (see `requirements_test.txt`).
+
+Two files run on any Python version without HA installed:
+- `test_api.py` — tests the HTTP client logic directly
+- `test_workflows.py` — static checks on the GitHub Actions workflow files
+
+All other test files require Python 3.14.2+ and PHCC. The CI workflow runs the full suite on every push. Coverage spans all API methods, all config flow steps and options flow, all three coordinators, all entity classes and platforms, all device registration helpers, all URL builders, update entity install/release_notes logic, and setup/unload lifecycle.

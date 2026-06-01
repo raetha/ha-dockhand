@@ -6,26 +6,16 @@ Covers: native_value, extra_state_attributes, is_on, entity metadata
 parentage, action method calls, and HomeAssistantError propagation.
 
 Entities are instantiated directly with mock coordinators — no full HA
-platform setup required. All HA classes come from ha_stubs.
+platform setup required.
 """
-import asyncio
-import os
-import sys
+import pytest
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS = os.path.join(ROOT, "tests")
-sys.path.insert(0, ROOT)
-sys.path.insert(0, TESTS)
-
-import ha_stubs as stubs
-
-stubs.install()
-from ha_stubs import EntityCategory, HomeAssistantError
+from homeassistant.const import EntityCategory
+from homeassistant.exceptions import HomeAssistantError
 
 DOMAIN = "dockhand"
-run = asyncio.run
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -164,6 +154,7 @@ def _fast_coord(env_data=None):
             "stats": STATS,
             "containers": [CONTAINER],
             "stacks": [STACK],
+            "container_stats": {},
         }
     }
     coord.last_update_success = True
@@ -197,7 +188,15 @@ def _slow_coord(env_data=None, schedules=None):
 
 def _sensor_classes():
     from custom_components.dockhand.sensor import (
+        DockhandContainerBlockReadSensor,
+        DockhandContainerBlockWriteSensor,
+        DockhandContainerCpuSensor,
         DockhandContainerHealthSensor,
+        DockhandContainerMemoryLimitSensor,
+        DockhandContainerMemoryPercentSensor,
+        DockhandContainerMemoryUsageSensor,
+        DockhandContainerNetworkRxSensor,
+        DockhandContainerNetworkTxSensor,
         DockhandContainerStateSensor,
         DockhandEnvActivityEventsSensor,
         DockhandEnvBuildCacheSensor,
@@ -370,7 +369,7 @@ class TestEnvActivitySensor(unittest.TestCase):
         self.assertFalse(self._make()._attr_entity_registry_enabled_default)
 
     def test_state_class_is_measurement(self):
-        from ha_stubs import SensorStateClass
+        from homeassistant.components.sensor import SensorStateClass
         sensor = self._make()
         self.assertEqual(sensor._attr_state_class, SensorStateClass.MEASUREMENT)
 
@@ -434,11 +433,11 @@ class TestContainerSensors(unittest.TestCase):
 
     def test_health_enabled_by_default(self):
         """Health sensor is enabled by default; only created when a healthcheck exists."""
-        self.assertTrue(self.health._attr_entity_registry_enabled_default)
+        self.assertTrue(self.health.entity_registry_enabled_default)
 
     def test_state_none_when_container_gone(self):
         coord = MagicMock()
-        coord.data = {ENV_ID: {"stats": STATS, "containers": [], "stacks": []}}
+        coord.data = {ENV_ID: {"stats": STATS, "containers": [], "stacks": [], "container_stats": {}}}
         sc = _sensor_classes()
         state = sc["DockhandContainerStateSensor"](
             coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
@@ -459,8 +458,143 @@ class TestContainerSensors(unittest.TestCase):
 
 
 # ===========================================================================
-# Stack sensors
+# Container stats sensors
 # ===========================================================================
+
+CONTAINER_STATS = {
+    "name": "nginx",
+    "cpuPercent": 12.34,
+    "memoryUsage": 157286400,   # 150 MB
+    "memoryRaw":   178257920,   # 170 MB
+    "memoryCache":  20971520,   #  20 MB
+    "memoryLimit": 16764731392, # ~16 GB (host RAM, no limit set)
+    "memoryPercent": 0.94,
+    "networkRx":  83886080,     #  80 MB
+    "networkTx": 104857600,     # 100 MB
+    "blockRead":  52428800,     #  50 MB
+    "blockWrite":  31457280,    #  30 MB
+}
+
+
+def _stats_coord(stats=None, running=True):
+    """Fast coordinator with optional container_stats entry for 'nginx'."""
+    coord = MagicMock()
+    coord.data = {
+        ENV_ID: {
+            "stats": STATS,
+            "containers": [CONTAINER] if running else [],
+            "stacks": [],
+            "container_stats": {"nginx": stats or CONTAINER_STATS} if running else {},
+        }
+    }
+    coord.last_update_success = True
+    coord.async_request_refresh = AsyncMock()
+    return coord
+
+
+class TestContainerStatsSensors(unittest.TestCase):
+    def setUp(self):
+        sc = _sensor_classes()
+        coord = _stats_coord()
+        args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+        self.cpu = sc["DockhandContainerCpuSensor"](*args)
+        self.mem_usage = sc["DockhandContainerMemoryUsageSensor"](*args)
+        self.mem_pct = sc["DockhandContainerMemoryPercentSensor"](*args)
+        self.mem_limit = sc["DockhandContainerMemoryLimitSensor"](*args)
+        self.net_rx = sc["DockhandContainerNetworkRxSensor"](*args)
+        self.net_tx = sc["DockhandContainerNetworkTxSensor"](*args)
+        self.blk_read = sc["DockhandContainerBlockReadSensor"](*args)
+        self.blk_write = sc["DockhandContainerBlockWriteSensor"](*args)
+        self.all_sensors = [
+            self.cpu, self.mem_usage, self.mem_pct, self.mem_limit,
+            self.net_rx, self.net_tx, self.blk_read, self.blk_write,
+        ]
+
+    # -- native_value correctness --------------------------------------------
+
+    def test_cpu_value(self):
+        self.assertEqual(self.cpu.native_value, 12.34)
+
+    def test_memory_usage_value_raw_bytes(self):
+        self.assertEqual(self.mem_usage.native_value, 157_286_400)
+
+    def test_memory_percent_value(self):
+        self.assertEqual(self.mem_pct.native_value, 0.94)
+
+    def test_memory_limit_value_raw_bytes(self):
+        self.assertEqual(self.mem_limit.native_value, 16_764_731_392)
+
+    def test_network_rx_value_raw_bytes(self):
+        self.assertEqual(self.net_rx.native_value, 83_886_080)
+
+    def test_network_tx_value_raw_bytes(self):
+        self.assertEqual(self.net_tx.native_value, 104_857_600)
+
+    def test_block_read_value_raw_bytes(self):
+        self.assertEqual(self.blk_read.native_value, 52_428_800)
+
+    def test_block_write_value_raw_bytes(self):
+        self.assertEqual(self.blk_write.native_value, 31_457_280)
+
+    # -- memory_cache_bytes attribute on memory usage sensor ----------------
+
+    def test_memory_usage_cache_attribute(self):
+        attrs = self.mem_usage.extra_state_attributes
+        self.assertIn("memory_cache_bytes", attrs)
+        self.assertEqual(attrs["memory_cache_bytes"], 20_971_520)
+
+    # -- unavailable when container is stopped ------------------------------
+
+    def test_all_sensors_none_when_container_stopped(self):
+        """All stats sensors return None when the container is not running."""
+        coord = _stats_coord(running=False)
+        sc = _sensor_classes()
+        args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+        sensors = [
+            sc["DockhandContainerCpuSensor"](*args),
+            sc["DockhandContainerMemoryUsageSensor"](*args),
+            sc["DockhandContainerMemoryPercentSensor"](*args),
+            sc["DockhandContainerMemoryLimitSensor"](*args),
+            sc["DockhandContainerNetworkRxSensor"](*args),
+            sc["DockhandContainerNetworkTxSensor"](*args),
+            sc["DockhandContainerBlockReadSensor"](*args),
+            sc["DockhandContainerBlockWriteSensor"](*args),
+        ]
+        for s in sensors:
+            self.assertIsNone(s.native_value, msg=f"{type(s).__name__} should be None")
+
+    # -- entity metadata -----------------------------------------------------
+
+    def test_all_disabled_by_default(self):
+        for s in self.all_sensors:
+            self.assertFalse(
+                s._attr_entity_registry_enabled_default,
+                msg=f"{type(s).__name__} should be disabled by default",
+            )
+
+    def test_all_diagnostic_category(self):
+        for s in self.all_sensors:
+            self.assertEqual(
+                s._attr_entity_category,
+                EntityCategory.DIAGNOSTIC,
+                msg=f"{type(s).__name__} should be DIAGNOSTIC",
+            )
+
+    def test_all_have_entity_name(self):
+        for s in self.all_sensors:
+            self.assertTrue(s._attr_has_entity_name)
+
+    def test_unique_ids_all_distinct(self):
+        uids = [s._attr_unique_id for s in self.all_sensors]
+        self.assertEqual(len(uids), len(set(uids)), "All unique_ids must be distinct")
+
+    def test_unique_ids_contain_container_name(self):
+        for s in self.all_sensors:
+            self.assertIn(
+                CONTAINER["name"],
+                s._attr_unique_id,
+                msg=f"{type(s).__name__} unique_id missing container name",
+            )
 
 
 class TestStackSensors(unittest.TestCase):
@@ -756,7 +890,7 @@ class TestBinarySensors(unittest.TestCase):
     def test_online_sensor_enabled_by_default(self):
         bs = _bs_classes()
         s = bs["DockhandEnvOnlineSensor"](_fast_coord(), ENV_ID, BASE_URL)
-        self.assertTrue(s._attr_entity_registry_enabled_default)
+        self.assertTrue(s.entity_registry_enabled_default)
 
 
 # ===========================================================================
@@ -764,7 +898,7 @@ class TestBinarySensors(unittest.TestCase):
 # ===========================================================================
 
 
-class TestSwitches(unittest.TestCase):
+class TestSwitches:
     def _container_switch(self, container=None, coord=None):
         sw = _switch_classes()
         c = container or CONTAINER
@@ -780,84 +914,84 @@ class TestSwitches(unittest.TestCase):
         )
 
     def test_container_on_when_running(self):
-        self.assertTrue(self._container_switch().is_on)
+        assert self._container_switch().is_on
 
     def test_container_off_when_stopped(self):
         stopped = {**CONTAINER, "state": "stopped"}
         coord = _fast_coord({"stats": STATS, "containers": [stopped], "stacks": []})
-        self.assertFalse(self._container_switch(stopped, coord).is_on)
+        assert not self._container_switch(stopped, coord).is_on
 
     def test_stack_on_when_running(self):
-        self.assertTrue(self._stack_switch().is_on)
+        assert self._stack_switch().is_on
 
     def test_stack_off_when_stopped(self):
         stopped = {**STACK, "status": "stopped"}
         coord = _fast_coord({"stats": STATS, "containers": [], "stacks": [stopped]})
-        self.assertFalse(self._stack_switch(stopped, coord).is_on)
+        assert not self._stack_switch(stopped, coord).is_on
 
-    def test_container_turn_on_calls_start(self):
+    async def test_container_turn_on_calls_start(self):
         switch = self._container_switch()
         switch._client = MagicMock()
         switch._client.async_start_container = AsyncMock()
-        run(switch.async_turn_on())
+        await switch.async_turn_on()
         switch._client.async_start_container.assert_called_once_with(
             ENV_ID, CONTAINER["id"]
         )
 
-    def test_container_turn_off_calls_stop(self):
+    async def test_container_turn_off_calls_stop(self):
         switch = self._container_switch()
         switch._client = MagicMock()
         switch._client.async_stop_container = AsyncMock()
-        run(switch.async_turn_off())
+        await switch.async_turn_off()
         switch._client.async_stop_container.assert_called_once_with(
             ENV_ID, CONTAINER["id"]
         )
 
-    def test_container_turn_on_raises_ha_error_on_api_failure(self):
+    async def test_container_turn_on_raises_ha_error_on_api_failure(self):
         switch = self._container_switch()
         switch._client = MagicMock()
         switch._client.async_start_container = AsyncMock(
             side_effect=Exception("network error")
         )
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(switch.async_turn_on())
-        self.assertEqual(ctx.exception.translation_key, "action_failed")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await switch.async_turn_on()
+        assert exc_info.value.translation_key == "action_failed"
 
-    def test_container_turn_off_raises_ha_error_on_api_failure(self):
+    async def test_container_turn_off_raises_ha_error_on_api_failure(self):
         switch = self._container_switch()
         switch._client = MagicMock()
         switch._client.async_stop_container = AsyncMock(
             side_effect=Exception("timeout")
         )
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(switch.async_turn_off())
-        self.assertEqual(ctx.exception.translation_key, "action_failed")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await switch.async_turn_off()
+        assert exc_info.value.translation_key == "action_failed"
 
-    def test_container_turn_on_raises_not_found_when_container_missing(self):
+    async def test_container_turn_on_raises_not_found_when_container_missing(self):
         """If the container is no longer in coordinator data, container_not_found is raised."""
         coord = _fast_coord({"stats": STATS, "containers": [], "stacks": []})
         switch = self._container_switch(coord=coord)
         switch._client = MagicMock()
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(switch.async_turn_on())
-        self.assertEqual(ctx.exception.translation_key, "container_not_found")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await switch.async_turn_on()
+        assert exc_info.value.translation_key == "container_not_found"
 
-    def test_stack_turn_on_calls_start(self):
+    async def test_stack_turn_on_calls_start(self):
         switch = self._stack_switch()
         switch._client = MagicMock()
         switch._client.async_start_stack = AsyncMock()
-        run(switch.async_turn_on())
+        await switch.async_turn_on()
         switch._client.async_start_stack.assert_called_once_with(
             ENV_ID, STACK["name"]
         )
 
-    def test_stack_turn_on_raises_ha_error_on_api_failure(self):
+    async def test_stack_turn_on_raises_ha_error_on_api_failure(self):
         switch = self._stack_switch()
         switch._client = MagicMock()
         switch._client.async_start_stack = AsyncMock(side_effect=Exception("down"))
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(switch.async_turn_on())
-        self.assertEqual(ctx.exception.translation_key, "action_failed")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await switch.async_turn_on()
+        assert exc_info.value.translation_key == "action_failed"
 
 
 # ===========================================================================
@@ -865,7 +999,7 @@ class TestSwitches(unittest.TestCase):
 # ===========================================================================
 
 
-class TestButtons(unittest.TestCase):
+class TestButtons:
     def _container_btn(self, coord=None):
         btn = _button_classes()
         b = btn["DockhandContainerRestartButton"](
@@ -879,47 +1013,47 @@ class TestButtons(unittest.TestCase):
             _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
         )
 
-    def test_container_restart_calls_api(self):
+    async def test_container_restart_calls_api(self):
         b = self._container_btn()
         b._client = MagicMock()
         b._client.async_restart_container = AsyncMock()
-        run(b.async_press())
+        await b.async_press()
         b._client.async_restart_container.assert_called_once_with(
             ENV_ID, CONTAINER["id"]
         )
 
-    def test_stack_restart_calls_api(self):
+    async def test_stack_restart_calls_api(self):
         b = self._stack_btn()
         b._client = MagicMock()
         b._client.async_restart_stack = AsyncMock()
-        run(b.async_press())
+        await b.async_press()
         b._client.async_restart_stack.assert_called_once_with(ENV_ID, STACK["name"])
 
-    def test_container_restart_raises_ha_error_on_api_failure(self):
+    async def test_container_restart_raises_ha_error_on_api_failure(self):
         b = self._container_btn()
         b._client = MagicMock()
         b._client.async_restart_container = AsyncMock(
             side_effect=Exception("connection refused")
         )
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(b.async_press())
-        self.assertEqual(ctx.exception.translation_key, "action_failed")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "action_failed"
 
-    def test_container_restart_raises_not_found_when_container_missing(self):
+    async def test_container_restart_raises_not_found_when_container_missing(self):
         coord = _fast_coord({"stats": STATS, "containers": [], "stacks": []})
         b = self._container_btn(coord=coord)
         b._client = MagicMock()
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(b.async_press())
-        self.assertEqual(ctx.exception.translation_key, "container_not_found")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "container_not_found"
 
-    def test_stack_restart_raises_ha_error_on_api_failure(self):
+    async def test_stack_restart_raises_ha_error_on_api_failure(self):
         b = self._stack_btn()
         b._client = MagicMock()
         b._client.async_restart_stack = AsyncMock(side_effect=Exception("refused"))
-        with self.assertRaises(HomeAssistantError) as ctx:
-            run(b.async_press())
-        self.assertEqual(ctx.exception.translation_key, "action_failed")
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "action_failed"
 
     def test_restart_buttons_are_config_category(self):
         coord = _fast_coord()
@@ -931,16 +1065,11 @@ class TestButtons(unittest.TestCase):
         s_btn = btn["DockhandStackRestartButton"](
             coord, client, ENV_ID, ENV_NAME, BASE_URL, STACK
         )
-        self.assertEqual(c_btn._attr_entity_category, EntityCategory.CONFIG)
-        self.assertEqual(s_btn._attr_entity_category, EntityCategory.CONFIG)
+        assert c_btn._attr_entity_category == EntityCategory.CONFIG
+        assert s_btn._attr_entity_category == EntityCategory.CONFIG
 
     def test_restart_buttons_both_use_restart_translation_key(self):
-        """Both use the same 'restart' key — no collision because device names now differ.
-
-        Container device: 'Forseti - Containers - nginx'
-        Stack device:     'Forseti - Stacks - nginx'
-        → entity_ids: button.forseti_containers_nginx_restart vs button.forseti_stacks_nginx_restart
-        """
+        """Both use the same 'restart' key — no collision because device names now differ."""
         coord = _fast_coord()
         client = MagicMock()
         btn = _button_classes()
@@ -950,26 +1079,24 @@ class TestButtons(unittest.TestCase):
         s_btn = btn["DockhandStackRestartButton"](
             coord, client, ENV_ID, ENV_NAME, BASE_URL, STACK
         )
-        self.assertEqual(c_btn._attr_translation_key, "restart")
-        self.assertEqual(s_btn._attr_translation_key, "restart")
+        assert c_btn._attr_translation_key == "restart"
+        assert s_btn._attr_translation_key == "restart"
 
     def test_container_device_name_includes_containers_segment(self):
-        """Container device names include 'Containers' type segment."""
         btn = _button_classes()
         b = btn["DockhandContainerRestartButton"](
             _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
         )
-        self.assertIn("Containers", b.device_info["name"])
-        self.assertIn(CONTAINER["name"], b.device_info["name"])
+        assert "Containers" in b.device_info["name"]
+        assert CONTAINER["name"] in b.device_info["name"]
 
     def test_stack_device_name_includes_stacks_segment(self):
-        """Stack device names include 'Stacks' type segment."""
         btn = _button_classes()
         b = btn["DockhandStackRestartButton"](
             _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
         )
-        self.assertIn("Stacks", b.device_info["name"])
-        self.assertIn(STACK["name"], b.device_info["name"])
+        assert "Stacks" in b.device_info["name"]
+        assert STACK["name"] in b.device_info["name"]
 
 
 # ===========================================================================

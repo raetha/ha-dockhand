@@ -1,0 +1,506 @@
+"""
+Tests for helpers.py — URL builders, DeviceInfo factories, and device registration.
+
+Covers:
+- _section_url / all section-specific URL helpers
+- _container_device: freestanding vs Compose via_device, name format
+- _stack_device: name format, via_device
+- _env_device: name, connectionType as hw_version
+- group device helpers: network, volume, image
+- _sched_key / _sched_device
+- _image_display_name: tagged, untagged, multi-tag, empty
+- _container_has_healthcheck: all states
+- _compose_project: with/without label, None container
+- _ensure_env_devices: all device creation branches
+- _ensure_hub_devices: schedules hub and per-schedule devices
+"""
+
+from __future__ import annotations
+
+import pytest
+from unittest.mock import MagicMock
+
+from custom_components.dockhand.helpers import (
+    _compose_project,
+    _container_device,
+    _container_has_healthcheck,
+    _container_url,
+    _ensure_env_devices,
+    _ensure_hub_devices,
+    _env_device,
+    _env_url,
+    _image_display_name,
+    _image_group_device,
+    _image_url,
+    _network_group_device,
+    _network_url,
+    _sched_device,
+    _sched_key,
+    _schedules_url,
+    _section_url,
+    _stack_device,
+    _stack_url,
+    _volume_group_device,
+    _volume_url,
+)
+
+# ---------------------------------------------------------------------------
+# _section_url and derived helpers
+# ---------------------------------------------------------------------------
+
+
+def test_section_url_appends_section():
+    assert _section_url("http://dh.test:3000", "containers") == "http://dh.test:3000/containers"
+
+
+def test_section_url_strips_trailing_slash():
+    assert _section_url("http://dh.test:3000/", "stacks") == "http://dh.test:3000/stacks"
+
+
+def test_section_url_empty_base_returns_none():
+    assert _section_url("", "containers") is None
+
+
+def test_container_url():
+    assert _container_url("http://dh.test:3000") == "http://dh.test:3000/containers"
+
+
+def test_stack_url():
+    assert _stack_url("http://dh.test:3000") == "http://dh.test:3000/stacks"
+
+
+def test_network_url():
+    assert _network_url("http://dh.test:3000") == "http://dh.test:3000/networks"
+
+
+def test_volume_url():
+    assert _volume_url("http://dh.test:3000") == "http://dh.test:3000/volumes"
+
+
+def test_image_url():
+    assert _image_url("http://dh.test:3000") == "http://dh.test:3000/images"
+
+
+def test_env_url():
+    assert _env_url("http://dh.test:3000") == "http://dh.test:3000/environments"
+
+
+def test_schedules_url():
+    assert _schedules_url("http://dh.test:3000") == "http://dh.test:3000/settings/schedules"
+
+
+def test_container_url_empty_base_returns_none():
+    assert _container_url("") is None
+
+
+# ---------------------------------------------------------------------------
+# _env_device
+# ---------------------------------------------------------------------------
+
+
+def test_env_device_identifier():
+    info = _env_device(1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", "env_1") in info["identifiers"]
+
+
+def test_env_device_name():
+    info = _env_device(1, "myenv", "http://dh.test:3000")
+    assert info["name"] == "myenv"
+
+
+def test_env_device_sets_hw_version_from_connection_type():
+    info = _env_device(1, "myenv", "http://dh.test:3000", stats={"connectionType": "local"})
+    assert info["hw_version"] == "local"
+
+
+def test_env_device_no_hw_version_when_stats_missing_connection():
+    info = _env_device(1, "myenv", "http://dh.test:3000", stats={"cpu": 10})
+    assert "hw_version" not in info
+
+
+def test_env_device_no_hw_version_when_no_stats():
+    info = _env_device(1, "myenv", "http://dh.test:3000")
+    assert "hw_version" not in info
+
+
+# ---------------------------------------------------------------------------
+# _container_device
+# ---------------------------------------------------------------------------
+
+
+def test_container_device_identifier():
+    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", "container_1_nginx") in info["identifiers"]
+
+
+def test_container_device_name_format():
+    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000")
+    assert info["name"] == "myenv – Containers – nginx"
+
+
+def test_container_device_via_containers_group_when_freestanding():
+    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000", stack_name=None)
+    assert info["via_device"] == ("dockhand", "env_1_Containers")
+
+
+def test_container_device_via_stack_when_compose():
+    info = _container_device("web", 1, "myenv", "http://dh.test:3000", stack_name="myapp")
+    assert info["via_device"] == ("dockhand", "stack_1_myapp")
+
+
+def test_container_device_configuration_url():
+    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000")
+    assert info["configuration_url"] == "http://dh.test:3000/containers"
+
+
+# ---------------------------------------------------------------------------
+# _stack_device
+# ---------------------------------------------------------------------------
+
+
+def test_stack_device_identifier():
+    info = _stack_device("myapp", 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", "stack_1_myapp") in info["identifiers"]
+
+
+def test_stack_device_name_format():
+    info = _stack_device("myapp", 1, "myenv", "http://dh.test:3000")
+    assert info["name"] == "myenv – Stacks – myapp"
+
+
+def test_stack_device_via_stacks_group():
+    info = _stack_device("myapp", 1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", "env_1_Stacks")
+
+
+# ---------------------------------------------------------------------------
+# Group device helpers
+# ---------------------------------------------------------------------------
+
+
+def test_network_group_device_identifier():
+    info = _network_group_device(1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", "env_1_Networks") in info["identifiers"]
+
+
+def test_network_group_device_via_env():
+    info = _network_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", "env_1")
+
+
+def test_volume_group_device_identifier():
+    info = _volume_group_device(1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", "env_1_Volumes") in info["identifiers"]
+
+
+def test_image_group_device_identifier():
+    info = _image_group_device(1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", "env_1_Images") in info["identifiers"]
+
+
+# ---------------------------------------------------------------------------
+# _sched_key / _sched_device
+# ---------------------------------------------------------------------------
+
+
+def test_sched_key_format():
+    assert _sched_key({"id": 5, "type": "maintenance"}) == "5_maintenance"
+
+
+def test_sched_device_identifier():
+    info = _sched_device(5, "maintenance", "nightly", "http://dh.test:3000")
+    assert ("dockhand", "schedule_5_maintenance") in info["identifiers"]
+
+
+def test_sched_device_name_format():
+    info = _sched_device(5, "maintenance", "nightly", "http://dh.test:3000")
+    assert info["name"] == "Dockhand – Schedules – nightly"
+
+
+def test_sched_device_via_schedules_hub():
+    info = _sched_device(5, "maintenance", "nightly", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", "schedules_hub")
+
+
+# ---------------------------------------------------------------------------
+# _image_display_name
+# ---------------------------------------------------------------------------
+
+
+def test_image_display_name_prefers_first_repo_tag():
+    assert _image_display_name({"repoTags": ["nginx:latest", "nginx:1.25"]}) == "nginx:latest"
+
+
+def test_image_display_name_skips_none_tag():
+    result = _image_display_name({"repoTags": ["<none>:<none>"], "id": "sha256:abc123def456789"})
+    assert result == "abc123def456"
+
+
+def test_image_display_name_falls_back_to_short_id():
+    result = _image_display_name({"repoTags": [], "id": "sha256:deadbeef1234567890"})
+    assert result == "deadbeef1234"
+
+
+def test_image_display_name_handles_empty_id():
+    result = _image_display_name({"repoTags": [], "id": ""})
+    assert result == "unknown"
+
+
+def test_image_display_name_handles_no_fields():
+    result = _image_display_name({})
+    assert result == "unknown"
+
+
+def test_image_display_name_id_without_colon():
+    result = _image_display_name({"repoTags": [], "id": "deadbeef1234567890"})
+    assert result == "deadbeef1234"
+
+
+# ---------------------------------------------------------------------------
+# _container_has_healthcheck
+# ---------------------------------------------------------------------------
+
+
+def test_has_healthcheck_healthy():
+    assert _container_has_healthcheck({"health": "healthy"}) is True
+
+
+def test_has_healthcheck_unhealthy():
+    assert _container_has_healthcheck({"health": "unhealthy"}) is True
+
+
+def test_has_healthcheck_starting():
+    assert _container_has_healthcheck({"health": "starting"}) is True
+
+
+def test_no_healthcheck_when_none():
+    assert _container_has_healthcheck({"health": "none"}) is False
+
+
+def test_no_healthcheck_when_unknown():
+    assert _container_has_healthcheck({"health": "unknown"}) is False
+
+
+def test_no_healthcheck_when_null():
+    assert _container_has_healthcheck({"health": None}) is False
+
+
+def test_no_healthcheck_when_missing():
+    assert _container_has_healthcheck({}) is False
+
+
+# ---------------------------------------------------------------------------
+# _compose_project
+# ---------------------------------------------------------------------------
+
+
+def test_compose_project_returns_project_name():
+    c = {"labels": {"com.docker.compose.project": "myapp"}}
+    assert _compose_project(c) == "myapp"
+
+
+def test_compose_project_none_for_freestanding():
+    assert _compose_project({"labels": {}}) is None
+
+
+def test_compose_project_none_for_no_labels():
+    assert _compose_project({"name": "nginx"}) is None
+
+
+def test_compose_project_none_for_none_container():
+    assert _compose_project(None) is None
+
+
+# ---------------------------------------------------------------------------
+# _ensure_env_devices
+# ---------------------------------------------------------------------------
+
+
+def _make_entry(hass):
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+    entry = MockConfigEntry(domain="dockhand", data={}, title="test")
+    entry.add_to_hass(hass)
+    return entry
+
+
+def _device_ids(hass, entry) -> set[str]:
+    from homeassistant.helpers import device_registry as dr
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    return {next(iter(d.identifiers))[1] for d in devs}
+
+
+def test_ensure_env_devices_creates_env_hub(hass):
+    entry = _make_entry(hass)
+    _ensure_env_devices(hass, entry.entry_id, "http://dh.test:3000", 1, "myenv")
+    assert "env_1" in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_creates_containers_group_for_freestanding(hass):
+    entry = _make_entry(hass)
+    containers = [{"name": "nginx", "labels": {}}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        containers=containers,
+    )
+    assert "env_1_Containers" in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_skips_containers_group_for_compose_only(hass):
+    entry = _make_entry(hass)
+    containers = [{"name": "web", "labels": {"com.docker.compose.project": "myapp"}}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        containers=containers,
+    )
+    assert "env_1_Containers" not in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_creates_stacks_group_when_stacks(hass):
+    entry = _make_entry(hass)
+    stacks = [{"name": "myapp"}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        stacks=stacks,
+    )
+    ids = _device_ids(hass, entry)
+    assert "env_1_Stacks" in ids
+    assert "stack_1_myapp" in ids
+
+
+def test_ensure_env_devices_creates_individual_stack_device(hass):
+    entry = _make_entry(hass)
+    stacks = [{"name": "alpha"}, {"name": "beta"}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        stacks=stacks,
+    )
+    ids = _device_ids(hass, entry)
+    assert "stack_1_alpha" in ids
+    assert "stack_1_beta" in ids
+
+
+def test_ensure_env_devices_skips_individual_stack_device_with_empty_name(hass):
+    """Stacks group is created for any non-empty stacks list, but the per-stack
+    device is skipped when the stack name is empty."""
+    entry = _make_entry(hass)
+    stacks = [{"name": ""}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        stacks=stacks,
+    )
+    ids = _device_ids(hass, entry)
+    # Group created (stacks list is truthy), but no individual device
+    assert "env_1_Stacks" in ids
+    assert "stack_1_" not in str(ids)
+
+
+def test_ensure_env_devices_creates_networks_group_when_enabled(hass):
+    entry = _make_entry(hass)
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        networks=[{"id": "n1"}], enable_networks=True,
+    )
+    assert "env_1_Networks" in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_skips_networks_group_when_disabled(hass):
+    entry = _make_entry(hass)
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        networks=[{"id": "n1"}], enable_networks=False,
+    )
+    assert "env_1_Networks" not in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_skips_networks_group_when_empty_list(hass):
+    entry = _make_entry(hass)
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        networks=[], enable_networks=True,
+    )
+    assert "env_1_Networks" not in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_creates_images_group_when_enabled(hass):
+    entry = _make_entry(hass)
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        images=[{"id": "sha256:abc"}], enable_images=True,
+    )
+    assert "env_1_Images" in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_creates_volumes_group_when_enabled(hass):
+    entry = _make_entry(hass)
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        volumes=[{"Name": "mydata"}], enable_volumes=True,
+    )
+    assert "env_1_Volumes" in _device_ids(hass, entry)
+
+
+def test_ensure_env_devices_is_idempotent(hass):
+    entry = _make_entry(hass)
+    stacks = [{"name": "app"}]
+    for _ in range(3):
+        _ensure_env_devices(
+            hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+            stacks=stacks,
+        )
+    from homeassistant.helpers import device_registry as dr
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    ids = [next(iter(d.identifiers))[1] for d in devs]
+    assert len(ids) == len(set(ids))  # no duplicates
+
+
+# ---------------------------------------------------------------------------
+# _ensure_hub_devices
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_hub_devices_creates_schedules_hub(hass):
+    entry = _make_entry(hass)
+    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=[])
+    assert "schedules_hub" in _device_ids(hass, entry)
+
+
+def test_ensure_hub_devices_creates_per_schedule_device(hass):
+    entry = _make_entry(hass)
+    schedules = [{"id": 5, "type": "maintenance", "name": "nightly"}]
+    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    assert "schedule_5_maintenance" in _device_ids(hass, entry)
+
+
+def test_ensure_hub_devices_creates_multiple_schedules(hass):
+    entry = _make_entry(hass)
+    schedules = [
+        {"id": 1, "type": "backup", "name": "nightly-backup"},
+        {"id": 2, "type": "maintenance", "name": "weekly-clean"},
+    ]
+    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    ids = _device_ids(hass, entry)
+    assert "schedule_1_backup" in ids
+    assert "schedule_2_maintenance" in ids
+
+
+def test_ensure_hub_devices_skips_schedule_with_no_id(hass):
+    entry = _make_entry(hass)
+    schedules = [{"id": None, "type": "maintenance", "name": "bad"}]
+    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    ids = _device_ids(hass, entry)
+    # Only hub itself, no schedule device
+    assert ids == {"schedules_hub"}
+
+
+def test_ensure_hub_devices_is_idempotent(hass):
+    entry = _make_entry(hass)
+    schedules = [{"id": 5, "type": "maintenance", "name": "nightly"}]
+    for _ in range(3):
+        _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    from homeassistant.helpers import device_registry as dr
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    ids = [next(iter(d.identifiers))[1] for d in devs]
+    assert len(ids) == len(set(ids))

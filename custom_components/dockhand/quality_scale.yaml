@@ -10,12 +10,15 @@ rules:
     status: done
     comment: >
       All three coordinators use DataUpdateCoordinator with user-configurable
-      intervals. Fast coordinator defaults to 60 s (stats, containers, stacks);
-      slow coordinator defaults to 600 s (images, volumes, networks, schedules);
-      update coordinator defaults to 86400 s / 24 h (registry update checks —
-      deliberately infrequent to avoid unnecessary load on the Docker host).
-      Dashboard stats are fetched in a single API call per fast poll cycle
-      rather than one call per environment.
+      intervals. Fast coordinator defaults to 60 s (stats, containers, stacks,
+      container resource stats); slow coordinator defaults to 600 s (images,
+      volumes, networks, schedules); update coordinator defaults to 86400 s /
+      24 h (registry update checks — deliberately infrequent to avoid
+      unnecessary load on the Docker host). Dashboard stats are fetched in a
+      single API call per fast poll cycle rather than one call per environment.
+      Container resource stats are fetched via a single bulk API call per
+      environment (GET /api/containers/stats?env=N) rather than one call per
+      container.
 
   brands:
     status: done
@@ -46,12 +49,13 @@ rules:
   config-flow-test-coverage:
     status: done
     comment: >
-      Full test coverage across all flow steps: async_step_user (5 tests),
-      async_step_token (7 tests), async_step_reauth_confirm (4 tests),
-      async_step_reconfigure (5 tests), and options async_step_init (2 tests).
-      All error branches, duplicate detection, auth-detection probe, token
-      merging, origin-routing, and no-auth token stripping are tested in
-      tests/test_config_flow.py.
+      Full test coverage across all flow steps in test_config_flow.py:
+      async_step_user (5 tests), async_step_token (4 tests),
+      async_step_reauth_confirm (3 tests), async_step_reconfigure (3 tests),
+      and options async_step_init (2 tests — options flow now correctly wired
+      via async_get_options_flow on DockhandConfigFlow). Covers all error
+      branches, duplicate detection, auth-detection probe, token merging,
+      origin-routing, and no-auth token stripping.
 
   dependency-transparency:
     status: done
@@ -199,17 +203,22 @@ rules:
   test-coverage:
     status: done
     comment: >
-      260 tests across six files: test_api.py (28), test_config_flow.py (23),
-      test_coordinator.py (22), test_entities.py (122), test_init.py (59),
-      test_workflows.py (6). Covers all API methods, Bearer token and Accept
-      headers, all config flow steps, legacy migration paths, all three
-      coordinators, all entity types and platforms, device registration,
-      _ensure_env_devices / _ensure_hub_devices, _compose_project /
-      _container_has_healthcheck helpers, HomeAssistantError propagation for
-      all action methods (action_failed and container_not_found translation
-      keys), Containers group device lifecycle (freestanding vs Compose-only
-      vs offline), unified stale cleanup (_cleanup_stale_registry), setup, and
-      unload. Zero external dependencies — runs in ~0.2 s with stdlib only.
+      354 tests across eight files: test_api.py (28), test_config_flow.py (16),
+      test_coordinator.py (24), test_entities.py (137), test_helpers.py (66),
+      test_init.py (41), test_update.py (36), test_workflows.py (6). Covers
+      all API methods, all config flow steps and options flow, legacy migration
+      paths, all three coordinators, all entity classes and platforms, device
+      registration via _ensure_env_devices and _ensure_hub_devices (all
+      branches including idempotency), all URL builders, all DeviceInfo
+      factories, all _container_has_healthcheck / _compose_project /
+      _image_display_name / _sched_key paths, ContainerUpdateEntity
+      (_short_digest, installed_version, latest_version, available,
+      release_summary, async_release_notes, _update_supported_features,
+      _handle_coordinator_update, async_install including not-found and
+      action_failed branches), HomeAssistantError propagation for all action
+      methods, setup, and unload. Full suite requires Python 3.14.2+ and
+      PHCC; runs in CI on every push. 261 of 354 tests run in the
+      Claude sandbox (Python 3.12) for immediate feedback without PHCC.
 
   # ── Gold ──────────────────────────────────────────────────────────────────
 
@@ -309,33 +318,41 @@ rules:
     status: done
     comment: >
       EntityCategory.DIAGNOSTIC applied to all monitoring and config-mirror
-      entities. EntityCategory.CONFIG applied to Restart buttons (user-initiated
-      device control actions). Primary state sensors (Container State, Stack
-      Status) and Running switches have no category as they are primary
-      control and observation entities.
+      entities, including all eight container resource stats sensors (CPU usage,
+      memory usage, memory usage %, memory limit, network in/out, disk read/write).
+      EntityCategory.CONFIG applied to Restart buttons (user-initiated device
+      control actions). Primary state sensors (Container State, Stack Status) and
+      Running switches have no category as they are primary control and observation
+      entities.
 
   entity-device-class:
     status: done
     comment: >
-      SensorDeviceClass.DATA_SIZE used for containers disk usage and build
-      cache size sensors. SensorDeviceClass.TIMESTAMP used for the schedule
-      next-run sensor. BinarySensorDeviceClass.CONNECTIVITY used for the
-      environment Online sensor. All other sensors and binary sensors use
-      SensorStateClass.MEASUREMENT or no device class where no standard
-      class fits (e.g. container state as a string sensor).
+      SensorDeviceClass.DATA_SIZE used for containers disk usage, build cache
+      size, and all eight container resource stats sensors (memory usage,
+      memory limit, network in/out, disk read/write). SensorDeviceClass.TIMESTAMP
+      used for the schedule next-run sensor. BinarySensorDeviceClass.CONNECTIVITY
+      used for the environment Online sensor. All other sensors and binary sensors
+      use SensorStateClass.MEASUREMENT or no device class where no standard class
+      fits (e.g. container state as a string sensor).
 
   entity-disabled-by-default:
     status: done
     comment: >
       Niche or verbose entities are disabled by default via
       _attr_entity_registry_enabled_default = False: build cache size,
-      containers disk usage, activity events, Hawser agent version, and the
+      containers disk usage, activity events, Hawser agent version, the
       six config-mirror binary sensors (activity logging, metrics collection,
-      vulnerability scanning, update checks, auto update, image pruning).
-      The container Health sensor is enabled by default — it is only ever
-      created when the container has a Docker healthcheck configured, so it
-      is never permanently unavailable. The container Image sensor was
-      removed in 1.6.0 (image name is an attribute on the State sensor).
+      vulnerability scanning, update checks, auto update, image pruning), and
+      all eight container resource stats sensors (CPU usage, memory usage,
+      memory usage %, memory limit, network in, network out, disk read, disk
+      write). Stats sensors start disabled so users enable only what they
+      need; enabled/disabled state survives container recreation because it is
+      keyed on env_id + container name. The container Health sensor is enabled
+      by default — it is only ever created when the container has a Docker
+      healthcheck configured, so it is never permanently unavailable. The
+      container Image sensor was removed in 1.6.0 (image name is an attribute
+      on the State sensor).
 
   entity-translations:
     status: done

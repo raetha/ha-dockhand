@@ -38,9 +38,16 @@ def _unwrap(val: Any, default: Any, label: str) -> Any:
 
 
 class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    """Polls 60s: dashboard stats, containers, stacks.
+    """Polls 60s: dashboard stats, containers, stacks, container resource stats.
 
-    Shape: { env_id: {"stats": {}, "containers": [], "stacks": []} }
+    Shape: {
+        env_id: {
+            "stats": {},
+            "containers": [],
+            "stacks": [],
+            "container_stats": {name: {}},
+        }
+    }
     """
 
     def __init__(
@@ -96,14 +103,25 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             results = await asyncio.gather(
                 self.client.async_get_containers(eid),
                 self.client.async_get_stacks(eid),
+                self.client.async_get_container_stats(eid),
                 return_exceptions=True,
             )
+            # Index container stats by name for O(1) lookup from sensor entities.
+            # Stopped/exited containers are absent from the stats response — their
+            # sensors will return None (unavailable) until the container is running.
+            raw_stats = _safe_list(
+                _unwrap(results[2], [], f"container_stats env={eid}")
+            )
+            container_stats: dict[str, dict] = {
+                s["name"]: s for s in raw_stats if isinstance(s, dict) and "name" in s
+            }
             return eid, {
                 "stats": all_stats.get(eid, {}),
                 "containers": _safe_list(
                     _unwrap(results[0], [], f"containers env={eid}")
                 ),
                 "stacks": _safe_list(_unwrap(results[1], [], f"stacks env={eid}")),
+                "container_stats": container_stats,
             }
 
         out: dict[int, dict] = {}

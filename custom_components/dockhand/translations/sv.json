@@ -168,6 +168,30 @@
       },
       "last_status": {
         "name": "Senaste status"
+      },
+      "container_cpu_percent": {
+        "name": "CPU-användning"
+      },
+      "container_memory_usage": {
+        "name": "Minnesanvändning"
+      },
+      "container_memory_percent": {
+        "name": "Minnesanvändning %"
+      },
+      "container_memory_limit": {
+        "name": "Minnesgräns"
+      },
+      "container_network_rx": {
+        "name": "Nätverk in"
+      },
+      "container_network_tx": {
+        "name": "Nätverk ut"
+      },
+      "container_block_read": {
+        "name": "Disk läsning"
+      },
+      "container_block_write": {
+        "name": "Disk skrivning"
       }
     },
     "binary_sensor": {

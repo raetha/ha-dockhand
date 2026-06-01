@@ -2,27 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-import os
-import sys
-import unittest
+import pytest
 from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TESTS = os.path.join(ROOT, "tests")
-sys.path.insert(0, ROOT)
-sys.path.insert(0, TESTS)
+from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
-import ha_stubs as stubs
-
-stubs.install()
-from ha_stubs import ConfigEntryAuthFailed, HomeAssistant, UpdateFailed
-
-from custom_components.dockhand.api import (
-    DockhandAuthError,
-    DockhandClient,
-)
+from custom_components.dockhand.api import DockhandAuthError, DockhandClient
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
@@ -30,7 +18,9 @@ from custom_components.dockhand.coordinator import (
     _unwrap,
 )
 
-run = asyncio.run
+# ---------------------------------------------------------------------------
+# Fixtures / helpers
+# ---------------------------------------------------------------------------
 
 ENV1 = {"id": 1, "name": "local"}
 ENV2 = {"id": 2, "name": "remote"}
@@ -53,19 +43,16 @@ def _make_client(
     schedules=None,
 ):
     c = MagicMock(spec=DockhandClient)
-    c.async_get_environments = AsyncMock(
-        return_value=envs if envs is not None else [ENV1]
-    )
-    # async_get_all_dashboard_stats returns a list indexed by env id;
-    # default wraps STATS1 as a single-env list keyed to ENV1's id.
-    _stats = stats or STATS1
     _envs = envs if envs is not None else [ENV1]
+    _stats = stats or STATS1
+    c.async_get_environments = AsyncMock(return_value=_envs)
     c.async_get_all_dashboard_stats = AsyncMock(
         return_value=[{**_stats, "id": e["id"]} for e in _envs]
     )
     c.async_get_containers = AsyncMock(
         return_value=containers if containers is not None else [CONTAINER1]
     )
+    c.async_get_container_stats = AsyncMock(return_value=[])
     c.async_get_stacks = AsyncMock(return_value=stacks or [])
     c.async_get_images = AsyncMock(return_value=images or [IMAGE1])
     c.async_get_networks = AsyncMock(return_value=networks or [NETWORK1])
@@ -74,18 +61,17 @@ def _make_client(
     return c
 
 
-def _fast(client, config=None, entry=None):
+def _fast(hass: HomeAssistant, client, config=None, entry=None):
     return DockhandFastCoordinator(
-        HomeAssistant(), client, config or {"poll_interval": 30}, entry=entry
+        hass, client, config or {"poll_interval": 30}, entry=entry
     )
 
 
-def _slow(client, config=None):
+def _slow(hass: HomeAssistant, client, config=None):
     return DockhandSlowCoordinator(
-        HomeAssistant(),
+        hass,
         client,
-        config
-        or {
+        config or {
             "poll_interval_slow": 300,
             "enable_images": True,
             "enable_networks": True,
@@ -95,206 +81,245 @@ def _slow(client, config=None):
     )
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Helper utilities
+# ---------------------------------------------------------------------------
 
 
-class TestHelpers(unittest.TestCase):
-    def test_safe_list_with_list(self):
-        self.assertEqual(_safe_list([1, 2]), [1, 2])
-
-    def test_safe_list_with_none(self):
-        self.assertEqual(_safe_list(None), [])
-
-    def test_safe_list_with_dict(self):
-        self.assertEqual(_safe_list({"a": 1}), [])
-
-    def test_unwrap_value(self):
-        self.assertEqual(_unwrap("ok", "d", "t"), "ok")
-
-    def test_unwrap_exception(self):
-        self.assertEqual(_unwrap(ValueError(), "d", "t"), "d")
+def test_safe_list_with_list():
+    assert _safe_list([1, 2]) == [1, 2]
 
 
-# ── Fast coordinator — data shape ─────────────────────────────────────────────
+def test_safe_list_with_none():
+    assert _safe_list(None) == []
 
 
-class TestFastData(unittest.TestCase):
-    def test_basic_shape(self):
-        coord = _fast(_make_client(stacks=[STACK1]))
-        run(coord.async_config_entry_first_refresh())
-        self.assertIn(1, coord.data)
-        # Stats include 'id' from the all-environments response; check the
-        # fields we care about rather than exact equality with STATS1.
-        stats = coord.data[1]["stats"]
-        self.assertEqual(stats["name"], STATS1["name"])
-        self.assertEqual(stats["cpu"], STATS1["cpu"])
-        self.assertEqual(coord.data[1]["containers"], [CONTAINER1])
-        self.assertEqual(coord.data[1]["stacks"], [STACK1])
-
-    def test_multiple_envs(self):
-        client = _make_client(envs=[ENV1, ENV2])
-        client.async_get_all_dashboard_stats = AsyncMock(
-            return_value=[{"id": 1, "name": "env1"}, {"id": 2, "name": "env2"}]
-        )
-        client.async_get_containers = AsyncMock(return_value=[])
-        client.async_get_stacks = AsyncMock(return_value=[])
-        coord = _fast(client)
-        run(coord.async_config_entry_first_refresh())
-        self.assertIn(1, coord.data)
-        self.assertIn(2, coord.data)
-
-    def test_containers_failure_returns_empty(self):
-        client = _make_client()
-        client.async_get_containers = AsyncMock(side_effect=Exception("timeout"))
-        coord = _fast(client)
-        run(coord.async_config_entry_first_refresh())
-        self.assertEqual(coord.data[1]["containers"], [])
-
-    def test_stats_failure_returns_empty_dict(self):
-        client = _make_client()
-        client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
-        coord = _fast(client)
-        run(coord.async_config_entry_first_refresh())
-        self.assertEqual(coord.data[1]["stats"], {})
-
-    def test_empty_env_list_returns_empty_data(self):
-        client = _make_client(envs=[])
-        coord = _fast(client)
-        run(coord.async_config_entry_first_refresh())
-        self.assertEqual(coord.data, {})
-
-    def test_update_interval_from_config(self):
-        coord = _fast(_make_client(envs=[]), config={"poll_interval": 90})
-        self.assertEqual(coord.update_interval, timedelta(seconds=90))
+def test_safe_list_with_dict():
+    assert _safe_list({"a": 1}) == []
 
 
-# ── Fast coordinator — auth ───────────────────────────────────────────────────
+def test_unwrap_value():
+    assert _unwrap("ok", "d", "t") == "ok"
 
 
-class TestFastAuth(unittest.TestCase):
-    def test_auth_error_raises_config_entry_auth_failed(self):
-        """A 401 from the API must surface as ConfigEntryAuthFailed immediately.
-        With token auth there is no silent re-login — HA prompts the user to
-        provide a new token via the re-authentication flow.
-        """
-        client = _make_client()
-        client.async_get_environments = AsyncMock(
-            side_effect=DockhandAuthError("token revoked")
-        )
-        with self.assertRaises(ConfigEntryAuthFailed):
-            run(_fast(client).async_config_entry_first_refresh())
-
-    def test_auth_error_message_mentions_token(self):
-        """The ConfigEntryAuthFailed message should mention the token so the
-        HA notification gives the user a useful hint."""
-        client = _make_client()
-        client.async_get_environments = AsyncMock(
-            side_effect=DockhandAuthError("expired")
-        )
-        with self.assertRaises(ConfigEntryAuthFailed) as ctx:
-            run(_fast(client).async_config_entry_first_refresh())
-        self.assertIn("token", str(ctx.exception).lower())
-
-    def test_general_error_raises_update_failed(self):
-        client = _make_client()
-        client.async_get_environments = AsyncMock(side_effect=Exception("network down"))
-        coord = _fast(client)
-        with self.assertRaises(UpdateFailed):
-            run(coord.async_config_entry_first_refresh())
+def test_unwrap_exception():
+    assert _unwrap(ValueError(), "d", "t") == "d"
 
 
-# ── Slow coordinator ──────────────────────────────────────────────────────────
+# ---------------------------------------------------------------------------
+# Fast coordinator — data shape
+# ---------------------------------------------------------------------------
 
 
-class TestSlowData(unittest.TestCase):
-    def test_all_features_fetches_everything(self):
-        client = _make_client(
-            envs=[ENV1],
-            images=[IMAGE1],
-            networks=[NETWORK1],
-            volumes=[VOLUME1],
-            schedules=[{"id": "s1"}],
-        )
-        coord = _slow(client)
-        run(coord.async_config_entry_first_refresh())
-        env = coord.data["environments"][1]
-        self.assertEqual(env["images"], [IMAGE1])
-        self.assertEqual(env["networks"], [NETWORK1])
-        self.assertEqual(env["volumes"], [VOLUME1])
-        self.assertEqual(coord.data["schedules"], [{"id": "s1"}])
-
-    def test_all_features_disabled(self):
-        client = _make_client(envs=[ENV1])
-        coord = _slow(
-            client,
-            config={
-                "poll_interval_slow": 300,
-                "enable_images": False,
-                "enable_networks": False,
-                "enable_volumes": False,
-                "enable_schedules": False,
-            },
-        )
-        run(coord.async_config_entry_first_refresh())
-        client.async_get_images.assert_not_called()
-        client.async_get_networks.assert_not_called()
-        client.async_get_volumes.assert_not_called()
-        client.async_get_schedules.assert_not_called()
-        self.assertEqual(coord.data["schedules"], [])
-
-    def test_only_images_enabled(self):
-        client = _make_client(envs=[ENV1], images=[IMAGE1])
-        coord = _slow(
-            client,
-            config={
-                "poll_interval_slow": 300,
-                "enable_images": True,
-                "enable_networks": False,
-                "enable_volumes": False,
-                "enable_schedules": False,
-            },
-        )
-        run(coord.async_config_entry_first_refresh())
-        client.async_get_images.assert_called_once_with(1)
-        client.async_get_networks.assert_not_called()
-        env = coord.data["environments"][1]
-        self.assertEqual(env["images"], [IMAGE1])
-        self.assertEqual(env["networks"], [])
-        self.assertEqual(env["volumes"], [])
-
-    def test_env_object_stored(self):
-        coord = _slow(_make_client(envs=[ENV1]))
-        run(coord.async_config_entry_first_refresh())
-        self.assertEqual(coord.data["environments"][1]["env"], ENV1)
-
-    def test_feature_api_failure_returns_empty(self):
-        client = _make_client(envs=[ENV1])
-        client.async_get_images = AsyncMock(side_effect=Exception("timeout"))
-        coord = _slow(client)
-        run(coord.async_config_entry_first_refresh())
-        self.assertEqual(coord.data["environments"][1]["images"], [])
-
-    def test_auth_error_raises_update_failed_with_message(self):
-        client = _make_client()
-        client.async_get_environments = AsyncMock(
-            side_effect=DockhandAuthError("expired")
-        )
-        coord = _slow(client)
-        with self.assertRaises(UpdateFailed) as ctx:
-            run(coord.async_config_entry_first_refresh())
-        self.assertIn("reauth", str(ctx.exception))
-
-    def test_general_error_raises_update_failed(self):
-        client = _make_client()
-        client.async_get_environments = AsyncMock(side_effect=Exception("network down"))
-        coord = _slow(client)
-        with self.assertRaises(UpdateFailed):
-            run(coord.async_config_entry_first_refresh())
-
-    def test_update_interval_from_config(self):
-        coord = _slow(_make_client(envs=[]), config={"poll_interval_slow": 1200})
-        self.assertEqual(coord.update_interval, timedelta(seconds=1200))
+async def test_fast_basic_shape(hass: HomeAssistant):
+    coord = _fast(hass, _make_client(stacks=[STACK1]))
+    await coord.async_refresh()
+    assert 1 in coord.data
+    stats = coord.data[1]["stats"]
+    assert stats["name"] == STATS1["name"]
+    assert stats["cpu"] == STATS1["cpu"]
+    assert coord.data[1]["containers"] == [CONTAINER1]
+    assert coord.data[1]["stacks"] == [STACK1]
+    assert "container_stats" in coord.data[1]
 
 
-if __name__ == "__main__":
-    unittest.main()
+async def test_fast_container_stats_indexed_by_name(hass: HomeAssistant):
+    """container_stats dict is keyed by container name for O(1) sensor lookup."""
+    client = _make_client()
+    client.async_get_container_stats = AsyncMock(
+        return_value=[
+            {"name": "nginx", "cpuPercent": 1.5, "memoryUsage": 52428800},
+            {"name": "redis", "cpuPercent": 0.2, "memoryUsage": 10485760},
+        ]
+    )
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    cs = coord.data[1]["container_stats"]
+    assert "nginx" in cs
+    assert "redis" in cs
+    assert cs["nginx"]["cpuPercent"] == 1.5
+
+
+async def test_fast_container_stats_failure_returns_empty_dict(hass: HomeAssistant):
+    """A stats API failure is non-fatal — containers and stacks still update."""
+    client = _make_client()
+    client.async_get_container_stats = AsyncMock(side_effect=Exception("timeout"))
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data[1]["container_stats"] == {}
+    assert coord.data[1]["containers"] == [CONTAINER1]
+
+
+async def test_fast_multiple_envs(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1, ENV2])
+    client.async_get_all_dashboard_stats = AsyncMock(
+        return_value=[{"id": 1, "name": "env1"}, {"id": 2, "name": "env2"}]
+    )
+    client.async_get_containers = AsyncMock(return_value=[])
+    client.async_get_stacks = AsyncMock(return_value=[])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert 1 in coord.data
+    assert 2 in coord.data
+
+
+async def test_fast_containers_failure_returns_empty(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_containers = AsyncMock(side_effect=Exception("timeout"))
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data[1]["containers"] == []
+
+
+async def test_fast_stats_failure_returns_empty_dict(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data[1]["stats"] == {}
+
+
+async def test_fast_empty_env_list_returns_empty_data(hass: HomeAssistant):
+    coord = _fast(hass, _make_client(envs=[]))
+    await coord.async_refresh()
+    assert coord.data == {}
+
+
+async def test_fast_update_interval_from_config(hass: HomeAssistant):
+    coord = _fast(hass, _make_client(envs=[]), config={"poll_interval": 90})
+    assert coord.update_interval == timedelta(seconds=90)
+
+
+# ---------------------------------------------------------------------------
+# Fast coordinator — auth / error propagation
+# ---------------------------------------------------------------------------
+
+
+async def test_fast_auth_error_raises_config_entry_auth_failed(hass: HomeAssistant):
+    """A 401 from the API must surface as ConfigEntryAuthFailed immediately."""
+    client = _make_client()
+    client.async_get_environments = AsyncMock(
+        side_effect=DockhandAuthError("token revoked")
+    )
+    with pytest.raises(ConfigEntryAuthFailed):
+        await _fast(hass, client)._async_update_data()
+
+
+async def test_fast_auth_error_message_mentions_token(hass: HomeAssistant):
+    """The ConfigEntryAuthFailed message should mention the token."""
+    client = _make_client()
+    client.async_get_environments = AsyncMock(
+        side_effect=DockhandAuthError("expired")
+    )
+    with pytest.raises(ConfigEntryAuthFailed, match="token"):
+        await _fast(hass, client)._async_update_data()
+
+
+async def test_fast_general_error_raises_update_failed(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_environments = AsyncMock(side_effect=Exception("network down"))
+    with pytest.raises(UpdateFailed):
+        await _fast(hass, client)._async_update_data()
+
+
+# ---------------------------------------------------------------------------
+# Slow coordinator
+# ---------------------------------------------------------------------------
+
+
+async def test_slow_all_features_fetches_everything(hass: HomeAssistant):
+    client = _make_client(
+        envs=[ENV1],
+        images=[IMAGE1],
+        networks=[NETWORK1],
+        volumes=[VOLUME1],
+        schedules=[{"id": "s1"}],
+    )
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert env["images"] == [IMAGE1]
+    assert env["networks"] == [NETWORK1]
+    assert env["volumes"] == [VOLUME1]
+    assert coord.data["schedules"] == [{"id": "s1"}]
+
+
+async def test_slow_all_features_disabled(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    coord = _slow(
+        hass,
+        client,
+        config={
+            "poll_interval_slow": 300,
+            "enable_images": False,
+            "enable_networks": False,
+            "enable_volumes": False,
+            "enable_schedules": False,
+        },
+    )
+    await coord.async_refresh()
+    client.async_get_images.assert_not_called()
+    client.async_get_networks.assert_not_called()
+    client.async_get_volumes.assert_not_called()
+    client.async_get_schedules.assert_not_called()
+    assert coord.data["schedules"] == []
+
+
+async def test_slow_only_images_enabled(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1], images=[IMAGE1])
+    coord = _slow(
+        hass,
+        client,
+        config={
+            "poll_interval_slow": 300,
+            "enable_images": True,
+            "enable_networks": False,
+            "enable_volumes": False,
+            "enable_schedules": False,
+        },
+    )
+    await coord.async_refresh()
+    client.async_get_images.assert_called_once_with(1)
+    client.async_get_networks.assert_not_called()
+    env = coord.data["environments"][1]
+    assert env["images"] == [IMAGE1]
+    assert env["networks"] == []
+    assert env["volumes"] == []
+
+
+async def test_slow_env_object_stored(hass: HomeAssistant):
+    coord = _slow(hass, _make_client(envs=[ENV1]))
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["env"] == ENV1
+
+
+async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    client.async_get_images = AsyncMock(side_effect=Exception("timeout"))
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["images"] == []
+
+
+async def test_slow_auth_error_raises_update_failed_with_message(hass: HomeAssistant):
+    """DockhandAuthError is wrapped in UpdateFailed by _async_update_data."""
+    client = _make_client()
+    client.async_get_environments = AsyncMock(
+        side_effect=DockhandAuthError("expired")
+    )
+    coord = _slow(hass, client)
+    with pytest.raises(UpdateFailed, match="reauth"):
+        await coord._async_update_data()
+
+
+async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_environments = AsyncMock(side_effect=Exception("network down"))
+    coord = _slow(hass, client)
+    with pytest.raises(UpdateFailed):
+        await coord._async_update_data()
+
+
+async def test_slow_update_interval_from_config(hass: HomeAssistant):
+    coord = _slow(hass, _make_client(envs=[]), config={"poll_interval_slow": 1200})
+    assert coord.update_interval == timedelta(seconds=1200)

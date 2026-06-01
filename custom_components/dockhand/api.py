@@ -92,6 +92,33 @@ class DockhandClient:
         result = await self._request("GET", "/api/dashboard/stats")
         return result if isinstance(result, list) else []
 
+    async def async_get_container_stats(self, env_id: int) -> list[dict[str, Any]]:
+        """Fetch resource stats for all running containers in an environment.
+
+        GET /api/containers/stats?env=X
+
+        Returns one entry per running container.  Stopped, exited, or created
+        containers are absent from the response — callers should treat a missing
+        entry as unavailable rather than zero.
+
+        Response fields per container:
+            id            str   — full container SHA256
+            name          str   — container name (used as lookup key)
+            cpuPercent    float — CPU usage as a percentage of host capacity
+            memoryUsage   int   — effective memory in bytes (raw minus cache),
+                                  matches Docker CLI 'docker stats' display
+            memoryRaw     int   — total memory bytes before cache subtraction
+            memoryCache   int   — page-cache bytes (memoryRaw - memoryUsage)
+            memoryLimit   int   — configured limit, or host RAM when unconstrained
+            memoryPercent float — memoryUsage / memoryLimit * 100
+            networkRx     int   — cumulative bytes received (resets on restart)
+            networkTx     int   — cumulative bytes transmitted (resets on restart)
+            blockRead     int   — cumulative bytes read from block devices
+            blockWrite    int   — cumulative bytes written to block devices
+        """
+        result = await self._request("GET", f"/api/containers/stats?env={env_id}")
+        return result if isinstance(result, list) else []
+
     async def async_get_containers(self, env_id: int) -> list[dict[str, Any]]:
         return await self._request("GET", f"/api/containers?env={env_id}")
 

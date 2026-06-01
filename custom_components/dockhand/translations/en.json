@@ -168,6 +168,30 @@
       },
       "last_status": {
         "name": "Last status"
+      },
+      "container_cpu_percent": {
+        "name": "CPU usage"
+      },
+      "container_memory_usage": {
+        "name": "Memory usage"
+      },
+      "container_memory_percent": {
+        "name": "Memory usage %"
+      },
+      "container_memory_limit": {
+        "name": "Memory limit"
+      },
+      "container_network_rx": {
+        "name": "Network in"
+      },
+      "container_network_tx": {
+        "name": "Network out"
+      },
+      "container_block_read": {
+        "name": "Disk read"
+      },
+      "container_block_write": {
+        "name": "Disk write"
       }
     },
     "binary_sensor": {

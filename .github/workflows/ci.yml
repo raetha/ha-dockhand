@@ -47,15 +47,14 @@ jobs:
         run: ruff check custom_components/dockhand/
       - name: Run ruff format check
         run: ruff format --check custom_components/dockhand/
-        # tests/ excluded — see [format] exclude in .ruff.toml
+        # tests/ excluded from format check — see [format] exclude in .ruff.toml
 
-  # ── Test suite ──────────────────────────────────────────────────────────
-  # Uses stdlib unittest + ha_stubs (no external HA installation required).
-  # The ha_stubs module provides accurate minimal stubs for all HA classes
-  # used by the integration, so tests run in plain Python with no network
-  # access needed during CI.
+  # ── Full test suite via pytest-homeassistant-custom-component ───────────
+  # PHCC pins an exact HA release and provides the same test infrastructure
+  # used by HA core. See requirements_test.txt for the pinned version and
+  # docs/development.md for local setup instructions.
   tests:
-    name: Tests (unittest)
+    name: Tests (pytest + PHCC)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -64,5 +63,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.14"
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
       - name: Run test suite
-        run: python3 tests/run_tests.py
+        run: pytest tests/ -v --tb=short

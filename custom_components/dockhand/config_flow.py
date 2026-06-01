@@ -2,6 +2,7 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -139,6 +140,14 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         # Tracks which flow triggered the token step.
         # Values: "user" | "reauth" | "reconfigure"
         self._flow_origin: str = "user"
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> DockhandOptionsFlow:
+        """Return the options flow handler."""
+        return DockhandOptionsFlow(config_entry)
 
     # ------------------------------------------------------------------ #
     # Step 1: connection settings (URL + feature flags)

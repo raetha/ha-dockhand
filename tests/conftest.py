@@ -21,13 +21,32 @@ from custom_components.dockhand.const import (
 )
 
 # ---------------------------------------------------------------------------
+# Required by pytest-homeassistant-custom-component to load custom integrations
+# ---------------------------------------------------------------------------
+
+try:
+    # This fixture is provided by pytest-homeassistant-custom-component.
+    # When running on Python 3.14+ with PHCC installed it enables loading
+    # custom integrations during tests.  On Python 3.12 (sandbox) where PHCC
+    # is unavailable the fixture doesn't exist and we skip the autouse wrapper.
+    import pytest_homeassistant_custom_component  # noqa: F401
+
+    @pytest.fixture(autouse=True)
+    def auto_enable_custom_integrations(enable_custom_integrations):
+        """Enable custom integrations for all tests automatically."""
+        return enable_custom_integrations
+
+except ImportError:
+    pass  # PHCC not installed — sandbox environment, skip autouse wrapper
+
+
+# ---------------------------------------------------------------------------
 # Canonical test data
 # ---------------------------------------------------------------------------
 
 MOCK_API_URL = "http://dockhand.test:3000"
 MOCK_TOKEN = "dh_test_token_abc123"
 
-# Config entry data as stored after successful authenticated setup
 MOCK_CONFIG_DATA: dict[str, Any] = {
     CONF_API_URL: MOCK_API_URL,
     CONF_API_TOKEN: MOCK_TOKEN,
@@ -39,7 +58,6 @@ MOCK_CONFIG_DATA: dict[str, Any] = {
     CONF_ENABLE_NETWORKS: False,
 }
 
-# Config entry data for a no-auth install (no token stored)
 MOCK_CONFIG_DATA_NOAUTH: dict[str, Any] = {
     CONF_API_URL: MOCK_API_URL,
     CONF_POLL_INTERVAL: DEFAULT_POLL_INTERVAL,
@@ -125,18 +143,38 @@ MOCK_STACK: dict[str, Any] = {
     "containers": [MOCK_CONTAINER_COMPOSE["id"]],
 }
 
+MOCK_CONTAINER_STATS: dict[str, Any] = {
+    "name": "my-app",
+    "cpuPercent": 12.34,
+    "memoryUsage": 157_286_400,
+    "memoryRaw": 178_257_920,
+    "memoryCache": 20_971_520,
+    "memoryLimit": 16_764_731_392,
+    "memoryPercent": 0.94,
+    "networkRx": 83_886_080,
+    "networkTx": 104_857_600,
+    "blockRead": 52_428_800,
+    "blockWrite": 31_457_280,
+}
+
 
 def make_fast_data(
     containers: list | None = None,
     stacks: list | None = None,
+    container_stats: dict | None = None,
 ) -> dict[int, dict]:
     return {
         ENV_ID: {
             "stats": MOCK_STATS,
-            "containers": containers
-            if containers is not None
-            else [MOCK_CONTAINER_FREE],
+            "containers": (
+                containers if containers is not None else [MOCK_CONTAINER_FREE]
+            ),
             "stacks": stacks if stacks is not None else [MOCK_STACK],
+            "container_stats": (
+                container_stats
+                if container_stats is not None
+                else {MOCK_CONTAINER_FREE["name"]: MOCK_CONTAINER_STATS}
+            ),
         }
     }
 
@@ -179,7 +217,11 @@ def make_mock_client(
         return_value=[{"id": ENV_ID, "name": ENV_NAME}]
     )
     client.async_get_dashboard_stats = AsyncMock(return_value=MOCK_STATS)
+    client.async_get_all_dashboard_stats = AsyncMock(
+        return_value=[{"id": ENV_ID, **MOCK_STATS}]
+    )
     client.async_get_containers = AsyncMock(return_value=[MOCK_CONTAINER_FREE])
+    client.async_get_container_stats = AsyncMock(return_value=[MOCK_CONTAINER_STATS])
     client.async_get_stacks = AsyncMock(return_value=[MOCK_STACK])
     client.async_get_images = AsyncMock(return_value=[])
     client.async_get_networks = AsyncMock(return_value=[])
