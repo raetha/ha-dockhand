@@ -6,17 +6,17 @@ The test suite uses [pytest-homeassistant-custom-component](https://github.com/M
 
 ### Using the test script
 
-A unified `scripts/run_tests.sh` handles both the sandbox-safe subset and the full PHCC suite:
+A unified `scripts/run_tests.sh` handles both lint-only and the full PHCC suite, with each mode using an isolated venv created automatically on first run:
 
 ```bash
-# Sandbox-safe: ruff + AST check + HA-independent tests (Python 3.12+ ok)
+# Lint + AST only (any Python 3.x — no homeassistant required)
 bash scripts/run_tests.sh
 
-# Full suite: everything above + all pytest tests via PHCC (requires Python 3.14.2+)
+# Full suite: ruff + AST + all 354 pytest tests via PHCC (requires Python 3.14.2+)
 bash scripts/run_tests.sh --full
 
-# Full suite in a specific venv
-bash scripts/run_tests.sh --full --venv .venv
+# Full suite in a specific venv path
+bash scripts/run_tests.sh --full --venv .my-venv
 
 # Additional pytest flags pass through
 bash scripts/run_tests.sh --full -v         # verbose
@@ -24,9 +24,9 @@ bash scripts/run_tests.sh --full -x         # stop on first failure
 bash scripts/run_tests.sh --full -k "coord" # filter by name
 ```
 
-The script always runs steps 1–3 (ruff check, ruff format, AST syntax) regardless of mode. Step 4 is either the full pytest suite (`--full`) or just `test_api.py` + `test_workflows.py` (default).
+Default mode (no flags) runs ruff check, ruff format, and AST syntax check in a lightweight `.venv-sandbox` venv. It does **not** run pytest because every test file imports from `custom_components.dockhand`, which imports `homeassistant` at module level — pytest cannot collect any tests without a real homeassistant install.
 
-When Python 3.14.2+ becomes available in the Claude sandbox, the single comment block in step 4 of the script can be uncommented to enable the full suite there too.
+`--full` uses `.venv-full` (created with Python 3.14.2+, PHCC installed from `requirements_test.txt`) and runs all 354 tests.
 
 ### Manual pytest (if PHCC is installed)
 
@@ -42,8 +42,8 @@ pytest tests/
 # Run a specific file
 pytest tests/test_coordinator.py -v
 
-# Run only the HA-independent tests (works on Python 3.12+)
-pytest tests/test_api.py tests/test_workflows.py
+# Run a specific test
+pytest tests/test_api.py -v
 ```
 
 ### PHCC version ↔ HA version
@@ -75,18 +75,13 @@ GitHub Actions (`.github/workflows/ci.yml`) runs the full suite on Python 3.14 w
 
 ### Sandbox limitations
 
-The Claude development sandbox runs Python 3.12 and cannot install PHCC or HA 2026.x. After code changes, Claude runs:
-- **ruff check + format** — full lint and format validation (always possible)
-- **AST syntax check** — catches syntax errors without imports
-- **261 of 354 tests** — all tests that don't require a real `hass` fixture:
-  - `test_api.py` (28) — fully sandbox-safe
-  - `test_workflows.py` (6) — fully sandbox-safe
-  - `test_entities.py` (137) — all entity unit tests use `MagicMock` coordinators
-  - `test_update.py` (36) — all update entity tests use `MagicMock`
-  - `test_coordinator.py` (5) — `_safe_list` and `_unwrap` helper tests only
-  - `test_helpers.py` (49) — URL builders, DeviceInfo factories, pure logic; excludes the 17 `_ensure_*_devices` tests that need a real device registry
+The Claude development sandbox runs Python 3.12 and cannot install PHCC or HA 2026.x. Because every test file imports from `custom_components.dockhand` (which imports `homeassistant` at module level), pytest cannot collect any tests without a real homeassistant install.
 
-The 93 `hass`-dependent tests (`test_config_flow.py`, `test_init.py`, `_ensure_*_devices` in `test_helpers.py`, coordinator integration tests) require Python 3.14.2+ with PHCC. Push to GitHub and check CI for authoritative results on those.
+After code changes, Claude runs:
+- **ruff check + format** — full lint and format validation
+- **AST syntax check** — catches syntax errors without imports
+
+The full 354-test pytest suite requires Python 3.14.2+ with PHCC. Use your local dev environment or push to GitHub and check CI for authoritative test results.
 
 ## Code quality checks
 
@@ -124,7 +119,7 @@ custom_components/dockhand/
 ├── api.py               # DockhandClient — Bearer token auth
 ├── binary_sensor.py     # Environment config/state binary sensors
 ├── button.py            # Container/stack restart buttons
-├── config_flow.py       # URL probe → optional token step + options flow
+├── config_flow.py       # Setup (URL+SSL → optional token); Options (poll/features); Reconfigure (URL+SSL+token)
 ├── const.py             # Constants and defaults
 ├── coordinator.py       # Fast (60s) + Slow (600s) + Update coordinators
 ├── diagnostics.py       # HA diagnostics support

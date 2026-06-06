@@ -40,22 +40,26 @@ rules:
   config-flow:
     status: done
     comment: >
-      Full UI config flow: async_step_user (URL and settings), async_step_token
-      (shown only when server returns 401), async_step_reauth_confirm,
-      async_step_reconfigure, and options flow. Auth is auto-detected — no checkbox
-      needed. All steps include data_description for each field. Connection steps
-      include a verify_ssl checkbox (default: True) to support self-signed certs.
+      Full UI config flow: async_step_user (URL and SSL), async_step_token
+      (shown only when server returns 401), async_step_setup_options (poll
+      intervals and feature flags, presented during initial setup so users
+      configure everything upfront), async_step_reauth_confirm,
+      async_step_reconfigure (URL, SSL, token only — options via Configure),
+      and options flow. Auth is auto-detected — no checkbox needed. All steps
+      include data_description for each field. Connection steps include a
+      verify_ssl checkbox (default: True) to support self-signed certs.
 
   config-flow-test-coverage:
     status: done
     comment: >
-      Full test coverage across all flow steps in test_config_flow.py:
-      async_step_user (5 tests), async_step_token (4 tests),
-      async_step_reauth_confirm (3 tests), async_step_reconfigure (3 tests),
-      and options async_step_init (2 tests — options flow now correctly wired
-      via async_get_options_flow on DockhandConfigFlow). Covers all error
-      branches, duplicate detection, auth-detection probe, token merging,
-      origin-routing, and no-auth token stripping.
+      Full test coverage across all flow steps in test_config_flow.py (18 tests):
+      async_step_user (5 tests), async_step_token (3 tests),
+      async_step_setup_options (covered by all full-flow tests — 3 explicit
+      step_id assertions), async_step_reauth_confirm (3 tests),
+      async_step_reconfigure (5 tests), and options async_step_init (2 tests).
+      Covers all error branches, duplicate detection, auth-detection probe,
+      token merging, origin-routing, no-auth token stripping, token-clear-disables-
+      auth, new-token replacement, and options stored correctly at setup.
 
   dependency-transparency:
     status: done
@@ -216,9 +220,9 @@ rules:
       release_summary, async_release_notes, _update_supported_features,
       _handle_coordinator_update, async_install including not-found and
       action_failed branches), HomeAssistantError propagation for all action
-      methods, setup, and unload. Full suite requires Python 3.14.2+ and
-      PHCC; runs in CI on every push. 261 of 354 tests run in the
-      Claude sandbox (Python 3.12) for immediate feedback without PHCC.
+      methods, setup, and unload. Full suite (356 tests) requires Python 3.14.2+ and
+      PHCC; runs in CI on every push. The Claude sandbox (Python 3.12) runs
+      ruff + AST only — pytest requires homeassistant at import time.
 
   # ── Gold ──────────────────────────────────────────────────────────────────
 
@@ -392,8 +396,9 @@ rules:
   reconfiguration-flow:
     status: done
     comment: >
-      async_step_reconfigure implemented. Allows changing API URL, API token,
-      and poll intervals without removing the integration.
+      async_step_reconfigure implemented. Allows changing API URL, SSL setting,
+      and API token without removing the integration. Poll intervals and feature
+      flags are managed separately via the Options flow (Configure button).
 
   repair-issues:
     status: exempt

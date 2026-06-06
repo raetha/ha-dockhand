@@ -2,12 +2,14 @@
 Tests for DockhandConfigFlow and DockhandOptionsFlow (config_flow.py).
 
 Covers:
-- async_step_user: no-auth (probe succeeds, entry created), auth required (→ token),
+- async_step_user: no-auth (→ setup_options → entry), auth required (→ token),
   connection error
-- async_step_token: success (user origin), auth error, connection error,
-  success (reauth/reconfigure origins)
+- async_step_token: success (→ setup_options → entry), auth error, connection error,
+  success (reauth origin), success (reconfigure origin)
+- async_step_setup_options: covered implicitly by all full-flow tests
 - async_step_reauth_confirm: success, auth error, connection error, no input shows form
-- async_step_reconfigure: no-auth (strips token), auth required (→ token), connection error
+- async_step_reconfigure: success (token kept), success (token cleared disables auth),
+  success (new token supplied), auth-required routes to token step, connection error
 - DockhandOptionsFlow: saves user_input as options
 """
 
@@ -25,13 +27,32 @@ from custom_components.dockhand.api import DockhandAuthError
 
 BASE_CONNECTION = {
     "api_url": "http://dh.test:3000",
+    "verify_ssl": True,
+}
+
+# Minimal options submitted on the setup_options step (all defaults accepted).
+BASE_OPTIONS = {
     "poll_interval": 60,
     "poll_interval_slow": 600,
     "enable_schedules": False,
     "enable_images": False,
     "enable_volumes": False,
     "enable_networks": False,
+    "enable_updates": False,
+    "poll_interval_updates": 86400,
+}
+
+# Legacy entry data shape (poll/enable keys stored in data by older versions).
+# Used in tests that exercise the options flow or migration paths.
+LEGACY_ENTRY_DATA = {
+    "api_url": "http://dh.test:3000",
     "verify_ssl": True,
+    "poll_interval": 60,
+    "poll_interval_slow": 600,
+    "enable_schedules": False,
+    "enable_images": False,
+    "enable_volumes": False,
+    "enable_networks": False,
 }
 
 MOCK_TOKEN = "dh_test_token_abc123"
@@ -78,7 +99,7 @@ def _patch_full_setup():
 
 
 async def test_step_user_no_auth_creates_entry(hass: HomeAssistant):
-    """Probe succeeds without token → auth disabled → create entry immediately."""
+    """Probe succeeds without token → auth disabled → setup_options → create entry."""
     result = await hass.config_entries.flow.async_init(
         "dockhand", context={"source": "user"}
     )
@@ -89,8 +110,15 @@ async def test_step_user_no_auth_creates_entry(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], BASE_CONNECTION
         )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "setup_options"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert "api_token" not in result["data"]
+    assert result["options"]["poll_interval"] == 60
 
 
 async def test_step_user_auth_required_redirects_to_token(hass: HomeAssistant):
@@ -134,6 +162,12 @@ async def test_step_user_verify_ssl_false_stored(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {**BASE_CONNECTION, "verify_ssl": False}
         )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "setup_options"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["verify_ssl"] is False
 
@@ -157,9 +191,16 @@ async def test_step_token_success_creates_entry(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"api_token": MOCK_TOKEN}
         )
+    assert result["type"] == FlowResultType.FORM
+    assert result["step_id"] == "setup_options"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["api_token"] == MOCK_TOKEN
     assert result["data"]["api_url"] == "http://dh.test:3000"
+    assert result["options"]["poll_interval"] == 60
 
 
 async def test_step_token_invalid_token_shows_invalid_auth(hass: HomeAssistant):
@@ -211,6 +252,9 @@ async def test_step_reauth_confirm_success(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], BASE_CONNECTION
         )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     entry = result["result"]
 
@@ -238,6 +282,9 @@ async def test_step_reauth_confirm_invalid_token(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], BASE_CONNECTION
         )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     entry = result["result"]
 
     result = await hass.config_entries.flow.async_init(
@@ -259,6 +306,9 @@ async def test_step_reauth_confirm_no_input_shows_form(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], BASE_CONNECTION
         )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     entry = result["result"]
 
     result = await hass.config_entries.flow.async_init(
@@ -275,7 +325,7 @@ async def test_step_reauth_confirm_no_input_shows_form(hass: HomeAssistant):
 
 
 async def test_step_reconfigure_no_auth_strips_token(hass: HomeAssistant):
-    """Probe succeeds without token → strip any stored token, update entry."""
+    """Blank token + probe succeeds → strip any stored token, update entry."""
     result = await hass.config_entries.flow.async_init(
         "dockhand", context={"source": "user"}
     )
@@ -287,23 +337,96 @@ async def test_step_reconfigure_no_auth_strips_token(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], {"api_token": MOCK_TOKEN}
         )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     entry = result["result"]
+    assert entry.data.get("api_token") == MOCK_TOKEN
 
+    # Reconfigure with blank token — server no longer requires auth.
     result = await hass.config_entries.flow.async_init(
         "dockhand",
         context={"source": "reconfigure", "entry_id": entry.entry_id},
     )
+    assert result["step_id"] == "reconfigure"
     with _patch_client():
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], BASE_CONNECTION
+            result["flow_id"], {**BASE_CONNECTION, "api_token": ""}
         )
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert "api_token" not in entry.data
 
 
-async def test_step_reconfigure_auth_required_redirects_to_token(hass: HomeAssistant):
+async def test_step_reconfigure_clearing_token_disables_auth(hass: HomeAssistant):
+    """Clearing the token field → probe without auth → if probe succeeds, strip token."""
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "user"}
+    )
+    with _patch_client(probe_side_effect=DockhandAuthError("401")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], BASE_CONNECTION
+        )
+    with _patch_client():
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_token": MOCK_TOKEN}
+        )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
+    entry = result["result"]
+    assert entry.data.get("api_token") == MOCK_TOKEN
+
+    # Clear the token — server no longer requires auth.
+    result = await hass.config_entries.flow.async_init(
+        "dockhand",
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    with _patch_client():
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {**BASE_CONNECTION, "api_token": ""}
+        )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    # Token must be removed since probe succeeded without auth.
+    assert "api_token" not in entry.data
+
+
+async def test_step_reconfigure_new_token_replaces_existing(hass: HomeAssistant):
+    """Supplying a new token replaces the stored one after a successful probe."""
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "user"}
+    )
+    with _patch_client(probe_side_effect=DockhandAuthError("401")):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], BASE_CONNECTION
+        )
+    with _patch_client():
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_token": MOCK_TOKEN}
+        )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
+    entry = result["result"]
+
+    new_token = "dh_new_token_xyz789"
+    result = await hass.config_entries.flow.async_init(
+        "dockhand",
+        context={"source": "reconfigure", "entry_id": entry.entry_id},
+    )
+    with _patch_client():
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {**BASE_CONNECTION, "api_token": new_token}
+        )
+    assert result["type"] == FlowResultType.ABORT
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data.get("api_token") == new_token
+
+
+async def test_step_reconfigure_auth_required_routes_to_token(hass: HomeAssistant):
+    """DockhandAuthError on reconfigure → routes to token step for re-entry."""
     result = await hass.config_entries.flow.async_init(
         "dockhand", context={"source": "user"}
     )
@@ -311,15 +434,19 @@ async def test_step_reconfigure_auth_required_redirects_to_token(hass: HomeAssis
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], BASE_CONNECTION
         )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     entry = result["result"]
 
     result = await hass.config_entries.flow.async_init(
         "dockhand",
         context={"source": "reconfigure", "entry_id": entry.entry_id},
     )
+    # Clear token; server still requires auth → should route to token step
     with _patch_client(probe_side_effect=DockhandAuthError("401")):
         result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], BASE_CONNECTION
+            result["flow_id"], {**BASE_CONNECTION, "api_token": ""}
         )
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "token"
@@ -333,6 +460,9 @@ async def test_step_reconfigure_connection_error(hass: HomeAssistant):
         result = await hass.config_entries.flow.async_configure(
             result["flow_id"], BASE_CONNECTION
         )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
     entry = result["result"]
 
     result = await hass.config_entries.flow.async_init(
@@ -355,7 +485,7 @@ async def test_step_reconfigure_connection_error(hass: HomeAssistant):
 async def test_options_flow_saves_options(hass: HomeAssistant):
     entry = MockConfigEntry(
         domain="dockhand",
-        data={**BASE_CONNECTION, "api_token": "dh_test_token"},
+        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
         title="http://dh.test:3000",
     )
     entry.add_to_hass(hass)
@@ -377,7 +507,7 @@ async def test_options_flow_saves_options(hass: HomeAssistant):
 async def test_options_flow_no_input_shows_form(hass: HomeAssistant):
     entry = MockConfigEntry(
         domain="dockhand",
-        data={**BASE_CONNECTION, "api_token": "dh_test_token"},
+        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
         title="http://dh.test:3000",
     )
     entry.add_to_hass(hass)

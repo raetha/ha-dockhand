@@ -3,30 +3,14 @@
     "step": {
       "user": {
         "title": "Mit Dockhand verbinden",
-        "description": "Gib deine Dockhand-Server-URL und Einstellungen ein. Ein API-Token wird angefordert, wenn die Authentifizierung in Dockhand aktiviert ist.",
+        "description": "Gib die URL deines Dockhand-Servers ein. Ein API-Token wird angefordert, wenn die Authentifizierung aktiviert ist.",
         "data": {
-          "api_url": "API-URL",
-          "poll_interval": "Schnelles Abfrageintervall (Sekunden) – Stats, Container & Stacks",
-          "poll_interval_slow": "Langsames Abfrageintervall (Sekunden) – Images, Volumes, Netzwerke, Schedules",
-          "enable_schedules": "Schedule-Sensoren aktivieren",
-          "enable_images": "Image-Sensoren aktivieren",
-          "enable_volumes": "Volume-Sensoren aktivieren",
-          "enable_networks": "Netzwerk-Sensoren aktivieren",
-          "verify_ssl": "SSL-Zertifikat prüfen",
-          "enable_updates": "Container-Update-Entitäten aktivieren",
-          "poll_interval_updates": "Update-Prüfintervall (Sekunden)"
+          "api_url": "API URL",
+          "verify_ssl": "SSL-Zertifikat überprüfen"
         },
         "data_description": {
           "api_url": "Die Basis-URL deiner Dockhand-Instanz.",
-          "poll_interval": "Wie oft Container-, Stack- und Umgebungsstatistiken aktualisiert werden. Niedrigere Werte erhöhen die Last. Standard: 60.",
-          "poll_interval_slow": "Wie oft Images, Volumes, Netzwerke und Schedules aktualisiert werden. Standard: 600.",
-          "enable_schedules": "Aktiviert Sensoren für Dockhand-Wartungspläne.",
-          "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
-          "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
-          "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
-          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet.",
-          "enable_updates": "Aktiviert Update-Entitäten für jeden Container, die die Verfügbarkeit von Image-Updates anzeigen. Löst echte Registry-Abfragen aus – siehe poll_interval_updates.",
-          "poll_interval_updates": "Wie oft Container-Registries auf Image-Updates geprüft werden (Sekunden). Jede Prüfung fragt die Registry für jeden Container ab. Standard: 86400 (24 Stunden)."
+          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet."
         }
       },
       "token": {
@@ -37,6 +21,30 @@
         },
         "data_description": {
           "api_token": "Ein Dockhand API-Token, das mit dh_ beginnt. Erstelle eines unter Profil → API-Tokens in der Dockhand-Oberfläche."
+        }
+      },
+      "setup_options": {
+        "title": "Abfrage und Funktionen konfigurieren",
+        "description": "Lege fest, wie oft Dockhand abgefragt wird und welche optionalen Entitätsgruppen aktiviert werden sollen. All das kann später über Konfigurieren geändert werden.",
+        "data": {
+          "poll_interval": "Schnelles Abfrageintervall (Sekunden)",
+          "poll_interval_slow": "Langsames Abfrageintervall (Sekunden)",
+          "enable_schedules": "Zeitpläne aktivieren",
+          "enable_images": "Images aktivieren",
+          "enable_volumes": "Volumes aktivieren",
+          "enable_networks": "Netzwerke aktivieren",
+          "enable_updates": "Container-Updates aktivieren",
+          "poll_interval_updates": "Update-Prüfintervall (Sekunden)"
+        },
+        "data_description": {
+          "poll_interval": "Wie oft Containerzustände, Stacks und Umgebungsstatistiken aktualisiert werden.",
+          "poll_interval_slow": "Wie oft Images, Volumes, Netzwerke und Zeitpläne aktualisiert werden.",
+          "enable_schedules": "Entitäten für geplante Dockhand-Aufgaben erstellen.",
+          "enable_images": "Entitäten für Docker-Images auf jedem Host erstellen.",
+          "enable_volumes": "Entitäten für Docker-Volumes auf jedem Host erstellen.",
+          "enable_networks": "Entitäten für Docker-Netzwerke auf jedem Host erstellen.",
+          "enable_updates": "Update-Entitäten erstellen, die Image-Update-Verfügbarkeit anzeigen und Ein-Klick-Updates ermöglichen.",
+          "poll_interval_updates": "Wie oft Container-Registries auf Image-Updates geprüft werden. Selten halten — jede Prüfung fragt die Registry für jeden Container ab."
         }
       },
       "reauth_confirm": {
@@ -51,30 +59,16 @@
       },
       "reconfigure": {
         "title": "Dockhand neu konfigurieren",
-        "description": "Server-URL und Einstellungen aktualisieren. Ein API-Token wird angefordert, wenn Authentifizierung erforderlich ist.",
+        "description": "Server-URL, SSL-Einstellung oder API-Token aktualisieren. Um Abfrageintervalle oder Feature-Flags zu ändern, verwende stattdessen Konfigurieren.",
         "data": {
-          "api_url": "API-URL",
-          "poll_interval": "Schnelles Abfrageintervall (Sekunden) – Stats, Container & Stacks",
-          "poll_interval_slow": "Langsames Abfrageintervall (Sekunden) – Images, Volumes, Netzwerke, Schedules",
-          "enable_schedules": "Schedule-Sensoren aktivieren",
-          "enable_images": "Image-Sensoren aktivieren",
-          "enable_volumes": "Volume-Sensoren aktivieren",
-          "enable_networks": "Netzwerk-Sensoren aktivieren",
-          "verify_ssl": "SSL-Zertifikat prüfen",
-          "enable_updates": "Container-Update-Entitäten aktivieren",
-          "poll_interval_updates": "Update-Prüfintervall (Sekunden)"
+          "api_url": "API URL",
+          "verify_ssl": "SSL-Zertifikat überprüfen",
+          "api_token": "API-Token"
         },
         "data_description": {
           "api_url": "Die Basis-URL deiner Dockhand-Instanz.",
-          "poll_interval": "Wie oft Container-, Stack- und Umgebungsstatistiken aktualisiert werden. Standard: 60.",
-          "poll_interval_slow": "Wie oft Images, Volumes, Netzwerke und Schedules aktualisiert werden. Standard: 600.",
-          "enable_schedules": "Aktiviert Sensoren für Dockhand-Wartungspläne.",
-          "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
-          "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
-          "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
-          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen. Nur deaktivieren, wenn deine Dockhand-Instanz ein selbstsigniertes Zertifikat verwendet.",
-          "enable_updates": "Aktiviert Update-Entitäten für jeden Container, die die Verfügbarkeit von Image-Updates anzeigen. Löst echte Registry-Abfragen aus – siehe poll_interval_updates.",
-          "poll_interval_updates": "Wie oft Container-Registries auf Image-Updates geprüft werden (Sekunden). Jede Prüfung fragt die Registry für jeden Container ab. Standard: 86400 (24 Stunden)."
+          "verify_ssl": "Deaktivieren, um selbstsignierte oder nicht vertrauenswürdige SSL-Zertifikate zuzulassen.",
+          "api_token": "Dein aktuelles Token wird maskiert angezeigt. Leere es und speichere, um die Authentifizierung zu deaktivieren (du wirst erneut aufgefordert, wenn der Server sie noch benötigt). Gib einen neuen Wert ein, um die Anmeldedaten zu rotieren."
         }
       }
     },
@@ -92,7 +86,7 @@
     "step": {
       "init": {
         "title": "Dockhand-Optionen",
-        "description": "Abfrageintervalle und optionale Datenquellen anpassen. Um URL oder API-Token zu ändern, verwende Neu konfigurieren.",
+        "description": "Abfrageintervalle und optionale Datenquellen anpassen. Um URL, SSL oder API-Token zu ändern, verwende stattdessen Neu konfigurieren.",
         "data": {
           "poll_interval": "Schnelles Abfrageintervall (Sekunden) – Stats, Container & Stacks",
           "poll_interval_slow": "Langsames Abfrageintervall (Sekunden) – Images, Volumes, Netzwerke, Schedules",

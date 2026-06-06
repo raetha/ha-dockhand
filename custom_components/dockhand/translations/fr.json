@@ -3,30 +3,14 @@
     "step": {
       "user": {
         "title": "Connexion à Dockhand",
-        "description": "Entrez l'URL de votre serveur Dockhand et les paramètres. Un jeton API sera demandé si l'authentification est activée dans Dockhand.",
+        "description": "Saisissez l'URL de votre serveur Dockhand. Un token API sera demandé si l'authentification est activée.",
         "data": {
-          "api_url": "URL de l'API",
-          "poll_interval": "Intervalle d'interrogation rapide (secondes) — stats, conteneurs et stacks",
-          "poll_interval_slow": "Intervalle d'interrogation lent (secondes) — images, volumes, réseaux, planifications",
-          "enable_schedules": "Activer les capteurs de planification",
-          "enable_images": "Activer les capteurs d'images",
-          "enable_volumes": "Activer les capteurs de volumes",
-          "enable_networks": "Activer les capteurs de réseaux",
-          "verify_ssl": "Vérifier le certificat SSL",
-          "enable_updates": "Activer les entités de mise à jour des conteneurs",
-          "poll_interval_updates": "Intervalle de vérification des mises à jour (secondes)"
+          "api_url": "API URL",
+          "verify_ssl": "Vérifier le certificat SSL"
         },
         "data_description": {
           "api_url": "L'URL de base de votre instance Dockhand.",
-          "poll_interval": "Fréquence d'actualisation des conteneurs, stacks et statistiques d'environnement. Des valeurs plus faibles augmentent la charge. Défaut : 60.",
-          "poll_interval_slow": "Fréquence d'actualisation des images, volumes, réseaux et planifications. Défaut : 600.",
-          "enable_schedules": "Active les capteurs pour les planifications de maintenance Dockhand.",
-          "enable_images": "Active les capteurs pour les images Docker par environnement.",
-          "enable_volumes": "Active les capteurs pour les volumes Docker par environnement.",
-          "enable_networks": "Active les capteurs pour les réseaux Docker par environnement.",
-          "verify_ssl": "Décochez pour autoriser les certificats SSL auto-signés ou non fiables. Désactivez uniquement si votre instance Dockhand utilise un certificat auto-signé.",
-          "enable_updates": "Active les entités de mise à jour pour chaque conteneur indiquant la disponibilité des mises à jour d'image. Déclenche de vraies requêtes vers le registre — voir poll_interval_updates.",
-          "poll_interval_updates": "Fréquence de vérification des mises à jour d'image dans les registres de conteneurs (secondes). Chaque vérification interroge le registre pour chaque conteneur. Défaut : 86400 (24 heures)."
+          "verify_ssl": "Décocher pour autoriser les certificats SSL auto-signés ou non approuvés. Ne désactiver que si votre instance Dockhand utilise un certificat auto-signé."
         }
       },
       "token": {
@@ -37,6 +21,30 @@
         },
         "data_description": {
           "api_token": "Un jeton API Dockhand commençant par dh_. Générez-en un sous Profil → Jetons API dans l'interface Dockhand."
+        }
+      },
+      "setup_options": {
+        "title": "Configurer l'interrogation et les fonctionnalités",
+        "description": "Définissez la fréquence d'interrogation de Dockhand et les groupes d'entités optionnels à activer. Tout cela peut être modifié ultérieurement via Configurer.",
+        "data": {
+          "poll_interval": "Intervalle d'interrogation rapide (secondes)",
+          "poll_interval_slow": "Intervalle d'interrogation lent (secondes)",
+          "enable_schedules": "Activer les planifications",
+          "enable_images": "Activer les images",
+          "enable_volumes": "Activer les volumes",
+          "enable_networks": "Activer les réseaux",
+          "enable_updates": "Activer les mises à jour des conteneurs",
+          "poll_interval_updates": "Intervalle de vérification des mises à jour (secondes)"
+        },
+        "data_description": {
+          "poll_interval": "Fréquence de rafraîchissement des états des conteneurs, des piles et des statistiques d'environnement.",
+          "poll_interval_slow": "Fréquence de rafraîchissement des images, volumes, réseaux et planifications.",
+          "enable_schedules": "Créer des entités pour les tâches planifiées Dockhand.",
+          "enable_images": "Créer des entités pour les images Docker sur chaque hôte.",
+          "enable_volumes": "Créer des entités pour les volumes Docker sur chaque hôte.",
+          "enable_networks": "Créer des entités pour les réseaux Docker sur chaque hôte.",
+          "enable_updates": "Créer des entités de mise à jour indiquant la disponibilité des mises à jour d'images, avec prise en charge des mises à jour en un clic.",
+          "poll_interval_updates": "Fréquence de vérification des registres de conteneurs pour les mises à jour d'images. Gardez cela peu fréquent — chaque vérification interroge le registre pour chaque conteneur."
         }
       },
       "reauth_confirm": {
@@ -51,30 +59,16 @@
       },
       "reconfigure": {
         "title": "Reconfigurer Dockhand",
-        "description": "Mettre à jour l'URL du serveur et les paramètres. Un jeton API sera demandé si l'authentification est requise.",
+        "description": "Mettez à jour l'URL du serveur, le paramètre SSL ou le token API. Pour modifier les intervalles d'interrogation ou les indicateurs de fonctionnalités, utilisez Configurer à la place.",
         "data": {
-          "api_url": "URL de l'API",
-          "poll_interval": "Intervalle d'interrogation rapide (secondes) — stats, conteneurs et stacks",
-          "poll_interval_slow": "Intervalle d'interrogation lent (secondes) — images, volumes, réseaux, planifications",
-          "enable_schedules": "Activer les capteurs de planification",
-          "enable_images": "Activer les capteurs d'images",
-          "enable_volumes": "Activer les capteurs de volumes",
-          "enable_networks": "Activer les capteurs de réseaux",
+          "api_url": "API URL",
           "verify_ssl": "Vérifier le certificat SSL",
-          "enable_updates": "Activer les entités de mise à jour des conteneurs",
-          "poll_interval_updates": "Intervalle de vérification des mises à jour (secondes)"
+          "api_token": "Jeton API"
         },
         "data_description": {
           "api_url": "L'URL de base de votre instance Dockhand.",
-          "poll_interval": "Fréquence d'actualisation des conteneurs, stacks et statistiques. Défaut : 60.",
-          "poll_interval_slow": "Fréquence d'actualisation des images, volumes, réseaux et planifications. Défaut : 600.",
-          "enable_schedules": "Active les capteurs pour les planifications de maintenance Dockhand.",
-          "enable_images": "Active les capteurs pour les images Docker par environnement.",
-          "enable_volumes": "Active les capteurs pour les volumes Docker par environnement.",
-          "enable_networks": "Active les capteurs pour les réseaux Docker par environnement.",
-          "verify_ssl": "Décochez pour autoriser les certificats SSL auto-signés ou non fiables.",
-          "enable_updates": "Active les entités de mise à jour pour chaque conteneur indiquant la disponibilité des mises à jour d'image. Déclenche de vraies requêtes vers le registre — voir poll_interval_updates.",
-          "poll_interval_updates": "Fréquence de vérification des mises à jour d'image dans les registres de conteneurs (secondes). Chaque vérification interroge le registre pour chaque conteneur. Défaut : 86400 (24 heures)."
+          "verify_ssl": "Décocher pour autoriser les certificats SSL auto-signés ou non approuvés.",
+          "api_token": "Votre token actuel est affiché masqué. Effacez-le et sauvegardez pour désactiver l'authentification (vous serez à nouveau invité si le serveur l'exige toujours). Saisissez une nouvelle valeur pour faire pivoter les identifiants."
         }
       }
     },
@@ -92,7 +86,7 @@
     "step": {
       "init": {
         "title": "Options Dockhand",
-        "description": "Ajustez les intervalles d'interrogation et les sources de données optionnelles. Pour modifier l'URL ou le jeton API, utilisez Reconfigurer.",
+        "description": "Ajustez les intervalles d'interrogation et les sources de données optionnelles. Pour modifier l'URL, le SSL ou le token API, utilisez Reconfigurer à la place.",
         "data": {
           "poll_interval": "Intervalle d'interrogation rapide (secondes) — stats, conteneurs et stacks",
           "poll_interval_slow": "Intervalle d'interrogation lent (secondes) — images, volumes, réseaux, planifications",

@@ -11,6 +11,42 @@
   to be cleaned up on upgrade. Deferred from 1.7.0 to give users more time
   given the close release cadence.
 
+## [1.7.1] — 2026-06-05
+
+### Fixed
+
+- **Container update timeout too short** — the `batch-update` API call used the
+  same 30-second timeout as read endpoints. A pull-and-recreate can take
+  considerably longer for large images or slow connections, causing HA to report
+  failure even when Dockhand completed the update successfully (Fixes #11).
+  The timeout for this operation is now 300 seconds.
+- **Update action errors not logged** — when `async_install` raised a
+  `HomeAssistantError` the underlying exception was only surfaced in the HA
+  frontend string, not in the log. The full exception type and message are now
+  logged at `ERROR` level, making timeout vs. API error vs. network failure
+  distinguishable from the HA log.
+- **Container stat sensor icons missing** — the eight container resource sensors
+  added in 1.7.0 (CPU %, memory usage/percent/limit, network rx/tx, disk
+  read/write) were not assigned icons in `icons.json`. They now have distinct
+  icons matching their environment-level counterparts.
+- **Reconfigure flow corrected** — the Reconfigure step now shows only
+  connection settings (URL, SSL, API token), matching standard HA convention.
+  Previously it duplicated the full options form including poll intervals and
+  feature flags, which belong in **Configure** instead.
+- **API token missing from Reconfigure** — users can now update, rotate, or
+  clear their API token directly from the Reconfigure step without needing to
+  delete and re-add the integration. The token field is pre-populated and
+  masked — clear it to disable authentication (you will be prompted again if
+  the server still requires it), or enter a new value to rotate credentials.
+- **API token fields masked** — token entry fields across all flow steps now
+  render as password inputs, preventing shoulder-surfing and accidental exposure
+  of credentials in screenshots.
+- **Options step added to initial setup** — poll intervals and optional feature
+  flags (schedules, images, volumes, networks, container updates) are now
+  presented as step 3 of the setup wizard, so new users can configure everything
+  without needing to find the Configure button afterwards. Options are stored in
+  `entry.options` from the start, consistent with the existing Configure flow.
+
 ## [1.7.0] — 2026-06-01
 
 ### Added
@@ -409,7 +445,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/raetha/ha-dockhand/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/raetha/ha-dockhand/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/raetha/ha-dockhand/compare/v1.5.1...v1.6.0
 [1.5.1]: https://github.com/raetha/ha-dockhand/compare/v1.5.0...v1.5.1

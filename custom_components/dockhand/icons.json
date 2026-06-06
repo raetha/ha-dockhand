@@ -7,6 +7,30 @@
       "memory_usage": {
         "default": "mdi:memory"
       },
+      "container_cpu_percent": {
+        "default": "mdi:cpu-64-bit"
+      },
+      "container_memory_usage": {
+        "default": "mdi:memory"
+      },
+      "container_memory_percent": {
+        "default": "mdi:memory"
+      },
+      "container_memory_limit": {
+        "default": "mdi:memory-arrow-down"
+      },
+      "container_network_rx": {
+        "default": "mdi:download-network"
+      },
+      "container_network_tx": {
+        "default": "mdi:upload-network"
+      },
+      "container_block_read": {
+        "default": "mdi:harddisk"
+      },
+      "container_block_write": {
+        "default": "mdi:harddisk"
+      },
       "containers": {
         "default": "mdi:docker"
       },

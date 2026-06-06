@@ -35,7 +35,9 @@ class DockhandClient:
     # Internal helper
     # ------------------------------------------------------------------ #
 
-    async def _request(self, method: str, path: str, **kwargs) -> Any:
+    async def _request(
+        self, method: str, path: str, timeout_seconds: int = 30, **kwargs
+    ) -> Any:
         url = f"{self._api_url}{path}"
         headers = kwargs.pop("headers", {})
 
@@ -44,7 +46,7 @@ class DockhandClient:
 
         headers.setdefault("Accept", "application/json")
 
-        timeout = ClientTimeout(total=30)
+        timeout = ClientTimeout(total=timeout_seconds)
         async with self._session.request(
             method, url, headers=headers, timeout=timeout, **kwargs
         ) as resp:
@@ -205,10 +207,15 @@ class DockhandClient:
         applied by this endpoint — that workflow is only available through the
         Dockhand UI. A warning is surfaced in the HA update entity's release
         summary when scanning is enabled on the environment.
+
+        A generous timeout is used (300 s) because the operation must pull the
+        image before recreating the container, which can be slow on limited
+        connections or for large images.
         """
         await self._request(
             "POST",
             f"/api/containers/batch-update?env={env_id}",
+            timeout_seconds=300,
             json={"containerIds": [container_id]},
         )
 

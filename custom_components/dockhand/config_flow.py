@@ -5,6 +5,11 @@ from homeassistant import config_entries
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
 from .api import DockhandAuthError, DockhandClient
 from .const import (
@@ -34,48 +39,35 @@ DEFAULT_VERIFY_SSL = True
 
 
 def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
-    """Step 1: URL and feature/poll settings."""
+    """Initial setup step: URL and SSL only. Token collected separately if needed."""
     d = defaults or {}
     return vol.Schema(
         {
             vol.Required(CONF_API_URL, default=d.get(CONF_API_URL, "")): str,
             vol.Optional(
-                CONF_POLL_INTERVAL,
-                default=d.get(CONF_POLL_INTERVAL, DEFAULT_POLL_INTERVAL),
-            ): int,
-            vol.Optional(
-                CONF_POLL_INTERVAL_SLOW,
-                default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW),
-            ): int,
-            vol.Optional(
-                CONF_ENABLE_SCHEDULES,
-                default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES),
+                CONF_VERIFY_SSL, default=d.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             ): bool,
-            vol.Optional(
-                CONF_ENABLE_IMAGES,
-                default=d.get(CONF_ENABLE_IMAGES, DEFAULT_ENABLE_IMAGES),
-            ): bool,
-            vol.Optional(
-                CONF_ENABLE_VOLUMES,
-                default=d.get(CONF_ENABLE_VOLUMES, DEFAULT_ENABLE_VOLUMES),
-            ): bool,
-            vol.Optional(
-                CONF_ENABLE_NETWORKS,
-                default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS),
-            ): bool,
-            vol.Optional(
-                CONF_ENABLE_UPDATES,
-                default=d.get(CONF_ENABLE_UPDATES, DEFAULT_ENABLE_UPDATES),
-            ): bool,
-            vol.Optional(
-                CONF_POLL_INTERVAL_UPDATES,
-                default=d.get(
-                    CONF_POLL_INTERVAL_UPDATES, DEFAULT_POLL_INTERVAL_UPDATES
-                ),
-            ): int,
+        }
+    )
+
+
+def _reconfigure_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
+    """Reconfigure step: URL, SSL, and token.
+
+    The token field is pre-populated (masked) with the existing token so the
+    user can see one is stored.  Clearing it and submitting will probe without
+    auth — if the server still requires it, the user will be prompted again.
+    """
+    d = defaults or {}
+    return vol.Schema(
+        {
+            vol.Required(CONF_API_URL, default=d.get(CONF_API_URL, "")): str,
             vol.Optional(
                 CONF_VERIFY_SSL, default=d.get(CONF_VERIFY_SSL, DEFAULT_VERIFY_SSL)
             ): bool,
+            vol.Optional(
+                CONF_API_TOKEN, default=d.get(CONF_API_TOKEN, "")
+            ): TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD)),
         }
     )
 
@@ -84,7 +76,9 @@ def _token_schema() -> vol.Schema:
     """Step 2: API token — only shown when server requires authentication."""
     return vol.Schema(
         {
-            vol.Required(CONF_API_TOKEN): str,
+            vol.Required(CONF_API_TOKEN): TextSelector(
+                TextSelectorConfig(type=TextSelectorType.PASSWORD)
+            ),
         }
     )
 
@@ -137,6 +131,8 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def __init__(self) -> None:
         # Accumulates data across multi-step flows.
         self._connection_data: dict[str, Any] = {}
+        # Stores confirmed connection data while the setup_options step runs.
+        self._confirmed_data: dict[str, Any] = {}
         # Tracks which flow triggered the token step.
         # Values: "user" | "reauth" | "reconfigure"
         self._flow_origin: str = "user"
@@ -150,7 +146,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return DockhandOptionsFlow(config_entry)
 
     # ------------------------------------------------------------------ #
-    # Step 1: connection settings (URL + feature flags)
+    # Step 1: connection settings (URL + SSL only)
     # ------------------------------------------------------------------ #
 
     async def async_step_user(
@@ -169,10 +165,9 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await client.async_probe()
                 # Probe succeeded with no token — auth is disabled.
-                return self.async_create_entry(
-                    title=user_input[CONF_API_URL],
-                    data=user_input,
-                )
+                # Proceed to options step to collect poll/feature preferences.
+                self._confirmed_data = user_input
+                return await self.async_step_setup_options()
             except DockhandAuthError:
                 # Server requires authentication — proceed to token step.
                 self._connection_data = user_input
@@ -205,10 +200,9 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 await client.async_probe()
 
                 if self._flow_origin == "user":
-                    return self.async_create_entry(
-                        title=merged[CONF_API_URL],
-                        data=merged,
-                    )
+                    # Connection confirmed with token — collect options next.
+                    self._confirmed_data = merged
+                    return await self.async_step_setup_options()
 
                 # reauth and reconfigure — update the existing entry
                 entry = self.hass.config_entries.async_get_entry(
@@ -271,42 +265,78 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------ #
-    # Reconfigure (change URL, token, or feature flags)
+    # Step 3: poll intervals and optional features (initial setup only)
+    # ------------------------------------------------------------------ #
+
+    async def async_step_setup_options(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Collect poll intervals and feature flags during initial setup.
+
+        Stores them directly into entry.options so the Options flow can
+        present and edit them without touching entry.data.
+        """
+        if user_input is not None:
+            return self.async_create_entry(
+                title=self._confirmed_data[CONF_API_URL],
+                data=self._confirmed_data,
+                options=user_input,
+            )
+        return self.async_show_form(
+            step_id="setup_options",
+            data_schema=_options_schema(),
+        )
+
+    # ------------------------------------------------------------------ #
+    # Reconfigure (change URL, SSL, or token; behaviour/poll in Options)
     # ------------------------------------------------------------------ #
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step 1 of reconfigure: connection settings. Probe to detect auth state."""
+        """Reconfigure connection settings (URL, SSL, token).
+
+        The token field is pre-populated with the existing token (masked).
+        - Leave as-is or change it → probe with that token
+        - Clear it → probe without auth; if server still requires auth, route
+          to the token step so the user can re-enter one
+        Polling intervals and feature flags live in the Options flow.
+        """
         errors: dict[str, str] = {}
         entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
         if user_input is not None and entry:
-            verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
+            submitted_token = (user_input.get(CONF_API_TOKEN) or "").strip()
+
+            probe_data = {
+                CONF_API_URL: user_input[CONF_API_URL],
+                CONF_VERIFY_SSL: user_input.get(CONF_VERIFY_SSL, True),
+                **({CONF_API_TOKEN: submitted_token} if submitted_token else {}),
+            }
+            verify_ssl = probe_data.get(CONF_VERIFY_SSL, True)
             session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
-            client = DockhandClient(session, user_input)
+            client = DockhandClient(session, probe_data)
             try:
                 await client.async_probe()
-                # No auth required — strip any previously stored token.
-                clean = {
-                    k: v
-                    for k, v in {**entry.data, **user_input}.items()
-                    if k != CONF_API_TOKEN
-                }
-                self.hass.config_entries.async_update_entry(entry, data=clean)
+                # Probe succeeded — save exactly what was submitted.
+                # If token was cleared and probe passed, auth is disabled; strip it.
+                updated = {**entry.data, **probe_data}
+                if not submitted_token:
+                    updated.pop(CONF_API_TOKEN, None)
+                self.hass.config_entries.async_update_entry(entry, data=updated)
                 await self.hass.config_entries.async_reload(entry.entry_id)
                 return self.async_abort(reason="reconfigure_successful")
             except DockhandAuthError:
-                # Auth required — carry connection data forward and show token step.
-                self._connection_data = {**entry.data, **user_input}
+                # Auth still required — prompt for token.
+                self._connection_data = probe_data
                 self._flow_origin = "reconfigure"
                 return await self.async_step_token()
             except Exception:
                 errors["base"] = "cannot_connect"
 
-        defaults = {**(entry.data if entry else {}), **(entry.options if entry else {})}
+        defaults = entry.data if entry else {}
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_connection_schema(defaults),
+            data_schema=_reconfigure_schema(defaults),
             errors=errors,
         )
 

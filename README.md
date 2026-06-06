@@ -36,15 +36,11 @@ This integration is not yet in the default HACS catalog. You can add it as a cus
 
 1. Go to **Settings → Devices & Services → Add Integration**
 2. Search for **Dockhand**
-3. Enter:
-   - **API URL** — e.g. `http://dockhand.local:3000`
-   - **Fast poll interval** — default 60 s (stats, containers, stacks)
-   - **Slow poll interval** — default 600 s (optional features)
-   - Which optional features to enable (schedules, images, volumes, networks)
-   - **Verify SSL certificate** — uncheck only if using a self-signed cert
-4. The integration probes the server. If authentication is enabled it will prompt for an **API token** — generate one in Dockhand under **Profile → API tokens**, then paste it in
+3. Enter the **API URL** (e.g. `http://dockhand.local:3000`) and SSL preference
+4. The integration probes the server. If authentication is enabled you'll be prompted for an **API token** — generate one in Dockhand under **Profile → API tokens**
+5. Set poll intervals and enable any optional features (schedules, images, volumes, networks, container updates). All of these can be changed later via **Configure**
 
-After setup, use **Configure** (the cog) to adjust poll intervals and feature flags, or **Reconfigure** to change the URL or API token.
+To change the URL, SSL setting, or API token after setup, use **Reconfigure** (three-dot menu on the integration card)
 
 ---
 
@@ -55,7 +51,15 @@ After setup, use **Configure** (the cog) to adjust poll intervals and feature fl
 | Field | Description | Default |
 |---|---|---|
 | **API URL** | Full URL to your Dockhand server, e.g. `http://dockhand.local:3000` | — |
-| **API Token** | A Dockhand API token starting with `dh_`. Only requested if the server requires authentication. Generate one under **Profile → API tokens** | — |
+| **Verify SSL certificate** | Validate the server's SSL/TLS certificate. Uncheck only if your Dockhand instance uses a self-signed certificate | on |
+| **API Token** | A Dockhand API token starting with `dh_`. Only prompted if the server requires authentication. Generate one under **Profile → API tokens** | — |
+
+### Options (adjustable via Configure)
+
+The following can be changed at any time via the **Configure** button on the integration card, without removing the integration. Changes take effect on the next coordinator refresh.
+
+| Field | Description | Default |
+|---|---|---|
 | **Fast poll interval** | How often (seconds) to refresh container states, stacks, and environment stats | 60 |
 | **Slow poll interval** | How often (seconds) to refresh images, volumes, networks, and schedules | 600 |
 | **Enable schedules** | Create entities for Dockhand scheduled tasks | off |
@@ -64,15 +68,10 @@ After setup, use **Configure** (the cog) to adjust poll intervals and feature fl
 | **Enable networks** | Create entities for Docker networks on each host | off |
 | **Enable container updates** | Create update entities for each container, showing image update availability and allowing one-click updates via Dockhand's `batch-update` API | off |
 | **Update check interval** | How often (seconds) to check container registries for image updates. Each check queries the registry for every container — keep this infrequent. Only shown when container updates are enabled | 86400 |
-| **Verify SSL certificate** | Validate the server's SSL/TLS certificate. Uncheck only if your Dockhand instance uses a self-signed certificate | on |
 
-### Options (adjustable via Configure without removing the integration)
+### Reconfigure (change URL, SSL, or API token)
 
-All fields except **API URL** and **API Token** can be changed at any time through the **Configure** button on the integration card. Changes take effect on the next coordinator refresh.
-
-### Reconfigure (change URL or credentials)
-
-Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, **API Token**, or feature flags. The integration re-probes the server immediately; if authentication is required it will prompt for a token.
+Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, **Verify SSL** setting, or **API Token**. The token field is pre-populated and masked — clear it to disable authentication (you will be re-prompted if the server still requires it), or enter a new value to rotate credentials. The integration re-probes the server on save.
 
 ---
 

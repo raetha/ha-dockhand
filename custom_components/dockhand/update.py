@@ -271,6 +271,14 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
                 self._env_id, container_id
             )
         except Exception as err:
+            _LOGGER.error(
+                "batch-update failed for container '%s' (env %s, id %s): %s: %s",
+                self._container_name,
+                self._env_id,
+                container_id,
+                type(err).__name__,
+                err,
+            )
             raise HomeAssistantError(
                 translation_domain="dockhand",
                 translation_key="action_failed",

@@ -11,7 +11,7 @@ than the versions listed here.
 
 | Project | Last reviewed | Where to check |
 |---|---|---|
-| Home Assistant Core | 2026.3 (minimum); tested against 2026.5.4 | https://github.com/home-assistant/core/releases |
+| Home Assistant Core | 2026.3 (minimum); tested against 2026.5.4; dev blog reviewed through 2026-05-27 | https://github.com/home-assistant/core/releases |
 | Dockhand | v1.0.29 | https://github.com/Finsys/dockhand/releases |
 
 Update this table (and the corresponding project memory entry) after each
@@ -80,8 +80,6 @@ A few formatting rules to keep in mind:
 
 The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHCC), which provides the same testing infrastructure as Home Assistant core. Tests run against real HA internals pinned to a specific release (see `requirements_test.txt`).
 
-Two files run on any Python version without HA installed:
-- `test_api.py` — tests the HTTP client logic directly
-- `test_workflows.py` — static checks on the GitHub Actions workflow files
+All test files import from `custom_components.dockhand`, which loads `homeassistant` at module level. As a result, **all tests require Python 3.14.2+ with PHCC installed** — there is no HA-free subset.
 
 All other test files require Python 3.14.2+ and PHCC. The CI workflow runs the full suite on every push. Coverage spans all API methods, all config flow steps and options flow, all three coordinators, all entity classes and platforms, all device registration helpers, all URL builders, update entity install/release_notes logic, and setup/unload lifecycle.

@@ -3,29 +3,13 @@
     "step": {
       "user": {
         "title": "Connect to Dockhand",
-        "description": "Enter your Dockhand server URL and settings. An API token will be requested if authentication is enabled in Dockhand.",
+        "description": "Enter your Dockhand server URL. An API token will be requested if authentication is enabled.",
         "data": {
           "api_url": "API URL",
-          "poll_interval": "Fast poll interval (seconds) — stats, containers & stacks",
-          "poll_interval_slow": "Slow poll interval (seconds) — images, volumes, networks, schedules",
-          "enable_schedules": "Enable schedule sensors",
-          "enable_images": "Enable image sensors",
-          "enable_volumes": "Enable volume sensors",
-          "enable_networks": "Enable network sensors",
-          "enable_updates": "Enable container update entities",
-          "poll_interval_updates": "Update check interval (seconds)",
           "verify_ssl": "Verify SSL certificate"
         },
         "data_description": {
           "api_url": "The base URL of your Dockhand instance.",
-          "poll_interval": "How often to refresh container, stack, and environment stats. Lower values increase load. Default: 60.",
-          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 600.",
-          "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
-          "enable_images": "Enables sensors for Docker images on each environment.",
-          "enable_volumes": "Enables sensors for Docker volumes on each environment.",
-          "enable_networks": "Enables sensors for Docker networks on each environment.",
-          "enable_updates": "Enables update entities for each container showing image update availability. Triggers real registry queries — see poll_interval_updates.",
-          "poll_interval_updates": "How often to check container registries for image updates (seconds). Each check queries the registry for every container. Default: 86400 (24 hours).",
           "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
         }
       },
@@ -37,6 +21,30 @@
         },
         "data_description": {
           "api_token": "A Dockhand API token starting with dh_. Generate one under Profile → API tokens in the Dockhand UI."
+        }
+      },
+      "setup_options": {
+        "title": "Configure polling and features",
+        "description": "Set how often to poll Dockhand and which optional entity groups to enable. All of these can be changed later via Configure.",
+        "data": {
+          "poll_interval": "Fast poll interval (seconds)",
+          "poll_interval_slow": "Slow poll interval (seconds)",
+          "enable_schedules": "Enable schedules",
+          "enable_images": "Enable images",
+          "enable_volumes": "Enable volumes",
+          "enable_networks": "Enable networks",
+          "enable_updates": "Enable container updates",
+          "poll_interval_updates": "Update check interval (seconds)"
+        },
+        "data_description": {
+          "poll_interval": "How often to refresh container states, stacks, and environment stats.",
+          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules.",
+          "enable_schedules": "Create entities for Dockhand scheduled tasks.",
+          "enable_images": "Create entities for Docker images on each host.",
+          "enable_volumes": "Create entities for Docker volumes on each host.",
+          "enable_networks": "Create entities for Docker networks on each host.",
+          "enable_updates": "Create update entities showing image update availability, with one-click update support.",
+          "poll_interval_updates": "How often to check container registries for image updates. Keep this infrequent — each check queries the registry for every container."
         }
       },
       "reauth_confirm": {
@@ -51,30 +59,16 @@
       },
       "reconfigure": {
         "title": "Reconfigure Dockhand",
-        "description": "Update server URL and settings. An API token will be requested if authentication is required.",
+        "description": "Update the server URL, SSL setting, or API token. To change polling intervals or feature flags, use Configure instead.",
         "data": {
           "api_url": "API URL",
-          "poll_interval": "Fast poll interval (seconds) — stats, containers & stacks",
-          "poll_interval_slow": "Slow poll interval (seconds) — images, volumes, networks, schedules",
-          "enable_schedules": "Enable schedule sensors",
-          "enable_images": "Enable image sensors",
-          "enable_volumes": "Enable volume sensors",
-          "enable_networks": "Enable network sensors",
-          "enable_updates": "Enable container update entities",
-          "poll_interval_updates": "Update check interval (seconds)",
-          "verify_ssl": "Verify SSL certificate"
+          "verify_ssl": "Verify SSL certificate",
+          "api_token": "API Token"
         },
         "data_description": {
           "api_url": "The base URL of your Dockhand instance.",
-          "poll_interval": "How often to refresh container, stack, and environment stats. Default: 60.",
-          "poll_interval_slow": "How often to refresh images, volumes, networks, and schedules. Default: 600.",
-          "enable_schedules": "Enables sensors for Dockhand maintenance schedules.",
-          "enable_images": "Enables sensors for Docker images on each environment.",
-          "enable_volumes": "Enables sensors for Docker volumes on each environment.",
-          "enable_networks": "Enables sensors for Docker networks on each environment.",
-          "enable_updates": "Enables update entities for each container showing image update availability. Triggers real registry queries — see poll_interval_updates.",
-          "poll_interval_updates": "How often to check container registries for image updates (seconds). Default: 86400 (24 hours).",
-          "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates. Only disable if your Dockhand instance uses a self-signed cert."
+          "verify_ssl": "Uncheck to allow self-signed or untrusted SSL certificates.",
+          "api_token": "Your current token is shown masked. Clear it and save to disable authentication (you will be prompted again if the server still requires it). Enter a new value to rotate credentials."
         }
       }
     },
@@ -92,7 +86,7 @@
     "step": {
       "init": {
         "title": "Dockhand Options",
-        "description": "Adjust polling intervals and optional data sources. To change the URL or API token, use Reconfigure instead.",
+        "description": "Adjust polling intervals and optional data sources. To change the URL, SSL, or API token, use Reconfigure instead.",
         "data": {
           "poll_interval": "Fast poll interval (seconds) — stats, containers & stacks",
           "poll_interval_slow": "Slow poll interval (seconds) — images, volumes, networks, schedules",
