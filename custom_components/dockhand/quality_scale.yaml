@@ -207,7 +207,7 @@ rules:
   test-coverage:
     status: done
     comment: >
-      354 tests across eight files: test_api.py (28), test_config_flow.py (16),
+      356 tests across eight files: test_api.py (28), test_config_flow.py (18),
       test_coordinator.py (24), test_entities.py (137), test_helpers.py (66),
       test_init.py (41), test_update.py (36), test_workflows.py (6). Covers
       all API methods, all config flow steps and options flow, legacy migration
@@ -217,10 +217,12 @@ rules:
       factories, all _container_has_healthcheck / _compose_project /
       _image_display_name / _sched_key paths, ContainerUpdateEntity
       (_short_digest, installed_version, latest_version, available,
-      release_summary, async_release_notes, _update_supported_features,
+      async_release_notes including ha-alert type verification and
+      scanner+system_container combination, _update_supported_features,
       _handle_coordinator_update, async_install including not-found and
       action_failed branches), HomeAssistantError propagation for all action
-      methods, setup, and unload. Full suite (356 tests) requires Python 3.14.2+ and
+      methods, setup, and unload. All test files use pure pytest (no
+      unittest.TestCase). Full suite (356 tests) requires Python 3.14.2+ and
       PHCC; runs in CI on every push. The Claude sandbox (Python 3.12) runs
       ruff + AST only — pytest requires homeassistant at import time.
 
@@ -387,11 +389,10 @@ rules:
       switch entities via _attr_translation_key. Includes state-specific icons
       for container State (running/stopped/paused), Health
       (healthy/unhealthy/starting), and Stack Status (running/partial/stopped).
-      The update platform (image_update) intentionally has no icon entry — HA's
-      frontend always displays the integration icon for update entities
-      regardless of icons.json, matching standard HA behavior. Per the quality
-      scale docs, icons should not override the platform default when context
-      is identical.
+      The update platform intentionally has no icon entry — HA's frontend always
+      displays the integration icon for update entities regardless of icons.json,
+      matching standard HA behavior. Per the quality scale docs, icons should not
+      override the platform default when context is identical.
 
   reconfiguration-flow:
     status: done

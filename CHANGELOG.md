@@ -11,6 +11,53 @@
   to be cleaned up on upgrade. Deferred from 1.7.0 to give users more time
   given the close release cadence.
 
+## [1.7.2] — TBD
+
+### Changed
+
+- **Update entity ID simplified** — update entity IDs no longer include the
+  `_image_update` suffix (e.g. `update.myenv_containers_mycontainer` instead
+  of `update.myenv_containers_mycontainer_image_update`). This aligns with
+  the standard HA pattern for devices that have a single update entity, used
+  by ESPHome, UniFi, and others. **Action required:** if you reference the
+  old entity ID in automations, dashboards, or scripts, update them after
+  upgrading. HA will show the old entity as unavailable until reassigned; use
+  **Settings → Devices & Services → Entities** to find and update references.
+
+- **Update warning styling** — warnings in the update entity release notes
+  (vulnerability scanner notice, system container notice, updates-disabled
+  notice) now use the native `<ha-alert>` component instead of plain emoji
+  text, matching the visual style used by HACS and other integrations. The
+  scanner and system container warnings use `warning` style; the
+  updates-disabled notice uses `info` style. The `release_summary` field is
+  no longer populated (consistent with HACS).
+
+### Added
+
+- **Translated update warnings** — the warning messages shown in the update
+  entity release notes are now translated into all supported languages rather
+  than always appearing in English.
+
+### Internal
+
+- **Migration functions extracted to `migration.py`** — the two one-time
+  registry migration functions (introduced in 1.4.1 and 1.5.0) have been
+  moved from `__init__.py` into a dedicated `migration.py` module. Functions
+  are now named by the version they target (`migrate_1_4_0_*`,
+  `migrate_1_5_0_*`) to make future retirement straightforward. No behaviour
+  change.
+
+- **Test suite converted to pure pytest** — `test_api.py`, `test_entities.py`,
+  and `test_workflows.py` have been converted from `unittest.TestCase` to
+  standard pytest functions and fixtures, consistent with the rest of the
+  suite. Test count unchanged at 356.
+
+### Documentation
+
+- Added guidance to the README on how to exclude containers from HA using
+  the existing `dockhand.hidden=true` Docker label, HA's device disable
+  feature, and bulk device selection for larger installs.
+
 ## [1.7.1] — 2026-06-05
 
 ### Fixed
@@ -445,7 +492,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.2...HEAD
+[1.7.2]: https://github.com/raetha/ha-dockhand/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/raetha/ha-dockhand/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/raetha/ha-dockhand/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/raetha/ha-dockhand/compare/v1.5.1...v1.6.0

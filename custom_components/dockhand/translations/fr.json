@@ -219,11 +219,6 @@
       "restart": {
         "name": "Redémarrer"
       }
-    },
-    "update": {
-      "image_update": {
-        "name": "Mise à jour de l'image"
-      }
     }
   },
   "exceptions": {
@@ -233,5 +228,11 @@
     "container_not_found": {
       "message": "Conteneur introuvable — il a peut-être été supprimé"
     }
+  },
+  "messages": {
+    "image_label": "Image : {image_name}",
+    "scanner_warning": "L'analyse des vulnérabilités ne sera pas effectuée via cette méthode de mise à jour.",
+    "system_container_warning": "Il s'agit d'un conteneur système qui doit être mis à jour directement sur l'hôte Docker.",
+    "update_disabled_warning": "Mises à jour désactivées via l'étiquette `dockhand.update=false`."
   }
 }

@@ -13,11 +13,12 @@ where:
 - `<env>` is slugified from the environment (host) name — a literal from Dockhand
 - `<type>` is the resource type plural (`containers`, `stacks`, `images`, `networks`, `volumes`)
 - `<name>` is slugified from the resource name — a literal from Dockhand
-- `<attribute>` is the entity attribute (`state`, `health`, `status`, `restart`, etc.)
+- `<attribute>` is the entity attribute (`state`, `health`, `status`, `next_run`, etc.). Primary entities (switch, update) have no attribute suffix — their entity ID ends at `<name>`.
 
 Examples:
 - `sensor.myenv_containers_mycontainer_state`
-- `switch.myenv_containers_mycontainer` (primary entity — no attribute suffix)
+- `switch.myenv_containers_mycontainer` (primary switch — no attribute suffix)
+- `update.myenv_containers_mycontainer` (update entity — no attribute suffix)
 - `sensor.myenv_stacks_mystack_status`
 - `sensor.myenv_images_nginx`
 - `sensor.dockhand_schedules_nightly_backup_next_run`
@@ -106,7 +107,7 @@ Entity ID prefix: `<platform>.{env}_containers_{name}`
 | State | sensor | — | — | — | ✓ | running / exited / paused / restarting / dead. Attributes: status, image, restart_count, networks |
 | Health | sensor | — | — | — | ✓ | Only created when container has a Docker healthcheck. healthy / unhealthy / starting |
 | Restart | button | — | — | — | ✓ | |
-| Image update | update | — | — | — | ✓ | Only present when updates are enabled. Install triggers batch-update API |
+| *(primary — no attribute)* | update | — | — | — | ✓ | Only present when updates are enabled. Install triggers batch-update API. No attribute suffix — follows HA convention for devices with a single update entity |
 
 ---
 

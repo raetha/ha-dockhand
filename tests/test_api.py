@@ -8,18 +8,16 @@ Covers: _request (all paths), async_probe, API endpoint URL construction,
 
 from __future__ import annotations
 
-import asyncio
-import unittest
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock
+
+import pytest
 
 from custom_components.dockhand.api import (
     DockhandAuthError,
     DockhandClient,
     DockhandError,
 )
-
-run = asyncio.run
 
 
 def _resp(status=200, json_data=None, text=""):
@@ -53,165 +51,197 @@ def _client(session=None, token=None):
     return DockhandClient(session or MagicMock(), cfg)
 
 
-class TestRequest(unittest.TestCase):
-    def test_401_raises_auth_error(self):
-        with self.assertRaises(DockhandAuthError) as ctx:
-            run(_client(_session(_resp(401)))._request("GET", "/api/x"))
-        self.assertIn("Unauthorized", str(ctx.exception))
-
-    def test_4xx_raises_dockhand_error(self):
-        with self.assertRaises(DockhandError) as ctx:
-            run(_client(_session(_resp(404, text="nf")))._request("GET", "/api/x"))
-        self.assertIn("404", str(ctx.exception))
-
-    def test_200_returns_json(self):
-        r = run(_client(_session(_resp(200, {"k": "v"})))._request("GET", "/api/x"))
-        self.assertEqual(r, {"k": "v"})
-
-    def test_200_no_json_returns_text(self):
-        r = run(_client(_session(_resp(200, text="plain")))._request("GET", "/api/x"))
-        self.assertEqual(r, "plain")
-
-    def test_correct_url_constructed(self):
-        s = _session(_resp(200, {}))
-        run(_client(s)._request("GET", "/api/environments"))
-        url = s.request.call_args.args[1]
-        self.assertEqual(url, "http://dh.test:3000/api/environments")
-
-    def test_bearer_token_in_header_when_token_set(self):
-        s = _session(_resp(200, {}))
-        run(_client(s, token="dh_mytoken")._request("GET", "/api/x"))
-        headers = s.request.call_args.kwargs.get("headers", {})
-        self.assertEqual(headers.get("Authorization"), "Bearer dh_mytoken")
-
-    def test_no_auth_header_when_no_token(self):
-        """No-auth install: no Authorization header should be sent."""
-        s = _session(_resp(200, {}))
-        run(_client(s)._request("GET", "/api/x"))
-        headers = s.request.call_args.kwargs.get("headers", {})
-        self.assertNotIn("Authorization", headers)
-
-    def test_accept_json_header_always_set(self):
-        """Accept: application/json must be present on every request."""
-        s = _session(_resp(200, {}))
-        run(_client(s, token="dh_tok")._request("GET", "/api/x"))
-        headers = s.request.call_args.kwargs.get("headers", {})
-        self.assertEqual(headers.get("Accept"), "application/json")
-
-    def test_accept_json_without_token(self):
-        """Accept header must also be set on no-auth requests."""
-        s = _session(_resp(200, {}))
-        run(_client(s)._request("GET", "/api/x"))
-        headers = s.request.call_args.kwargs.get("headers", {})
-        self.assertEqual(headers.get("Accept"), "application/json")
+# ---------------------------------------------------------------------------
+# _request
+# ---------------------------------------------------------------------------
 
 
-class TestProbe(unittest.TestCase):
-    def test_probe_success_calls_environments(self):
-        c = _client(token="dh_tok")
-        c.async_get_environments = AsyncMock(return_value=[])
-        run(c.async_probe())
-        c.async_get_environments.assert_called_once()
-
-    def test_probe_propagates_auth_error(self):
-        c = _client(token="dh_tok")
-        c.async_get_environments = AsyncMock(side_effect=DockhandAuthError("401"))
-        with self.assertRaises(DockhandAuthError):
-            run(c.async_probe())
-
-    def test_probe_propagates_other_error(self):
-        c = _client(token="dh_tok")
-        c.async_get_environments = AsyncMock(side_effect=DockhandError("500"))
-        with self.assertRaises(DockhandError):
-            run(c.async_probe())
+async def test_request_401_raises_auth_error():
+    with pytest.raises(DockhandAuthError, match="Unauthorized"):
+        await _client(_session(_resp(401)))._request("GET", "/api/x")
 
 
-class TestEndpoints(unittest.TestCase):
-    def setUp(self):
-        self.c = _client(token="dh_tok")
-        self.c._request = AsyncMock(return_value=[])
-
-    def _url(self):
-        return self.c._request.call_args.args[1]
-
-    def test_get_environments(self):
-        run(self.c.async_get_environments())
-        self.assertEqual(self._url(), "/api/environments")
-
-    def test_get_dashboard_stats(self):
-        self.c._request.return_value = {}
-        run(self.c.async_get_dashboard_stats(7))
-        self.assertEqual(self._url(), "/api/dashboard/stats?env=7")
-
-    def test_get_containers(self):
-        run(self.c.async_get_containers(2))
-        self.assertEqual(self._url(), "/api/containers?env=2")
-
-    def test_get_stacks(self):
-        run(self.c.async_get_stacks(2))
-        self.assertEqual(self._url(), "/api/stacks?env=2")
-
-    def test_get_networks(self):
-        run(self.c.async_get_networks(2))
-        self.assertEqual(self._url(), "/api/networks?env=2")
-
-    def test_get_images(self):
-        run(self.c.async_get_images(2))
-        self.assertEqual(self._url(), "/api/images?env=2")
-
-    def test_get_volumes(self):
-        run(self.c.async_get_volumes(2))
-        self.assertEqual(self._url(), "/api/volumes?env=2")
-
-    def test_get_schedules_list(self):
-        self.c._request.return_value = [{"id": "s1"}]
-        r = run(self.c.async_get_schedules())
-        self.assertEqual(r, [{"id": "s1"}])
-
-    def test_get_schedules_dict_unwraps(self):
-        self.c._request.return_value = {"schedules": [{"id": "s1"}]}
-        r = run(self.c.async_get_schedules())
-        self.assertEqual(r, [{"id": "s1"}])
-
-    def test_get_schedules_bad_type_returns_empty(self):
-        self.c._request.return_value = "oops"
-        self.assertEqual(run(self.c.async_get_schedules()), [])
+async def test_request_4xx_raises_dockhand_error():
+    with pytest.raises(DockhandError, match="404"):
+        await _client(_session(_resp(404, text="nf")))._request("GET", "/api/x")
 
 
-class TestActions(unittest.TestCase):
-    def setUp(self):
-        self.c = _client(token="dh_tok")
-        self.c._request = AsyncMock(return_value=None)
-
-    def _call(self):
-        return self.c._request.call_args
-
-    def test_start_container(self):
-        run(self.c.async_start_container(1, "cid"))
-        self.assertEqual(self._call().args, ("POST", "/api/containers/cid/start?env=1"))
-
-    def test_stop_container(self):
-        run(self.c.async_stop_container(1, "cid"))
-        self.assertEqual(self._call().args, ("POST", "/api/containers/cid/stop?env=1"))
-
-    def test_restart_container(self):
-        run(self.c.async_restart_container(1, "cid"))
-        self.assertEqual(
-            self._call().args, ("POST", "/api/containers/cid/restart?env=1")
-        )
-
-    def test_start_stack(self):
-        run(self.c.async_start_stack(1, "myapp"))
-        self.assertEqual(self._call().args, ("POST", "/api/stacks/myapp/start?env=1"))
-
-    def test_stop_stack(self):
-        run(self.c.async_stop_stack(1, "myapp"))
-        self.assertEqual(self._call().args, ("POST", "/api/stacks/myapp/stop?env=1"))
-
-    def test_restart_stack(self):
-        run(self.c.async_restart_stack(1, "myapp"))
-        self.assertEqual(self._call().args, ("POST", "/api/stacks/myapp/restart?env=1"))
+async def test_request_200_returns_json():
+    r = await _client(_session(_resp(200, {"k": "v"})))._request("GET", "/api/x")
+    assert r == {"k": "v"}
 
 
-if __name__ == "__main__":
-    unittest.main()
+async def test_request_200_no_json_returns_text():
+    r = await _client(_session(_resp(200, text="plain")))._request("GET", "/api/x")
+    assert r == "plain"
+
+
+async def test_request_correct_url_constructed():
+    s = _session(_resp(200, {}))
+    await _client(s)._request("GET", "/api/environments")
+    url = s.request.call_args.args[1]
+    assert url == "http://dh.test:3000/api/environments"
+
+
+async def test_request_bearer_token_in_header_when_token_set():
+    s = _session(_resp(200, {}))
+    await _client(s, token="dh_mytoken")._request("GET", "/api/x")
+    headers = s.request.call_args.kwargs.get("headers", {})
+    assert headers.get("Authorization") == "Bearer dh_mytoken"
+
+
+async def test_request_no_auth_header_when_no_token():
+    """No-auth install: no Authorization header should be sent."""
+    s = _session(_resp(200, {}))
+    await _client(s)._request("GET", "/api/x")
+    headers = s.request.call_args.kwargs.get("headers", {})
+    assert "Authorization" not in headers
+
+
+async def test_request_accept_json_header_always_set():
+    """Accept: application/json must be present on every request."""
+    s = _session(_resp(200, {}))
+    await _client(s, token="dh_tok")._request("GET", "/api/x")
+    headers = s.request.call_args.kwargs.get("headers", {})
+    assert headers.get("Accept") == "application/json"
+
+
+async def test_request_accept_json_without_token():
+    """Accept header must also be set on no-auth requests."""
+    s = _session(_resp(200, {}))
+    await _client(s)._request("GET", "/api/x")
+    headers = s.request.call_args.kwargs.get("headers", {})
+    assert headers.get("Accept") == "application/json"
+
+
+# ---------------------------------------------------------------------------
+# async_probe
+# ---------------------------------------------------------------------------
+
+
+async def test_probe_success_calls_environments():
+    c = _client(token="dh_tok")
+    c.async_get_environments = AsyncMock(return_value=[])
+    await c.async_probe()
+    c.async_get_environments.assert_called_once()
+
+
+async def test_probe_propagates_auth_error():
+    c = _client(token="dh_tok")
+    c.async_get_environments = AsyncMock(side_effect=DockhandAuthError("401"))
+    with pytest.raises(DockhandAuthError):
+        await c.async_probe()
+
+
+async def test_probe_propagates_other_error():
+    c = _client(token="dh_tok")
+    c.async_get_environments = AsyncMock(side_effect=DockhandError("500"))
+    with pytest.raises(DockhandError):
+        await c.async_probe()
+
+
+# ---------------------------------------------------------------------------
+# Endpoint URL construction
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def client_with_mock_request():
+    c = _client(token="dh_tok")
+    c._request = AsyncMock(return_value=[])
+    return c
+
+
+async def test_get_environments(client_with_mock_request):
+    await client_with_mock_request.async_get_environments()
+    assert client_with_mock_request._request.call_args.args[1] == "/api/environments"
+
+
+async def test_get_dashboard_stats(client_with_mock_request):
+    client_with_mock_request._request.return_value = {}
+    await client_with_mock_request.async_get_dashboard_stats(7)
+    assert client_with_mock_request._request.call_args.args[1] == "/api/dashboard/stats?env=7"
+
+
+async def test_get_containers(client_with_mock_request):
+    await client_with_mock_request.async_get_containers(2)
+    assert client_with_mock_request._request.call_args.args[1] == "/api/containers?env=2"
+
+
+async def test_get_stacks(client_with_mock_request):
+    await client_with_mock_request.async_get_stacks(2)
+    assert client_with_mock_request._request.call_args.args[1] == "/api/stacks?env=2"
+
+
+async def test_get_networks(client_with_mock_request):
+    await client_with_mock_request.async_get_networks(2)
+    assert client_with_mock_request._request.call_args.args[1] == "/api/networks?env=2"
+
+
+async def test_get_images(client_with_mock_request):
+    await client_with_mock_request.async_get_images(2)
+    assert client_with_mock_request._request.call_args.args[1] == "/api/images?env=2"
+
+
+async def test_get_volumes(client_with_mock_request):
+    await client_with_mock_request.async_get_volumes(2)
+    assert client_with_mock_request._request.call_args.args[1] == "/api/volumes?env=2"
+
+
+async def test_get_schedules_list(client_with_mock_request):
+    client_with_mock_request._request.return_value = [{"id": "s1"}]
+    r = await client_with_mock_request.async_get_schedules()
+    assert r == [{"id": "s1"}]
+
+
+async def test_get_schedules_dict_unwraps(client_with_mock_request):
+    client_with_mock_request._request.return_value = {"schedules": [{"id": "s1"}]}
+    r = await client_with_mock_request.async_get_schedules()
+    assert r == [{"id": "s1"}]
+
+
+async def test_get_schedules_bad_type_returns_empty(client_with_mock_request):
+    client_with_mock_request._request.return_value = "oops"
+    assert await client_with_mock_request.async_get_schedules() == []
+
+
+# ---------------------------------------------------------------------------
+# Container/stack actions
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def action_client():
+    c = _client(token="dh_tok")
+    c._request = AsyncMock(return_value=None)
+    return c
+
+
+async def test_start_container(action_client):
+    await action_client.async_start_container(1, "cid")
+    assert action_client._request.call_args.args == ("POST", "/api/containers/cid/start?env=1")
+
+
+async def test_stop_container(action_client):
+    await action_client.async_stop_container(1, "cid")
+    assert action_client._request.call_args.args == ("POST", "/api/containers/cid/stop?env=1")
+
+
+async def test_restart_container(action_client):
+    await action_client.async_restart_container(1, "cid")
+    assert action_client._request.call_args.args == ("POST", "/api/containers/cid/restart?env=1")
+
+
+async def test_start_stack(action_client):
+    await action_client.async_start_stack(1, "myapp")
+    assert action_client._request.call_args.args == ("POST", "/api/stacks/myapp/start?env=1")
+
+
+async def test_stop_stack(action_client):
+    await action_client.async_stop_stack(1, "myapp")
+    assert action_client._request.call_args.args == ("POST", "/api/stacks/myapp/stop?env=1")
+
+
+async def test_restart_stack(action_client):
+    await action_client.async_restart_stack(1, "myapp")
+    assert action_client._request.call_args.args == ("POST", "/api/stacks/myapp/restart?env=1")

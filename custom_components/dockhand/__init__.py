@@ -36,6 +36,7 @@ from .helpers import (
     _ensure_hub_devices,
     _sched_key,
 )
+from .migration import async_run_migrations
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -144,13 +145,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     base_url = entry.data.get(CONF_API_URL, "")
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
 
-    # Migrate update entity unique_ids from the 1.4.0 container-ID-based scheme
-    # to the 1.4.1 name-based scheme.
-    _migrate_update_entity_unique_ids(hass, entry, fast_coordinator)
-
-    # Migrate container device identifiers from the 1.4.x format (no env_id)
-    # to the 1.5.0 format (env_id prefix for precise per-env cleanup).
-    _migrate_container_device_identifiers(hass, entry, fast_coordinator)
+    # Run any pending one-time registry migrations (idempotent — safe to call
+    # on every setup). All migration logic lives in migration.py.
+    async_run_migrations(hass, entry.entry_id, fast_coordinator.data or {})
 
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
@@ -180,181 +177,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
-
-
-def _migrate_update_entity_unique_ids(
-    hass: HomeAssistant,
-    entry: DockhandConfigEntry,
-    fast_coordinator: DockhandFastCoordinator,
-) -> None:
-    """Migrate update entity unique_ids from 1.4.0 format to 1.4.1 format.
-
-    1.4.0 used: dockhand_update_{container_id}  (64-char Docker hash — unstable)
-    1.4.1 uses: dockhand_update_{env_id}_{container_name}  (stable across rebuilds)
-
-    Builds a reverse map of container_id → (env_id, container_name) from the
-    fast coordinator data, then rewrites any matching entity unique_ids in the
-    entity registry. Runs once at setup time; is a no-op after the first run
-    since old-format unique_ids will no longer exist.
-    """
-    fast_data = fast_coordinator.data or {}
-
-    # Build reverse map: container_id → (env_id, name)
-    id_to_name: dict[str, tuple[int, str]] = {}
-    for env_id, env_data in fast_data.items():
-        for c in env_data.get("containers") or []:
-            cid = c.get("id", "")
-            name = c.get("name", "")
-            if cid and name:
-                id_to_name[cid] = (env_id, name)
-
-    if not id_to_name:
-        return
-
-    ent_registry = er.async_get(hass)
-    migrated = 0
-    for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
-        uid = entity_entry.unique_id or ""
-        if not uid.startswith("dockhand_update_"):
-            continue
-        # Old format: "dockhand_update_" + 64-char hex container ID.
-        # New format: "dockhand_update_" + digits + "_" + name.
-        suffix = uid[len("dockhand_update_") :]
-        # If suffix contains no underscore it's a plain container ID (old format).
-        # If it starts with digits followed by underscore, it's already new format.
-        if "_" in suffix:
-            continue  # Already new format — skip.
-        container_id = suffix
-        if container_id not in id_to_name:
-            # Container no longer running — will be cleaned up by stale registry pass.
-            continue
-        env_id, name = id_to_name[container_id]
-        new_uid = f"dockhand_update_{env_id}_{name}"
-        ent_registry.async_update_entity(entity_entry.entity_id, new_unique_id=new_uid)
-        _LOGGER.debug(
-            "Dockhand: migrated update entity unique_id %s → %s", uid, new_uid
-        )
-        migrated += 1
-
-    if migrated:
-        _LOGGER.info(
-            "Dockhand: migrated %d update entity unique_id(s) to name-based scheme",
-            migrated,
-        )
-
-
-def _migrate_container_device_identifiers(
-    hass: HomeAssistant,
-    entry: DockhandConfigEntry,
-    fast_coordinator: DockhandFastCoordinator,
-) -> None:
-    """Migrate container device identifiers and entity unique_ids to name-based format.
-
-    Handles all historical formats:
-      Devices:  container_{hash}  /  container_{env_id}_{hash}
-      Entities: dockhand_container_{hash}_{suffix}
-                dockhand_container_{env_id}_{hash}_{suffix}
-    Target:
-      Devices:  container_{env_id}_{name}
-      Entities: dockhand_container_{env_id}_{name}_{suffix}
-
-    Builds a reverse map of docker_hash → (env_id, name) from coordinator data.
-    Is a no-op once all entries are in the new format.
-    """
-    fast_data = fast_coordinator.data or {}
-
-    # Build reverse map: docker_hash → (env_id, container_name)
-    id_to_env_name: dict[str, tuple[int, str]] = {}
-    for env_id, env_data in fast_data.items():
-        for c in env_data.get("containers") or []:
-            cid = c.get("id", "")
-            name = c.get("name", "")
-            if cid and name:
-                id_to_env_name[cid] = (env_id, name)
-
-    if not id_to_env_name:
-        return
-
-    dev_registry = dr.async_get(hass)
-    ent_registry = er.async_get(hass)
-    migrated_devices = 0
-    migrated_entities = 0
-
-    def _is_hex64(s: str) -> bool:
-        return len(s) == 64 and all(c in "0123456789abcdef" for c in s)
-
-    # ── Device registry ───────────────────────────────────────────────────
-    for device in dr.async_entries_for_config_entry(dev_registry, entry.entry_id):
-        for domain, identifier in device.identifiers:
-            if domain != DOMAIN or not identifier.startswith("container_"):
-                continue
-            suffix = identifier[len("container_") :]
-            parts = suffix.split("_", 1)
-            if len(parts) == 1 and _is_hex64(parts[0]):
-                # pre-1.5.0: container_{hash}
-                container_hash = parts[0]
-                if container_hash not in id_to_env_name:
-                    continue
-                env_id, name = id_to_env_name[container_hash]
-            elif len(parts) == 2 and parts[0].isdigit() and _is_hex64(parts[1]):
-                # 1.5.0: container_{env_id}_{hash}
-                env_id, container_hash = int(parts[0]), parts[1]
-                if container_hash not in id_to_env_name:
-                    continue
-                _, name = id_to_env_name[container_hash]
-            else:
-                continue  # Already name-based or unknown — skip.
-            new_id = f"container_{env_id}_{name}"
-            new_identifiers = {
-                (d, new_id if d == DOMAIN and i == identifier else i)
-                for d, i in device.identifiers
-            }
-            dev_registry.async_update_device(device.id, new_identifiers=new_identifiers)
-            _LOGGER.debug("Dockhand: migrated device %s → %s", identifier, new_id)
-            migrated_devices += 1
-            break
-
-    # ── Entity registry ───────────────────────────────────────────────────
-    _suffixes = ("_state", "_health", "_image", "_running", "_restart")
-    for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
-        uid = entity_entry.unique_id or ""
-        if not uid.startswith("dockhand_container_"):
-            continue
-        rest = uid[len("dockhand_container_") :]
-        for sfx in _suffixes:
-            if not rest.endswith(sfx):
-                continue
-            middle = rest[: -len(sfx)]
-            parts = middle.split("_", 1)
-            if len(parts) == 2 and parts[0].isdigit() and _is_hex64(parts[1]):
-                # 1.5.0 entity: dockhand_container_{env_id}_{hash}_{suffix}
-                env_id, container_hash = int(parts[0]), parts[1]
-                if container_hash not in id_to_env_name:
-                    continue
-                _, name = id_to_env_name[container_hash]
-            elif _is_hex64(middle):
-                # pre-1.5.0: dockhand_container_{hash}_{suffix}
-                container_hash = middle
-                if container_hash not in id_to_env_name:
-                    continue
-                env_id, name = id_to_env_name[container_hash]
-            else:
-                continue  # Already name-based — skip.
-            new_uid = f"dockhand_container_{env_id}_{name}{sfx}"
-            ent_registry.async_update_entity(
-                entity_entry.entity_id, new_unique_id=new_uid
-            )
-            _LOGGER.debug("Dockhand: migrated entity %s → %s", uid, new_uid)
-            migrated_entities += 1
-            break
-
-    if migrated_devices or migrated_entities:
-        _LOGGER.info(
-            "Dockhand: migrated %d container device(s) and %d entity unique_id(s)"
-            " to name-based scheme",
-            migrated_devices,
-            migrated_entities,
-        )
 
 
 def _register_devices(

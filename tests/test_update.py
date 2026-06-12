@@ -4,12 +4,17 @@ Tests for ContainerUpdateEntity and helpers (update.py).
 Covers:
 - _short_digest: both currentDigest and newDigest formats, malformed input
 - installed_version / latest_version: up-to-date, update available, missing data
-- available: container in fast data, container missing, super() availability
-- release_summary / async_release_notes: image name, scanner warning,
-  system container warning, update disabled label, no data
+- available: container in fast data, container missing, env missing,
+  coordinator unhealthy (last_update_success=False)
+- release_summary: always None (no longer populated, consistent with HACS)
+- async_release_notes: image name, ha-alert types verified (warning/info),
+  scanner warning, system container warning, update disabled, no data,
+  scanner+system combo, systemContainer priority over updateDisabled
+  Note: _messages is empty in unit tests (async_added_to_hass not called),
+  so these tests exercise the _DEFAULTS fallback path in _msg().
 - _update_supported_features: normal, updateDisabled, systemContainer
 - _handle_coordinator_update: triggers feature refresh
-- async_install: success, container_not_found, action_failed
+- async_install: success, container_not_found, action_failed, no container_id
 """
 
 from __future__ import annotations
@@ -203,6 +208,13 @@ def test_available_false_when_container_missing_from_fast_data():
     assert entity.available is False
 
 
+def test_available_false_when_coordinator_not_successful():
+    """available requires both container present in fast data AND coordinator healthy."""
+    entity = _make_entity()
+    entity.coordinator.last_update_success = False
+    assert entity.available is False
+
+
 def test_available_false_when_env_missing_from_fast_data():
     update_coord = _make_update_coord()
     fast_coord = MagicMock(spec=DockhandFastCoordinator)
@@ -247,42 +259,14 @@ def test_install_suppressed_for_system_container():
 # ---------------------------------------------------------------------------
 
 
-def test_release_summary_includes_image_name():
-    entity = _make_entity(ITEM_UP_TO_DATE)
-    summary = entity.release_summary
-    assert summary is not None
-    assert "nginx:latest" in summary
-
-
-def test_release_summary_includes_scanner_warning_when_enabled():
-    entity = _make_entity(ITEM_UP_TO_DATE, scanner_enabled=True)
-    summary = entity.release_summary
-    assert summary is not None
-    assert "scanning" in summary.lower() or "⚠️" in summary
-
-
-def test_release_summary_no_scanner_warning_when_disabled():
-    entity = _make_entity(ITEM_UP_TO_DATE, scanner_enabled=False)
-    summary = entity.release_summary
-    # May include image name but no scanner warning
-    if summary:
-        assert "Vulnerability" not in summary
-
-
-def test_release_summary_none_when_no_item():
-    update_coord = MagicMock(spec=DockhandUpdateCoordinator)
-    update_coord.data = {ENV_ID: {}}
-    update_coord.last_update_success = True
-    update_coord.async_add_listener = MagicMock(return_value=lambda: None)
-    entity = ContainerUpdateEntity(
-        fast_coordinator=_make_fast_coord(),
-        update_coordinator=update_coord,
-        env_id=ENV_ID,
-        env_name=ENV_NAME,
-        container_name=CONTAINER_NAME,
-        item=ITEM_UP_TO_DATE,
-    )
-    assert entity.release_summary is None
+def test_release_summary_always_none():
+    # release_summary is no longer populated — consistent with HACS convention.
+    # Image name and warnings appear in async_release_notes instead.
+    # This holds regardless of item state, image name, or scanner state.
+    assert _make_entity(ITEM_UP_TO_DATE).release_summary is None
+    assert _make_entity(ITEM_UP_TO_DATE, scanner_enabled=True).release_summary is None
+    assert _make_entity(ITEM_SYSTEM).release_summary is None
+    assert _make_entity(ITEM_UPDATE_DISABLED).release_summary is None
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +275,8 @@ def test_release_summary_none_when_no_item():
 
 
 async def test_release_notes_includes_image_name():
+    # Note: _messages is empty (async_added_to_hass not called in unit tests),
+    # so these tests exercise the _DEFAULTS fallback path in _msg().
     entity = _make_entity(ITEM_UP_TO_DATE)
     notes = await entity.async_release_notes()
     assert notes is not None
@@ -301,14 +287,15 @@ async def test_release_notes_includes_scanner_warning():
     entity = _make_entity(ITEM_UP_TO_DATE, scanner_enabled=True)
     notes = await entity.async_release_notes()
     assert notes is not None
-    assert "⚠️" in notes
-    assert "scanning" in notes.lower() or "Vulnerability" in notes
+    assert "<ha-alert alert-type='warning'>" in notes
+    assert "Vulnerability" in notes
 
 
 async def test_release_notes_includes_system_container_warning():
     entity = _make_entity(ITEM_SYSTEM)
     notes = await entity.async_release_notes()
     assert notes is not None
+    assert "<ha-alert alert-type='warning'>" in notes
     assert "system container" in notes.lower()
 
 
@@ -316,7 +303,29 @@ async def test_release_notes_includes_update_disabled_message():
     entity = _make_entity(ITEM_UPDATE_DISABLED)
     notes = await entity.async_release_notes()
     assert notes is not None
+    assert "<ha-alert alert-type='info'>" in notes
     assert "dockhand.update=false" in notes
+
+
+async def test_release_notes_scanner_and_system_container_both_appear():
+    """Scanner warning and system container warning are independent — both show."""
+    item = {**ITEM_SYSTEM}  # systemContainer set
+    entity = _make_entity(item, scanner_enabled=True)
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert notes.count("<ha-alert") == 2
+    assert "Vulnerability" in notes
+    assert "system container" in notes.lower()
+
+
+async def test_release_notes_system_container_takes_priority_over_update_disabled():
+    """systemContainer and updateDisabled: systemContainer warning shown, not update_disabled."""
+    item = {**ITEM_SYSTEM, "updateDisabled": True}
+    entity = _make_entity(item)
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "system container" in notes.lower()
+    assert "dockhand.update=false" not in notes
 
 
 async def test_release_notes_none_when_no_item():
@@ -423,8 +432,10 @@ def test_unique_id_format():
 
 
 def test_translation_key():
+    # Update entity uses no translation_key — consistent with HA convention for
+    # devices that have a single update entity (ESPHome, UniFi, etc.).
     entity = _make_entity()
-    assert entity._attr_translation_key == "image_update"
+    assert not hasattr(entity, "_attr_translation_key")
 
 
 def test_device_info_references_container_device():

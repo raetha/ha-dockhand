@@ -9,7 +9,6 @@ Entities are instantiated directly with mock coordinators — no full HA
 platform setup required.
 """
 import pytest
-import unittest
 from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.const import EntityCategory
@@ -254,156 +253,180 @@ def _button_classes():
 # ===========================================================================
 
 
-class TestEnvSensors(unittest.TestCase):
-    def setUp(self):
-        sc = _sensor_classes()
-        coord = _fast_coord()
-        self.cpu = sc["DockhandEnvCpuSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.mem = sc["DockhandEnvMemPercentSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.containers = sc["DockhandEnvContainerCountSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.stacks = sc["DockhandEnvStacksSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.images = sc["DockhandEnvImagesSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.volumes = sc["DockhandEnvVolumesSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.networks = sc["DockhandEnvNetworksSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.disk = sc["DockhandEnvContainersDiskSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-        self.cache = sc["DockhandEnvBuildCacheSensor"](coord, ENV_ID, ENV_NAME, BASE_URL)
-
-    def test_cpu_value(self):
-        self.assertAlmostEqual(self.cpu.native_value, 23.5)
-
-    def test_mem_percent_value(self):
-        self.assertAlmostEqual(self.mem.native_value, 45.2)
-
-    def test_mem_attributes_raw_bytes(self):
-        attrs = self.mem.extra_state_attributes
-        self.assertEqual(attrs["memory_used_bytes"], 4724464640)
-        self.assertEqual(attrs["memory_total_bytes"], 8589934592)
-        self.assertNotIn("memory_used_mib", attrs)
-
-    def test_container_count_total(self):
-        self.assertEqual(self.containers.native_value, 4)
-
-    def test_container_count_attributes(self):
-        attrs = self.containers.extra_state_attributes
-        self.assertEqual(attrs["running"], 3)
-        self.assertEqual(attrs["stopped"], 1)
-        self.assertEqual(attrs["pending_updates"], 1)
-
-    def test_stacks_value(self):
-        self.assertEqual(self.stacks.native_value, 2)
-
-    def test_images_count(self):
-        self.assertEqual(self.images.native_value, 5)
-
-    def test_images_attribute_raw_bytes(self):
-        attrs = self.images.extra_state_attributes
-        self.assertEqual(attrs["total_size_bytes"], 2147483648)
-        self.assertNotIn("total_size_mib", attrs)
-
-    def test_volumes_count(self):
-        self.assertEqual(self.volumes.native_value, 2)
-
-    def test_volumes_attribute_raw_bytes(self):
-        attrs = self.volumes.extra_state_attributes
-        self.assertIn("total_size_bytes", attrs)
-        self.assertNotIn("total_size_mib", attrs)
-
-    def test_networks_count(self):
-        self.assertEqual(self.networks.native_value, 3)
-
-    def test_disk_value_bytes(self):
-        self.assertEqual(self.disk.native_value, 524288000)
-
-    def test_disk_disabled_by_default(self):
-        self.assertFalse(self.disk._attr_entity_registry_enabled_default)
-
-    def test_cache_value_bytes(self):
-        self.assertEqual(self.cache.native_value, 104857600)
-
-    def test_cache_disabled_by_default(self):
-        self.assertFalse(self.cache._attr_entity_registry_enabled_default)
-
-    def test_unique_ids_are_unique(self):
-        sensors = [
-            self.cpu, self.mem, self.containers, self.stacks,
-            self.images, self.volumes, self.networks, self.disk, self.cache,
-        ]
-        uids = [s._attr_unique_id for s in sensors]
-        self.assertEqual(len(uids), len(set(uids)))
-
-    def test_entity_category_diagnostic(self):
-        for sensor in [
-            self.containers, self.stacks, self.images,
-            self.volumes, self.networks, self.disk, self.cache,
-        ]:
-            self.assertEqual(sensor._attr_entity_category, EntityCategory.DIAGNOSTIC)
-
-    def test_has_entity_name_true(self):
-        for sensor in [
-            self.cpu, self.mem, self.containers, self.stacks,
-            self.images, self.volumes, self.networks, self.disk, self.cache,
-        ]:
-            self.assertTrue(
-                sensor._attr_has_entity_name,
-                f"{type(sensor).__name__} must have _attr_has_entity_name=True",
-            )
+@pytest.fixture
+def env_sensors():
+    sc = _sensor_classes()
+    coord = _fast_coord()
+    return {
+        "cpu": sc["DockhandEnvCpuSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "mem": sc["DockhandEnvMemPercentSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "containers": sc["DockhandEnvContainerCountSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "stacks": sc["DockhandEnvStacksSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "images": sc["DockhandEnvImagesSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "volumes": sc["DockhandEnvVolumesSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "networks": sc["DockhandEnvNetworksSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "disk": sc["DockhandEnvContainersDiskSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "cache": sc["DockhandEnvBuildCacheSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+    }
 
 
-class TestEnvActivitySensor(unittest.TestCase):
-    def _make(self, events=None):
-        from custom_components.dockhand.sensor import DockhandEnvActivityEventsSensor
-        coord = _fast_coord(env_data={
-            "stats": {**STATS, "events": events or {"total": 42, "today": 7}},
-            "containers": [],
-            "stacks": [],
-        })
-        return DockhandEnvActivityEventsSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
-
-    def test_total_event_count(self):
-        self.assertEqual(self._make().native_value, 42)
-
-    def test_today_attribute(self):
-        self.assertEqual(self._make().extra_state_attributes["today"], 7)
-
-    def test_disabled_by_default(self):
-        self.assertFalse(self._make()._attr_entity_registry_enabled_default)
-
-    def test_state_class_is_measurement(self):
-        from homeassistant.components.sensor import SensorStateClass
-        sensor = self._make()
-        self.assertEqual(sensor._attr_state_class, SensorStateClass.MEASUREMENT)
+def test_cpu_value(env_sensors):
+    assert abs(env_sensors["cpu"].native_value - 23.5) < 1e-9
 
 
-class TestEnvHawserSensor(unittest.TestCase):
-    def _make(self, env_obj=None):
-        from custom_components.dockhand.sensor import DockhandEnvHawserVersionSensor
-        coord = _slow_coord(env_data={
-            "env": env_obj or {
-                "name": ENV_NAME,
-                "hawserVersion": "1.4.2",
-                "hawserAgentName": "agent-1",
-                "hawserAgentId": "abc",
-                "hawserLastSeen": "2024-01-01T00:00:00Z",
-            },
-            "images": [], "networks": [], "volumes": [],
-        })
-        return DockhandEnvHawserVersionSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
+def test_mem_percent_value(env_sensors):
+    assert abs(env_sensors["mem"].native_value - 45.2) < 1e-9
 
-    def test_version_string(self):
-        self.assertEqual(self._make().native_value, "1.4.2")
 
-    def test_agent_name_attribute(self):
-        self.assertEqual(self._make().extra_state_attributes["agent_name"], "agent-1")
+def test_mem_attributes_raw_bytes(env_sensors):
+    attrs = env_sensors["mem"].extra_state_attributes
+    assert attrs["memory_used_bytes"] == 4724464640
+    assert attrs["memory_total_bytes"] == 8589934592
+    assert "memory_used_mib" not in attrs
 
-    def test_last_seen_attribute_present(self):
-        self.assertIn("last_seen", self._make().extra_state_attributes)
 
-    def test_none_when_absent(self):
-        sensor = self._make(env_obj={"name": ENV_NAME})
-        self.assertIsNone(sensor.native_value)
+def test_container_count_total(env_sensors):
+    assert env_sensors["containers"].native_value == 4
 
-    def test_disabled_by_default(self):
-        self.assertFalse(self._make()._attr_entity_registry_enabled_default)
+
+def test_container_count_attributes(env_sensors):
+    attrs = env_sensors["containers"].extra_state_attributes
+    assert attrs["running"] == 3
+    assert attrs["stopped"] == 1
+    assert attrs["pending_updates"] == 1
+
+
+def test_stacks_value(env_sensors):
+    assert env_sensors["stacks"].native_value == 2
+
+
+def test_images_count(env_sensors):
+    assert env_sensors["images"].native_value == 5
+
+
+def test_images_attribute_raw_bytes(env_sensors):
+    attrs = env_sensors["images"].extra_state_attributes
+    assert attrs["total_size_bytes"] == 2147483648
+    assert "total_size_mib" not in attrs
+
+
+def test_volumes_count(env_sensors):
+    assert env_sensors["volumes"].native_value == 2
+
+
+def test_volumes_attribute_raw_bytes(env_sensors):
+    attrs = env_sensors["volumes"].extra_state_attributes
+    assert "total_size_bytes" in attrs
+    assert "total_size_mib" not in attrs
+
+
+def test_networks_count(env_sensors):
+    assert env_sensors["networks"].native_value == 3
+
+
+def test_disk_value_bytes(env_sensors):
+    assert env_sensors["disk"].native_value == 524288000
+
+
+def test_disk_disabled_by_default(env_sensors):
+    assert not env_sensors["disk"]._attr_entity_registry_enabled_default
+
+
+def test_cache_value_bytes(env_sensors):
+    assert env_sensors["cache"].native_value == 104857600
+
+
+def test_cache_disabled_by_default(env_sensors):
+    assert not env_sensors["cache"]._attr_entity_registry_enabled_default
+
+
+def test_env_sensor_unique_ids_are_unique(env_sensors):
+    uids = [s._attr_unique_id for s in env_sensors.values()]
+    assert len(uids) == len(set(uids))
+
+
+def test_env_sensor_entity_category_diagnostic(env_sensors):
+    for key in ["containers", "stacks", "images", "volumes", "networks", "disk", "cache"]:
+        assert env_sensors[key]._attr_entity_category == EntityCategory.DIAGNOSTIC
+
+
+def test_env_sensor_has_entity_name_true(env_sensors):
+    for name, sensor in env_sensors.items():
+        assert sensor._attr_has_entity_name, (
+            f"{type(sensor).__name__} must have _attr_has_entity_name=True"
+        )
+
+
+# ===========================================================================
+# Environment activity sensor
+# ===========================================================================
+
+
+def _make_activity(events=None):
+    from custom_components.dockhand.sensor import DockhandEnvActivityEventsSensor
+    coord = _fast_coord(env_data={
+        "stats": {**STATS, "events": events or {"total": 42, "today": 7}},
+        "containers": [],
+        "stacks": [],
+    })
+    return DockhandEnvActivityEventsSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
+
+
+def test_activity_total_event_count():
+    assert _make_activity().native_value == 42
+
+
+def test_activity_today_attribute():
+    assert _make_activity().extra_state_attributes["today"] == 7
+
+
+def test_activity_disabled_by_default():
+    assert not _make_activity()._attr_entity_registry_enabled_default
+
+
+def test_activity_state_class_is_measurement():
+    from homeassistant.components.sensor import SensorStateClass
+    assert _make_activity()._attr_state_class == SensorStateClass.MEASUREMENT
+
+
+# ===========================================================================
+# Hawser version sensor
+# ===========================================================================
+
+
+def _make_hawser(env_obj=None):
+    from custom_components.dockhand.sensor import DockhandEnvHawserVersionSensor
+    coord = _slow_coord(env_data={
+        "env": env_obj or {
+            "name": ENV_NAME,
+            "hawserVersion": "1.4.2",
+            "hawserAgentName": "agent-1",
+            "hawserAgentId": "abc",
+            "hawserLastSeen": "2024-01-01T00:00:00Z",
+        },
+        "images": [], "networks": [], "volumes": [],
+    })
+    return DockhandEnvHawserVersionSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
+
+
+def test_hawser_version_string():
+    assert _make_hawser().native_value == "1.4.2"
+
+
+def test_hawser_agent_name_attribute():
+    assert _make_hawser().extra_state_attributes["agent_name"] == "agent-1"
+
+
+def test_hawser_last_seen_attribute_present():
+    assert "last_seen" in _make_hawser().extra_state_attributes
+
+
+def test_hawser_none_when_absent():
+    assert _make_hawser(env_obj={"name": ENV_NAME}).native_value is None
+
+
+def test_hawser_disabled_by_default():
+    assert not _make_hawser()._attr_entity_registry_enabled_default
 
 
 # ===========================================================================
@@ -411,50 +434,59 @@ class TestEnvHawserSensor(unittest.TestCase):
 # ===========================================================================
 
 
-class TestContainerSensors(unittest.TestCase):
-    def setUp(self):
-        sc = _sensor_classes()
-        coord = _fast_coord()
-        self.state = sc["DockhandContainerStateSensor"](
-            coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
-        )
-        self.health = sc["DockhandContainerHealthSensor"](
-            coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
-        )
+@pytest.fixture
+def container_sensors():
+    sc = _sensor_classes()
+    coord = _fast_coord()
+    return {
+        "state": sc["DockhandContainerStateSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
+        "health": sc["DockhandContainerHealthSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
+    }
 
-    def test_state_value(self):
-        self.assertEqual(self.state.native_value, "running")
 
-    def test_state_image_attribute(self):
-        self.assertEqual(self.state.extra_state_attributes["image"], "nginx:latest")
+def test_container_state_value(container_sensors):
+    assert container_sensors["state"].native_value == "running"
 
-    def test_health_value(self):
-        self.assertEqual(self.health.native_value, "healthy")
 
-    def test_health_enabled_by_default(self):
-        """Health sensor is enabled by default; only created when a healthcheck exists."""
-        self.assertTrue(self.health.entity_registry_enabled_default)
+def test_container_state_image_attribute(container_sensors):
+    assert container_sensors["state"].extra_state_attributes["image"] == "nginx:latest"
 
-    def test_state_none_when_container_gone(self):
-        coord = MagicMock()
-        coord.data = {ENV_ID: {"stats": STATS, "containers": [], "stacks": [], "container_stats": {}}}
-        sc = _sensor_classes()
-        state = sc["DockhandContainerStateSensor"](
-            coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
-        )
-        self.assertIsNone(state.native_value)
 
-    def test_has_entity_name_true(self):
-        for s in [self.state, self.health]:
-            self.assertTrue(s._attr_has_entity_name)
+def test_container_health_value(container_sensors):
+    assert container_sensors["health"].native_value == "healthy"
 
-    def test_unique_ids_include_container_name(self):
-        name = CONTAINER["name"]
-        self.assertIn(name, self.state._attr_unique_id)
-        self.assertIn(name, self.health._attr_unique_id)
 
-    def test_unique_ids_differ(self):
-        self.assertNotEqual(self.state._attr_unique_id, self.health._attr_unique_id)
+def test_container_health_enabled_by_default(container_sensors):
+    """Health sensor is enabled by default; only created when a healthcheck exists."""
+    assert container_sensors["health"].entity_registry_enabled_default
+
+
+def test_container_state_none_when_container_gone():
+    coord = MagicMock()
+    coord.data = {
+        ENV_ID: {"stats": STATS, "containers": [], "stacks": [], "container_stats": {}}
+    }
+    sc = _sensor_classes()
+    state = sc["DockhandContainerStateSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    assert state.native_value is None
+
+
+def test_container_has_entity_name_true(container_sensors):
+    for s in container_sensors.values():
+        assert s._attr_has_entity_name
+
+
+def test_container_unique_ids_include_container_name(container_sensors):
+    name = CONTAINER["name"]
+    assert name in container_sensors["state"]._attr_unique_id
+    assert name in container_sensors["health"]._attr_unique_id
+
+
+def test_container_unique_ids_differ(container_sensors):
+    assert (
+        container_sensors["state"]._attr_unique_id
+        != container_sensors["health"]._attr_unique_id
+    )
 
 
 # ===========================================================================
@@ -464,20 +496,19 @@ class TestContainerSensors(unittest.TestCase):
 CONTAINER_STATS = {
     "name": "nginx",
     "cpuPercent": 12.34,
-    "memoryUsage": 157286400,   # 150 MB
-    "memoryRaw":   178257920,   # 170 MB
-    "memoryCache":  20971520,   #  20 MB
-    "memoryLimit": 16764731392, # ~16 GB (host RAM, no limit set)
+    "memoryUsage": 157286400,
+    "memoryRaw":   178257920,
+    "memoryCache":  20971520,
+    "memoryLimit": 16764731392,
     "memoryPercent": 0.94,
-    "networkRx":  83886080,     #  80 MB
-    "networkTx": 104857600,     # 100 MB
-    "blockRead":  52428800,     #  50 MB
-    "blockWrite":  31457280,    #  30 MB
+    "networkRx":  83886080,
+    "networkTx": 104857600,
+    "blockRead":  52428800,
+    "blockWrite":  31457280,
 }
 
 
 def _stats_coord(stats=None, running=True):
-    """Fast coordinator with optional container_stats entry for 'nginx'."""
     coord = MagicMock()
     coord.data = {
         ENV_ID: {
@@ -492,133 +523,141 @@ def _stats_coord(stats=None, running=True):
     return coord
 
 
-class TestContainerStatsSensors(unittest.TestCase):
-    def setUp(self):
-        sc = _sensor_classes()
-        coord = _stats_coord()
-        args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
-        self.cpu = sc["DockhandContainerCpuSensor"](*args)
-        self.mem_usage = sc["DockhandContainerMemoryUsageSensor"](*args)
-        self.mem_pct = sc["DockhandContainerMemoryPercentSensor"](*args)
-        self.mem_limit = sc["DockhandContainerMemoryLimitSensor"](*args)
-        self.net_rx = sc["DockhandContainerNetworkRxSensor"](*args)
-        self.net_tx = sc["DockhandContainerNetworkTxSensor"](*args)
-        self.blk_read = sc["DockhandContainerBlockReadSensor"](*args)
-        self.blk_write = sc["DockhandContainerBlockWriteSensor"](*args)
-        self.all_sensors = [
-            self.cpu, self.mem_usage, self.mem_pct, self.mem_limit,
-            self.net_rx, self.net_tx, self.blk_read, self.blk_write,
-        ]
-
-    # -- native_value correctness --------------------------------------------
-
-    def test_cpu_value(self):
-        self.assertEqual(self.cpu.native_value, 12.34)
-
-    def test_memory_usage_value_raw_bytes(self):
-        self.assertEqual(self.mem_usage.native_value, 157_286_400)
-
-    def test_memory_percent_value(self):
-        self.assertEqual(self.mem_pct.native_value, 0.94)
-
-    def test_memory_limit_value_raw_bytes(self):
-        self.assertEqual(self.mem_limit.native_value, 16_764_731_392)
-
-    def test_network_rx_value_raw_bytes(self):
-        self.assertEqual(self.net_rx.native_value, 83_886_080)
-
-    def test_network_tx_value_raw_bytes(self):
-        self.assertEqual(self.net_tx.native_value, 104_857_600)
-
-    def test_block_read_value_raw_bytes(self):
-        self.assertEqual(self.blk_read.native_value, 52_428_800)
-
-    def test_block_write_value_raw_bytes(self):
-        self.assertEqual(self.blk_write.native_value, 31_457_280)
-
-    # -- memory_cache_bytes attribute on memory usage sensor ----------------
-
-    def test_memory_usage_cache_attribute(self):
-        attrs = self.mem_usage.extra_state_attributes
-        self.assertIn("memory_cache_bytes", attrs)
-        self.assertEqual(attrs["memory_cache_bytes"], 20_971_520)
-
-    # -- unavailable when container is stopped ------------------------------
-
-    def test_all_sensors_none_when_container_stopped(self):
-        """All stats sensors return None when the container is not running."""
-        coord = _stats_coord(running=False)
-        sc = _sensor_classes()
-        args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
-        sensors = [
-            sc["DockhandContainerCpuSensor"](*args),
-            sc["DockhandContainerMemoryUsageSensor"](*args),
-            sc["DockhandContainerMemoryPercentSensor"](*args),
-            sc["DockhandContainerMemoryLimitSensor"](*args),
-            sc["DockhandContainerNetworkRxSensor"](*args),
-            sc["DockhandContainerNetworkTxSensor"](*args),
-            sc["DockhandContainerBlockReadSensor"](*args),
-            sc["DockhandContainerBlockWriteSensor"](*args),
-        ]
-        for s in sensors:
-            self.assertIsNone(s.native_value, msg=f"{type(s).__name__} should be None")
-
-    # -- entity metadata -----------------------------------------------------
-
-    def test_all_disabled_by_default(self):
-        for s in self.all_sensors:
-            self.assertFalse(
-                s._attr_entity_registry_enabled_default,
-                msg=f"{type(s).__name__} should be disabled by default",
-            )
-
-    def test_all_diagnostic_category(self):
-        for s in self.all_sensors:
-            self.assertEqual(
-                s._attr_entity_category,
-                EntityCategory.DIAGNOSTIC,
-                msg=f"{type(s).__name__} should be DIAGNOSTIC",
-            )
-
-    def test_all_have_entity_name(self):
-        for s in self.all_sensors:
-            self.assertTrue(s._attr_has_entity_name)
-
-    def test_unique_ids_all_distinct(self):
-        uids = [s._attr_unique_id for s in self.all_sensors]
-        self.assertEqual(len(uids), len(set(uids)), "All unique_ids must be distinct")
-
-    def test_unique_ids_contain_container_name(self):
-        for s in self.all_sensors:
-            self.assertIn(
-                CONTAINER["name"],
-                s._attr_unique_id,
-                msg=f"{type(s).__name__} unique_id missing container name",
-            )
+@pytest.fixture
+def stats_sensors():
+    sc = _sensor_classes()
+    coord = _stats_coord()
+    args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    sensors = {
+        "cpu": sc["DockhandContainerCpuSensor"](*args),
+        "mem_usage": sc["DockhandContainerMemoryUsageSensor"](*args),
+        "mem_pct": sc["DockhandContainerMemoryPercentSensor"](*args),
+        "mem_limit": sc["DockhandContainerMemoryLimitSensor"](*args),
+        "net_rx": sc["DockhandContainerNetworkRxSensor"](*args),
+        "net_tx": sc["DockhandContainerNetworkTxSensor"](*args),
+        "blk_read": sc["DockhandContainerBlockReadSensor"](*args),
+        "blk_write": sc["DockhandContainerBlockWriteSensor"](*args),
+    }
+    sensors["all"] = list(sensors.values())
+    return sensors
 
 
-class TestStackSensors(unittest.TestCase):
-    def setUp(self):
-        sc = _sensor_classes()
-        coord = _fast_coord()
-        self.status = sc["DockhandStackStatusSensor"](
-            coord, ENV_ID, ENV_NAME, BASE_URL, STACK
-        )
-        self.count = sc["DockhandStackContainerCountSensor"](
-            coord, ENV_ID, ENV_NAME, BASE_URL, STACK
+def test_stats_cpu_value(stats_sensors):
+    assert stats_sensors["cpu"].native_value == 12.34
+
+
+def test_stats_memory_usage_value_raw_bytes(stats_sensors):
+    assert stats_sensors["mem_usage"].native_value == 157_286_400
+
+
+def test_stats_memory_percent_value(stats_sensors):
+    assert stats_sensors["mem_pct"].native_value == 0.94
+
+
+def test_stats_memory_limit_value_raw_bytes(stats_sensors):
+    assert stats_sensors["mem_limit"].native_value == 16_764_731_392
+
+
+def test_stats_network_rx_value_raw_bytes(stats_sensors):
+    assert stats_sensors["net_rx"].native_value == 83_886_080
+
+
+def test_stats_network_tx_value_raw_bytes(stats_sensors):
+    assert stats_sensors["net_tx"].native_value == 104_857_600
+
+
+def test_stats_block_read_value_raw_bytes(stats_sensors):
+    assert stats_sensors["blk_read"].native_value == 52_428_800
+
+
+def test_stats_block_write_value_raw_bytes(stats_sensors):
+    assert stats_sensors["blk_write"].native_value == 31_457_280
+
+
+def test_stats_memory_usage_cache_attribute(stats_sensors):
+    attrs = stats_sensors["mem_usage"].extra_state_attributes
+    assert "memory_cache_bytes" in attrs
+    assert attrs["memory_cache_bytes"] == 20_971_520
+
+
+def test_stats_all_sensors_none_when_container_stopped():
+    coord = _stats_coord(running=False)
+    sc = _sensor_classes()
+    args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    sensors = [
+        sc["DockhandContainerCpuSensor"](*args),
+        sc["DockhandContainerMemoryUsageSensor"](*args),
+        sc["DockhandContainerMemoryPercentSensor"](*args),
+        sc["DockhandContainerMemoryLimitSensor"](*args),
+        sc["DockhandContainerNetworkRxSensor"](*args),
+        sc["DockhandContainerNetworkTxSensor"](*args),
+        sc["DockhandContainerBlockReadSensor"](*args),
+        sc["DockhandContainerBlockWriteSensor"](*args),
+    ]
+    for s in sensors:
+        assert s.native_value is None, f"{type(s).__name__} should be None when stopped"
+
+
+def test_stats_all_disabled_by_default(stats_sensors):
+    for s in stats_sensors["all"]:
+        assert not s._attr_entity_registry_enabled_default, (
+            f"{type(s).__name__} should be disabled by default"
         )
 
-    def test_status_value(self):
-        self.assertEqual(self.status.native_value, "running")
 
-    def test_container_count(self):
-        self.assertEqual(self.count.native_value, 3)
+def test_stats_all_diagnostic_category(stats_sensors):
+    for s in stats_sensors["all"]:
+        assert s._attr_entity_category == EntityCategory.DIAGNOSTIC, (
+            f"{type(s).__name__} should be DIAGNOSTIC"
+        )
 
-    def test_status_container_count_attribute(self):
-        self.assertIn("container_count", self.status.extra_state_attributes)
 
-    def test_unique_ids_differ(self):
-        self.assertNotEqual(self.status._attr_unique_id, self.count._attr_unique_id)
+def test_stats_all_have_entity_name(stats_sensors):
+    for s in stats_sensors["all"]:
+        assert s._attr_has_entity_name
+
+
+def test_stats_unique_ids_all_distinct(stats_sensors):
+    uids = [s._attr_unique_id for s in stats_sensors["all"]]
+    assert len(uids) == len(set(uids)), "All unique_ids must be distinct"
+
+
+def test_stats_unique_ids_contain_container_name(stats_sensors):
+    for s in stats_sensors["all"]:
+        assert CONTAINER["name"] in s._attr_unique_id, (
+            f"{type(s).__name__} unique_id missing container name"
+        )
+
+
+# ===========================================================================
+# Stack sensors
+# ===========================================================================
+
+
+@pytest.fixture
+def stack_sensors():
+    sc = _sensor_classes()
+    coord = _fast_coord()
+    return {
+        "status": sc["DockhandStackStatusSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, STACK),
+        "count": sc["DockhandStackContainerCountSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, STACK),
+    }
+
+
+def test_stack_status_value(stack_sensors):
+    assert stack_sensors["status"].native_value == "running"
+
+
+def test_stack_container_count(stack_sensors):
+    assert stack_sensors["count"].native_value == 3
+
+
+def test_stack_status_container_count_attribute(stack_sensors):
+    assert "container_count" in stack_sensors["status"].extra_state_attributes
+
+
+def test_stack_unique_ids_differ(stack_sensors):
+    assert stack_sensors["status"]._attr_unique_id != stack_sensors["count"]._attr_unique_id
 
 
 # ===========================================================================
@@ -626,39 +665,42 @@ class TestStackSensors(unittest.TestCase):
 # ===========================================================================
 
 
-class TestImageSensor(unittest.TestCase):
-    def _make(self, image=None):
-        sc = _sensor_classes()
-        return sc["DockhandImageSensor"](
-            _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, image or IMAGE
-        )
+def _make_image(image=None):
+    sc = _sensor_classes()
+    return sc["DockhandImageSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, image or IMAGE)
 
-    def test_native_value_is_tag(self):
-        self.assertEqual(self._make().native_value, "latest")
 
-    def test_name_is_repo_only(self):
-        sensor = self._make()
-        self.assertEqual(sensor._attr_name, "nginx")
-        self.assertNotIn(":", sensor._attr_name)
+def test_image_native_value_is_tag():
+    assert _make_image().native_value == "latest"
 
-    def test_has_entity_name_true(self):
-        """Images use has_entity_name=True so device name prefixes entity_id."""
-        self.assertTrue(self._make()._attr_has_entity_name)
 
-    def test_size_bytes_attribute(self):
-        attrs = self._make().extra_state_attributes
-        self.assertEqual(attrs["size_bytes"], 104857600)
-        self.assertNotIn("size_mib", attrs)
+def test_image_name_is_repo_only():
+    sensor = _make_image()
+    assert sensor._attr_name == "nginx"
+    assert ":" not in sensor._attr_name
 
-    def test_tags_attribute(self):
-        self.assertEqual(self._make().extra_state_attributes["tags"], ["nginx:latest"])
 
-    def test_containers_using_attribute(self):
-        self.assertEqual(self._make().extra_state_attributes["containers_using"], 2)
+def test_image_has_entity_name_true():
+    assert _make_image()._attr_has_entity_name
 
-    def test_device_is_images_group(self):
-        idents = self._make().device_info.get("identifiers", set())
-        self.assertIn((DOMAIN, f"env_{ENV_ID}_Images"), idents)
+
+def test_image_size_bytes_attribute():
+    attrs = _make_image().extra_state_attributes
+    assert attrs["size_bytes"] == 104857600
+    assert "size_mib" not in attrs
+
+
+def test_image_tags_attribute():
+    assert _make_image().extra_state_attributes["tags"] == ["nginx:latest"]
+
+
+def test_image_containers_using_attribute():
+    assert _make_image().extra_state_attributes["containers_using"] == 2
+
+
+def test_image_device_is_images_group():
+    idents = _make_image().device_info.get("identifiers", set())
+    assert (DOMAIN, f"env_{ENV_ID}_Images") in idents
 
 
 # ===========================================================================
@@ -666,41 +708,45 @@ class TestImageSensor(unittest.TestCase):
 # ===========================================================================
 
 
-class TestNetworkSensor(unittest.TestCase):
-    def _make(self, coord=None):
-        sc = _sensor_classes()
-        return sc["DockhandNetworkSensor"](
-            coord or _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, NETWORK
-        )
+def _make_network(coord=None):
+    sc = _sensor_classes()
+    return sc["DockhandNetworkSensor"](
+        coord or _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, NETWORK
+    )
 
-    def test_container_count(self):
-        self.assertEqual(self._make().native_value, 1)
 
-    def test_attributes(self):
-        attrs = self._make().extra_state_attributes
-        self.assertEqual(attrs["driver"], "bridge")
-        self.assertEqual(attrs["subnet"], "172.17.0.0/16")
-        self.assertIn("nginx", attrs["connected_containers"])
+def test_network_container_count():
+    assert _make_network().native_value == 1
 
-    def test_none_when_not_found(self):
-        coord = _slow_coord(
-            env_data={"env": {}, "images": [], "networks": [], "volumes": []}
-        )
-        self.assertIsNone(self._make(coord).native_value)
 
-    def test_unique_id_includes_env_id(self):
-        self.assertIn(str(ENV_ID), self._make()._attr_unique_id)
+def test_network_attributes():
+    attrs = _make_network().extra_state_attributes
+    assert attrs["driver"] == "bridge"
+    assert attrs["subnet"] == "172.17.0.0/16"
+    assert "nginx" in attrs["connected_containers"]
 
-    def test_name_is_network_name(self):
-        """_attr_name is the network name (device name provides env+type prefix)."""
-        sensor = self._make()
-        self.assertEqual(sensor._attr_name, NETWORK["name"])
-        self.assertTrue(sensor._attr_has_entity_name)
 
-    def test_device_is_networks_group(self):
-        idents = self._make().device_info.get("identifiers", set())
-        self.assertIn((DOMAIN, f"env_{ENV_ID}_Networks"), idents)
-        self.assertNotIn((DOMAIN, f"network_{NETWORK['id']}"), idents)
+def test_network_none_when_not_found():
+    coord = _slow_coord(
+        env_data={"env": {}, "images": [], "networks": [], "volumes": []}
+    )
+    assert _make_network(coord).native_value is None
+
+
+def test_network_unique_id_includes_env_id():
+    assert str(ENV_ID) in _make_network()._attr_unique_id
+
+
+def test_network_name_is_network_name():
+    sensor = _make_network()
+    assert sensor._attr_name == NETWORK["name"]
+    assert sensor._attr_has_entity_name
+
+
+def test_network_device_is_networks_group():
+    idents = _make_network().device_info.get("identifiers", set())
+    assert (DOMAIN, f"env_{ENV_ID}_Networks") in idents
+    assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
 
 
 # ===========================================================================
@@ -708,53 +754,56 @@ class TestNetworkSensor(unittest.TestCase):
 # ===========================================================================
 
 
-class TestVolumeSensor(unittest.TestCase):
-    def _make(self, volume=None, coord=None):
-        sc = _sensor_classes()
-        vol = volume or VOLUME
-        return sc["DockhandVolumeSensor"](
-            coord or _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, vol
-        )
+def _make_volume(volume=None, coord=None):
+    sc = _sensor_classes()
+    return sc["DockhandVolumeSensor"](
+        coord or _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, volume or VOLUME
+    )
 
-    def test_container_count_when_used(self):
-        self.assertEqual(self._make().native_value, 1)
 
-    def test_container_count_zero_when_unused(self):
-        coord = _slow_coord(
-            env_data={"env": {}, "images": [], "networks": [], "volumes": [VOLUME_UNUSED]}
-        )
-        self.assertEqual(self._make(VOLUME_UNUSED, coord).native_value, 0)
+def test_volume_container_count_when_used():
+    assert _make_volume().native_value == 1
 
-    def test_in_use_attribute(self):
-        self.assertTrue(self._make().extra_state_attributes["in_use"])
 
-    def test_containers_attribute(self):
-        self.assertEqual(
-            self._make().extra_state_attributes["containers"], ["container_abc123"]
-        )
+def test_volume_container_count_zero_when_unused():
+    coord = _slow_coord(
+        env_data={"env": {}, "images": [], "networks": [], "volumes": [VOLUME_UNUSED]}
+    )
+    assert _make_volume(VOLUME_UNUSED, coord).native_value == 0
 
-    def test_driver_scope_mountpoint_created(self):
-        attrs = self._make().extra_state_attributes
-        self.assertEqual(attrs["driver"], "local")
-        self.assertEqual(attrs["scope"], "local")
-        self.assertIn("mountpoint", attrs)
-        self.assertIn("created", attrs)
 
-    def test_none_when_not_found(self):
-        coord = _slow_coord(
-            env_data={"env": {}, "images": [], "networks": [], "volumes": []}
-        )
-        self.assertIsNone(self._make(coord=coord).native_value)
+def test_volume_in_use_attribute():
+    assert _make_volume().extra_state_attributes["in_use"]
 
-    def test_name_is_volume_name(self):
-        """_attr_name is the volume name (device name provides env+type prefix)."""
-        sensor = self._make()
-        self.assertEqual(sensor._attr_name, VOLUME["name"])
-        self.assertTrue(sensor._attr_has_entity_name)
 
-    def test_device_is_volumes_group(self):
-        idents = self._make().device_info.get("identifiers", set())
-        self.assertIn((DOMAIN, f"env_{ENV_ID}_Volumes"), idents)
+def test_volume_containers_attribute():
+    assert _make_volume().extra_state_attributes["containers"] == ["container_abc123"]
+
+
+def test_volume_driver_scope_mountpoint_created():
+    attrs = _make_volume().extra_state_attributes
+    assert attrs["driver"] == "local"
+    assert attrs["scope"] == "local"
+    assert "mountpoint" in attrs
+    assert "created" in attrs
+
+
+def test_volume_none_when_not_found():
+    coord = _slow_coord(
+        env_data={"env": {}, "images": [], "networks": [], "volumes": []}
+    )
+    assert _make_volume(coord=coord).native_value is None
+
+
+def test_volume_name_is_volume_name():
+    sensor = _make_volume()
+    assert sensor._attr_name == VOLUME["name"]
+    assert sensor._attr_has_entity_name
+
+
+def test_volume_device_is_volumes_group():
+    idents = _make_volume().device_info.get("identifiers", set())
+    assert (DOMAIN, f"env_{ENV_ID}_Volumes") in idents
 
 
 # ===========================================================================
@@ -762,72 +811,72 @@ class TestVolumeSensor(unittest.TestCase):
 # ===========================================================================
 
 
-class TestScheduleSensors(unittest.TestCase):
-    def _next_run(self, sched=None):
-        sc = _sensor_classes()
-        s = sched or SCHEDULE
-        return sc["DockhandScheduleNextRunSensor"](
-            _slow_coord(schedules=[s]), s, BASE_URL
-        )
+def _make_next_run(sched=None):
+    sc = _sensor_classes()
+    s = sched or SCHEDULE
+    return sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[s]), s, BASE_URL)
 
-    def _last_status(self, sched=None):
-        sc = _sensor_classes()
-        s = sched or SCHEDULE
-        return sc["DockhandScheduleLastStatusSensor"](
-            _slow_coord(schedules=[s]), s, BASE_URL
-        )
 
-    def test_next_run_returns_datetime(self):
-        self.assertIsNotNone(self._next_run().native_value)
+def _make_last_status(sched=None):
+    sc = _sensor_classes()
+    s = sched or SCHEDULE
+    return sc["DockhandScheduleLastStatusSensor"](_slow_coord(schedules=[s]), s, BASE_URL)
 
-    def test_next_run_none_when_schedule_gone(self):
-        sc = _sensor_classes()
-        sensor = sc["DockhandScheduleNextRunSensor"](
-            _slow_coord(schedules=[]), SCHEDULE, BASE_URL
-        )
-        self.assertIsNone(sensor.native_value)
 
-    def test_next_run_attributes(self):
-        attrs = self._next_run().extra_state_attributes
-        self.assertEqual(attrs["cron_expression"], "0 2 * * *")
-        self.assertTrue(attrs["enabled"])
-        self.assertEqual(attrs["schedule_type"], "system")
+def test_schedule_next_run_returns_datetime():
+    assert _make_next_run().native_value is not None
 
-    def test_last_status_success(self):
-        self.assertEqual(self._last_status().native_value, "success")
 
-    def test_last_status_failed(self):
-        self.assertEqual(self._last_status(SCHEDULE_FAILED).native_value, "failed")
+def test_schedule_next_run_none_when_schedule_gone():
+    sc = _sensor_classes()
+    sensor = sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[]), SCHEDULE, BASE_URL)
+    assert sensor.native_value is None
 
-    def test_last_status_attributes_on_failure(self):
-        attrs = self._last_status(SCHEDULE_FAILED).extra_state_attributes
-        self.assertEqual(attrs["error_message"], "Connection timeout")
-        self.assertIn("triggered_at", attrs)
-        self.assertIn("duration_ms", attrs)
 
-    def test_last_status_none_when_no_execution(self):
-        sched = {**SCHEDULE, "lastExecution": None}
-        sc = _sensor_classes()
-        sensor = sc["DockhandScheduleLastStatusSensor"](
-            _slow_coord(schedules=[sched]), sched, BASE_URL
-        )
-        self.assertIsNone(sensor.native_value)
+def test_schedule_next_run_attributes():
+    attrs = _make_next_run().extra_state_attributes
+    assert attrs["cron_expression"] == "0 2 * * *"
+    assert attrs["enabled"]
+    assert attrs["schedule_type"] == "system"
 
-    def test_both_sensors_share_device(self):
-        nr = self._next_run()
-        ls = self._last_status()
-        self.assertEqual(
-            nr.device_info.get("identifiers"), ls.device_info.get("identifiers")
-        )
 
-    def test_device_is_child_of_hub(self):
-        via = self._next_run().device_info.get("via_device")
-        self.assertEqual(via, ("dockhand", "schedules_hub"))
+def test_schedule_last_status_success():
+    assert _make_last_status().native_value == "success"
 
-    def test_last_status_is_diagnostic(self):
-        self.assertEqual(
-            self._last_status()._attr_entity_category, EntityCategory.DIAGNOSTIC
-        )
+
+def test_schedule_last_status_failed():
+    assert _make_last_status(SCHEDULE_FAILED).native_value == "failed"
+
+
+def test_schedule_last_status_attributes_on_failure():
+    attrs = _make_last_status(SCHEDULE_FAILED).extra_state_attributes
+    assert attrs["error_message"] == "Connection timeout"
+    assert "triggered_at" in attrs
+    assert "duration_ms" in attrs
+
+
+def test_schedule_last_status_none_when_no_execution():
+    sched = {**SCHEDULE, "lastExecution": None}
+    sc = _sensor_classes()
+    sensor = sc["DockhandScheduleLastStatusSensor"](
+        _slow_coord(schedules=[sched]), sched, BASE_URL
+    )
+    assert sensor.native_value is None
+
+
+def test_schedule_both_sensors_share_device():
+    nr = _make_next_run()
+    ls = _make_last_status()
+    assert nr.device_info.get("identifiers") == ls.device_info.get("identifiers")
+
+
+def test_schedule_device_is_child_of_hub():
+    via = _make_next_run().device_info.get("via_device")
+    assert via == ("dockhand", "schedules_hub")
+
+
+def test_schedule_last_status_is_diagnostic():
+    assert _make_last_status()._attr_entity_category == EntityCategory.DIAGNOSTIC
 
 
 # ===========================================================================
@@ -835,62 +884,69 @@ class TestScheduleSensors(unittest.TestCase):
 # ===========================================================================
 
 
-class TestBinarySensors(unittest.TestCase):
-    def _make(self, cls_name, stats_override=None):
-        bs = _bs_classes()
-        coord = _fast_coord({
-            "stats": {**STATS, **(stats_override or {})},
-            "containers": [],
-            "stacks": [],
-        })
-        return bs[cls_name](coord, ENV_ID, BASE_URL)
+def _make_binary(cls_name, stats_override=None):
+    bs = _bs_classes()
+    coord = _fast_coord({
+        "stats": {**STATS, **(stats_override or {})},
+        "containers": [],
+        "stacks": [],
+    })
+    return bs[cls_name](coord, ENV_ID, BASE_URL)
 
-    def test_online_is_on(self):
-        self.assertTrue(self._make("DockhandEnvOnlineSensor").is_on)
 
-    def test_collect_activity_true(self):
-        self.assertTrue(self._make("DockhandEnvCollectActivitySensor").is_on)
+def test_binary_online_is_on():
+    assert _make_binary("DockhandEnvOnlineSensor").is_on
 
-    def test_collect_metrics_true(self):
-        self.assertTrue(self._make("DockhandEnvCollectMetricsSensor").is_on)
 
-    def test_scanner_disabled(self):
-        self.assertFalse(self._make("DockhandEnvScannerEnabledSensor").is_on)
+def test_binary_collect_activity_true():
+    assert _make_binary("DockhandEnvCollectActivitySensor").is_on
 
-    def test_update_checks_enabled(self):
-        self.assertTrue(self._make("DockhandEnvUpdateCheckSensor").is_on)
 
-    def test_auto_update_disabled(self):
-        self.assertFalse(self._make("DockhandEnvAutoUpdateSensor").is_on)
+def test_binary_collect_metrics_true():
+    assert _make_binary("DockhandEnvCollectMetricsSensor").is_on
 
-    def test_image_prune_enabled(self):
-        bs = _bs_classes()
-        coord = _slow_coord(env_data={
-            "env": {"name": ENV_NAME, "imagePruneEnabled": True},
-            "images": [], "networks": [], "volumes": [],
-        })
-        self.assertTrue(bs["DockhandEnvImagePruneBinarySensor"](coord, ENV_ID, BASE_URL).is_on)
 
-    def test_config_sensors_disabled_by_default(self):
-        bs = _bs_classes()
-        coord = _fast_coord()
-        for cls_name in [
-            "DockhandEnvCollectActivitySensor",
-            "DockhandEnvCollectMetricsSensor",
-            "DockhandEnvScannerEnabledSensor",
-            "DockhandEnvUpdateCheckSensor",
-            "DockhandEnvAutoUpdateSensor",
-        ]:
-            s = bs[cls_name](coord, ENV_ID, BASE_URL)
-            self.assertFalse(
-                s._attr_entity_registry_enabled_default,
-                f"{cls_name} should be disabled by default",
-            )
+def test_binary_scanner_disabled():
+    assert not _make_binary("DockhandEnvScannerEnabledSensor").is_on
 
-    def test_online_sensor_enabled_by_default(self):
-        bs = _bs_classes()
-        s = bs["DockhandEnvOnlineSensor"](_fast_coord(), ENV_ID, BASE_URL)
-        self.assertTrue(s.entity_registry_enabled_default)
+
+def test_binary_update_checks_enabled():
+    assert _make_binary("DockhandEnvUpdateCheckSensor").is_on
+
+
+def test_binary_auto_update_disabled():
+    assert not _make_binary("DockhandEnvAutoUpdateSensor").is_on
+
+
+def test_binary_image_prune_enabled():
+    bs = _bs_classes()
+    coord = _slow_coord(env_data={
+        "env": {"name": ENV_NAME, "imagePruneEnabled": True},
+        "images": [], "networks": [], "volumes": [],
+    })
+    assert bs["DockhandEnvImagePruneBinarySensor"](coord, ENV_ID, BASE_URL).is_on
+
+
+def test_binary_config_sensors_disabled_by_default():
+    bs = _bs_classes()
+    coord = _fast_coord()
+    for cls_name in [
+        "DockhandEnvCollectActivitySensor",
+        "DockhandEnvCollectMetricsSensor",
+        "DockhandEnvScannerEnabledSensor",
+        "DockhandEnvUpdateCheckSensor",
+        "DockhandEnvAutoUpdateSensor",
+    ]:
+        s = bs[cls_name](coord, ENV_ID, BASE_URL)
+        assert not s._attr_entity_registry_enabled_default, (
+            f"{cls_name} should be disabled by default"
+        )
+
+
+def test_binary_online_sensor_enabled_by_default():
+    bs = _bs_classes()
+    s = bs["DockhandEnvOnlineSensor"](_fast_coord(), ENV_ID, BASE_URL)
+    assert s.entity_registry_enabled_default
 
 
 # ===========================================================================
@@ -968,7 +1024,6 @@ class TestSwitches:
         assert exc_info.value.translation_key == "action_failed"
 
     async def test_container_turn_on_raises_not_found_when_container_missing(self):
-        """If the container is no longer in coordinator data, container_not_found is raised."""
         coord = _fast_coord({"stats": STATS, "containers": [], "stacks": []})
         switch = self._container_switch(coord=coord)
         switch._client = MagicMock()
@@ -1002,10 +1057,9 @@ class TestSwitches:
 class TestButtons:
     def _container_btn(self, coord=None):
         btn = _button_classes()
-        b = btn["DockhandContainerRestartButton"](
+        return btn["DockhandContainerRestartButton"](
             coord or _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
         )
-        return b
 
     def _stack_btn(self):
         btn = _button_classes()
@@ -1069,7 +1123,6 @@ class TestButtons:
         assert s_btn._attr_entity_category == EntityCategory.CONFIG
 
     def test_restart_buttons_both_use_restart_translation_key(self):
-        """Both use the same 'restart' key — no collision because device names now differ."""
         coord = _fast_coord()
         client = MagicMock()
         btn = _button_classes()
@@ -1104,88 +1157,87 @@ class TestButtons:
 # ===========================================================================
 
 
-class TestDeviceInfo(unittest.TestCase):
-    """Verify env-prefixed names and correct group device parentage."""
+def test_container_device_name_format():
+    sc = _sensor_classes()
+    sensor = sc["DockhandContainerStateSensor"](
+        _fast_coord(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+    )
+    assert sensor.device_info["name"] == (
+        f"{ENV_NAME} \u2013 Containers \u2013 {CONTAINER['name']}"
+    )
 
-    def test_container_device_name_format(self):
-        """Container device name must be '{env} – Containers – {name}'."""
-        sc = _sensor_classes()
-        sensor = sc["DockhandContainerStateSensor"](
-            _fast_coord(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
-        )
-        name = sensor.device_info["name"]
-        self.assertEqual(name, f"{ENV_NAME} \u2013 Containers \u2013 {CONTAINER['name']}")
 
-    def test_stack_device_name_format(self):
-        """Stack device name must be '{env} – Stacks – {name}'."""
-        sc = _sensor_classes()
-        sensor = sc["DockhandStackStatusSensor"](
-            _fast_coord(), ENV_ID, ENV_NAME, BASE_URL, STACK
-        )
-        name = sensor.device_info["name"]
-        self.assertEqual(name, f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}")
+def test_stack_device_name_format():
+    sc = _sensor_classes()
+    sensor = sc["DockhandStackStatusSensor"](
+        _fast_coord(), ENV_ID, ENV_NAME, BASE_URL, STACK
+    )
+    assert sensor.device_info["name"] == (
+        f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}"
+    )
 
-    def test_container_switch_device_name_format(self):
-        sw = _switch_classes()
-        switch = sw["DockhandContainerRunningSwitch"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
-        )
-        self.assertIn("Containers", switch.device_info["name"])
-        self.assertIn(CONTAINER["name"], switch.device_info["name"])
 
-    def test_stack_switch_device_name_format(self):
-        sw = _switch_classes()
-        switch = sw["DockhandStackRunningSwitch"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
-        )
-        self.assertIn("Stacks", switch.device_info["name"])
-        self.assertIn(STACK["name"], switch.device_info["name"])
+def test_container_switch_device_name_format():
+    sw = _switch_classes()
+    switch = sw["DockhandContainerRunningSwitch"](
+        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+    )
+    assert "Containers" in switch.device_info["name"]
+    assert CONTAINER["name"] in switch.device_info["name"]
 
-    def test_container_button_device_name_format(self):
-        btn = _button_classes()
-        b = btn["DockhandContainerRestartButton"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
-        )
-        self.assertIn("Containers", b.device_info["name"])
 
-    def test_stack_button_device_name_format(self):
-        btn = _button_classes()
-        b = btn["DockhandStackRestartButton"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
-        )
-        self.assertIn("Stacks", b.device_info["name"])
+def test_stack_switch_device_name_format():
+    sw = _switch_classes()
+    switch = sw["DockhandStackRunningSwitch"](
+        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
+    )
+    assert "Stacks" in switch.device_info["name"]
+    assert STACK["name"] in switch.device_info["name"]
 
-    def test_stack_device_helper_name_format(self):
-        """_stack_device() must produce '{env} – Stacks – {name}' (regression guard)."""
-        from custom_components.dockhand.helpers import _stack_device
-        info = _stack_device(STACK["name"], ENV_ID, ENV_NAME, BASE_URL)
-        name = info["name"]
-        self.assertEqual(name, f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}")
 
-    def test_network_entity_under_group_device(self):
-        sc = _sensor_classes()
-        sensor = sc["DockhandNetworkSensor"](
-            _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, NETWORK
-        )
-        idents = sensor.device_info.get("identifiers", set())
-        self.assertIn((DOMAIN, f"env_{ENV_ID}_Networks"), idents)
-        self.assertNotIn((DOMAIN, f"network_{NETWORK['id']}"), idents)
+def test_container_button_device_name_format():
+    btn = _button_classes()
+    b = btn["DockhandContainerRestartButton"](
+        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+    )
+    assert "Containers" in b.device_info["name"]
 
-    def test_volume_entity_under_group_device(self):
-        sc = _sensor_classes()
-        sensor = sc["DockhandVolumeSensor"](
-            _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, VOLUME
-        )
-        idents = sensor.device_info.get("identifiers", set())
-        self.assertIn((DOMAIN, f"env_{ENV_ID}_Volumes"), idents)
 
-    def test_image_entity_under_group_device(self):
-        sc = _sensor_classes()
-        sensor = sc["DockhandImageSensor"](
-            _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, IMAGE
-        )
-        idents = sensor.device_info.get("identifiers", set())
-        self.assertIn((DOMAIN, f"env_{ENV_ID}_Images"), idents)
+def test_stack_button_device_name_format():
+    btn = _button_classes()
+    b = btn["DockhandStackRestartButton"](
+        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
+    )
+    assert "Stacks" in b.device_info["name"]
+
+
+def test_stack_device_helper_name_format():
+    """_stack_device() must produce '{env} – Stacks – {name}' (regression guard)."""
+    from custom_components.dockhand.helpers import _stack_device
+    info = _stack_device(STACK["name"], ENV_ID, ENV_NAME, BASE_URL)
+    assert info["name"] == f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}"
+
+
+def test_network_entity_under_group_device():
+    sc = _sensor_classes()
+    sensor = sc["DockhandNetworkSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, NETWORK)
+    idents = sensor.device_info.get("identifiers", set())
+    assert (DOMAIN, f"env_{ENV_ID}_Networks") in idents
+    assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
+
+
+def test_volume_entity_under_group_device():
+    sc = _sensor_classes()
+    sensor = sc["DockhandVolumeSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, VOLUME)
+    idents = sensor.device_info.get("identifiers", set())
+    assert (DOMAIN, f"env_{ENV_ID}_Volumes") in idents
+
+
+def test_image_entity_under_group_device():
+    sc = _sensor_classes()
+    sensor = sc["DockhandImageSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, IMAGE)
+    idents = sensor.device_info.get("identifiers", set())
+    assert (DOMAIN, f"env_{ENV_ID}_Images") in idents
 
 
 # ===========================================================================
@@ -1193,60 +1245,65 @@ class TestDeviceInfo(unittest.TestCase):
 # ===========================================================================
 
 
-class TestComposeProjectHelper(unittest.TestCase):
-    """Tests for the _compose_project() helper in helpers.py."""
-
-    def setUp(self):
-        from custom_components.dockhand.helpers import _compose_project
-        self._fn = _compose_project
-
-    def test_returns_project_name_for_compose_container(self):
-        self.assertEqual(self._fn(COMPOSE_CONTAINER), "myapp")
-
-    def test_returns_none_for_freestanding_container(self):
-        self.assertIsNone(self._fn(CONTAINER))
-
-    def test_returns_none_for_empty_labels(self):
-        self.assertIsNone(self._fn({"labels": {}}))
-
-    def test_returns_none_for_none_labels(self):
-        self.assertIsNone(self._fn({"labels": None}))
-
-    def test_returns_none_for_none_input(self):
-        self.assertIsNone(self._fn(None))
-
-    def test_returns_none_for_empty_dict(self):
-        self.assertIsNone(self._fn({}))
+@pytest.fixture
+def compose_project_fn():
+    from custom_components.dockhand.helpers import _compose_project
+    return _compose_project
 
 
-class TestContainerHasHealthcheck(unittest.TestCase):
-    """Tests for the _container_has_healthcheck() helper."""
-
-    def setUp(self):
-        from custom_components.dockhand.helpers import _container_has_healthcheck
-        self._fn = _container_has_healthcheck
-
-    def test_true_for_healthy(self):
-        self.assertTrue(self._fn({"health": "healthy"}))
-
-    def test_true_for_unhealthy(self):
-        self.assertTrue(self._fn({"health": "unhealthy"}))
-
-    def test_true_for_starting(self):
-        self.assertTrue(self._fn({"health": "starting"}))
-
-    def test_false_for_none_string(self):
-        self.assertFalse(self._fn({"health": "none"}))
-
-    def test_false_for_none_value(self):
-        self.assertFalse(self._fn({"health": None}))
-
-    def test_false_for_missing_key(self):
-        self.assertFalse(self._fn({}))
-
-    def test_false_for_unknown(self):
-        self.assertFalse(self._fn({"health": "unknown"}))
+def test_compose_project_returns_name(compose_project_fn):
+    assert compose_project_fn(COMPOSE_CONTAINER) == "myapp"
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_compose_project_none_for_freestanding(compose_project_fn):
+    assert compose_project_fn(CONTAINER) is None
+
+
+def test_compose_project_none_for_empty_labels(compose_project_fn):
+    assert compose_project_fn({"labels": {}}) is None
+
+
+def test_compose_project_none_for_none_labels(compose_project_fn):
+    assert compose_project_fn({"labels": None}) is None
+
+
+def test_compose_project_none_for_none_input(compose_project_fn):
+    assert compose_project_fn(None) is None
+
+
+def test_compose_project_none_for_empty_dict(compose_project_fn):
+    assert compose_project_fn({}) is None
+
+
+@pytest.fixture
+def healthcheck_fn():
+    from custom_components.dockhand.helpers import _container_has_healthcheck
+    return _container_has_healthcheck
+
+
+def test_healthcheck_true_for_healthy(healthcheck_fn):
+    assert healthcheck_fn({"health": "healthy"})
+
+
+def test_healthcheck_true_for_unhealthy(healthcheck_fn):
+    assert healthcheck_fn({"health": "unhealthy"})
+
+
+def test_healthcheck_true_for_starting(healthcheck_fn):
+    assert healthcheck_fn({"health": "starting"})
+
+
+def test_healthcheck_false_for_none_string(healthcheck_fn):
+    assert not healthcheck_fn({"health": "none"})
+
+
+def test_healthcheck_false_for_none_value(healthcheck_fn):
+    assert not healthcheck_fn({"health": None})
+
+
+def test_healthcheck_false_for_missing_key(healthcheck_fn):
+    assert not healthcheck_fn({})
+
+
+def test_healthcheck_false_for_unknown(healthcheck_fn):
+    assert not healthcheck_fn({"health": "unknown"})

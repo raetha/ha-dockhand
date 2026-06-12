@@ -16,9 +16,6 @@ from .const import DOMAIN
 
 # --------------------------------------------------------------------------- #
 # Section URL helpers
-# Dockhand uses flat paths — no hash routing, no per-object deep links.
-# All links land on the relevant section list; the user selects env/object there.
-# Pattern: {base_url}/{section}
 # --------------------------------------------------------------------------- #
 
 
@@ -57,7 +54,6 @@ def _schedules_url(base_url: str) -> str | None:
 
 # --------------------------------------------------------------------------- #
 # Device info helpers
-# model field shows as the "Type" badge in the HA device list.
 # --------------------------------------------------------------------------- #
 
 

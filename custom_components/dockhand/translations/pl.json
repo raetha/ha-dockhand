@@ -219,11 +219,6 @@
       "restart": {
         "name": "Uruchom ponownie"
       }
-    },
-    "update": {
-      "image_update": {
-        "name": "Aktualizacja obrazu"
-      }
     }
   },
   "exceptions": {
@@ -233,5 +228,11 @@
     "container_not_found": {
       "message": "Kontener nie znaleziony — mógł zostać usunięty"
     }
+  },
+  "messages": {
+    "image_label": "Obraz: {image_name}",
+    "scanner_warning": "Skanowanie podatności nie zostanie wykonane za pomocą tej metody aktualizacji.",
+    "system_container_warning": "To jest kontener systemowy i musi być aktualizowany bezpośrednio na hoście Docker.",
+    "update_disabled_warning": "Aktualizacje wyłączone przez etykietę `dockhand.update=false`."
   }
 }

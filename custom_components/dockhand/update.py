@@ -30,6 +30,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
@@ -140,17 +141,50 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
         self._env_id = env_id
         self._container_name = container_name
 
-        # Unique ID is stable across container recreation — name-based not ID-based.
         self._attr_unique_id = f"dockhand_update_{env_id}_{container_name}"
-        self._attr_translation_key = "image_update"
-
-        # Attach to the container device — stable because the device identifier
-        # is name-based (container_{env_id}_{name}).
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"container_{env_id}_{container_name}")},
         )
 
         self._update_supported_features()
+
+        # Translated message strings — populated in async_added_to_hass.
+        # Keys match strings.json messages section.
+        self._messages: dict[str, str] = {}
+
+    async def async_added_to_hass(self) -> None:
+        """Load translated message strings once the entity is added to HA."""
+        await super().async_added_to_hass()
+        translations = await async_get_translations(
+            self.hass,
+            self.hass.config.language,
+            "messages",
+            integrations=[DOMAIN],
+        )
+        prefix = f"component.{DOMAIN}.messages."
+        self._messages = {
+            key.removeprefix(prefix): value
+            for key, value in translations.items()
+            if key.startswith(prefix)
+        }
+
+    def _msg(self, key: str, **kwargs: str) -> str:
+        """Return a translated message string, falling back to English defaults."""
+        _DEFAULTS: dict[str, str] = {
+            "image_label": "Image: {image_name}",
+            "scanner_warning": (
+                "Vulnerability scanning will not be performed via this update method."
+            ),
+            "system_container_warning": (
+                "This is a system container and must be updated"
+                " directly on the docker host."
+            ),
+            "update_disabled_warning": (
+                "Updates disabled via `dockhand.update=false` label."
+            ),
+        }
+        template = self._messages.get(key) or _DEFAULTS.get(key, key)
+        return template.format(**kwargs) if kwargs else template
 
     def _item(self) -> dict:
         """Return the current update payload for this container.
@@ -202,19 +236,8 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
 
     @property
     def release_summary(self) -> str | None:
-        """Brief summary shown in the entity state attribute — max 255 chars."""
-        item = self._item()
-        if not item:
-            return None
-        parts = []
-        image_name = item.get("imageName", "")
-        if image_name:
-            parts.append(f"Image: {image_name}")
-        if self._scanner_enabled():
-            parts.append(
-                "⚠️ Vulnerability scanning will not be performed via this update method."
-            )
-        return " ".join(parts) if parts else None
+        """Not used — release notes cover all warning content."""
+        return None
 
     async def async_release_notes(self) -> str | None:
         """Full release notes shown in the more-info dialog — supports Markdown."""
@@ -225,20 +248,18 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandUpdateCoordinator], Update
 
         image_name = item.get("imageName")
         if image_name:
-            parts.append(f"Image: {image_name}")
+            parts.append(self._msg("image_label", image_name=image_name))
 
         if self._scanner_enabled():
-            parts.append(
-                "⚠️ Vulnerability scanning will not be performed via this update method."
-            )
+            msg = self._msg("scanner_warning")
+            parts.append(f"<ha-alert alert-type='warning'>{msg}</ha-alert>")
 
         if item.get("systemContainer"):
-            parts.append(
-                "⚠️ This is a system container and must be updated"
-                " directly on the docker host."
-            )
+            msg = self._msg("system_container_warning")
+            parts.append(f"<ha-alert alert-type='warning'>{msg}</ha-alert>")
         elif item.get("updateDisabled"):
-            parts.append("Updates disabled via `dockhand.update=false` label.")
+            msg = self._msg("update_disabled_warning")
+            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
 
         return "\n\n".join(parts) if parts else None
 

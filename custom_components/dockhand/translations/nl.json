@@ -219,11 +219,6 @@
       "restart": {
         "name": "Herstart"
       }
-    },
-    "update": {
-      "image_update": {
-        "name": "Image-update"
-      }
     }
   },
   "exceptions": {
@@ -233,5 +228,11 @@
     "container_not_found": {
       "message": "Container niet gevonden — het is mogelijk verwijderd"
     }
+  },
+  "messages": {
+    "image_label": "Image: {image_name}",
+    "scanner_warning": "Kwetsbaarheidsscanning wordt niet uitgevoerd via deze updatemethode.",
+    "system_container_warning": "Dit is een systeemcontainer en moet rechtstreeks op de Docker-host worden bijgewerkt.",
+    "update_disabled_warning": "Updates uitgeschakeld via `dockhand.update=false`-label."
   }
 }

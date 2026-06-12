@@ -78,7 +78,7 @@ Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, 
 ## Authentication
 
 ### API token (recommended)
-When Dockhand authentication is enabled, the integration authenticates using a **Bearer token** (`dh_...`). Tokens do not have a session timeout, which eliminates the daily re-authentication prompts that affected MFA users with the previous session-cookie approach.
+When Dockhand authentication is enabled, the integration authenticates using a **Bearer token** (`dh_...`). Tokens do not expire by default (unless you set an expiry when generating), which means no periodic re-authentication prompts.
 
 To generate a token:
 1. Open the Dockhand UI and click your avatar in the sidebar
@@ -109,7 +109,7 @@ myenv                                       ← Environment device
 │       ├── sensor.State
 │       ├── sensor.Health              ← only if container has a healthcheck
 │       ├── button.Restart
-│       ├── update.Image update        ← if container updates enabled
+│       ├── update                     ← if container updates enabled
 │       └── (diagnostic, disabled by default)
 │           ├── sensor.CPU usage
 │           ├── sensor.Memory usage
@@ -147,7 +147,7 @@ Each device in the list shows its **Type** (`model` field), so it's easy to dist
 Container and stack switches are **primary entities** — the entity name equals the device name with no suffix, following HA convention for the principal on/off control of a device.
 
 ### Portainer users
-If you're migrating from the Portainer integration, this integration follows the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and per stack.
+If you're also running the Portainer integration, note that this integration uses the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and stack.
 
 ---
 
@@ -158,7 +158,7 @@ If you're migrating from the Portainer integration, this integration follows the
 |---|---|---|
 | Online | binary_sensor | Connectivity device class |
 | CPU usage | sensor | % |
-| Memory usage | sensor | %, with used/total GB attributes |
+| Memory usage | sensor | %, with used/total bytes attributes |
 | Containers running | sensor | with total/stopped/unhealthy attributes |
 | Images | sensor | count of Docker images on the environment |
 
@@ -169,7 +169,7 @@ If you're migrating from the Portainer integration, this integration follows the
 | Health | sensor | healthy / unhealthy / starting. Only created for containers with a Docker healthcheck configured — enabled by default |
 | Container | switch | turn on = start, turn off = stop |
 | Restart | button | restarts running container (use Container to start stopped) |
-| Image update | update | Shows when a newer image digest is available. Install triggers a pull-and-recreate via Dockhand's `batch-update` API. Note: vulnerability scanning is not applied by this API endpoint — a warning is shown in the entity when scanning is enabled on the environment. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
+| Update | update | Shows when a newer image digest is available. Install triggers a pull-and-recreate via Dockhand's `batch-update` API. Note: vulnerability scanning is not applied by this API endpoint — a warning is shown in the entity when scanning is enabled on the environment. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
 
 The following **diagnostic sensors** are also created for every container but are **disabled by default**. Enable the ones you want individually in **Settings → Entities**. They show as unavailable when the container is stopped or exited.
 
@@ -188,7 +188,7 @@ The following **diagnostic sensors** are also created for every container but ar
 | Entity | Type | Notes |
 |---|---|---|
 | Status | sensor | running / partial / stopped |
-| Running | switch | turn on = start, turn off = stop |
+| Stack | switch | turn on = start, turn off = stop |
 | Restart | button | restarts running stack (use Running to start stopped) |
 
 ### Network (optional, 600 s)
@@ -302,6 +302,7 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 - The Restart button only works on *running* containers/stacks
 - Disable **Verify SSL certificate** only if using a self-signed certificate on the Dockhand server
 - Containers with the `dockhand.hidden=true` label are filtered from Dockhand's API responses and will not appear in HA
+- **To exclude a container or stack from HA entirely**, the cleanest approach is to add the `dockhand.hidden=true` Docker label — it is filtered at the Dockhand API level so those containers never appear in HA at all. If you want the container visible in Dockhand but not in HA, disable the device in HA instead: go to **Settings → Devices & Services → Dockhand**, find the device, and use the three-dot menu → **Disable**. Disabling a device disables all of its entities at once and survives integration reloads. To act on many devices at once, use the **Devices** tab filter to narrow the list (e.g. filter by integration = Dockhand), then select multiple rows and use the bulk action menu.
 
 ---
 
@@ -313,7 +314,7 @@ The integration ships with machine-generated translations for German, Spanish, F
 
 ## Attribution
 
-This integration was developed by **[@raetha](https://github.com/raetha)** with design assistance and code generation by **[Claude](https://claude.ai)** (Anthropic). The integration architecture and entity model are inspired by the official [Portainer integration](https://www.home-assistant.io/integrations/portainer/) added to Home Assistant core in 2025.10.
+This integration was developed by **[@raetha](https://github.com/raetha)** with design assistance and code generation by **[Claude](https://claude.ai)** (Anthropic).
 
 ---
 

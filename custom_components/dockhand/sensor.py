@@ -707,7 +707,6 @@ class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
 
 # --------------------------------------------------------------------------- #
 # Fast coordinator — container sensors
-# model = "Container" mirrors Portainer naming convention
 # --------------------------------------------------------------------------- #
 
 
@@ -780,12 +779,8 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
         return c.get("health") if c else None
 
 
-# DockhandContainerImageSensor was removed in 1.6.0.
-# The image name is already surfaced as the `image` attribute on
-# DockhandContainerStateSensor, making a dedicated sensor redundant.
-# The "_image" suffix is kept in __init__._migrate_container_device_identifiers
-# until 1.7.0 so that stale entities from users who had enabled the sensor
-# are cleaned up automatically on upgrade. Remove it then.
+# DockhandContainerImageSensor was removed in 1.6.0 — the image name is
+# already surfaced as the `image` attribute on DockhandContainerStateSensor.
 
 
 # --------------------------------------------------------------------------- #
@@ -1079,7 +1074,6 @@ class DockhandContainerBlockWriteSensor(BaseFastContainerSensor):
 
 # --------------------------------------------------------------------------- #
 # Fast coordinator — stack sensors
-# model = "Stack" — distinguishes from containers in device list
 # --------------------------------------------------------------------------- #
 
 
@@ -1224,7 +1218,6 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    # has_entity_name=True: device name "{env} – Images" prefixes the entity_id
     _attr_has_entity_name = True
     _attr_icon = "mdi:package-variant-closed"
 
@@ -1342,7 +1335,6 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "containers"
-    # has_entity_name=True: device name "{env} – Networks" prefixes the entity_id
     _attr_has_entity_name = True
     _attr_icon = "mdi:lan"
 
@@ -1409,7 +1401,6 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
     _attr_native_unit_of_measurement = "containers"
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_icon = "mdi:database"
-    # has_entity_name=True: device name "{env} – Volumes" prefixes the entity_id
     _attr_has_entity_name = True
 
     def __init__(
