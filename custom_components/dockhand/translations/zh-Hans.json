@@ -228,11 +228,5 @@
     "container_not_found": {
       "message": "未找到容器 — 它可能已被删除"
     }
-  },
-  "messages": {
-    "image_label": "镜像：{image_name}",
-    "scanner_warning": "通过此更新方式不会执行漏洞扫描。",
-    "system_container_warning": "这是一个系统容器，必须直接在 Docker 主机上更新。",
-    "update_disabled_warning": "已通过 `dockhand.update=false` 标签禁用更新。"
   }
 }

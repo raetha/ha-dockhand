@@ -228,11 +228,5 @@
     "container_not_found": {
       "message": "Container not found — it may have been removed"
     }
-  },
-  "messages": {
-    "image_label": "Image: {image_name}",
-    "scanner_warning": "Vulnerability scanning will not be performed via this update method.",
-    "system_container_warning": "This is a system container and must be updated directly on the docker host.",
-    "update_disabled_warning": "Updates disabled via `dockhand.update=false` label."
   }
 }

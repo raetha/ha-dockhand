@@ -228,11 +228,5 @@
     "container_not_found": {
       "message": "Container nicht gefunden – er wurde möglicherweise entfernt"
     }
-  },
-  "messages": {
-    "image_label": "Image: {image_name}",
-    "scanner_warning": "Beim Update über diese Methode wird kein Schwachstellen-Scan durchgeführt.",
-    "system_container_warning": "Dies ist ein Systemcontainer und muss direkt auf dem Docker-Host aktualisiert werden.",
-    "update_disabled_warning": "Updates deaktiviert via `dockhand.update=false` Label."
   }
 }

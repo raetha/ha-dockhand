@@ -5,12 +5,12 @@
 #
 # PHCC version ↔ HA version mapping (patch increments daily with HA releases):
 #   0.13.317+ requires Python >=3.14
-#   0.13.333  pins homeassistant==2026.5.4  (use this or newer for 2026.3+ targets)
+#   0.13.338  pins homeassistant==2026.6.2  (use this or newer for 2026.3+ targets)
 #
 # To run the full suite locally (see docs/development.md for venv setup):
 #   pytest tests/
 #
 # CI runs on Python 3.14 (latest patch) via .github/workflows/ci.yml
 
-pytest-homeassistant-custom-component==0.13.333
+pytest-homeassistant-custom-component==0.13.338
 ruff

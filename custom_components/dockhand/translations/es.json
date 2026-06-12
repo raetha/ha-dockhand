@@ -228,11 +228,5 @@
     "container_not_found": {
       "message": "Contenedor no encontrado — puede haber sido eliminado"
     }
-  },
-  "messages": {
-    "image_label": "Imagen: {image_name}",
-    "scanner_warning": "El análisis de vulnerabilidades no se realizará a través de este método de actualización.",
-    "system_container_warning": "Este es un contenedor del sistema y debe actualizarse directamente en el host de Docker.",
-    "update_disabled_warning": "Actualizaciones desactivadas mediante la etiqueta `dockhand.update=false`."
   }
 }

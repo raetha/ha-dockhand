@@ -10,8 +10,6 @@ Covers:
 - async_release_notes: image name, ha-alert types verified (warning/info),
   scanner warning, system container warning, update disabled, no data,
   scanner+system combo, systemContainer priority over updateDisabled
-  Note: _messages is empty in unit tests (async_added_to_hass not called),
-  so these tests exercise the _DEFAULTS fallback path in _msg().
 - _update_supported_features: normal, updateDisabled, systemContainer
 - _handle_coordinator_update: triggers feature refresh
 - async_install: success, container_not_found, action_failed, no container_id
@@ -275,8 +273,6 @@ def test_release_summary_always_none():
 
 
 async def test_release_notes_includes_image_name():
-    # Note: _messages is empty (async_added_to_hass not called in unit tests),
-    # so these tests exercise the _DEFAULTS fallback path in _msg().
     entity = _make_entity(ITEM_UP_TO_DATE)
     notes = await entity.async_release_notes()
     assert notes is not None

@@ -32,12 +32,6 @@
   updates-disabled notice uses `info` style. The `release_summary` field is
   no longer populated (consistent with HACS).
 
-### Added
-
-- **Translated update warnings** — the warning messages shown in the update
-  entity release notes are now translated into all supported languages rather
-  than always appearing in English.
-
 ### Internal
 
 - **Migration functions extracted to `migration.py`** — the two one-time

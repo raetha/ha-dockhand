@@ -228,11 +228,5 @@
     "container_not_found": {
       "message": "Container ikke funnet — den kan ha blitt fjernet"
     }
-  },
-  "messages": {
-    "image_label": "Image: {image_name}",
-    "scanner_warning": "Sårbarhetsskanning vil ikke utføres via denne oppdateringsmetoden.",
-    "system_container_warning": "Dette er en systemcontainer og må oppdateres direkte på Docker-verten.",
-    "update_disabled_warning": "Oppdateringer deaktivert via `dockhand.update=false`-etikett."
   }
 }
