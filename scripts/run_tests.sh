@@ -47,7 +47,7 @@ done
 # ── Determine venv path and required Python ───────────────────────────────────
 if [[ $FULL -eq 1 ]]; then
     VENV="${VENV:-.venv-full}"
-    MODE_LABEL="full (PHCC / HA 2026.5.4) — 373 tests"
+    MODE_LABEL="full (PHCC / HA 2026.5.4)"
 else
     VENV="${VENV:-.venv-sandbox}"
     MODE_LABEL="lint + AST only (pytest requires --full)"
@@ -124,7 +124,7 @@ AST_EXIT=$?
 
 # ── Step 4: pytest (full mode only) ──────────────────────────────────────────
 if [[ $FULL -eq 1 ]]; then
-    echo "[ 4/$STEPS ] pytest tests/ (full suite — 373 tests)..."
+    echo "[ 4/$STEPS ] pytest tests/ (full suite)..."
     # shellcheck disable=SC2086
     "$PYTHON" -m pytest tests/ --tb=short $PYTEST_EXTRA_ARGS \
         && echo "        PASS" || { echo "        FAIL"; FAILED=1; }

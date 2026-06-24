@@ -504,3 +504,110 @@ def test_ensure_hub_devices_is_idempotent(hass):
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
     ids = [next(iter(d.identifiers))[1] for d in devs]
     assert len(ids) == len(set(ids))
+
+
+# ---------------------------------------------------------------------------
+# _network_group_device / _volume_group_device / _image_group_device
+# — via_device and configuration_url (identifier already tested above)
+# ---------------------------------------------------------------------------
+
+from custom_components.dockhand.helpers import (
+    _network_group_device,
+    _volume_group_device,
+    _image_group_device,
+)
+
+
+def test_network_group_device_via_env():
+    info = _network_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", "env_1")
+
+
+def test_network_group_device_configuration_url():
+    info = _network_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["configuration_url"] == "http://dh.test:3000/networks"
+
+
+def test_volume_group_device_via_env():
+    info = _volume_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", "env_1")
+
+
+def test_volume_group_device_configuration_url():
+    info = _volume_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["configuration_url"] == "http://dh.test:3000/volumes"
+
+
+def test_image_group_device_via_env():
+    info = _image_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", "env_1")
+
+
+def test_image_group_device_configuration_url():
+    info = _image_group_device(1, "myenv", "http://dh.test:3000")
+    assert info["configuration_url"] == "http://dh.test:3000/images"
+
+
+def test_image_group_device_name():
+    info = _image_group_device(2, "prodenv", "http://dh.test:3000")
+    assert info["name"] == "prodenv \u2013 Images"
+
+
+def test_volume_group_device_name():
+    info = _volume_group_device(2, "prodenv", "http://dh.test:3000")
+    assert info["name"] == "prodenv \u2013 Volumes"
+
+
+def test_network_group_device_name():
+    info = _network_group_device(2, "prodenv", "http://dh.test:3000")
+    assert info["name"] == "prodenv \u2013 Networks"
+
+
+# ---------------------------------------------------------------------------
+# _ensure_env_devices — individual container device creation
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_env_devices_creates_containers_group_for_freestanding(hass):
+    """Containers group device is created when at least one freestanding container exists."""
+    from custom_components.dockhand.helpers import _ensure_env_devices
+    from homeassistant.helpers import device_registry as dr
+
+    entry = _make_entry(hass)
+    # No compose label → freestanding container
+    containers = [{"name": "nginx", "id": "abc", "state": "running", "labels": {}}]
+    _ensure_env_devices(
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        containers=containers,
+    )
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    ids = {next(iter(d.identifiers))[1] for d in devs}
+    assert "env_1_Containers" in ids
+
+
+def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
+    """Containers group is not created when every container is Compose-managed."""
+    from custom_components.dockhand.helpers import _ensure_env_devices
+    from homeassistant.helpers import device_registry as dr
+
+    entry = _make_entry(hass)
+    # compose.project label → compose-managed, not freestanding
+    containers = [{"name": "web", "id": "abc", "state": "running",
+                   "labels": {"com.docker.compose.project": "myapp"}}]
+    _ensure_env_devices(
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        containers=containers,
+    )
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    ids = {next(iter(d.identifiers))[1] for d in devs}
+    assert "env_1_Containers" not in ids

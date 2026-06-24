@@ -245,3 +245,251 @@ def test_migration_idempotent(hass: HomeAssistant):
     migrate_1_7_3_entry_scoped_unique_ids(hass, ENTRY_ID)
     uid_after_second = _get_uid(hass, ent.entity_id)
     assert uid_after_first == uid_after_second
+
+# ---------------------------------------------------------------------------
+# _is_hex64
+# ---------------------------------------------------------------------------
+
+from custom_components.dockhand.migration import _is_hex64
+
+
+def test_is_hex64_valid():
+    assert _is_hex64("a" * 64)
+    assert _is_hex64("0123456789abcdef" * 4)
+
+
+def test_is_hex64_wrong_length():
+    assert not _is_hex64("a" * 63)
+    assert not _is_hex64("a" * 65)
+    assert not _is_hex64("")
+
+
+def test_is_hex64_uppercase_rejected():
+    assert not _is_hex64("A" * 64)
+
+
+def test_is_hex64_non_hex_chars():
+    assert not _is_hex64("g" * 64)
+    assert not _is_hex64("z" * 64)
+
+
+# ---------------------------------------------------------------------------
+# migrate_1_4_0_update_entity_unique_ids
+# ---------------------------------------------------------------------------
+
+from custom_components.dockhand.migration import migrate_1_4_0_update_entity_unique_ids
+
+CONTAINER_HASH = "a" * 64
+FAST_DATA_1_4 = {
+    1: {
+        "containers": [{"id": CONTAINER_HASH, "name": "nginx"}],
+        "stacks": [],
+    }
+}
+
+
+def test_1_4_0_migrates_hash_to_name(hass: HomeAssistant):
+    """Old dockhand_update_{64-char-hash} → dockhand_update_{env_id}_{name}."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"dockhand_update_{CONTAINER_HASH}")
+    migrate_1_4_0_update_entity_unique_ids(hass, ENTRY_ID, FAST_DATA_1_4)
+    assert _get_uid(hass, ent.entity_id) == "dockhand_update_1_nginx"
+
+
+def test_1_4_0_already_name_based_is_no_op(hass: HomeAssistant):
+    """New-format dockhand_update_{env_id}_{name} is left untouched."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, "dockhand_update_1_nginx")
+    migrate_1_4_0_update_entity_unique_ids(hass, ENTRY_ID, FAST_DATA_1_4)
+    assert _get_uid(hass, ent.entity_id) == "dockhand_update_1_nginx"
+
+
+def test_1_4_0_hash_not_in_fast_data_is_skipped(hass: HomeAssistant):
+    """Hash not in live data (container gone) is left for stale cleanup."""
+    entry = _make_entry(hass)
+    other_hash = "b" * 64
+    ent = _add_entity(hass, entry, f"dockhand_update_{other_hash}")
+    migrate_1_4_0_update_entity_unique_ids(hass, ENTRY_ID, FAST_DATA_1_4)
+    # UID unchanged — stale cleanup will handle it
+    assert _get_uid(hass, ent.entity_id) == f"dockhand_update_{other_hash}"
+
+
+def test_1_4_0_empty_fast_data_returns_early(hass: HomeAssistant):
+    """Empty fast data short-circuits with no registry reads."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"dockhand_update_{CONTAINER_HASH}")
+    migrate_1_4_0_update_entity_unique_ids(hass, ENTRY_ID, {})
+    assert _get_uid(hass, ent.entity_id) == f"dockhand_update_{CONTAINER_HASH}"
+
+
+def test_1_4_0_non_update_entity_is_not_touched(hass: HomeAssistant):
+    """Non-update entities are ignored even if uid starts with dockhand_."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"dockhand_container_{CONTAINER_HASH}_state")
+    migrate_1_4_0_update_entity_unique_ids(hass, ENTRY_ID, FAST_DATA_1_4)
+    assert _get_uid(hass, ent.entity_id) == f"dockhand_container_{CONTAINER_HASH}_state"
+
+
+def test_1_4_0_multiple_envs_and_containers(hass: HomeAssistant):
+    """Migration handles multiple environments and containers correctly."""
+    hash1, hash2 = "1" * 64, "2" * 64
+    fast_data = {
+        1: {"containers": [{"id": hash1, "name": "nginx"}], "stacks": []},
+        2: {"containers": [{"id": hash2, "name": "redis"}], "stacks": []},
+    }
+    entry = _make_entry(hass)
+    ent1 = _add_entity(hass, entry, f"dockhand_update_{hash1}")
+    ent2 = _add_entity(hass, entry, f"dockhand_update_{hash2}")
+    migrate_1_4_0_update_entity_unique_ids(hass, ENTRY_ID, fast_data)
+    assert _get_uid(hass, ent1.entity_id) == "dockhand_update_1_nginx"
+    assert _get_uid(hass, ent2.entity_id) == "dockhand_update_2_redis"
+
+
+# ---------------------------------------------------------------------------
+# migrate_1_5_0_container_device_identifiers
+# ---------------------------------------------------------------------------
+
+from homeassistant.helpers import device_registry as dr
+from custom_components.dockhand.migration import migrate_1_5_0_container_device_identifiers
+from custom_components.dockhand.const import DOMAIN
+
+FAST_DATA_1_5 = {
+    1: {
+        "containers": [{"id": CONTAINER_HASH, "name": "nginx"}],
+        "stacks": [],
+    }
+}
+
+
+def _add_device(hass: HomeAssistant, entry: MockConfigEntry, identifier: str):
+    reg = dr.async_get(hass)
+    return reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={(DOMAIN, identifier)},
+    )
+
+
+def _get_device_identifiers(hass: HomeAssistant, device_id: str) -> set:
+    reg = dr.async_get(hass)
+    dev = reg.async_get(device_id)
+    return set(dev.identifiers) if dev else set()
+
+
+def test_1_5_0_migrates_pre_1_5_device_hash_format(hass: HomeAssistant):
+    """container_{64-char-hash} → container_{env_id}_{name}."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, f"container_{CONTAINER_HASH}")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, "container_1_nginx") in idents
+
+
+def test_1_5_0_migrates_1_5_device_env_hash_format(hass: HomeAssistant):
+    """container_{env_id}_{64-char-hash} → container_{env_id}_{name}."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, f"container_1_{CONTAINER_HASH}")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, "container_1_nginx") in idents
+
+
+def test_1_5_0_name_based_device_is_no_op(hass: HomeAssistant):
+    """Already-migrated container_{env_id}_{name} device is not touched."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "container_1_nginx")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, "container_1_nginx") in idents
+
+
+def test_1_5_0_migrates_pre_1_5_entity_hash_format(hass: HomeAssistant):
+    """dockhand_container_{hash}_{suffix} → dockhand_container_{env_id}_{name}_{suffix}."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"dockhand_container_{CONTAINER_HASH}_state")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    assert _get_uid(hass, ent.entity_id) == "dockhand_container_1_nginx_state"
+
+
+def test_1_5_0_migrates_1_5_entity_env_hash_format(hass: HomeAssistant):
+    """dockhand_container_{env_id}_{hash}_{suffix} → dockhand_container_{env_id}_{name}_{suffix}."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"dockhand_container_1_{CONTAINER_HASH}_running")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    assert _get_uid(hass, ent.entity_id) == "dockhand_container_1_nginx_running"
+
+
+def test_1_5_0_all_suffixes_migrated(hass: HomeAssistant):
+    """All four entity suffixes (_state, _health, _running, _restart) are migrated."""
+    entry = _make_entry(hass)
+    suffixes = ["_state", "_health", "_running", "_restart"]
+    entities = [
+        _add_entity(hass, entry, f"dockhand_container_{CONTAINER_HASH}{sfx}")
+        for sfx in suffixes
+    ]
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    for ent, sfx in zip(entities, suffixes):
+        assert _get_uid(hass, ent.entity_id) == f"dockhand_container_1_nginx{sfx}"
+
+
+def test_1_5_0_name_based_entity_is_no_op(hass: HomeAssistant):
+    """Already-migrated dockhand_container_{env_id}_{name}_{suffix} is not touched."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, "dockhand_container_1_nginx_state")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    assert _get_uid(hass, ent.entity_id) == "dockhand_container_1_nginx_state"
+
+
+def test_1_5_0_hash_not_in_fast_data_is_skipped(hass: HomeAssistant):
+    """Container no longer running — left for stale cleanup, not migrated."""
+    entry = _make_entry(hass)
+    gone_hash = "c" * 64
+    dev = _add_device(hass, entry, f"container_{gone_hash}")
+    ent = _add_entity(hass, entry, f"dockhand_container_{gone_hash}_state")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    assert (DOMAIN, f"container_{gone_hash}") in _get_device_identifiers(hass, dev.id)
+    assert _get_uid(hass, ent.entity_id) == f"dockhand_container_{gone_hash}_state"
+
+
+def test_1_5_0_empty_fast_data_returns_early(hass: HomeAssistant):
+    """Empty fast data short-circuits with no registry changes."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, f"container_{CONTAINER_HASH}")
+    ent = _add_entity(hass, entry, f"dockhand_container_{CONTAINER_HASH}_state")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, {})
+    assert (DOMAIN, f"container_{CONTAINER_HASH}") in _get_device_identifiers(hass, dev.id)
+    assert _get_uid(hass, ent.entity_id) == f"dockhand_container_{CONTAINER_HASH}_state"
+
+
+def test_1_5_0_non_container_device_not_touched(hass: HomeAssistant):
+    """Devices with non-container identifiers are ignored."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "env_1")
+    migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
+    assert (DOMAIN, "env_1") in _get_device_identifiers(hass, dev.id)
+
+
+# ---------------------------------------------------------------------------
+# async_run_migrations — orchestration
+# ---------------------------------------------------------------------------
+
+from custom_components.dockhand.migration import async_run_migrations
+
+
+def test_async_run_migrations_is_no_op_when_nothing_to_migrate(hass: HomeAssistant):
+    """Running migrations on a clean install with no old-format entities is safe."""
+    entry = _make_entry(hass)
+    new_uid = f"{ENTRY_ID}_1_cpu"
+    ent = _add_entity(hass, entry, new_uid)
+    # Should not raise, and should not touch the already-new-format entity
+    async_run_migrations(hass, ENTRY_ID, {})
+    assert _get_uid(hass, ent.entity_id) == new_uid
+
+
+def test_async_run_migrations_runs_all_three_in_order(hass: HomeAssistant):
+    """All three migrations fire: 1.4.0 → 1.5.0 → 1.7.3, each a no-op here."""
+    entry = _make_entry(hass)
+    # Seed an entity that would be touched by 1.7.3 if 1.4.0/1.5.0 leave it alone
+    ent = _add_entity(hass, entry, "dockhand_env_1_cpu")
+    async_run_migrations(hass, ENTRY_ID, {})
+    # 1.7.3 should have fired and renamed it
+    assert _get_uid(hass, ent.entity_id) == f"{ENTRY_ID}_1_cpu"

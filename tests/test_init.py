@@ -531,6 +531,59 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
     assert not _entity_exists(hass, stale.entity_id)
 
 
+
+def test_removes_stale_update_entity(hass: HomeAssistant):
+    # update_data must be non-empty for update_valid=True; env must be online.
+    # nginx is absent from update_data so it should be removed.
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"name": "myenv", "online": True}}},
+        slow_data={"environments": {}, "schedules": []},
+        update_data={1: {}},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_update_nginx")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_preserves_live_update_entity(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [{"name": "nginx", "id": "abc", "state": "running", "labels": {}}], "stacks": [], "stats": {"name": "myenv", "online": True}}},
+        slow_data={"environments": {}, "schedules": []},
+        update_data={1: {"abc": {"containerName": "nginx", "currentDigest": "d1", "latestDigest": "d1"}}},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_update_nginx")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_uid_too_short_is_skipped_in_entity_cleanup(hass: HomeAssistant):
+    """UIDs with fewer than 3 underscore-separated parts are skipped without error."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": []}},
+        slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
+    )
+    # Only 2 parts after split — guard must not raise
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_odduid")
+    _cleanup_stale_registry(hass, entry)
+    # Entity is not removed (guard skipped it)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_non_digit_env_id_is_skipped_in_entity_cleanup(hass: HomeAssistant):
+    """UIDs whose second token is not a digit are skipped without error."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": []}},
+        slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_notanint_image_abc")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
 # ---------------------------------------------------------------------------
 # async_setup_entry
 # ---------------------------------------------------------------------------
@@ -555,6 +608,47 @@ async def test_success_stores_runtime_data(hass: HomeAssistant):
     assert entry.runtime_data is not None
     assert entry.runtime_data.fast_coordinator is fast
     assert entry.runtime_data.slow_coordinator is slow
+
+
+
+async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssistant):
+    """Health sensor is created when a container has a healthcheck.
+
+    Regression test for a bug where DockhandContainerHealthSensor was called
+    without entry.entry_id, causing a TypeError at setup time.
+    """
+    from tests.conftest import MOCK_CONTAINER_HEALTHY
+
+    entry = _make_entry(hass)
+    fast = _make_fast_coordinator({
+        1: {
+            "stats": ENV1_STATS,
+            "containers": [MOCK_CONTAINER_HEALTHY],
+            "stacks": [],
+        }
+    })
+    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+
+    with (
+        patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()),
+        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
+        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
+        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    from homeassistant.config_entries import ConfigEntryState
+    assert entry.state == ConfigEntryState.LOADED
+
+    from homeassistant.helpers import entity_registry as er
+    reg = er.async_get(hass)
+    entities = er.async_entries_for_config_entry(reg, entry.entry_id)
+    entity_ids = {e.entity_id for e in entities}
+    # Health sensor must be present — its entity_id contains the container name
+    assert any("healthy_app" in eid and "health" in eid for eid in entity_ids), (
+        f"Health sensor not found in: {entity_ids}"
+    )
 
 
 async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):

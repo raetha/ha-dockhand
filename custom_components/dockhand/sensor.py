@@ -158,7 +158,12 @@ async def async_setup_entry(
                     if _container_has_healthcheck(container):
                         new.append(
                             DockhandContainerHealthSensor(
-                                fast, env_id, env_name, base_url, container
+                                fast,
+                                entry.entry_id,
+                                env_id,
+                                env_name,
+                                base_url,
+                                container,
                             )
                         )
                     # Resource stats sensors — created for every container but

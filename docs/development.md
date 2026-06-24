@@ -12,7 +12,7 @@ A unified `scripts/run_tests.sh` handles both lint-only and the full PHCC suite,
 # Lint + AST only (any Python 3.x — no homeassistant required)
 bash scripts/run_tests.sh
 
-# Full suite: ruff + AST + all 373 pytest tests via PHCC (requires Python 3.14.2+)
+# Full suite: ruff + AST + all pytest tests via PHCC (requires Python 3.14.2+)
 bash scripts/run_tests.sh --full
 
 # Full suite in a specific venv path
@@ -26,7 +26,7 @@ bash scripts/run_tests.sh --full -k "coord" # filter by name
 
 Default mode (no flags) runs ruff check, ruff format, and AST syntax check in a lightweight `.venv-sandbox` venv. It does **not** run pytest because every test file imports from `custom_components.dockhand`, which imports `homeassistant` at module level — pytest cannot collect any tests without a real homeassistant install.
 
-`--full` uses `.venv-full` (created with Python 3.14.2+, PHCC installed from `requirements_test.txt`) and runs all 373 tests.
+`--full` uses `.venv-full` (created with Python 3.14.2+, PHCC installed from `requirements_test.txt`) and runs all pytest tests.
 
 ### Manual pytest (if PHCC is installed)
 
@@ -81,7 +81,7 @@ After code changes, Claude runs:
 - **ruff check + format** — full lint and format validation
 - **AST syntax check** — catches syntax errors without imports
 
-The full 373-test pytest suite requires Python 3.14.2+ with PHCC. Use your local dev environment or push to GitHub and check CI for authoritative test results.
+The full pytest suite requires Python 3.14.2+ with PHCC. Use your local dev environment or push to GitHub and check CI for authoritative test results.
 
 ## Code quality checks
 
@@ -109,6 +109,7 @@ tests/
 ├── test_entities.py     # All entity classes — native_value, metadata, actions
 ├── test_helpers.py      # URL builders, DeviceInfo factories, _ensure_*_devices
 ├── test_init.py         # Setup/unload, _register_devices, _cleanup_stale_registry
+├── test_migration.py    # All migration functions — _is_hex64, 1.4.0, 1.5.0, 1.7.3, orchestration
 ├── test_update.py       # ContainerUpdateEntity — install, release notes, available
 └── test_workflows.py    # Static CI workflow validation
 ```
