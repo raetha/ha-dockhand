@@ -33,6 +33,7 @@ from custom_components.dockhand.coordinator import (
 # ---------------------------------------------------------------------------
 
 ENV_ID = 1
+ENTRY_ID = "test_entry_id_update"
 ENV_NAME = "myenv"
 BASE_URL = "http://dh.test:3000"
 CONTAINER_NAME = "nginx"
@@ -101,6 +102,7 @@ def _make_entity(
     return ContainerUpdateEntity(
         fast_coordinator=fast_coord,
         update_coordinator=update_coord,
+        entry_id=ENTRY_ID,
         env_id=ENV_ID,
         env_name=ENV_NAME,
         container_name=CONTAINER_NAME,
@@ -183,6 +185,7 @@ def test_latest_version_returns_installed_when_item_empty():
     entity = ContainerUpdateEntity(
         fast_coordinator=_make_fast_coord(),
         update_coordinator=update_coord,
+        entry_id=ENTRY_ID,
         env_id=ENV_ID,
         env_name=ENV_NAME,
         container_name=CONTAINER_NAME,
@@ -220,6 +223,7 @@ def test_available_false_when_env_missing_from_fast_data():
     entity = ContainerUpdateEntity(
         fast_coordinator=fast_coord,
         update_coordinator=update_coord,
+        entry_id=ENTRY_ID,
         env_id=ENV_ID,
         env_name=ENV_NAME,
         container_name=CONTAINER_NAME,
@@ -332,6 +336,7 @@ async def test_release_notes_none_when_no_item():
     entity = ContainerUpdateEntity(
         fast_coordinator=_make_fast_coord(),
         update_coordinator=update_coord,
+        entry_id=ENTRY_ID,
         env_id=ENV_ID,
         env_name=ENV_NAME,
         container_name=CONTAINER_NAME,
@@ -389,6 +394,7 @@ async def test_async_install_raises_not_found_when_container_gone():
     entity = ContainerUpdateEntity(
         fast_coordinator=fast_coord,
         update_coordinator=update_coord,
+        entry_id=ENTRY_ID,
         env_id=ENV_ID,
         env_name=ENV_NAME,
         container_name=CONTAINER_NAME,
@@ -424,7 +430,7 @@ async def test_async_install_raises_not_found_when_no_container_id():
 
 def test_unique_id_format():
     entity = _make_entity()
-    assert entity._attr_unique_id == f"dockhand_update_{ENV_ID}_{CONTAINER_NAME}"
+    assert entity._attr_unique_id == f"{ENTRY_ID}_{ENV_ID}_update_{CONTAINER_NAME}"
 
 
 def test_translation_key():

@@ -23,6 +23,7 @@ DOMAIN = "dockhand"
 ENV_ID = 1
 ENV_NAME = "MyHost"
 BASE_URL = "http://dh.test:3000"
+ENTRY_ID = "test_entry_id"
 
 STATS = {
     "name": "MyHost",
@@ -258,15 +259,15 @@ def env_sensors():
     sc = _sensor_classes()
     coord = _fast_coord()
     return {
-        "cpu": sc["DockhandEnvCpuSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "mem": sc["DockhandEnvMemPercentSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "containers": sc["DockhandEnvContainerCountSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "stacks": sc["DockhandEnvStacksSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "images": sc["DockhandEnvImagesSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "volumes": sc["DockhandEnvVolumesSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "networks": sc["DockhandEnvNetworksSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "disk": sc["DockhandEnvContainersDiskSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
-        "cache": sc["DockhandEnvBuildCacheSensor"](coord, ENV_ID, ENV_NAME, BASE_URL),
+        "cpu": sc["DockhandEnvCpuSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "mem": sc["DockhandEnvMemPercentSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "containers": sc["DockhandEnvContainerCountSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "stacks": sc["DockhandEnvStacksSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "images": sc["DockhandEnvImagesSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "volumes": sc["DockhandEnvVolumesSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "networks": sc["DockhandEnvNetworksSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "disk": sc["DockhandEnvContainersDiskSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "cache": sc["DockhandEnvBuildCacheSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
     }
 
 
@@ -369,7 +370,7 @@ def _make_activity(events=None):
         "containers": [],
         "stacks": [],
     })
-    return DockhandEnvActivityEventsSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
+    return DockhandEnvActivityEventsSensor(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
 
 
 def test_activity_total_event_count():
@@ -406,7 +407,7 @@ def _make_hawser(env_obj=None):
         },
         "images": [], "networks": [], "volumes": [],
     })
-    return DockhandEnvHawserVersionSensor(coord, ENV_ID, ENV_NAME, BASE_URL)
+    return DockhandEnvHawserVersionSensor(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
 
 
 def test_hawser_version_string():
@@ -439,8 +440,8 @@ def container_sensors():
     sc = _sensor_classes()
     coord = _fast_coord()
     return {
-        "state": sc["DockhandContainerStateSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
-        "health": sc["DockhandContainerHealthSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
+        "state": sc["DockhandContainerStateSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
+        "health": sc["DockhandContainerHealthSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
     }
 
 
@@ -467,7 +468,7 @@ def test_container_state_none_when_container_gone():
         ENV_ID: {"stats": STATS, "containers": [], "stacks": [], "container_stats": {}}
     }
     sc = _sensor_classes()
-    state = sc["DockhandContainerStateSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    state = sc["DockhandContainerStateSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
     assert state.native_value is None
 
 
@@ -527,7 +528,7 @@ def _stats_coord(stats=None, running=True):
 def stats_sensors():
     sc = _sensor_classes()
     coord = _stats_coord()
-    args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
     sensors = {
         "cpu": sc["DockhandContainerCpuSensor"](*args),
         "mem_usage": sc["DockhandContainerMemoryUsageSensor"](*args),
@@ -583,7 +584,7 @@ def test_stats_memory_usage_cache_attribute(stats_sensors):
 def test_stats_all_sensors_none_when_container_stopped():
     coord = _stats_coord(running=False)
     sc = _sensor_classes()
-    args = (coord, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
     sensors = [
         sc["DockhandContainerCpuSensor"](*args),
         sc["DockhandContainerMemoryUsageSensor"](*args),
@@ -639,8 +640,8 @@ def stack_sensors():
     sc = _sensor_classes()
     coord = _fast_coord()
     return {
-        "status": sc["DockhandStackStatusSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, STACK),
-        "count": sc["DockhandStackContainerCountSensor"](coord, ENV_ID, ENV_NAME, BASE_URL, STACK),
+        "status": sc["DockhandStackStatusSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK),
+        "count": sc["DockhandStackContainerCountSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK),
     }
 
 
@@ -667,7 +668,7 @@ def test_stack_unique_ids_differ(stack_sensors):
 
 def _make_image(image=None):
     sc = _sensor_classes()
-    return sc["DockhandImageSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, image or IMAGE)
+    return sc["DockhandImageSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, image or IMAGE)
 
 
 def test_image_native_value_is_tag():
@@ -711,7 +712,7 @@ def test_image_device_is_images_group():
 def _make_network(coord=None):
     sc = _sensor_classes()
     return sc["DockhandNetworkSensor"](
-        coord or _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, NETWORK
+        coord or _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, NETWORK
     )
 
 
@@ -757,7 +758,7 @@ def test_network_device_is_networks_group():
 def _make_volume(volume=None, coord=None):
     sc = _sensor_classes()
     return sc["DockhandVolumeSensor"](
-        coord or _slow_coord(), ENV_ID, ENV_NAME, BASE_URL, volume or VOLUME
+        coord or _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, volume or VOLUME
     )
 
 
@@ -814,13 +815,13 @@ def test_volume_device_is_volumes_group():
 def _make_next_run(sched=None):
     sc = _sensor_classes()
     s = sched or SCHEDULE
-    return sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[s]), s, BASE_URL)
+    return sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[s]), ENTRY_ID, s, BASE_URL)
 
 
 def _make_last_status(sched=None):
     sc = _sensor_classes()
     s = sched or SCHEDULE
-    return sc["DockhandScheduleLastStatusSensor"](_slow_coord(schedules=[s]), s, BASE_URL)
+    return sc["DockhandScheduleLastStatusSensor"](_slow_coord(schedules=[s]), ENTRY_ID, s, BASE_URL)
 
 
 def test_schedule_next_run_returns_datetime():
@@ -829,7 +830,7 @@ def test_schedule_next_run_returns_datetime():
 
 def test_schedule_next_run_none_when_schedule_gone():
     sc = _sensor_classes()
-    sensor = sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[]), SCHEDULE, BASE_URL)
+    sensor = sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[]), ENTRY_ID, SCHEDULE, BASE_URL)
     assert sensor.native_value is None
 
 
@@ -859,7 +860,7 @@ def test_schedule_last_status_none_when_no_execution():
     sched = {**SCHEDULE, "lastExecution": None}
     sc = _sensor_classes()
     sensor = sc["DockhandScheduleLastStatusSensor"](
-        _slow_coord(schedules=[sched]), sched, BASE_URL
+        _slow_coord(schedules=[sched]), ENTRY_ID, sched, BASE_URL
     )
     assert sensor.native_value is None
 
@@ -891,7 +892,7 @@ def _make_binary(cls_name, stats_override=None):
         "containers": [],
         "stacks": [],
     })
-    return bs[cls_name](coord, ENV_ID, BASE_URL)
+    return bs[cls_name](coord, ENTRY_ID, ENV_ID, BASE_URL)
 
 
 def test_binary_online_is_on():
@@ -924,7 +925,7 @@ def test_binary_image_prune_enabled():
         "env": {"name": ENV_NAME, "imagePruneEnabled": True},
         "images": [], "networks": [], "volumes": [],
     })
-    assert bs["DockhandEnvImagePruneBinarySensor"](coord, ENV_ID, BASE_URL).is_on
+    assert bs["DockhandEnvImagePruneBinarySensor"](coord, ENTRY_ID, ENV_ID, BASE_URL).is_on
 
 
 def test_binary_config_sensors_disabled_by_default():
@@ -937,7 +938,7 @@ def test_binary_config_sensors_disabled_by_default():
         "DockhandEnvUpdateCheckSensor",
         "DockhandEnvAutoUpdateSensor",
     ]:
-        s = bs[cls_name](coord, ENV_ID, BASE_URL)
+        s = bs[cls_name](coord, ENTRY_ID, ENV_ID, BASE_URL)
         assert not s._attr_entity_registry_enabled_default, (
             f"{cls_name} should be disabled by default"
         )
@@ -945,7 +946,7 @@ def test_binary_config_sensors_disabled_by_default():
 
 def test_binary_online_sensor_enabled_by_default():
     bs = _bs_classes()
-    s = bs["DockhandEnvOnlineSensor"](_fast_coord(), ENV_ID, BASE_URL)
+    s = bs["DockhandEnvOnlineSensor"](_fast_coord(), ENTRY_ID, ENV_ID, BASE_URL)
     assert s.entity_registry_enabled_default
 
 
@@ -959,14 +960,14 @@ class TestSwitches:
         sw = _switch_classes()
         c = container or CONTAINER
         return sw["DockhandContainerRunningSwitch"](
-            coord or _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, c
+            coord or _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, c
         )
 
     def _stack_switch(self, stack=None, coord=None):
         sw = _switch_classes()
         s = stack or STACK
         return sw["DockhandStackRunningSwitch"](
-            coord or _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, s
+            coord or _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, s
         )
 
     def test_container_on_when_running(self):
@@ -1058,13 +1059,13 @@ class TestButtons:
     def _container_btn(self, coord=None):
         btn = _button_classes()
         return btn["DockhandContainerRestartButton"](
-            coord or _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+            coord or _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
         )
 
     def _stack_btn(self):
         btn = _button_classes()
         return btn["DockhandStackRestartButton"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
+            _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
         )
 
     async def test_container_restart_calls_api(self):
@@ -1114,10 +1115,10 @@ class TestButtons:
         client = MagicMock()
         btn = _button_classes()
         c_btn = btn["DockhandContainerRestartButton"](
-            coord, client, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+            coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
         )
         s_btn = btn["DockhandStackRestartButton"](
-            coord, client, ENV_ID, ENV_NAME, BASE_URL, STACK
+            coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
         )
         assert c_btn._attr_entity_category == EntityCategory.CONFIG
         assert s_btn._attr_entity_category == EntityCategory.CONFIG
@@ -1127,10 +1128,10 @@ class TestButtons:
         client = MagicMock()
         btn = _button_classes()
         c_btn = btn["DockhandContainerRestartButton"](
-            coord, client, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+            coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
         )
         s_btn = btn["DockhandStackRestartButton"](
-            coord, client, ENV_ID, ENV_NAME, BASE_URL, STACK
+            coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
         )
         assert c_btn._attr_translation_key == "restart"
         assert s_btn._attr_translation_key == "restart"
@@ -1138,7 +1139,7 @@ class TestButtons:
     def test_container_device_name_includes_containers_segment(self):
         btn = _button_classes()
         b = btn["DockhandContainerRestartButton"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+            _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
         )
         assert "Containers" in b.device_info["name"]
         assert CONTAINER["name"] in b.device_info["name"]
@@ -1146,7 +1147,7 @@ class TestButtons:
     def test_stack_device_name_includes_stacks_segment(self):
         btn = _button_classes()
         b = btn["DockhandStackRestartButton"](
-            _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
+            _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
         )
         assert "Stacks" in b.device_info["name"]
         assert STACK["name"] in b.device_info["name"]
@@ -1160,7 +1161,7 @@ class TestButtons:
 def test_container_device_name_format():
     sc = _sensor_classes()
     sensor = sc["DockhandContainerStateSensor"](
-        _fast_coord(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+        _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
     )
     assert sensor.device_info["name"] == (
         f"{ENV_NAME} \u2013 Containers \u2013 {CONTAINER['name']}"
@@ -1170,7 +1171,7 @@ def test_container_device_name_format():
 def test_stack_device_name_format():
     sc = _sensor_classes()
     sensor = sc["DockhandStackStatusSensor"](
-        _fast_coord(), ENV_ID, ENV_NAME, BASE_URL, STACK
+        _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
     )
     assert sensor.device_info["name"] == (
         f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}"
@@ -1180,7 +1181,7 @@ def test_stack_device_name_format():
 def test_container_switch_device_name_format():
     sw = _switch_classes()
     switch = sw["DockhandContainerRunningSwitch"](
-        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+        _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
     )
     assert "Containers" in switch.device_info["name"]
     assert CONTAINER["name"] in switch.device_info["name"]
@@ -1189,7 +1190,7 @@ def test_container_switch_device_name_format():
 def test_stack_switch_device_name_format():
     sw = _switch_classes()
     switch = sw["DockhandStackRunningSwitch"](
-        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
+        _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
     )
     assert "Stacks" in switch.device_info["name"]
     assert STACK["name"] in switch.device_info["name"]
@@ -1198,7 +1199,7 @@ def test_stack_switch_device_name_format():
 def test_container_button_device_name_format():
     btn = _button_classes()
     b = btn["DockhandContainerRestartButton"](
-        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+        _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
     )
     assert "Containers" in b.device_info["name"]
 
@@ -1206,7 +1207,7 @@ def test_container_button_device_name_format():
 def test_stack_button_device_name_format():
     btn = _button_classes()
     b = btn["DockhandStackRestartButton"](
-        _fast_coord(), MagicMock(), ENV_ID, ENV_NAME, BASE_URL, STACK
+        _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
     )
     assert "Stacks" in b.device_info["name"]
 
@@ -1220,7 +1221,7 @@ def test_stack_device_helper_name_format():
 
 def test_network_entity_under_group_device():
     sc = _sensor_classes()
-    sensor = sc["DockhandNetworkSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, NETWORK)
+    sensor = sc["DockhandNetworkSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, NETWORK)
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"env_{ENV_ID}_Networks") in idents
     assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
@@ -1228,14 +1229,14 @@ def test_network_entity_under_group_device():
 
 def test_volume_entity_under_group_device():
     sc = _sensor_classes()
-    sensor = sc["DockhandVolumeSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, VOLUME)
+    sensor = sc["DockhandVolumeSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, VOLUME)
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"env_{ENV_ID}_Volumes") in idents
 
 
 def test_image_entity_under_group_device():
     sc = _sensor_classes()
-    sensor = sc["DockhandImageSensor"](_slow_coord(), ENV_ID, ENV_NAME, BASE_URL, IMAGE)
+    sensor = sc["DockhandImageSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE)
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"env_{ENV_ID}_Images") in idents
 

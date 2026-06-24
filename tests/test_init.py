@@ -316,7 +316,7 @@ def test_guard_empty_fast_data_skips_all_cleanup(hass: HomeAssistant):
         slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
     )
     dev = _add_device(hass, entry, "container_1_oldhash")
-    ent = _add_entity(hass, entry, "dockhand_image_1_deadbeef")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert _device_exists(hass, dev.id)
     assert _entity_exists(hass, ent.entity_id)
@@ -469,7 +469,7 @@ def test_guard_slow_invalid_skips_entity_cleanup(hass: HomeAssistant):
     )
     rd.slow_coordinator.last_update_success = False
     entry.runtime_data = rd
-    ent = _add_entity(hass, entry, "dockhand_image_1_deadbeef")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -480,7 +480,7 @@ def test_removes_stale_image_entity(hass: HomeAssistant):
         fast_data={1: {"containers": [], "stacks": []}},
         slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, "dockhand_image_1_deadbeef")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
 
@@ -491,7 +491,7 @@ def test_preserves_live_image_entity(hass: HomeAssistant):
         fast_data={1: {"containers": [], "stacks": []}},
         slow_data={"environments": {1: {"images": [{"id": "sha256:deadbeef"}], "networks": [], "volumes": []}}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, "dockhand_image_1_deadbeef")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -502,7 +502,7 @@ def test_removes_stale_network_entity(hass: HomeAssistant):
         fast_data={1: {"containers": [], "stacks": []}},
         slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, "dockhand_network_1_netXYZ")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_network_netXYZ")
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
 
@@ -513,7 +513,7 @@ def test_removes_stale_volume_entity(hass: HomeAssistant):
         fast_data={1: {"containers": [], "stacks": []}},
         slow_data={"environments": {1: {"images": [], "networks": [], "volumes": []}}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, "dockhand_volume_1_mydata")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_volume_mydata")
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
 
@@ -524,8 +524,8 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
         fast_data={1: {"containers": [], "stacks": []}},
         slow_data={"environments": {1: {"images": [{"id": "sha256:aabbccdd"}], "networks": [], "volumes": []}}, "schedules": []},
     )
-    live = _add_entity(hass, entry, "dockhand_image_1_aabbccdd")
-    stale = _add_entity(hass, entry, "dockhand_image_1_deadbeef")
+    live = _add_entity(hass, entry, f"{entry.entry_id}_1_image_aabbccdd")
+    stale = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, live.entity_id)
     assert not _entity_exists(hass, stale.entity_id)

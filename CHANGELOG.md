@@ -11,6 +11,31 @@
   to be cleaned up on upgrade. Deferred from 1.7.0 to give users more time
   given the close release cadence.
 
+## [1.7.3] — 2026-06-23
+
+### Fixed
+
+- **Multiple Dockhand instances now supported** — entity unique IDs were
+  previously scoped only to environment and container name, causing collisions
+  when two Dockhand integrations shared the same environment or container
+  names (e.g. both having an environment `1` with a container named
+  `dockhand`). Unique IDs are now prefixed with the config entry ID, making
+  them globally unique regardless of how many Dockhand instances are
+  configured. Closes #14.
+
+  **Automatic migration:** existing installations are migrated automatically
+  on first startup after upgrade. No manual action is required for single-
+  instance users. Users with multiple Dockhand instances configured
+  simultaneously should reduce to one instance before upgrading, then add
+  the others back afterward.
+
+### Internal
+
+- Unique ID format changed from `dockhand_{type}_{env_id}_{discriminator}`
+  to `{entry_id}_{env_id}_{type}_{discriminator}`, placing the config entry
+  ID first and the environment ID before the object type for a consistent
+  instance → environment → object hierarchy.
+
 ## [1.7.2] — TBD
 
 ### Changed
@@ -486,7 +511,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.2...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.3...HEAD
+[1.7.3]: https://github.com/raetha/ha-dockhand/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/raetha/ha-dockhand/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/raetha/ha-dockhand/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/raetha/ha-dockhand/compare/v1.6.0...v1.7.0
