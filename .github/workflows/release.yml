@@ -13,7 +13,7 @@ jobs:
       contents: write   # needed to create releases and upload assets
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Verify tag matches manifest version
         run: |
