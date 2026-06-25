@@ -3,9 +3,9 @@
 [![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/ci.yml?label=validation&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/ci.yml)
 [![Installs](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=blue&label=installs&cacheSeconds=3600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.dockhand.total)](https://analytics.home-assistant.io/custom_integrations.json)
 
-# Dockhand for Home Assistant
-
 ![Dockhand logo](custom_components/dockhand/brand/logo.png)
+
+# Dockhand for Home Assistant
 
 Monitor and control your Docker environments through **[Dockhand](https://dockhand.pro)** — a modern Docker management UI. This integration exposes environments, containers, stacks, networks, images, volumes, and schedules as Home Assistant devices and entities, using the same API as the Dockhand web UI.
 
