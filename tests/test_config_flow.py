@@ -20,7 +20,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.core import HomeAssistant
-from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.api import DockhandAuthError
@@ -502,6 +502,32 @@ async def test_options_flow_saves_options(hass: HomeAssistant):
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options["poll_interval"] == 120
+
+
+async def test_options_flow_rejects_interval_below_minimum(hass: HomeAssistant):
+    """Zero/negative poll intervals are rejected by the options schema.
+
+    Without validation a zero interval would make the coordinator refresh
+    in a tight loop and hammer the Dockhand API.
+    """
+    entry = MockConfigEntry(
+        domain="dockhand",
+        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
+        title="http://dh.test:3000",
+    )
+    entry.add_to_hass(hass)
+
+    with _patch_full_setup():
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    assert result["type"] == FlowResultType.FORM
+
+    with pytest.raises(InvalidData):
+        await hass.config_entries.options.async_configure(
+            result["flow_id"], {"poll_interval": 0}
+        )
 
 
 async def test_options_flow_no_input_shows_form(hass: HomeAssistant):

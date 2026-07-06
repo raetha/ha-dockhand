@@ -7,7 +7,8 @@
 #
 # Both modes use an isolated venv created automatically on first run:
 #   Default:  .venv-sandbox  (ruff + pytest stubs, no homeassistant)
-#   --full:   .venv-full     (pytest-homeassistant-custom-component, pins HA 2026.5.4)
+#   --full:   .venv-full     (pytest-homeassistant-custom-component, which pins
+#                             the HA release — see requirements_test.txt)
 #
 # Override the venv path:
 #   bash scripts/run_tests.sh --full --venv .my-venv
@@ -47,7 +48,7 @@ done
 # ── Determine venv path and required Python ───────────────────────────────────
 if [[ $FULL -eq 1 ]]; then
     VENV="${VENV:-.venv-full}"
-    MODE_LABEL="full (PHCC / HA 2026.5.4)"
+    MODE_LABEL="full (PHCC, pinned HA per requirements_test.txt)"
 else
     VENV="${VENV:-.venv-sandbox}"
     MODE_LABEL="lint + AST only (pytest requires --full)"

@@ -52,7 +52,7 @@ PHCC patch versions increment daily with each HA release. The pin in `requiremen
 
 | PHCC version | HA version  |
 |--------------|-------------|
-| 0.13.333     | 2026.5.4    |
+| 0.13.340     | 2026.6.4    |
 | 0.13.317+    | Requires Python 3.14.2+ |
 
 To update the pin after a new HA release: find the PHCC version corresponding to the new HA release on the [PHCC releases page](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component/releases) and update `requirements_test.txt`.

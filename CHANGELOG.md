@@ -2,14 +2,49 @@
 
 ## [Unreleased]
 
-## [1.8.0] — TBD
+## [1.7.4] — 2026-07-06
 
-### Maintenance
+### Fixed
 
-- Remove `"_image"` from `_suffixes` in `_migrate_container_device_identifiers`
-  (`__init__.py`). Kept through 1.6.x to allow time for stale image entities
-  to be cleaned up on upgrade. Deferred from 1.7.0 to give users more time
-  given the close release cadence.
+- **Health sensor now appears without a restart when a container gains a
+  healthcheck** — previously, if a container was recreated from an image
+  that added a `HEALTHCHECK` instruction after the integration was set up,
+  its Health sensor was not created until Home Assistant restarted or the
+  integration was reloaded.
+
+- **Duplicate Docker hosts get complete network entities** — when two
+  environments point at the same Docker host (e.g. a direct connection and
+  a Hawser agent during migration), they report identical network IDs.
+  Network entities were previously only created for the first environment
+  seen; each environment now gets its own set.
+
+### Changed
+
+- **Poll intervals now enforce minimum values** — the options flow rejects
+  intervals below 10 s (fast), 30 s (slow), and 300 s (update checks).
+  Zero or negative values previously caused the coordinator to refresh in
+  a tight loop, hammering the Dockhand API. Existing stored values are
+  unaffected until the options form is next submitted.
+
+- **Diagnostics redact container and image labels** — Docker labels can
+  carry secrets (e.g. reverse-proxy basic-auth hashes), and diagnostics
+  are commonly attached to public bug reports. The compose-vs-freestanding
+  summary counts are unaffected.
+
+### Internal
+
+- `bump_version.sh` now inserts the dated release heading beneath
+  `## [Unreleased]` (so drafted notes become the release notes) and
+  maintains the compare links at the bottom of this file automatically.
+  Previously it prepended an unbracketed heading above `[Unreleased]`,
+  which is how earlier releases ended up with `— TBD` headings. It also
+  no longer requires a clean working tree — the version bump can be
+  committed together with the release's other changes in a single commit
+  (a warning is printed if `manifest.json` or `CHANGELOG.md` themselves
+  have uncommitted edits, since the script rewrites both).
+- Removed hardcoded test counts from `quality_scale.yaml` and hardcoded
+  HA versions from `run_tests.sh` — CI and `requirements_test.txt` are
+  authoritative.
 
 ## [1.7.3] — 2026-06-23
 
@@ -511,7 +546,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.3...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.4...HEAD
+[1.7.4]: https://github.com/raetha/ha-dockhand/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/raetha/ha-dockhand/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/raetha/ha-dockhand/compare/v1.7.1...v1.7.2
 [1.7.1]: https://github.com/raetha/ha-dockhand/compare/v1.7.0...v1.7.1

@@ -64,14 +64,14 @@ The following can be changed at any time via the **Configure** button on the int
 
 | Field | Description | Default |
 |---|---|---|
-| **Fast poll interval** | How often (seconds) to refresh container states, stacks, and environment stats | 60 |
-| **Slow poll interval** | How often (seconds) to refresh images, volumes, networks, and schedules | 600 |
+| **Fast poll interval** | How often (seconds) to refresh container states, stacks, and environment stats. Minimum: 10 | 60 |
+| **Slow poll interval** | How often (seconds) to refresh images, volumes, networks, and schedules. Minimum: 30 | 600 |
 | **Enable schedules** | Create entities for Dockhand scheduled tasks | off |
 | **Enable images** | Create entities for Docker images on each host | off |
 | **Enable volumes** | Create entities for Docker volumes on each host | off |
 | **Enable networks** | Create entities for Docker networks on each host | off |
 | **Enable container updates** | Create update entities for each container, showing image update availability and allowing one-click updates via Dockhand's `batch-update` API | off |
-| **Update check interval** | How often (seconds) to check container registries for image updates. Each check queries the registry for every container — keep this infrequent. Only shown when container updates are enabled | 86400 |
+| **Update check interval** | How often (seconds) to check container registries for image updates. Each check queries the registry for every container — keep this infrequent (minimum: 300). Only shown when container updates are enabled | 86400 |
 
 ### Reconfigure (change URL, SSL, or API token)
 

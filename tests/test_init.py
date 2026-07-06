@@ -651,6 +651,100 @@ async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssi
     )
 
 
+async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssistant):
+    """A container that gains a healthcheck after setup gets its Health sensor.
+
+    Regression test: health sensor creation was gated behind the same
+    known-key set as the other per-container sensors, so a container whose
+    image update added a HEALTHCHECK never got a Health sensor until restart.
+    """
+    entry = _make_entry(hass)
+    container = {
+        "id": "c1",
+        "name": "nginx",
+        "state": "running",
+        "labels": {},
+        "health": None,
+    }
+    fast = _make_fast_coordinator({
+        1: {"stats": {"name": "MyHost", "online": True},
+            "containers": [container], "stacks": []}
+    })
+    # Capture listener callbacks so the coordinator-update path can be driven.
+    listeners: list = []
+
+    def _add_listener(cb):
+        listeners.append(cb)
+        return lambda: None
+
+    fast.async_add_listener = MagicMock(side_effect=_add_listener)
+    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+
+    with (
+        patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()),
+        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
+        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
+        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        reg = er.async_get(hass)
+        uids = {e.unique_id for e in er.async_entries_for_config_entry(reg, entry.entry_id)}
+        health_uid = f"{entry.entry_id}_1_container_nginx_health"
+        assert health_uid not in uids, "Health sensor must not exist without a healthcheck"
+
+        # Container is recreated from an image that adds a HEALTHCHECK.
+        fast.data = {
+            1: {"stats": {"name": "MyHost", "online": True},
+                "containers": [{**container, "health": "healthy"}], "stacks": []}
+        }
+        for cb in listeners:
+            cb()
+        await hass.async_block_till_done()
+
+        uids = {e.unique_id for e in er.async_entries_for_config_entry(reg, entry.entry_id)}
+        assert health_uid in uids, f"Health sensor not created after healthcheck appeared: {uids}"
+
+
+async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssistant):
+    """Identical network IDs across environments each get an entity.
+
+    Regression test: the network known-set was keyed on the bare Docker
+    network ID, so two environments pointing at the same Docker host (which
+    report identical network IDs) only got an entity for the first env seen.
+    """
+    entry = _make_entry(hass, data={"enable_networks": True})
+    network = {"id": "netabc123", "name": "bridge", "driver": "bridge", "containers": {}}
+    fast = _make_fast_coordinator({
+        1: {"stats": {"name": "HostDirect", "online": True}, "containers": [], "stacks": []},
+        2: {"stats": {"name": "HostHawser", "online": True}, "containers": [], "stacks": []},
+    })
+    slow = _make_slow_coordinator({
+        "environments": {
+            1: {"env": {"id": 1, "name": "HostDirect"}, "images": [],
+                "networks": [network], "volumes": []},
+            2: {"env": {"id": 2, "name": "HostHawser"}, "images": [],
+                "networks": [network], "volumes": []},
+        },
+        "schedules": [],
+    })
+
+    with (
+        patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()),
+        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
+        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
+        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
+    ):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    reg = er.async_get(hass)
+    uids = {e.unique_id for e in er.async_entries_for_config_entry(reg, entry.entry_id)}
+    assert f"{entry.entry_id}_1_network_netabc123" in uids, uids
+    assert f"{entry.entry_id}_2_network_netabc123" in uids, uids
+
+
 async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):
     """Fast coordinator failure puts entry in SETUP_RETRY state."""
     entry = _make_entry(hass, {"api_token": "dh_test_token"})

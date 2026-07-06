@@ -11,8 +11,8 @@ than the versions listed here.
 
 | Project | Last reviewed | Where to check |
 |---|---|---|
-| Home Assistant Core | 2026.3 (minimum); tested against 2026.5.4; dev blog reviewed through 2026-05-27 | https://github.com/home-assistant/core/releases |
-| Dockhand | v1.0.29 | https://github.com/Finsys/dockhand/releases |
+| Home Assistant Core | 2026.3 (minimum); tested against 2026.6.4; dev blog reviewed through 2026-07-05 | https://github.com/home-assistant/core/releases |
+| Dockhand | v1.0.36 | https://github.com/Finsys/dockhand/releases |
 
 Update this table (and the corresponding project memory entry) after each
 review session.
