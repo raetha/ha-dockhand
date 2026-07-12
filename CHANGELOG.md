@@ -2,6 +2,112 @@
 
 ## [Unreleased]
 
+### Added
+
+- **New: "Redeploy" button on internal stacks** — pulls the latest image
+  for each service and redeploys, recreating only what actually
+  changed. Named and behaves exactly like Dockhand's own Redeploy
+  popover, including its own literal button title. Not created for
+  git-tracked or Untracked stacks (git stacks already have their own
+  Deploy/Sync from Git button, with different mechanics — see the
+  README for why they aren't identical) or for a stack containing a
+  system container.
+
+- **New: bulk "Update all" button per environment**, appearing only
+  while at least one container has a pending update — matching
+  Dockhand's own "Update all" button, including its name and the fact
+  that it doesn't exist at all when there's nothing to update, not just
+  disabled. Updates every pending container in one batch (with
+  vulnerability scanning, same as individual updates) instead of one
+  API call per container.
+
+- **New: "Updates available" sensor on each stack**, showing whether any
+  container in the stack has a pending image update, with an update
+  count attribute. Requires Dockhand 1.0.37 or later — automatically
+  skipped on older versions rather than requiring any configuration.
+
+- **Update entities now appear automatically** for every container in an
+  environment where update-check is enabled in Dockhand — no setup
+  required. They show the current image tag, flip to "update-pending" as
+  soon as Dockhand notices an update is available, and Install works
+  right away.
+
+  The old **Enable container updates** option is renamed **Enable
+  precise update versions**. It's no longer required to get update
+  entities at all — turning it on now just upgrades them to show exact
+  image versions (digests) via periodic registry checks. Your existing
+  setting is carried over automatically.
+
+- **New git stack entities** for git-tracked stacks: sync status, last
+  sync time, and sync error, plus a Deploy/Sync from Git button (its
+  name and icon match Dockhand's own equivalent exactly, including
+  switching between the two depending on whether the stack is currently
+  running) and an Auto-deploy switch.
+
+- **New container Auto-update switch** — toggle Dockhand's own scheduled
+  auto-update check for a container directly from Home Assistant.
+
+- **New runtime controls** (opt-in via **Enable runtime controls**) for
+  containers not managed by a Compose stack: adjust memory limit, CPU
+  limit, process limit, and restart policy without recreating the
+  container. Includes an automatic safety check that reverts a
+  memory-limit change and raises a repair issue if it causes the
+  container to stop running.
+
+- **Stack devices now show their type** (Internal, Git, or Untracked) so
+  you can tell at a glance why a stack does or doesn't have the git sync
+  entities above.
+
+- **New sensors, disabled by default** (enable what you want in
+  **Settings → Entities**): host platform, architecture, Docker version,
+  and last boot time; an "Image pruning" sensor; and Hawser agent
+  identity details as attributes on the Hawser version sensor
+  (edge-mode connections only).
+
+- **A few existing sensors gained useful attributes** instead of new
+  entities: CPU count on CPU usage, and environment name/connection
+  details on the Online sensor.
+
+### Changed
+
+- **Installing a container update now runs vulnerability scanning** (if
+  configured on the environment) and **honors your configured blocking
+  policy** — matching what Dockhand's own UI does. Install progress is
+  also more accurate.
+
+- **"Activity logging" renamed to "Activity collection"**, to match
+  "Metrics collection".
+
+- **The container/stack Start-Stop switch, Restart button, container
+  Auto-update switch, and runtime controls (memory/CPU/process limits,
+  restart policy) are no longer created for Dockhand's own
+  infrastructure** (its management container, or a Hawser agent) — or,
+  for the switch and button, for a stack containing one. This prevents
+  accidentally restarting, updating, or reconfiguring the very thing
+  that lets Home Assistant manage your containers in the first place.
+
+- **Reduced how often the integration touches your Dockhand connection
+  credentials** during normal polling, and added a second layer of
+  redaction in diagnostics exports as a safety net.
+
+### Fixed
+
+- **Hawser agent version now reports correctly for standard-mode
+  (port-bind) connections** — it previously always showed unavailable
+  for this connection type.
+
+- **Image sensors no longer pick up a stray "_2" in their entity ID after
+  a container update.** When a container is updated, Docker briefly has
+  two images claiming the same name — the new one just pulled, and the
+  old one not yet cleaned up. Image sensors now wait for that to settle
+  before creating a new entity, so the correct one gets the clean name
+  instead of a manual "recreate entity IDs" being needed afterward.
+
+- **Health sensor is now removed if a container loses its healthcheck**
+  — if an image update dropped a container's `HEALTHCHECK` instruction,
+  its Health sensor previously stuck around permanently showing stale
+  data instead of being cleaned up.
+
 ## [1.7.4] — 2026-07-06
 
 ### Fixed

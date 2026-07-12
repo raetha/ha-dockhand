@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import homeassistant.util.dt as dt_util
@@ -103,6 +103,7 @@ async def async_setup_entry(
     known_network_ids: set[str] = set()
     known_volume_ids: set[str] = set()
     known_sched_ids: set[str] = set()
+    known_git_stack_ids: set[str] = set()
 
     def _build_fast_entities() -> list[SensorEntity]:
         """Return new fast-coordinator entities not yet registered."""
@@ -118,7 +119,7 @@ async def async_setup_entry(
                 known_env_ids.add(env_id)
                 new += [
                     DockhandEnvCpuSensor(
-                        fast, entry.entry_id, env_id, env_name, base_url
+                        fast, slow, entry.entry_id, env_id, env_name, base_url
                     ),
                     DockhandEnvMemPercentSensor(
                         fast, entry.entry_id, env_id, env_name, base_url
@@ -253,12 +254,8 @@ async def async_setup_entry(
         fast_data = fast.data or {}
 
         for env_id, env_data in slow_envs.items():
-            # Prefer the name from fast stats (more reliable); fall back to slow env obj
             fast_stats = fast_data.get(env_id, {}).get("stats") or {}
-            slow_env_obj = env_data.get("env") or {}
-            env_name = fast_stats.get("name") or slow_env_obj.get(
-                "name", f"Environment {env_id}"
-            )
+            env_name = fast_stats.get("name", f"Environment {env_id}")
             _ensure_env_devices(
                 hass,
                 entry.entry_id,
@@ -285,29 +282,65 @@ async def async_setup_entry(
             )
         new: list[SensorEntity] = []
         slow_envs = (slow.data or {}).get("environments", {})
+        fast_data = fast.data or {}
 
         for env_id, env_data in slow_envs.items():
-            env_name = (env_data.get("env") or {}).get("name", f"Environment {env_id}")
+            fast_stats = fast_data.get(env_id, {}).get("stats") or {}
+            env_name = fast_stats.get("name", f"Environment {env_id}")
 
             if env_id not in known_slow_env_ids:
                 known_slow_env_ids.add(env_id)
-                new.append(
+                new += [
                     DockhandEnvHawserVersionSensor(
                         slow, entry.entry_id, env_id, env_name, base_url
-                    )
-                )
+                    ),
+                    DockhandEnvPlatformSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url
+                    ),
+                    DockhandEnvArchSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url
+                    ),
+                    DockhandEnvDockerVersionSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url
+                    ),
+                    DockhandEnvLastBootSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url
+                    ),
+                ]
 
             if enable_images:
-                for image in env_data.get("images") or []:
+                images_list = env_data.get("images") or []
+                # A container upgrade momentarily produces two images under
+                # the same repo:tag — the freshly-pulled one, and the old
+                # one it's replacing, which hasn't been marked untagged in
+                # Dockhand's own data yet (that usually resolves by the very
+                # next poll). Creating a brand-new entity for either one
+                # while both still claim the same tag would collide with
+                # whichever entity gets added first, forcing an ugly
+                # auto-suffixed "_2" entity_id that doesn't self-heal
+                # without a manual "recreate entity ids" action. Detect
+                # any tag currently claimed by more than one image and
+                # defer creating entities for all of them — normal,
+                # unambiguous images are never affected, and a real
+                # collision resolves itself within a poll cycle or two
+                # once Dockhand's data catches up.
+                tag_counts: dict[str, int] = {}
+                for image in images_list:
+                    tag = _image_display_name(image)
+                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
+                for image in images_list:
                     raw_id = image.get("id") or ""
                     iid = f"{env_id}_{raw_id.split(':')[-1]}"
-                    if iid not in known_image_ids:
-                        known_image_ids.add(iid)
-                        new.append(
-                            DockhandImageSensor(
-                                slow, entry.entry_id, env_id, env_name, base_url, image
-                            )
+                    if iid in known_image_ids:
+                        continue
+                    if tag_counts.get(_image_display_name(image), 0) > 1:
+                        continue
+                    known_image_ids.add(iid)
+                    new.append(
+                        DockhandImageSensor(
+                            slow, entry.entry_id, env_id, env_name, base_url, image
                         )
+                    )
 
             if enable_networks:
                 for network in env_data.get("networks") or []:
@@ -338,6 +371,29 @@ async def async_setup_entry(
                                 slow, entry.entry_id, env_id, env_name, base_url, volume
                             )
                         )
+
+            for git_stack in env_data.get("git_stacks") or []:
+                gsid = f"{env_id}_{git_stack.get('stackName', '')}"
+                if gsid not in known_git_stack_ids:
+                    known_git_stack_ids.add(gsid)
+                    new += [
+                        DockhandGitStackSyncStatusSensor(
+                            slow,
+                            entry.entry_id,
+                            env_id,
+                            env_name,
+                            base_url,
+                            git_stack,
+                        ),
+                        DockhandGitStackLastSyncSensor(
+                            slow,
+                            entry.entry_id,
+                            env_id,
+                            env_name,
+                            base_url,
+                            git_stack,
+                        ),
+                    ]
 
         if enable_schedules:
             for sched in (slow.data or {}).get("schedules") or []:
@@ -485,8 +541,13 @@ class BaseFastStackSensor(CoordinatorEntity[DockhandFastCoordinator], SensorEnti
 
     @property
     def device_info(self) -> DeviceInfo:
+        s = self._stack()
         return _stack_device(
-            self._stack_name, self._env_id, self._env_name, self._base_url
+            self._stack_name,
+            self._env_id,
+            self._env_name,
+            self._base_url,
+            source_type=(s or {}).get("sourceType"),
         )
 
 
@@ -499,18 +560,36 @@ class DockhandEnvCpuSensor(BaseFastEnvSensor):
     def __init__(
         self,
         coordinator: DockhandFastCoordinator,
+        slow_coordinator: DockhandSlowCoordinator,
         entry_id: str,
         env_id: int,
         env_name: str,
         base_url: str,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._slow_coordinator = slow_coordinator
         self._attr_unique_id = f"{self._entry_id}_{env_id}_cpu"
 
     @property
     def native_value(self) -> float | None:
         cpu = self._stats().get("metrics", {}).get("cpuPercent")
         return round(cpu, 2) if cpu is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        # cpu_count is host-level data from the slow coordinator (GET
+        # /api/host) — consulted directly here rather than as a separate
+        # entity, same reasoning as Memory usage's used/total byte
+        # attributes: one more data point about the same underlying
+        # metric doesn't need its own entity. Unlike memory's attributes
+        # (same fast-coordinator source as the state itself), this one
+        # is genuinely cross-coordinator — cpus practically never
+        # changes, so only updating in step with the slow coordinator's
+        # own 600s cadence rather than every fast poll is a non-issue.
+        slow_data = self._slow_coordinator.data or {}
+        host = slow_data.get("environments", {}).get(self._env_id, {}).get("host") or {}
+        cpus = host.get("cpus")
+        return {"cpu_count": cpus} if isinstance(cpus, int) else {}
 
 
 class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
@@ -1244,17 +1323,22 @@ class BaseSlowEnvSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorEntity
 # --------------------------------------------------------------------------- #
 
 
-class BaseSlowEnvConfigSensor(BaseSlowEnvSensor):
-    """Env sensors sourced from /api/environments via the slow coordinator."""
+class DockhandEnvHawserVersionSensor(BaseSlowEnvSensor):
+    """Hawser agent version string — None until the agent first checks in.
 
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    Sourced entirely from /api/host: for hawser-standard (port-bind)
+    connections, it live-fetches the version from the agent on every
+    call; for hawser-edge it falls back to Dockhand's own persisted
+    value.
 
-    def _env_obj(self) -> dict:
-        return self._env_data().get("env") or {}
-
-
-class DockhandEnvHawserVersionSensor(BaseSlowEnvConfigSensor):
-    """Hawser agent version string — None until the agent first checks in."""
+    agent_name/agent_id/last_seen attributes come from /api/environments'
+    env_meta (see coordinator.py — only the four needed fields are
+    extracted from that response, never the raw one with its decrypted
+    secrets) since /api/host doesn't have them. Only shown when /api/host
+    confirms this environment is actually hawser-edge — the only mode
+    Dockhand ever populates them for — rather than displaying them as
+    permanently empty for the far more common standard-mode case.
+    """
 
     _attr_translation_key = "hawser_agent_version"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -1271,18 +1355,147 @@ class DockhandEnvHawserVersionSensor(BaseSlowEnvConfigSensor):
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
         self._attr_unique_id = f"{self._entry_id}_{env_id}_hawser_version"
 
-    @property
-    def native_value(self) -> str | None:
-        return self._env_obj().get("hawserVersion")
+    def _host_env(self) -> dict:
+        return self._env_data().get("host", {}).get("environment") or {}
 
     @property
-    def extra_state_attributes(self) -> dict[str, Any]:
-        e = self._env_obj()
+    def native_value(self) -> str | None:
+        return self._host_env().get("hawserVersion")
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        if self._host_env().get("connectionType") != "hawser-edge":
+            return None
+        meta = self._env_data().get("env_meta") or {}
         return {
-            "agent_name": e.get("hawserAgentName"),
-            "agent_id": e.get("hawserAgentId"),
-            "last_seen": e.get("hawserLastSeen"),
+            "agent_name": meta.get("hawserAgentName"),
+            "agent_id": meta.get("hawserAgentId"),
+            "last_seen": meta.get("hawserLastSeen"),
         }
+
+
+class BaseSlowEnvHostSensor(BaseSlowEnvSensor):
+    """Env sensors sourced from the top-level fields of GET /api/host
+    (hostname/platform/arch/cpus/memory/uptime/dockerVersion) — distinct
+    from DockhandEnvHawserVersionSensor's nested "environment" sub-object.
+
+    All of this comes from data the slow coordinator already fetches for
+    the Hawser version sensor — no additional API call. Deliberately
+    skips dockerContainers/dockerContainersRunning/dockerImages, which
+    would duplicate the existing Containers-running and Images sensors
+    (sourced from /api/dashboard/stats), and totalMemory/freeMemory,
+    which would duplicate the existing Memory usage sensor's used/total
+    byte attributes (also from dashboard/stats metrics). cpus (a raw
+    count, not a percentage) has no existing equivalent, so it's kept.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+
+    def _host(self) -> dict:
+        return self._env_data().get("host") or {}
+
+
+class DockhandEnvPlatformSensor(BaseSlowEnvHostSensor):
+    """Host OS platform, e.g. 'linux', 'darwin', 'win32' (Node's os.platform())."""
+
+    _attr_translation_key = "host_platform"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._attr_unique_id = f"{self._entry_id}_{env_id}_host_platform"
+
+    @property
+    def native_value(self) -> str | None:
+        return self._host().get("platform")
+
+
+class DockhandEnvArchSensor(BaseSlowEnvHostSensor):
+    """Host CPU architecture, e.g. 'x64', 'arm64' (Node's os.arch())."""
+
+    _attr_translation_key = "host_arch"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._attr_unique_id = f"{self._entry_id}_{env_id}_host_arch"
+
+    @property
+    def native_value(self) -> str | None:
+        return self._host().get("arch")
+
+
+class DockhandEnvDockerVersionSensor(BaseSlowEnvHostSensor):
+    """Docker Engine server version string."""
+
+    _attr_translation_key = "host_docker_version"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._attr_unique_id = f"{self._entry_id}_{env_id}_host_docker_version"
+
+    @property
+    def native_value(self) -> str | None:
+        version = self._host().get("dockerVersion")
+        # Reported as the literal string "unknown" for some connection
+        # types Dockhand can't determine it for (see /api/host source) —
+        # treat that the same as genuinely absent rather than displaying
+        # the word "unknown" as if it were a real version string.
+        return version if version and version != "unknown" else None
+
+
+class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
+    """Host's last boot time, computed from Node's os.uptime() (seconds
+    since boot) at the moment /api/host was called. A TIMESTAMP sensor
+    reads better here than a raw duration — matches the convention HA's
+    own System Monitor integration uses for the same concept ("Last
+    boot"), and works naturally with relative-time display in the UI.
+
+    Recomputed fresh each poll rather than cached — tiny (sub-second)
+    drift between polls is expected and not worth smoothing over, since
+    it reflects the actual precision of the underlying uptime figure.
+    """
+
+    _attr_translation_key = "host_last_boot"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._attr_unique_id = f"{self._entry_id}_{env_id}_host_last_boot"
+
+    @property
+    def native_value(self):
+        uptime_seconds = self._host().get("uptime")
+        if not isinstance(uptime_seconds, int | float) or uptime_seconds < 0:
+            return None
+        return dt_util.utcnow() - timedelta(seconds=uptime_seconds)
 
 
 class DockhandImageSensor(BaseSlowEnvSensor):
@@ -1294,6 +1507,10 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     the name is the short hash ID and the state is None. All image metadata
     (size, digests, OCI labels, created, containers_using) is surfaced as
     extra_state_attributes.
+
+    name is a live @property, not a value fixed at construction — see its
+    docstring for why (a container upgrade producing a same-name-but-new-
+    entity collision on this being static, once shipped, once caught).
 
     API shape (confirmed from /api/images): camelCase fields, created is a
     Unix timestamp integer, containers is always an int (0 = unused).
@@ -1316,20 +1533,14 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         raw_id = image.get("id") or ""
         # Strip "sha256:" prefix — store just the 64-char hex for lookups
         self._image_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-        # Name = repository portion only (e.g. "cloudflare/cloudflared")
-        # This is stable across image pulls so entity references in dashboards
-        # and automations remain valid. The unique_id uses the image hash so
-        # old entities are cleaned up when the old image is pruned. The brief
-        # window where old and new hashes coexist may produce a _2 suffix, but
-        # that resolves after prune + recreate entity IDs.
-        # Fall back to short hash for untagged/intermediate images.
+        # Fallback repo name if a live lookup ever comes back empty (image
+        # gone entirely — shouldn't normally happen while this entity still
+        # exists, but avoids a blank name in that edge case).
         primary_tag = _image_display_name(image)  # e.g. "cloudflare/cloudflared:latest"
-        if ":" in primary_tag:
-            self._image_repo = primary_tag.rsplit(":", 1)[0]
-        else:
-            self._image_repo = primary_tag  # already a short hash (no colon)
+        self._image_repo_fallback = (
+            primary_tag.rsplit(":", 1)[0] if ":" in primary_tag else primary_tag
+        )
         self._attr_unique_id = f"{self._entry_id}_{env_id}_image_{self._image_id}"
-        self._attr_name = self._image_repo
 
     def _image(self) -> dict | None:
         for img in self._env_data().get("images") or []:
@@ -1338,6 +1549,33 @@ class DockhandImageSensor(BaseSlowEnvSensor):
             if short_id == self._image_id:
                 return img
         return None
+
+    @property
+    def name(self) -> str:
+        """Recomputed from live data on every access — NOT fixed at
+        construction. The unique_id is hash-based and this entity object
+        is reused indefinitely for the same hash (see the dedup pattern
+        in async_setup_entry), so a static name would go stale the moment
+        this image's tag changes: a container upgrade pulls a new image
+        under the same repo:tag, the old image (this one) loses that tag
+        and becomes just a hash — if the name were fixed at construction,
+        this entity would keep showing the old repo:tag forever, and
+        worse, would permanently occupy the entity_id slot the *new*
+        image's entity actually deserves, forcing it into an auto-
+        suffixed "_2" id that never self-heals without a manual
+        "recreate entity ids" action. Recomputing live means this
+        entity's name correctly becomes the short hash on the very next
+        poll after the tag moves elsewhere, freeing the slot naturally.
+        See also the tag-collision check in async_setup_entry, which
+        covers the (usually one extra poll cycle) window before that
+        happens, where the two images might briefly still agree on the
+        same tag.
+        """
+        img = self._image()
+        if img is None:
+            return self._image_repo_fallback
+        primary_tag = _image_display_name(img)
+        return primary_tag.rsplit(":", 1)[0] if ":" in primary_tag else primary_tag
 
     @property
     def native_value(self) -> str | None:
@@ -1673,3 +1911,105 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
         if "updatesFound" in details:
             attrs["updates_found"] = details["updatesFound"]
         return attrs
+
+
+# ===========================================================================
+# Git stack sensors (slow coordinator, always created when a stack is
+# detected as git-tracked — no config gate; it's one bulk call per
+# environment, not per-stack, so there's no meaningful API cost to gate)
+# ===========================================================================
+
+
+class BaseSlowGitStackSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorEntity):
+    """Base for per-git-stack slow-coordinator sensors.
+
+    Lives on the same device as the regular Stack (_stack_device) — a git
+    stack IS a regular Compose stack, just with extra sync/deploy metadata
+    Dockhand tracks separately from /api/stacks. No separate device type.
+    """
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        git_stack: dict,
+    ) -> None:
+        super().__init__(coordinator)
+        self._entry_id = entry_id
+        self._env_id = env_id
+        self._env_name = env_name
+        self._base_url = base_url
+        self._stack_name = git_stack.get("stackName", "")
+
+    def _git_stack(self) -> dict | None:
+        slow_data = self.coordinator.data or {}
+        env = slow_data.get("environments", {}).get(self._env_id, {})
+        for gs in env.get("git_stacks") or []:
+            if gs.get("stackName") == self._stack_name:
+                return gs
+        return None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return _stack_device(
+            self._stack_name,
+            self._env_id,
+            self._env_name,
+            self._base_url,
+            source_type="git",
+        )
+
+
+class DockhandGitStackSyncStatusSensor(BaseSlowGitStackSensor):
+    """Current git sync status: pending / syncing / synced / error."""
+
+    _attr_translation_key = "git_stack_sync_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = ["pending", "syncing", "synced", "error"]
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._attr_unique_id = (
+            f"{self._entry_id}_{self._env_id}_stack_{self._stack_name}_git_sync_status"
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        gs = self._git_stack()
+        return gs.get("syncStatus") if gs else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        gs = self._git_stack()
+        if not gs:
+            return {}
+        return {
+            "last_commit": gs.get("lastCommit"),
+            "sync_error": gs.get("syncError"),
+            "auto_update": gs.get("autoUpdate"),
+            "webhook_enabled": gs.get("webhookEnabled"),
+        }
+
+
+class DockhandGitStackLastSyncSensor(BaseSlowGitStackSensor):
+    """Timestamp of the last git sync — for time-based automations."""
+
+    _attr_translation_key = "git_stack_last_sync"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self._attr_unique_id = (
+            f"{self._entry_id}_{self._env_id}_stack_{self._stack_name}_git_last_sync"
+        )
+
+    @property
+    def native_value(self) -> datetime | None:
+        gs = self._git_stack()
+        return _parse_dt(gs.get("lastSync")) if gs else None

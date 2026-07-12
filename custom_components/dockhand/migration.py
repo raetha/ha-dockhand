@@ -9,6 +9,13 @@ Active migrations:
   migrate_1_4_0_update_entity_unique_ids       — retire after ~1.10.0
   migrate_1_5_0_container_device_identifiers   — retire after ~1.10.0
   migrate_1_7_3_entry_scoped_unique_ids        — retire after ~1.11.0
+
+Migrations are for entity/device registry changes between released
+versions only (e.g. 1.7.3 -> 1.8.0) — never add one for churn within an
+unreleased dev cycle (an entity added and removed before ever shipping).
+Raetha's own testing doesn't rely on these at all (she reloads/re-adds
+the integration during development), so a migration for interim-build-only
+artifacts adds permanent maintenance cost for zero real benefit.
 """
 
 import logging
@@ -34,7 +41,8 @@ def async_run_migrations(
     anything to do and returns immediately if not.
 
     To add a migration: define a new migrate_X_Y_Z_* function below and
-    call it here.
+    call it here. Only for changes between released versions — see module
+    docstring.
 
     To retire a migration: delete the function and remove its call from
     this function. If no migrations remain, this function body should be

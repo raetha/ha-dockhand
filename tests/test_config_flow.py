@@ -38,7 +38,7 @@ BASE_OPTIONS = {
     "enable_images": False,
     "enable_volumes": False,
     "enable_networks": False,
-    "enable_updates": False,
+    "enable_precise_updates": False,
     "poll_interval_updates": 86400,
 }
 
@@ -76,7 +76,9 @@ def _patch_client(probe_side_effect=None):
 def _patch_full_setup():
     """Patch everything needed for async_setup_entry to succeed without network access."""
     fast = MagicMock()
-    fast.data = {1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}}
+    fast.data = {
+        1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}
+    }
     fast.async_config_entry_first_refresh = AsyncMock()
     fast.async_add_listener = MagicMock(return_value=lambda: None)
     slow = MagicMock()
@@ -85,7 +87,10 @@ def _patch_full_setup():
     slow.async_config_entry_first_refresh = AsyncMock()
     slow.async_add_listener = MagicMock(return_value=lambda: None)
     with (
-        patch("custom_components.dockhand.async_get_clientsession", return_value=MagicMock()),
+        patch(
+            "custom_components.dockhand.async_get_clientsession",
+            return_value=MagicMock(),
+        ),
         patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
         patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
         patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
@@ -502,6 +507,48 @@ async def test_options_flow_saves_options(hass: HomeAssistant):
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options["poll_interval"] == 120
+
+
+async def test_options_flow_runtime_controls_defaults_off(hass: HomeAssistant):
+    """enable_runtime_controls defaults to False when not submitted — the
+    extra per-container inspect cost is opt-in only."""
+    entry = MockConfigEntry(
+        domain="dockhand",
+        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
+        title="http://dh.test:3000",
+    )
+    entry.add_to_hass(hass)
+
+    with _patch_full_setup():
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"poll_interval": 60}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options["enable_runtime_controls"] is False
+
+
+async def test_options_flow_runtime_controls_can_be_enabled(hass: HomeAssistant):
+    entry = MockConfigEntry(
+        domain="dockhand",
+        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
+        title="http://dh.test:3000",
+    )
+    entry.add_to_hass(hass)
+
+    with _patch_full_setup():
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {**BASE_OPTIONS, "enable_runtime_controls": True}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert entry.options["enable_runtime_controls"] is True
 
 
 async def test_options_flow_rejects_interval_below_minimum(hass: HomeAssistant):

@@ -44,10 +44,9 @@ jobs:
       - name: Install ruff
         run: pip install ruff
       - name: Run ruff check
-        run: ruff check custom_components/dockhand/
+        run: ruff check custom_components/dockhand/ tests/
       - name: Run ruff format check
-        run: ruff format --check custom_components/dockhand/
-        # tests/ excluded from format check — see [format] exclude in .ruff.toml
+        run: ruff format --check custom_components/dockhand/ tests/
 
   # ── Full test suite via pytest-homeassistant-custom-component ───────────
   # PHCC pins an exact HA release and provides the same test infrastructure

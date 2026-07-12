@@ -11,11 +11,19 @@ from __future__ import annotations
 import pytest
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.dockhand.migration import migrate_1_7_3_entry_scoped_unique_ids
+from custom_components.dockhand.const import DOMAIN
+from custom_components.dockhand.migration import (
+    _is_hex64,
+    async_run_migrations,
+    migrate_1_4_0_update_entity_unique_ids,
+    migrate_1_5_0_container_device_identifiers,
+    migrate_1_7_3_entry_scoped_unique_ids,
+)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -42,10 +50,24 @@ def _make_entry(hass: HomeAssistant) -> MockConfigEntry:
     return entry
 
 
-def _add_entity(hass: HomeAssistant, entry: MockConfigEntry, unique_id: str) -> er.RegistryEntry:
+def _add_entity(
+    hass: HomeAssistant, entry: MockConfigEntry, unique_id: str
+) -> er.RegistryEntry:
     registry = er.async_get(hass)
     return registry.async_get_or_create(
         "sensor",
+        "dockhand",
+        unique_id,
+        config_entry=entry,
+    )
+
+
+def _add_binary_sensor(
+    hass: HomeAssistant, entry: MockConfigEntry, unique_id: str
+) -> er.RegistryEntry:
+    registry = er.async_get(hass)
+    return registry.async_get_or_create(
+        "binary_sensor",
         "dockhand",
         unique_id,
         config_entry=entry,
@@ -189,8 +211,6 @@ def test_unrelated_entity_uid_is_not_touched(hass: HomeAssistant):
 
 def test_entities_from_other_entry_are_not_touched(hass: HomeAssistant):
     """Entities belonging to a different config entry are never migrated."""
-    entry = _make_entry(hass)
-
     other_entry = MockConfigEntry(
         domain="dockhand",
         data={
@@ -246,11 +266,10 @@ def test_migration_idempotent(hass: HomeAssistant):
     uid_after_second = _get_uid(hass, ent.entity_id)
     assert uid_after_first == uid_after_second
 
+
 # ---------------------------------------------------------------------------
 # _is_hex64
 # ---------------------------------------------------------------------------
-
-from custom_components.dockhand.migration import _is_hex64
 
 
 def test_is_hex64_valid():
@@ -276,8 +295,6 @@ def test_is_hex64_non_hex_chars():
 # ---------------------------------------------------------------------------
 # migrate_1_4_0_update_entity_unique_ids
 # ---------------------------------------------------------------------------
-
-from custom_components.dockhand.migration import migrate_1_4_0_update_entity_unique_ids
 
 CONTAINER_HASH = "a" * 64
 FAST_DATA_1_4 = {
@@ -348,10 +365,6 @@ def test_1_4_0_multiple_envs_and_containers(hass: HomeAssistant):
 # ---------------------------------------------------------------------------
 # migrate_1_5_0_container_device_identifiers
 # ---------------------------------------------------------------------------
-
-from homeassistant.helpers import device_registry as dr
-from custom_components.dockhand.migration import migrate_1_5_0_container_device_identifiers
-from custom_components.dockhand.const import DOMAIN
 
 FAST_DATA_1_5 = {
     1: {
@@ -427,7 +440,7 @@ def test_1_5_0_all_suffixes_migrated(hass: HomeAssistant):
         for sfx in suffixes
     ]
     migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, FAST_DATA_1_5)
-    for ent, sfx in zip(entities, suffixes):
+    for ent, sfx in zip(entities, suffixes, strict=True):
         assert _get_uid(hass, ent.entity_id) == f"dockhand_container_1_nginx{sfx}"
 
 
@@ -456,7 +469,9 @@ def test_1_5_0_empty_fast_data_returns_early(hass: HomeAssistant):
     dev = _add_device(hass, entry, f"container_{CONTAINER_HASH}")
     ent = _add_entity(hass, entry, f"dockhand_container_{CONTAINER_HASH}_state")
     migrate_1_5_0_container_device_identifiers(hass, ENTRY_ID, {})
-    assert (DOMAIN, f"container_{CONTAINER_HASH}") in _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"container_{CONTAINER_HASH}") in _get_device_identifiers(
+        hass, dev.id
+    )
     assert _get_uid(hass, ent.entity_id) == f"dockhand_container_{CONTAINER_HASH}_state"
 
 
@@ -472,8 +487,6 @@ def test_1_5_0_non_container_device_not_touched(hass: HomeAssistant):
 # async_run_migrations — orchestration
 # ---------------------------------------------------------------------------
 
-from custom_components.dockhand.migration import async_run_migrations
-
 
 def test_async_run_migrations_is_no_op_when_nothing_to_migrate(hass: HomeAssistant):
     """Running migrations on a clean install with no old-format entities is safe."""
@@ -485,8 +498,9 @@ def test_async_run_migrations_is_no_op_when_nothing_to_migrate(hass: HomeAssista
     assert _get_uid(hass, ent.entity_id) == new_uid
 
 
-def test_async_run_migrations_runs_all_three_in_order(hass: HomeAssistant):
-    """All three migrations fire: 1.4.0 → 1.5.0 → 1.7.3, each a no-op here."""
+def test_async_run_migrations_runs_all_in_order(hass: HomeAssistant):
+    """All four migrations fire: 1.4.0 → 1.5.0 → 1.7.3 → 1.8.0, each a no-op
+    here except 1.7.3."""
     entry = _make_entry(hass)
     # Seed an entity that would be touched by 1.7.3 if 1.4.0/1.5.0 leave it alone
     ent = _add_entity(hass, entry, "dockhand_env_1_cpu")

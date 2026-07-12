@@ -17,8 +17,9 @@ from .const import (
     CONF_API_URL,
     CONF_ENABLE_IMAGES,
     CONF_ENABLE_NETWORKS,
+    CONF_ENABLE_PRECISE_UPDATES,
+    CONF_ENABLE_RUNTIME_CONTROLS,
     CONF_ENABLE_SCHEDULES,
-    CONF_ENABLE_UPDATES,
     CONF_ENABLE_VOLUMES,
     CONF_POLL_INTERVAL,
     CONF_POLL_INTERVAL_SLOW,
@@ -26,8 +27,9 @@ from .const import (
     CONF_VERIFY_SSL,
     DEFAULT_ENABLE_IMAGES,
     DEFAULT_ENABLE_NETWORKS,
+    DEFAULT_ENABLE_PRECISE_UPDATES,
+    DEFAULT_ENABLE_RUNTIME_CONTROLS,
     DEFAULT_ENABLE_SCHEDULES,
-    DEFAULT_ENABLE_UPDATES,
     DEFAULT_ENABLE_VOLUMES,
     DEFAULT_POLL_INTERVAL,
     DEFAULT_POLL_INTERVAL_SLOW,
@@ -115,8 +117,16 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                 default=d.get(CONF_ENABLE_NETWORKS, DEFAULT_ENABLE_NETWORKS),
             ): bool,
             vol.Optional(
-                CONF_ENABLE_UPDATES,
-                default=d.get(CONF_ENABLE_UPDATES, DEFAULT_ENABLE_UPDATES),
+                CONF_ENABLE_RUNTIME_CONTROLS,
+                default=d.get(
+                    CONF_ENABLE_RUNTIME_CONTROLS, DEFAULT_ENABLE_RUNTIME_CONTROLS
+                ),
+            ): bool,
+            vol.Optional(
+                CONF_ENABLE_PRECISE_UPDATES,
+                default=d.get(
+                    CONF_ENABLE_PRECISE_UPDATES, DEFAULT_ENABLE_PRECISE_UPDATES
+                ),
             ): bool,
             vol.Optional(
                 CONF_POLL_INTERVAL_UPDATES,
@@ -129,7 +139,7 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
 
 
 class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
-    VERSION = 1
+    VERSION = 2
 
     def __init__(self) -> None:
         # Accumulates data across multi-step flows.

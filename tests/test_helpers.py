@@ -32,6 +32,7 @@ from custom_components.dockhand.helpers import (
     _image_display_name,
     _image_group_device,
     _image_url,
+    _is_update_disabled_by_label,
     _network_group_device,
     _network_url,
     _sched_device,
@@ -39,6 +40,7 @@ from custom_components.dockhand.helpers import (
     _schedules_url,
     _section_url,
     _stack_device,
+    _stack_has_system_container,
     _stack_url,
     _volume_group_device,
     _volume_url,
@@ -50,11 +52,16 @@ from custom_components.dockhand.helpers import (
 
 
 def test_section_url_appends_section():
-    assert _section_url("http://dh.test:3000", "containers") == "http://dh.test:3000/containers"
+    assert (
+        _section_url("http://dh.test:3000", "containers")
+        == "http://dh.test:3000/containers"
+    )
 
 
 def test_section_url_strips_trailing_slash():
-    assert _section_url("http://dh.test:3000/", "stacks") == "http://dh.test:3000/stacks"
+    assert (
+        _section_url("http://dh.test:3000/", "stacks") == "http://dh.test:3000/stacks"
+    )
 
 
 def test_section_url_empty_base_returns_none():
@@ -86,7 +93,10 @@ def test_env_url():
 
 
 def test_schedules_url():
-    assert _schedules_url("http://dh.test:3000") == "http://dh.test:3000/settings/schedules"
+    assert (
+        _schedules_url("http://dh.test:3000")
+        == "http://dh.test:3000/settings/schedules"
+    )
 
 
 def test_container_url_empty_base_returns_none():
@@ -109,7 +119,9 @@ def test_env_device_name():
 
 
 def test_env_device_sets_hw_version_from_connection_type():
-    info = _env_device(1, "myenv", "http://dh.test:3000", stats={"connectionType": "local"})
+    info = _env_device(
+        1, "myenv", "http://dh.test:3000", stats={"connectionType": "local"}
+    )
     assert info["hw_version"] == "local"
 
 
@@ -139,12 +151,16 @@ def test_container_device_name_format():
 
 
 def test_container_device_via_containers_group_when_freestanding():
-    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000", stack_name=None)
+    info = _container_device(
+        "nginx", 1, "myenv", "http://dh.test:3000", stack_name=None
+    )
     assert info["via_device"] == ("dockhand", "env_1_Containers")
 
 
 def test_container_device_via_stack_when_compose():
-    info = _container_device("web", 1, "myenv", "http://dh.test:3000", stack_name="myapp")
+    info = _container_device(
+        "web", 1, "myenv", "http://dh.test:3000", stack_name="myapp"
+    )
     assert info["via_device"] == ("dockhand", "stack_1_myapp")
 
 
@@ -228,11 +244,16 @@ def test_sched_device_via_schedules_hub():
 
 
 def test_image_display_name_prefers_first_repo_tag():
-    assert _image_display_name({"repoTags": ["nginx:latest", "nginx:1.25"]}) == "nginx:latest"
+    assert (
+        _image_display_name({"repoTags": ["nginx:latest", "nginx:1.25"]})
+        == "nginx:latest"
+    )
 
 
 def test_image_display_name_skips_none_tag():
-    result = _image_display_name({"repoTags": ["<none>:<none>"], "id": "sha256:abc123def456789"})
+    result = _image_display_name(
+        {"repoTags": ["<none>:<none>"], "id": "sha256:abc123def456789"}
+    )
     assert result == "abc123def456"
 
 
@@ -312,12 +333,74 @@ def test_compose_project_none_for_none_container():
 
 
 # ---------------------------------------------------------------------------
+# _extract_runtime_config
+# ---------------------------------------------------------------------------
+
+
+def test_extract_runtime_config_normal_values():
+    from custom_components.dockhand.helpers import _extract_runtime_config
+
+    inspect_data = {
+        "HostConfig": {
+            "Memory": 536870912,
+            "NanoCpus": 1500000000,
+            "PidsLimit": 100,
+            "RestartPolicy": {"Name": "unless-stopped"},
+        }
+    }
+    result = _extract_runtime_config(inspect_data)
+    assert result == {
+        "memory": 536870912,
+        "nano_cpus": 1500000000,
+        "pids_limit": 100,
+        "restart_policy": "unless-stopped",
+    }
+
+
+def test_extract_runtime_config_unlimited_defaults():
+    """Memory/NanoCpus 0 = unlimited (Docker's own convention); PidsLimit
+    missing entirely also means unlimited, represented as -1 to match
+    Docker's own sentinel for this field; RestartPolicy missing means "no"."""
+    from custom_components.dockhand.helpers import _extract_runtime_config
+
+    result = _extract_runtime_config({"HostConfig": {}})
+    assert result == {
+        "memory": 0,
+        "nano_cpus": 0,
+        "pids_limit": -1,
+        "restart_policy": "no",
+    }
+
+
+def test_extract_runtime_config_explicit_pids_limit_zero_preserved():
+    """PidsLimit=0 is an explicit value from Docker, distinct from the key
+    being absent — our -1 "unlimited" default only kicks in when the key
+    is truly missing, so an explicit 0 is passed through as-is."""
+    from custom_components.dockhand.helpers import _extract_runtime_config
+
+    result = _extract_runtime_config({"HostConfig": {"PidsLimit": 0}})
+    assert result["pids_limit"] == 0
+
+
+def test_extract_runtime_config_missing_host_config():
+    from custom_components.dockhand.helpers import _extract_runtime_config
+
+    assert _extract_runtime_config({}) == {
+        "memory": 0,
+        "nano_cpus": 0,
+        "pids_limit": -1,
+        "restart_policy": "no",
+    }
+
+
+# ---------------------------------------------------------------------------
 # _ensure_env_devices
 # ---------------------------------------------------------------------------
 
 
 def _make_entry(hass):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
+
     entry = MockConfigEntry(domain="dockhand", data={}, title="test")
     entry.add_to_hass(hass)
     return entry
@@ -325,9 +408,83 @@ def _make_entry(hass):
 
 def _device_ids(hass, entry) -> set[str]:
     from homeassistant.helpers import device_registry as dr
+
     reg = dr.async_get(hass)
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
     return {next(iter(d.identifiers))[1] for d in devs}
+
+
+def _device_by_id_suffix(hass, entry, id_suffix: str):
+    from homeassistant.helpers import device_registry as dr
+
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    for d in devs:
+        if next(iter(d.identifiers))[1] == id_suffix:
+            return d
+    return None
+
+
+def test_ensure_env_devices_stack_model_reflects_source_type(hass):
+    """Regression test: _ensure_env_devices() is a SEPARATE device-
+    registration path from _stack_device()/BaseFastStackSensor's
+    device_info — it runs unconditionally on every coordinator update,
+    calling registry.async_get_or_create() directly, rather than going
+    through an entity at all. These two paths drifted out of sync once
+    already (this one kept a hardcoded generic "Stack" after
+    _stack_device() was updated to use sourceType), silently overwriting
+    the correct model within about one poll cycle of every reload — a
+    real bug shipped before being caught. This locks in that both stay
+    in sync."""
+    entry = _make_entry(hass)
+    stacks = [{"name": "myapp", "sourceType": "git"}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv", stacks=stacks
+    )
+    device = _device_by_id_suffix(hass, entry, "stack_1_myapp")
+    assert device is not None
+    assert device.model == "Git Stack"
+
+
+def test_ensure_env_devices_stack_model_internal(hass):
+    entry = _make_entry(hass)
+    stacks = [{"name": "myapp", "sourceType": "internal"}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv", stacks=stacks
+    )
+    device = _device_by_id_suffix(hass, entry, "stack_1_myapp")
+    assert device.model == "Internal Stack"
+
+
+def test_ensure_env_devices_stack_model_untracked_when_source_type_absent(hass):
+    """No sourceType at all (no stackSources DB record) — matches
+    Dockhand's own frontend default of 'external', not a generic
+    fallback."""
+    entry = _make_entry(hass)
+    stacks = [{"name": "myapp"}]
+    _ensure_env_devices(
+        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv", stacks=stacks
+    )
+    device = _device_by_id_suffix(hass, entry, "stack_1_myapp")
+    assert device.model == "Untracked Stack"
+
+
+def test_ensure_env_devices_stack_model_survives_repeated_calls(hass):
+    """The actual shape of the bug: _ensure_env_devices() is called on
+    every coordinator update (fast AND slow), not just once at entity
+    add time. A second call with the same (correct) data must not
+    regress the model — this is what would have caught the real bug,
+    since the hardcoded "Stack" value would have shown up on the very
+    next call after the first one happened to look right by coincidence
+    of call order."""
+    entry = _make_entry(hass)
+    stacks = [{"name": "myapp", "sourceType": "git"}]
+    for _ in range(3):
+        _ensure_env_devices(
+            hass, entry.entry_id, "http://dh.test:3000", 1, "myenv", stacks=stacks
+        )
+    device = _device_by_id_suffix(hass, entry, "stack_1_myapp")
+    assert device.model == "Git Stack"
 
 
 def test_ensure_env_devices_creates_env_hub(hass):
@@ -340,7 +497,11 @@ def test_ensure_env_devices_creates_containers_group_for_freestanding(hass):
     entry = _make_entry(hass)
     containers = [{"name": "nginx", "labels": {}}]
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
         containers=containers,
     )
     assert "env_1_Containers" in _device_ids(hass, entry)
@@ -350,7 +511,11 @@ def test_ensure_env_devices_skips_containers_group_for_compose_only(hass):
     entry = _make_entry(hass)
     containers = [{"name": "web", "labels": {"com.docker.compose.project": "myapp"}}]
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
         containers=containers,
     )
     assert "env_1_Containers" not in _device_ids(hass, entry)
@@ -360,7 +525,11 @@ def test_ensure_env_devices_creates_stacks_group_when_stacks(hass):
     entry = _make_entry(hass)
     stacks = [{"name": "myapp"}]
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
         stacks=stacks,
     )
     ids = _device_ids(hass, entry)
@@ -372,7 +541,11 @@ def test_ensure_env_devices_creates_individual_stack_device(hass):
     entry = _make_entry(hass)
     stacks = [{"name": "alpha"}, {"name": "beta"}]
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
         stacks=stacks,
     )
     ids = _device_ids(hass, entry)
@@ -386,7 +559,11 @@ def test_ensure_env_devices_skips_individual_stack_device_with_empty_name(hass):
     entry = _make_entry(hass)
     stacks = [{"name": ""}]
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
         stacks=stacks,
     )
     ids = _device_ids(hass, entry)
@@ -398,8 +575,13 @@ def test_ensure_env_devices_skips_individual_stack_device_with_empty_name(hass):
 def test_ensure_env_devices_creates_networks_group_when_enabled(hass):
     entry = _make_entry(hass)
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
-        networks=[{"id": "n1"}], enable_networks=True,
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        networks=[{"id": "n1"}],
+        enable_networks=True,
     )
     assert "env_1_Networks" in _device_ids(hass, entry)
 
@@ -407,8 +589,13 @@ def test_ensure_env_devices_creates_networks_group_when_enabled(hass):
 def test_ensure_env_devices_skips_networks_group_when_disabled(hass):
     entry = _make_entry(hass)
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
-        networks=[{"id": "n1"}], enable_networks=False,
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        networks=[{"id": "n1"}],
+        enable_networks=False,
     )
     assert "env_1_Networks" not in _device_ids(hass, entry)
 
@@ -416,8 +603,13 @@ def test_ensure_env_devices_skips_networks_group_when_disabled(hass):
 def test_ensure_env_devices_skips_networks_group_when_empty_list(hass):
     entry = _make_entry(hass)
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
-        networks=[], enable_networks=True,
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        networks=[],
+        enable_networks=True,
     )
     assert "env_1_Networks" not in _device_ids(hass, entry)
 
@@ -425,8 +617,13 @@ def test_ensure_env_devices_skips_networks_group_when_empty_list(hass):
 def test_ensure_env_devices_creates_images_group_when_enabled(hass):
     entry = _make_entry(hass)
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
-        images=[{"id": "sha256:abc"}], enable_images=True,
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        images=[{"id": "sha256:abc"}],
+        enable_images=True,
     )
     assert "env_1_Images" in _device_ids(hass, entry)
 
@@ -434,8 +631,13 @@ def test_ensure_env_devices_creates_images_group_when_enabled(hass):
 def test_ensure_env_devices_creates_volumes_group_when_enabled(hass):
     entry = _make_entry(hass)
     _ensure_env_devices(
-        hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
-        volumes=[{"Name": "mydata"}], enable_volumes=True,
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        1,
+        "myenv",
+        volumes=[{"Name": "mydata"}],
+        enable_volumes=True,
     )
     assert "env_1_Volumes" in _device_ids(hass, entry)
 
@@ -445,10 +647,15 @@ def test_ensure_env_devices_is_idempotent(hass):
     stacks = [{"name": "app"}]
     for _ in range(3):
         _ensure_env_devices(
-            hass, entry.entry_id, "http://dh.test:3000", 1, "myenv",
+            hass,
+            entry.entry_id,
+            "http://dh.test:3000",
+            1,
+            "myenv",
             stacks=stacks,
         )
     from homeassistant.helpers import device_registry as dr
+
     reg = dr.async_get(hass)
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
     ids = [next(iter(d.identifiers))[1] for d in devs]
@@ -469,7 +676,9 @@ def test_ensure_hub_devices_creates_schedules_hub(hass):
 def test_ensure_hub_devices_creates_per_schedule_device(hass):
     entry = _make_entry(hass)
     schedules = [{"id": 5, "type": "maintenance", "name": "nightly"}]
-    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    _ensure_hub_devices(
+        hass, entry.entry_id, "http://dh.test:3000", schedules=schedules
+    )
     assert "schedule_5_maintenance" in _device_ids(hass, entry)
 
 
@@ -479,7 +688,9 @@ def test_ensure_hub_devices_creates_multiple_schedules(hass):
         {"id": 1, "type": "backup", "name": "nightly-backup"},
         {"id": 2, "type": "maintenance", "name": "weekly-clean"},
     ]
-    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    _ensure_hub_devices(
+        hass, entry.entry_id, "http://dh.test:3000", schedules=schedules
+    )
     ids = _device_ids(hass, entry)
     assert "schedule_1_backup" in ids
     assert "schedule_2_maintenance" in ids
@@ -488,7 +699,9 @@ def test_ensure_hub_devices_creates_multiple_schedules(hass):
 def test_ensure_hub_devices_skips_schedule_with_no_id(hass):
     entry = _make_entry(hass)
     schedules = [{"id": None, "type": "maintenance", "name": "bad"}]
-    _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+    _ensure_hub_devices(
+        hass, entry.entry_id, "http://dh.test:3000", schedules=schedules
+    )
     ids = _device_ids(hass, entry)
     # Only hub itself, no schedule device
     assert ids == {"schedules_hub"}
@@ -498,8 +711,11 @@ def test_ensure_hub_devices_is_idempotent(hass):
     entry = _make_entry(hass)
     schedules = [{"id": 5, "type": "maintenance", "name": "nightly"}]
     for _ in range(3):
-        _ensure_hub_devices(hass, entry.entry_id, "http://dh.test:3000", schedules=schedules)
+        _ensure_hub_devices(
+            hass, entry.entry_id, "http://dh.test:3000", schedules=schedules
+        )
     from homeassistant.helpers import device_registry as dr
+
     reg = dr.async_get(hass)
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
     ids = [next(iter(d.identifiers))[1] for d in devs]
@@ -510,17 +726,6 @@ def test_ensure_hub_devices_is_idempotent(hass):
 # _network_group_device / _volume_group_device / _image_group_device
 # — via_device and configuration_url (identifier already tested above)
 # ---------------------------------------------------------------------------
-
-from custom_components.dockhand.helpers import (
-    _network_group_device,
-    _volume_group_device,
-    _image_group_device,
-)
-
-
-def test_network_group_device_via_env():
-    info = _network_group_device(1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", "env_1")
 
 
 def test_network_group_device_configuration_url():
@@ -568,28 +773,6 @@ def test_network_group_device_name():
 # ---------------------------------------------------------------------------
 
 
-def test_ensure_env_devices_creates_containers_group_for_freestanding(hass):
-    """Containers group device is created when at least one freestanding container exists."""
-    from custom_components.dockhand.helpers import _ensure_env_devices
-    from homeassistant.helpers import device_registry as dr
-
-    entry = _make_entry(hass)
-    # No compose label → freestanding container
-    containers = [{"name": "nginx", "id": "abc", "state": "running", "labels": {}}]
-    _ensure_env_devices(
-        hass,
-        entry.entry_id,
-        "http://dh.test:3000",
-        1,
-        "myenv",
-        containers=containers,
-    )
-    reg = dr.async_get(hass)
-    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
-    ids = {next(iter(d.identifiers))[1] for d in devs}
-    assert "env_1_Containers" in ids
-
-
 def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
     """Containers group is not created when every container is Compose-managed."""
     from custom_components.dockhand.helpers import _ensure_env_devices
@@ -597,8 +780,14 @@ def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
 
     entry = _make_entry(hass)
     # compose.project label → compose-managed, not freestanding
-    containers = [{"name": "web", "id": "abc", "state": "running",
-                   "labels": {"com.docker.compose.project": "myapp"}}]
+    containers = [
+        {
+            "name": "web",
+            "id": "abc",
+            "state": "running",
+            "labels": {"com.docker.compose.project": "myapp"},
+        }
+    ]
     _ensure_env_devices(
         hass,
         entry.entry_id,
@@ -611,3 +800,65 @@ def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
     ids = {next(iter(d.identifiers))[1] for d in devs}
     assert "env_1_Containers" not in ids
+
+
+# ---------------------------------------------------------------------------
+# _stack_has_system_container
+# ---------------------------------------------------------------------------
+
+
+def test_stack_has_system_container_true_when_member_is_system():
+    """stack['containers'] is a list of container IDs, not names —
+    confirmed from Dockhand's own source (stacks.ts populates it from a
+    Set matched against container.id). Using names here was a real bug
+    that shipped: this check silently never matched anything, for any
+    stack, ever, since IDs and names never overlap in practice."""
+    stack = {"name": "infra", "containers": ["id-dockhand", "id-web"]}
+    all_containers = [
+        {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"},
+        {"id": "id-web", "name": "web", "systemContainer": None},
+    ]
+    assert _stack_has_system_container(stack, all_containers) is True
+
+
+def test_stack_has_system_container_false_when_no_member_is_system():
+    stack = {"name": "myapp", "containers": ["id-web", "id-db"]}
+    all_containers = [
+        {"id": "id-web", "name": "web", "systemContainer": None},
+        {"id": "id-db", "name": "db", "systemContainer": None},
+    ]
+    assert _stack_has_system_container(stack, all_containers) is False
+
+
+def test_stack_has_system_container_false_for_empty_container_list():
+    stack = {"name": "myapp", "containers": []}
+    all_containers = [
+        {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
+    ]
+    assert _stack_has_system_container(stack, all_containers) is False
+
+
+def test_stack_has_system_container_false_for_none_stack():
+    assert _stack_has_system_container(None, []) is False
+
+
+def test_stack_has_system_container_false_when_ids_dont_match():
+    """The stack's container IDs must actually match an entry in the
+    full container list — an ID that doesn't appear there at all (e.g.
+    a stale ID after recreation) is not treated as a match."""
+    stack = {"name": "myapp", "containers": ["id-ghost"]}
+    all_containers = [
+        {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
+    ]
+    assert _stack_has_system_container(stack, all_containers) is False
+
+
+def test_stack_has_system_container_ignores_name_collision_with_id():
+    """Regression guard for the exact bug: a container whose NAME
+    happens to equal another container's ID string must not produce a
+    false match — only real id-to-id equality counts."""
+    stack = {"name": "myapp", "containers": ["dockhand"]}  # looks like a name!
+    all_containers = [
+        {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
+    ]
+    assert _stack_has_system_container(stack, all_containers) is False

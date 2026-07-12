@@ -87,16 +87,16 @@ The full pytest suite requires Python 3.14.2+ with PHCC. Use your local dev envi
 
 ```bash
 # Lint
-ruff check custom_components/
+ruff check custom_components/ tests/
 
 # Format check (does not modify files)
-ruff format --check custom_components/
+ruff format --check custom_components/ tests/
 
 # Fix formatting in-place
-ruff format custom_components/
+ruff format custom_components/ tests/
 ```
 
-Ruff config is in `.ruff.toml` at the repo root. CI runs both `ruff check` and `ruff format --check` on `custom_components/` only; tests are excluded from format checking.
+Ruff config is in `.ruff.toml` at the repo root. CI runs both `ruff check` and `ruff format --check` on `custom_components/` and `tests/` — test files get a handful of per-file rule exemptions (no docstring/annotation requirements, `assert` allowed, etc.) but are otherwise held to the same standard as the integration code.
 
 ## Project structure
 

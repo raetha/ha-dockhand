@@ -92,6 +92,24 @@
       },
       "network_count": {
         "default": "mdi:lan"
+      },
+      "git_stack_sync_status": {
+        "default": "mdi:source-branch-sync"
+      },
+      "git_stack_last_sync": {
+        "default": "mdi:clock-check-outline"
+      },
+      "host_platform": {
+        "default": "mdi:laptop"
+      },
+      "host_arch": {
+        "default": "mdi:chip"
+      },
+      "host_docker_version": {
+        "default": "mdi:docker"
+      },
+      "host_last_boot": {
+        "default": "mdi:restart"
       }
     },
     "binary_sensor": {
@@ -119,15 +137,53 @@
       },
       "image_pruning": {
         "default": "mdi:broom"
+      },
+      "git_stack_sync_error": {
+        "default": "mdi:source-branch-remove"
+      },
+      "stack_updates_available": {
+        "default": "mdi:package-up"
       }
     },
-    "switch": {},
+    "switch": {
+      "container_auto_update": {
+        "default": "mdi:update"
+      },
+      "git_stack_auto_deploy": {
+        "default": "mdi:source-branch-check"
+      }
+    },
     "button": {
       "check_updates": {
         "default": "mdi:cloud-search"
       },
       "restart": {
         "default": "mdi:restart"
+      },
+      "git_stack_deploy": {
+        "default": "mdi:rocket-launch-outline"
+      },
+      "stack_deploy": {
+        "default": "mdi:rocket-launch-outline"
+      },
+      "env_bulk_update": {
+        "default": "mdi:package-up"
+      }
+    },
+    "number": {
+      "container_memory_limit": {
+        "default": "mdi:memory"
+      },
+      "container_cpu_limit": {
+        "default": "mdi:chip"
+      },
+      "container_pids_limit": {
+        "default": "mdi:sitemap-outline"
+      }
+    },
+    "select": {
+      "container_restart_policy": {
+        "default": "mdi:restart-alert"
       }
     }
   }

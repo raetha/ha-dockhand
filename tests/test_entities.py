@@ -8,6 +8,7 @@ parentage, action method calls, and HomeAssistantError propagation.
 Entities are instantiated directly with mock coordinators — no full HA
 platform setup required.
 """
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -217,6 +218,7 @@ def _sensor_classes():
         DockhandStackStatusSensor,
         DockhandVolumeSensor,
     )
+
     return locals()
 
 
@@ -225,11 +227,12 @@ def _bs_classes():
         DockhandEnvAutoUpdateSensor,
         DockhandEnvCollectActivitySensor,
         DockhandEnvCollectMetricsSensor,
-        DockhandEnvImagePruneBinarySensor,
         DockhandEnvOnlineSensor,
         DockhandEnvScannerEnabledSensor,
         DockhandEnvUpdateCheckSensor,
+        DockhandStackUpdatesAvailableBinarySensor,
     )
+
     return locals()
 
 
@@ -238,6 +241,7 @@ def _switch_classes():
         DockhandContainerRunningSwitch,
         DockhandStackRunningSwitch,
     )
+
     return locals()
 
 
@@ -246,6 +250,7 @@ def _button_classes():
         DockhandContainerRestartButton,
         DockhandStackRestartButton,
     )
+
     return locals()
 
 
@@ -258,21 +263,62 @@ def _button_classes():
 def env_sensors():
     sc = _sensor_classes()
     coord = _fast_coord()
+    slow_coord = _slow_coord()
     return {
-        "cpu": sc["DockhandEnvCpuSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "mem": sc["DockhandEnvMemPercentSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "containers": sc["DockhandEnvContainerCountSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "stacks": sc["DockhandEnvStacksSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "images": sc["DockhandEnvImagesSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "volumes": sc["DockhandEnvVolumesSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "networks": sc["DockhandEnvNetworksSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "disk": sc["DockhandEnvContainersDiskSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
-        "cache": sc["DockhandEnvBuildCacheSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL),
+        "cpu": sc["DockhandEnvCpuSensor"](
+            coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "mem": sc["DockhandEnvMemPercentSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "containers": sc["DockhandEnvContainerCountSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "stacks": sc["DockhandEnvStacksSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "images": sc["DockhandEnvImagesSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "volumes": sc["DockhandEnvVolumesSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "networks": sc["DockhandEnvNetworksSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "disk": sc["DockhandEnvContainersDiskSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        "cache": sc["DockhandEnvBuildCacheSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
     }
 
 
 def test_cpu_value(env_sensors):
     assert abs(env_sensors["cpu"].native_value - 23.5) < 1e-9
+
+
+def test_cpu_count_attribute_from_slow_coordinator_host_data():
+    from custom_components.dockhand.sensor import DockhandEnvCpuSensor
+
+    fast_coord = _fast_coord()
+    slow_coord = _slow_coord(env_data={"host": {"cpus": 8}})
+    sensor = DockhandEnvCpuSensor(
+        fast_coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    assert sensor.extra_state_attributes == {"cpu_count": 8}
+
+
+def test_cpu_count_attribute_empty_when_absent():
+    from custom_components.dockhand.sensor import DockhandEnvCpuSensor
+
+    fast_coord = _fast_coord()
+    slow_coord = _slow_coord(env_data={"host": {}})
+    sensor = DockhandEnvCpuSensor(
+        fast_coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    assert sensor.extra_state_attributes == {}
 
 
 def test_mem_percent_value(env_sensors):
@@ -347,12 +393,20 @@ def test_env_sensor_unique_ids_are_unique(env_sensors):
 
 
 def test_env_sensor_entity_category_diagnostic(env_sensors):
-    for key in ["containers", "stacks", "images", "volumes", "networks", "disk", "cache"]:
+    for key in [
+        "containers",
+        "stacks",
+        "images",
+        "volumes",
+        "networks",
+        "disk",
+        "cache",
+    ]:
         assert env_sensors[key]._attr_entity_category == EntityCategory.DIAGNOSTIC
 
 
 def test_env_sensor_has_entity_name_true(env_sensors):
-    for name, sensor in env_sensors.items():
+    for _name, sensor in env_sensors.items():
         assert sensor._attr_has_entity_name, (
             f"{type(sensor).__name__} must have _attr_has_entity_name=True"
         )
@@ -365,11 +419,14 @@ def test_env_sensor_has_entity_name_true(env_sensors):
 
 def _make_activity(events=None):
     from custom_components.dockhand.sensor import DockhandEnvActivityEventsSensor
-    coord = _fast_coord(env_data={
-        "stats": {**STATS, "events": events or {"total": 42, "today": 7}},
-        "containers": [],
-        "stacks": [],
-    })
+
+    coord = _fast_coord(
+        env_data={
+            "stats": {**STATS, "events": events or {"total": 42, "today": 7}},
+            "containers": [],
+            "stacks": [],
+        }
+    )
     return DockhandEnvActivityEventsSensor(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
 
 
@@ -387,6 +444,7 @@ def test_activity_disabled_by_default():
 
 def test_activity_state_class_is_measurement():
     from homeassistant.components.sensor import SensorStateClass
+
     assert _make_activity()._attr_state_class == SensorStateClass.MEASUREMENT
 
 
@@ -395,39 +453,130 @@ def test_activity_state_class_is_measurement():
 # ===========================================================================
 
 
-def _make_hawser(env_obj=None):
+def _make_hawser(host_environment=None):
     from custom_components.dockhand.sensor import DockhandEnvHawserVersionSensor
-    coord = _slow_coord(env_data={
-        "env": env_obj or {
-            "name": ENV_NAME,
-            "hawserVersion": "1.4.2",
-            "hawserAgentName": "agent-1",
-            "hawserAgentId": "abc",
-            "hawserLastSeen": "2024-01-01T00:00:00Z",
-        },
-        "images": [], "networks": [], "volumes": [],
-    })
+
+    coord = _slow_coord(
+        env_data={
+            "host": {"environment": host_environment}
+            if host_environment is not None
+            else {},
+            "images": [],
+            "networks": [],
+            "volumes": [],
+        }
+    )
     return DockhandEnvHawserVersionSensor(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
 
 
 def test_hawser_version_string():
-    assert _make_hawser().native_value == "1.4.2"
-
-
-def test_hawser_agent_name_attribute():
-    assert _make_hawser().extra_state_attributes["agent_name"] == "agent-1"
-
-
-def test_hawser_last_seen_attribute_present():
-    assert "last_seen" in _make_hawser().extra_state_attributes
+    sensor = _make_hawser(host_environment={"hawserVersion": "1.4.2"})
+    assert sensor.native_value == "1.4.2"
 
 
 def test_hawser_none_when_absent():
-    assert _make_hawser(env_obj={"name": ENV_NAME}).native_value is None
+    assert _make_hawser().native_value is None
 
 
 def test_hawser_disabled_by_default():
     assert not _make_hawser()._attr_entity_registry_enabled_default
+
+
+def test_hawser_has_no_attributes():
+    """agent_name/agent_id/last_seen were dropped along with the
+    /api/environments call entirely — /api/host doesn't have them (it
+    only forwards hawserVersion from its internal agent-info call), and
+    the only other source is a side-effecting manual-action endpoint we
+    shouldn't poll. Rather than gate them, they're just gone — a low-use
+    edge-mode-only detail wasn't worth keeping a whole extra API call
+    around for (see coordinator.py for the /api/environments removal
+    rationale: it also returns tlsKey/hawserToken fully decrypted with no
+    redaction on Dockhand's side)."""
+    sensor = _make_hawser(host_environment={"hawserVersion": "1.4.2"})
+    assert sensor.extra_state_attributes is None
+
+
+# ===========================================================================
+# Host info sensors (platform/arch/cpu count/docker version/last boot)
+# ===========================================================================
+
+
+def _make_host_sensor(cls_name, host=None):
+    from custom_components.dockhand import sensor as sensor_module
+
+    cls = getattr(sensor_module, cls_name)
+    coord = _slow_coord(
+        env_data={
+            "host": host if host is not None else {},
+            "images": [],
+            "networks": [],
+            "volumes": [],
+        }
+    )
+    return cls(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
+
+
+def test_host_platform_sensor():
+    sensor = _make_host_sensor("DockhandEnvPlatformSensor", {"platform": "linux"})
+    assert sensor.native_value == "linux"
+
+
+def test_host_platform_sensor_none_when_absent():
+    assert _make_host_sensor("DockhandEnvPlatformSensor").native_value is None
+
+
+def test_host_arch_sensor():
+    sensor = _make_host_sensor("DockhandEnvArchSensor", {"arch": "x64"})
+    assert sensor.native_value == "x64"
+
+
+def test_host_docker_version_sensor():
+    sensor = _make_host_sensor(
+        "DockhandEnvDockerVersionSensor", {"dockerVersion": "27.3.1"}
+    )
+    assert sensor.native_value == "27.3.1"
+
+
+def test_host_docker_version_sensor_treats_unknown_string_as_none():
+    """Dockhand reports the literal string "unknown" for some connection
+    types it can't determine this for — treat that as absent, not as a
+    real version string."""
+    sensor = _make_host_sensor(
+        "DockhandEnvDockerVersionSensor", {"dockerVersion": "unknown"}
+    )
+    assert sensor.native_value is None
+
+
+def test_host_last_boot_sensor_computed_from_uptime():
+    import homeassistant.util.dt as dt_util
+
+    sensor = _make_host_sensor("DockhandEnvLastBootSensor", {"uptime": 3600})
+    result = sensor.native_value
+    assert result is not None
+    # Roughly one hour before "now" — generous tolerance since the test
+    # itself takes nonzero time to run.
+    expected = dt_util.utcnow() - __import__("datetime").timedelta(seconds=3600)
+    assert abs((result - expected).total_seconds()) < 5
+
+
+def test_host_last_boot_sensor_none_when_uptime_absent():
+    assert _make_host_sensor("DockhandEnvLastBootSensor").native_value is None
+
+
+def test_host_last_boot_sensor_none_when_uptime_negative():
+    sensor = _make_host_sensor("DockhandEnvLastBootSensor", {"uptime": -1})
+    assert sensor.native_value is None
+
+
+def test_host_sensors_disabled_by_default():
+    for cls_name in [
+        "DockhandEnvPlatformSensor",
+        "DockhandEnvArchSensor",
+        "DockhandEnvDockerVersionSensor",
+        "DockhandEnvLastBootSensor",
+    ]:
+        sensor = _make_host_sensor(cls_name)
+        assert not sensor._attr_entity_registry_enabled_default, cls_name
 
 
 # ===========================================================================
@@ -440,8 +589,12 @@ def container_sensors():
     sc = _sensor_classes()
     coord = _fast_coord()
     return {
-        "state": sc["DockhandContainerStateSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
-        "health": sc["DockhandContainerHealthSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER),
+        "state": sc["DockhandContainerStateSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+        ),
+        "health": sc["DockhandContainerHealthSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+        ),
     }
 
 
@@ -468,7 +621,9 @@ def test_container_state_none_when_container_gone():
         ENV_ID: {"stats": STATS, "containers": [], "stacks": [], "container_stats": {}}
     }
     sc = _sensor_classes()
-    state = sc["DockhandContainerStateSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    state = sc["DockhandContainerStateSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+    )
     assert state.native_value is None
 
 
@@ -498,14 +653,14 @@ CONTAINER_STATS = {
     "name": "nginx",
     "cpuPercent": 12.34,
     "memoryUsage": 157286400,
-    "memoryRaw":   178257920,
-    "memoryCache":  20971520,
+    "memoryRaw": 178257920,
+    "memoryCache": 20971520,
     "memoryLimit": 16764731392,
     "memoryPercent": 0.94,
-    "networkRx":  83886080,
+    "networkRx": 83886080,
     "networkTx": 104857600,
-    "blockRead":  52428800,
-    "blockWrite":  31457280,
+    "blockRead": 52428800,
+    "blockWrite": 31457280,
 }
 
 
@@ -640,8 +795,12 @@ def stack_sensors():
     sc = _sensor_classes()
     coord = _fast_coord()
     return {
-        "status": sc["DockhandStackStatusSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK),
-        "count": sc["DockhandStackContainerCountSensor"](coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK),
+        "status": sc["DockhandStackStatusSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
+        ),
+        "count": sc["DockhandStackContainerCountSensor"](
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
+        ),
     }
 
 
@@ -657,8 +816,53 @@ def test_stack_status_container_count_attribute(stack_sensors):
     assert "container_count" in stack_sensors["status"].extra_state_attributes
 
 
+def test_stack_status_model_untracked_when_no_source_record(stack_sensors):
+    """STACK fixture has no sourceType — Dockhand has no DB record for it
+    at all (e.g. a plain compose stack it only ever saw via running
+    containers). Confirmed from Dockhand's own frontend source that it
+    treats this exact case as sourceType 'external' by default (not
+    "unknown"), displayed there as "Untracked" — we match that instead of
+    falling back to a generic, uninformative "Stack"."""
+    assert stack_sensors["status"].device_info["model"] == "Untracked Stack"
+
+
+def test_stack_status_model_reflects_git_source_type():
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        {
+            "stats": STATS,
+            "containers": [CONTAINER],
+            "stacks": [{**STACK, "sourceType": "git"}],
+            "container_stats": {},
+        }
+    )
+    sensor = sc["DockhandStackStatusSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
+    )
+    assert sensor.device_info["model"] == "Git Stack"
+
+
+def test_stack_status_model_reflects_internal_source_type():
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        {
+            "stats": STATS,
+            "containers": [CONTAINER],
+            "stacks": [{**STACK, "sourceType": "internal"}],
+            "container_stats": {},
+        }
+    )
+    sensor = sc["DockhandStackStatusSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, STACK
+    )
+    assert sensor.device_info["model"] == "Internal Stack"
+
+
 def test_stack_unique_ids_differ(stack_sensors):
-    assert stack_sensors["status"]._attr_unique_id != stack_sensors["count"]._attr_unique_id
+    assert (
+        stack_sensors["status"]._attr_unique_id
+        != stack_sensors["count"]._attr_unique_id
+    )
 
 
 # ===========================================================================
@@ -668,7 +872,9 @@ def test_stack_unique_ids_differ(stack_sensors):
 
 def _make_image(image=None):
     sc = _sensor_classes()
-    return sc["DockhandImageSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, image or IMAGE)
+    return sc["DockhandImageSensor"](
+        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, image or IMAGE
+    )
 
 
 def test_image_native_value_is_tag():
@@ -677,12 +883,53 @@ def test_image_native_value_is_tag():
 
 def test_image_name_is_repo_only():
     sensor = _make_image()
-    assert sensor._attr_name == "nginx"
-    assert ":" not in sensor._attr_name
+    assert sensor.name == "nginx"
+    assert ":" not in sensor.name
 
 
 def test_image_has_entity_name_true():
     assert _make_image()._attr_has_entity_name
+
+
+def test_image_name_recomputes_live_when_tag_is_lost():
+    """Regression test: name used to be fixed at construction (_attr_name
+    set once in __init__). Since this entity object is reused
+    indefinitely for the same image hash (see the known_image_ids dedup
+    pattern in async_setup_entry), a static name meant that once this
+    image's tag moved to a different (newly pulled) image — the normal
+    outcome of a container upgrade — this entity would keep showing the
+    old repo:tag forever, permanently occupying the entity_id slot the
+    new image's entity actually deserved and forcing it into an
+    auto-suffixed "_2" id that never self-heals. name is now a live
+    property so it correctly falls back to the short hash the moment
+    Dockhand's own data shows this image as untagged, freeing that slot
+    naturally within a poll cycle or two."""
+    coord = _slow_coord()
+    sc = _sensor_classes()
+    sensor = sc["DockhandImageSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+    )
+    assert sensor.name == "nginx"
+
+    # Simulate the next poll: Dockhand's data now shows this exact image
+    # (same id) as untagged — a new image has taken over "nginx:latest".
+    untagged_image = {**IMAGE, "repoTags": []}
+    coord.data["environments"][ENV_ID]["images"] = [untagged_image]
+    assert sensor.name == "deadbeef1234"
+
+
+def test_image_name_falls_back_when_image_gone_entirely():
+    """If the image disappears from the environment entirely (e.g.
+    pruned) while this entity object still exists momentarily, name
+    falls back to whatever it was last known as, rather than crashing
+    or going blank."""
+    coord = _slow_coord()
+    sc = _sensor_classes()
+    sensor = sc["DockhandImageSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+    )
+    coord.data["environments"][ENV_ID]["images"] = []
+    assert sensor.name == "nginx"
 
 
 def test_image_size_bytes_attribute():
@@ -815,13 +1062,17 @@ def test_volume_device_is_volumes_group():
 def _make_next_run(sched=None):
     sc = _sensor_classes()
     s = sched or SCHEDULE
-    return sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[s]), ENTRY_ID, s, BASE_URL)
+    return sc["DockhandScheduleNextRunSensor"](
+        _slow_coord(schedules=[s]), ENTRY_ID, s, BASE_URL
+    )
 
 
 def _make_last_status(sched=None):
     sc = _sensor_classes()
     s = sched or SCHEDULE
-    return sc["DockhandScheduleLastStatusSensor"](_slow_coord(schedules=[s]), ENTRY_ID, s, BASE_URL)
+    return sc["DockhandScheduleLastStatusSensor"](
+        _slow_coord(schedules=[s]), ENTRY_ID, s, BASE_URL
+    )
 
 
 def test_schedule_next_run_returns_datetime():
@@ -830,7 +1081,9 @@ def test_schedule_next_run_returns_datetime():
 
 def test_schedule_next_run_none_when_schedule_gone():
     sc = _sensor_classes()
-    sensor = sc["DockhandScheduleNextRunSensor"](_slow_coord(schedules=[]), ENTRY_ID, SCHEDULE, BASE_URL)
+    sensor = sc["DockhandScheduleNextRunSensor"](
+        _slow_coord(schedules=[]), ENTRY_ID, SCHEDULE, BASE_URL
+    )
     assert sensor.native_value is None
 
 
@@ -887,16 +1140,105 @@ def test_schedule_last_status_is_diagnostic():
 
 def _make_binary(cls_name, stats_override=None):
     bs = _bs_classes()
-    coord = _fast_coord({
-        "stats": {**STATS, **(stats_override or {})},
-        "containers": [],
-        "stacks": [],
-    })
+    coord = _fast_coord(
+        {
+            "stats": {**STATS, **(stats_override or {})},
+            "containers": [],
+            "stacks": [],
+        }
+    )
+    if cls_name == "DockhandEnvOnlineSensor":
+        return bs[cls_name](coord, _slow_coord(), ENTRY_ID, ENV_ID, BASE_URL)
     return bs[cls_name](coord, ENTRY_ID, ENV_ID, BASE_URL)
 
 
 def test_binary_online_is_on():
     assert _make_binary("DockhandEnvOnlineSensor").is_on
+
+
+def test_binary_online_carries_name_and_connection_attributes():
+    from custom_components.dockhand.binary_sensor import DockhandEnvOnlineSensor
+
+    fast_coord = _fast_coord(
+        {"stats": {**STATS, "name": "prod"}, "containers": [], "stacks": []}
+    )
+    slow_coord = _slow_coord(
+        env_data={"env_meta": {"connectionHost": "192.168.1.5", "connectionPort": 2375}}
+    )
+    sensor = DockhandEnvOnlineSensor(fast_coord, slow_coord, ENTRY_ID, ENV_ID, BASE_URL)
+    assert sensor.extra_state_attributes == {
+        "name": "prod",
+        "connection_host": "192.168.1.5",
+        "connection_port": 2375,
+    }
+
+
+def test_binary_online_attributes_none_when_env_meta_absent():
+    from custom_components.dockhand.binary_sensor import DockhandEnvOnlineSensor
+
+    fast_coord = _fast_coord(
+        {"stats": {**STATS, "name": "prod"}, "containers": [], "stacks": []}
+    )
+    slow_coord = _slow_coord(env_data={})
+    sensor = DockhandEnvOnlineSensor(fast_coord, slow_coord, ENTRY_ID, ENV_ID, BASE_URL)
+    assert sensor.extra_state_attributes == {
+        "name": "prod",
+        "connection_host": None,
+        "connection_port": None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Stack updates-available binary sensor (feature-detected, Dockhand 1.0.37+)
+# ---------------------------------------------------------------------------
+
+
+def _make_stack_updates_sensor(stack):
+    bs = _bs_classes()
+    coord = _fast_coord({"stats": STATS, "containers": [], "stacks": [stack]})
+    return bs["DockhandStackUpdatesAvailableBinarySensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+
+
+def test_stack_updates_available_true():
+    stack = {**STACK, "updatesAvailable": True, "updateCount": 2}
+    sensor = _make_stack_updates_sensor(stack)
+    assert sensor.is_on is True
+    assert sensor.extra_state_attributes == {"update_count": 2}
+
+
+def test_stack_updates_available_false():
+    stack = {**STACK, "updatesAvailable": False, "updateCount": 0}
+    sensor = _make_stack_updates_sensor(stack)
+    assert sensor.is_on is False
+    assert sensor.extra_state_attributes == {"update_count": 0}
+
+
+def test_stack_updates_available_none_when_field_absent():
+    """Feature detection: an older Dockhand version's stack data simply
+    doesn't have this key at all — reads as None (unknown), not False,
+    since those mean different things (we don't know vs. confirmed no
+    updates)."""
+    stack = dict(STACK)
+    assert "updatesAvailable" not in stack
+    sensor = _make_stack_updates_sensor(stack)
+    assert sensor.is_on is None
+    assert sensor.extra_state_attributes is None
+
+
+def test_stack_updates_available_none_when_stack_gone():
+    stack = {**STACK, "updatesAvailable": True, "updateCount": 1}
+    sensor = _make_stack_updates_sensor(stack)
+    # Simulate the stack disappearing from live data entirely.
+    sensor.coordinator.data[ENV_ID]["stacks"] = []
+    assert sensor.is_on is None
+
+
+def test_stack_updates_available_device_reflects_source_type():
+    stack = {**STACK, "updatesAvailable": True, "updateCount": 1, "sourceType": "git"}
+    sensor = _make_stack_updates_sensor(stack)
+    assert sensor.device_info["model"] == "Git Stack"
 
 
 def test_binary_collect_activity_true():
@@ -919,15 +1261,6 @@ def test_binary_auto_update_disabled():
     assert not _make_binary("DockhandEnvAutoUpdateSensor").is_on
 
 
-def test_binary_image_prune_enabled():
-    bs = _bs_classes()
-    coord = _slow_coord(env_data={
-        "env": {"name": ENV_NAME, "imagePruneEnabled": True},
-        "images": [], "networks": [], "volumes": [],
-    })
-    assert bs["DockhandEnvImagePruneBinarySensor"](coord, ENTRY_ID, ENV_ID, BASE_URL).is_on
-
-
 def test_binary_config_sensors_disabled_by_default():
     bs = _bs_classes()
     coord = _fast_coord()
@@ -946,7 +1279,9 @@ def test_binary_config_sensors_disabled_by_default():
 
 def test_binary_online_sensor_enabled_by_default():
     bs = _bs_classes()
-    s = bs["DockhandEnvOnlineSensor"](_fast_coord(), ENTRY_ID, ENV_ID, BASE_URL)
+    s = bs["DockhandEnvOnlineSensor"](
+        _fast_coord(), _slow_coord(), ENTRY_ID, ENV_ID, BASE_URL
+    )
     assert s.entity_registry_enabled_default
 
 
@@ -1037,9 +1372,7 @@ class TestSwitches:
         switch._client = MagicMock()
         switch._client.async_start_stack = AsyncMock()
         await switch.async_turn_on()
-        switch._client.async_start_stack.assert_called_once_with(
-            ENV_ID, STACK["name"]
-        )
+        switch._client.async_start_stack.assert_called_once_with(ENV_ID, STACK["name"])
 
     async def test_stack_turn_on_raises_ha_error_on_api_failure(self):
         switch = self._stack_switch()
@@ -1059,7 +1392,13 @@ class TestButtons:
     def _container_btn(self, coord=None):
         btn = _button_classes()
         return btn["DockhandContainerRestartButton"](
-            coord or _fast_coord(), MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+            coord or _fast_coord(),
+            MagicMock(),
+            ENTRY_ID,
+            ENV_ID,
+            ENV_NAME,
+            BASE_URL,
+            CONTAINER,
         )
 
     def _stack_btn(self):
@@ -1215,13 +1554,16 @@ def test_stack_button_device_name_format():
 def test_stack_device_helper_name_format():
     """_stack_device() must produce '{env} – Stacks – {name}' (regression guard)."""
     from custom_components.dockhand.helpers import _stack_device
+
     info = _stack_device(STACK["name"], ENV_ID, ENV_NAME, BASE_URL)
     assert info["name"] == f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}"
 
 
 def test_network_entity_under_group_device():
     sc = _sensor_classes()
-    sensor = sc["DockhandNetworkSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, NETWORK)
+    sensor = sc["DockhandNetworkSensor"](
+        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, NETWORK
+    )
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"env_{ENV_ID}_Networks") in idents
     assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
@@ -1229,14 +1571,18 @@ def test_network_entity_under_group_device():
 
 def test_volume_entity_under_group_device():
     sc = _sensor_classes()
-    sensor = sc["DockhandVolumeSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, VOLUME)
+    sensor = sc["DockhandVolumeSensor"](
+        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, VOLUME
+    )
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"env_{ENV_ID}_Volumes") in idents
 
 
 def test_image_entity_under_group_device():
     sc = _sensor_classes()
-    sensor = sc["DockhandImageSensor"](_slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE)
+    sensor = sc["DockhandImageSensor"](
+        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+    )
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"env_{ENV_ID}_Images") in idents
 
@@ -1249,6 +1595,7 @@ def test_image_entity_under_group_device():
 @pytest.fixture
 def compose_project_fn():
     from custom_components.dockhand.helpers import _compose_project
+
     return _compose_project
 
 
@@ -1279,6 +1626,7 @@ def test_compose_project_none_for_empty_dict(compose_project_fn):
 @pytest.fixture
 def healthcheck_fn():
     from custom_components.dockhand.helpers import _container_has_healthcheck
+
     return _container_has_healthcheck
 
 
@@ -1308,3 +1656,311 @@ def test_healthcheck_false_for_missing_key(healthcheck_fn):
 
 def test_healthcheck_false_for_unknown(healthcheck_fn):
     assert not healthcheck_fn({"health": "unknown"})
+
+
+# ---------------------------------------------------------------------------
+# Image entity tag-collision avoidance (async_setup_entry)
+# ---------------------------------------------------------------------------
+
+
+def _make_image_setup_entry(images):
+    """Minimal entry mock exercising sensor.py's async_setup_entry with a
+    given images list — everything else (containers/stacks/schedules)
+    left empty so only the images path is meaningfully tested."""
+    fast = MagicMock()
+    fast.data = {ENV_ID: {"stats": {"name": ENV_NAME}, "containers": [], "stacks": []}}
+    fast.async_add_listener = MagicMock(return_value=lambda: None)
+
+    slow = MagicMock()
+    slow.data = {
+        "environments": {ENV_ID: {"images": images}},
+        "schedules": [],
+    }
+    slow.async_add_listener = MagicMock(return_value=lambda: None)
+
+    entry = MagicMock()
+    entry.entry_id = ENTRY_ID
+    entry.data = {"api_url": BASE_URL, "enable_images": True}
+    entry.options = {}
+    entry.runtime_data.fast_coordinator = fast
+    entry.runtime_data.slow_coordinator = slow
+    entry.async_on_unload = MagicMock()
+    return entry
+
+
+async def test_setup_entry_defers_image_entities_when_tag_collides():
+    """Two images momentarily reporting the same repo:tag (a container
+    upgrade in progress — the old image hasn't been marked untagged in
+    Dockhand's data yet) — neither gets an entity created this poll,
+    avoiding the "_2" suffix collision entirely."""
+    from custom_components.dockhand.sensor import async_setup_entry
+
+    old_image = {**IMAGE, "id": "sha256:old111111111"}
+    new_image = {**IMAGE, "id": "sha256:new222222222"}
+    entry = _make_image_setup_entry([old_image, new_image])
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
+    assert image_entities == []
+
+
+async def test_setup_entry_creates_image_entity_when_tag_unambiguous():
+    from custom_components.dockhand.sensor import async_setup_entry
+
+    entry = _make_image_setup_entry([IMAGE])
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
+    assert len(image_entities) == 1
+
+
+async def test_setup_entry_creates_entity_once_collision_resolves():
+    """Same scenario as the deferred case, but simulating the next poll:
+    the old image has dropped out of the list (Dockhand's data caught up
+    — it's now untagged and no longer shares the tag), so the new image
+    can be created cleanly."""
+    from custom_components.dockhand.sensor import async_setup_entry
+
+    new_image = {**IMAGE, "id": "sha256:new222222222"}
+    entry = _make_image_setup_entry([new_image])
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
+    assert len(image_entities) == 1
+    assert image_entities[0].name == "nginx"
+
+
+async def test_setup_entry_untagged_images_never_collide_with_each_other():
+    """Two different untagged images each fall back to their own short
+    hash as a display name — since hashes are unique, they never
+    collide, regardless of how many untagged images exist at once."""
+    from custom_components.dockhand.sensor import async_setup_entry
+
+    untagged_1 = {**IMAGE, "id": "sha256:aaaa11111111", "repoTags": []}
+    untagged_2 = {**IMAGE, "id": "sha256:bbbb22222222", "repoTags": []}
+    entry = _make_image_setup_entry([untagged_1, untagged_2])
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
+    assert len(image_entities) == 2
+
+
+# ---------------------------------------------------------------------------
+# Bulk update button (env-level "Update all", conditionally present)
+# ---------------------------------------------------------------------------
+
+
+def _make_bulk_update_button(pending=None, containers=None):
+    from custom_components.dockhand.button import DockhandEnvBulkUpdateButton
+
+    coord = MagicMock()
+    coord.data = {
+        ENV_ID: {
+            "pending_update_container_ids": pending or set(),
+            "containers": containers or [],
+        }
+    }
+    coord.async_request_refresh = AsyncMock()
+    client = MagicMock()
+    client.async_get_update_check_settings = AsyncMock(return_value={})
+    return (
+        DockhandEnvBulkUpdateButton(
+            coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+        ),
+        coord,
+        client,
+    )
+
+
+def test_bulk_update_updatable_ids_excludes_system_containers():
+    button, _, _ = _make_bulk_update_button(
+        pending={"id-web", "id-dockhand"},
+        containers=[
+            {"id": "id-web", "name": "web", "systemContainer": None},
+            {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"},
+        ],
+    )
+    assert button._updatable_container_ids() == ["id-web"]
+
+
+def test_bulk_update_name_shows_count():
+    button, _, _ = _make_bulk_update_button(
+        pending={"id-web", "id-db"},
+        containers=[
+            {"id": "id-web", "name": "web", "systemContainer": None},
+            {"id": "id-db", "name": "db", "systemContainer": None},
+        ],
+    )
+    assert button.name == "Update all (2)"
+
+
+def test_bulk_update_name_zero_when_only_system_containers_pending():
+    button, _, _ = _make_bulk_update_button(
+        pending={"id-dockhand"},
+        containers=[
+            {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
+        ],
+    )
+    assert button.name == "Update all (0)"
+
+
+async def test_bulk_update_press_raises_when_nothing_updatable():
+    button, _, _ = _make_bulk_update_button()
+    with pytest.raises(HomeAssistantError):
+        await button.async_press()
+
+
+async def test_bulk_update_press_success():
+    button, coord, client = _make_bulk_update_button(
+        pending={"id-web"},
+        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+    )
+    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
+    client.async_get_job = AsyncMock(return_value={"status": "done", "lines": []})
+    await button.async_press()
+    client.async_start_batch_update_stream.assert_called_once_with(
+        ENV_ID, ["id-web"], vulnerability_criteria=None
+    )
+    coord.async_request_refresh.assert_called_once()
+
+
+async def test_bulk_update_press_raises_on_job_error():
+    button, _, client = _make_bulk_update_button(
+        pending={"id-web"},
+        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+    )
+    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
+    client.async_get_job = AsyncMock(
+        return_value={"status": "error", "result": {"error": "pull failed"}}
+    )
+    with pytest.raises(HomeAssistantError):
+        await button.async_press()
+
+
+async def test_bulk_update_press_collects_multiple_failures():
+    """A partial batch failure (some containers blocked/failed, others
+    fine) shouldn't hide that multiple containers failed — the summary
+    error should mention all of them, not just the first."""
+    button, _, client = _make_bulk_update_button(
+        pending={"id-web", "id-db"},
+        containers=[
+            {"id": "id-web", "name": "web", "systemContainer": None},
+            {"id": "id-db", "name": "db", "systemContainer": None},
+        ],
+    )
+    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
+    client.async_get_job = AsyncMock(
+        return_value={
+            "status": "done",
+            "lines": [
+                {
+                    "data": {
+                        "type": "blocked",
+                        "containerId": "id-web",
+                        "blockReason": "critical CVE",
+                    }
+                },
+                {
+                    "data": {
+                        "type": "progress",
+                        "step": "failed",
+                        "containerId": "id-db",
+                        "error": "pull timeout",
+                    }
+                },
+            ],
+        }
+    )
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await button.async_press()
+    message = str(exc_info.value.translation_placeholders["error"])
+    assert "id-web" in message
+    assert "id-db" in message
+
+
+async def test_setup_entry_creates_bulk_update_button_when_pending():
+    from custom_components.dockhand.button import async_setup_entry
+
+    fast = MagicMock()
+    fast.data = {
+        ENV_ID: {
+            "stats": {"name": ENV_NAME},
+            "containers": [{"id": "id-web", "name": "web", "systemContainer": None}],
+            "stacks": [],
+            "pending_update_container_ids": {"id-web"},
+        }
+    }
+    fast.async_add_listener = MagicMock(return_value=lambda: None)
+    slow = MagicMock()
+    slow.data = {"environments": {}, "schedules": []}
+    slow.async_add_listener = MagicMock(return_value=lambda: None)
+
+    entry = MagicMock()
+    entry.entry_id = ENTRY_ID
+    entry.data = {"api_url": BASE_URL}
+    entry.options = {}
+    entry.runtime_data.fast_coordinator = fast
+    entry.runtime_data.slow_coordinator = slow
+    entry.runtime_data.client = MagicMock()
+    entry.runtime_data.update_coordinator = None
+    entry.async_on_unload = MagicMock()
+
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    names = [type(e).__name__ for e in created]
+    assert "DockhandEnvBulkUpdateButton" in names
+
+
+async def test_setup_entry_skips_bulk_update_button_when_nothing_pending():
+    from custom_components.dockhand.button import async_setup_entry
+
+    fast = MagicMock()
+    fast.data = {
+        ENV_ID: {
+            "stats": {"name": ENV_NAME},
+            "containers": [],
+            "stacks": [],
+            "pending_update_container_ids": set(),
+        }
+    }
+    fast.async_add_listener = MagicMock(return_value=lambda: None)
+    slow = MagicMock()
+    slow.data = {"environments": {}, "schedules": []}
+    slow.async_add_listener = MagicMock(return_value=lambda: None)
+
+    entry = MagicMock()
+    entry.entry_id = ENTRY_ID
+    entry.data = {"api_url": BASE_URL}
+    entry.options = {}
+    entry.runtime_data.fast_coordinator = fast
+    entry.runtime_data.slow_coordinator = slow
+    entry.runtime_data.client = MagicMock()
+    entry.runtime_data.update_coordinator = None
+    entry.async_on_unload = MagicMock()
+
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    names = [type(e).__name__ for e in created]
+    assert "DockhandEnvBulkUpdateButton" not in names

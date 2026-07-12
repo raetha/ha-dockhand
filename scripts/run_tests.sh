@@ -91,12 +91,12 @@ echo ""
 FAILED=0
 
 # ── Step 1: ruff lint ─────────────────────────────────────────────────────────
-echo "[ 1/$STEPS ] ruff check custom_components/..."
-ruff check custom_components/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
+echo "[ 1/$STEPS ] ruff check custom_components/ tests/..."
+ruff check custom_components/ tests/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
 
 # ── Step 2: ruff format check ─────────────────────────────────────────────────
-echo "[ 2/$STEPS ] ruff format --check custom_components/..."
-ruff format --check custom_components/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
+echo "[ 2/$STEPS ] ruff format --check custom_components/ tests/..."
+ruff format --check custom_components/ tests/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
 
 # ── Step 3: AST syntax check ──────────────────────────────────────────────────
 echo "[ 3/$STEPS ] AST syntax check custom_components/..."

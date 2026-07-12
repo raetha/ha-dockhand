@@ -41,6 +41,7 @@ def _make_client(
     networks=None,
     volumes=None,
     schedules=None,
+    host_info=None,
 ):
     c = MagicMock(spec=DockhandClient)
     _envs = envs if envs is not None else [ENV1]
@@ -58,6 +59,13 @@ def _make_client(
     c.async_get_networks = AsyncMock(return_value=networks or [NETWORK1])
     c.async_get_volumes = AsyncMock(return_value=volumes or [VOLUME1])
     c.async_get_schedules = AsyncMock(return_value=schedules or [])
+    c.async_get_host_info = AsyncMock(return_value=host_info or {})
+    c.async_get_container_inspect = AsyncMock(
+        return_value={"HostConfig": {"Memory": 0}}
+    )
+    c.async_get_git_stacks = AsyncMock(return_value=[])
+    c.async_get_auto_update_settings = AsyncMock(return_value={})
+    c.async_get_pending_updates = AsyncMock(return_value=[])
     return c
 
 
@@ -67,17 +75,25 @@ def _fast(hass: HomeAssistant, client, config=None, entry=None):
     )
 
 
-def _slow(hass: HomeAssistant, client, config=None):
+def _slow(hass: HomeAssistant, client, config=None, fast_coordinator=None):
+    if fast_coordinator is None:
+        fast_coordinator = MagicMock()
+        # Matches ENV1 = {"id": 1, "name": "local"} used throughout this
+        # file — the slow coordinator derives its environment id list
+        # from fast_coordinator.data.keys(), not a separate API call.
+        fast_coordinator.data = {1: {"stats": {"name": "local"}}}
     return DockhandSlowCoordinator(
         hass,
         client,
-        config or {
+        config
+        or {
             "poll_interval_slow": 300,
             "enable_images": True,
             "enable_networks": True,
             "enable_volumes": True,
             "enable_schedules": True,
         },
+        fast_coordinator,
     )
 
 
@@ -171,18 +187,57 @@ async def test_fast_containers_failure_returns_empty(hass: HomeAssistant):
     assert coord.data[1]["containers"] == []
 
 
-async def test_fast_stats_failure_returns_empty_dict(hass: HomeAssistant):
+async def test_fast_stats_failure_means_no_environments_this_cycle(hass: HomeAssistant):
+    """/api/dashboard/stats (no env param) is now the fast coordinator's
+    only source of which environments exist — no separate /api/environments
+    call. If it fails, this cycle simply has nothing to iterate; normal
+    coordinator retry picks it back up next cycle (a deliberate tradeoff:
+    one less call every 60s, in exchange for stats-call failures also
+    skipping containers/stacks for that one cycle, not just stats)."""
     client = _make_client()
     client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client)
     await coord.async_refresh()
-    assert coord.data[1]["stats"] == {}
+    assert coord.data == {}
 
 
 async def test_fast_empty_env_list_returns_empty_data(hass: HomeAssistant):
     coord = _fast(hass, _make_client(envs=[]))
     await coord.async_refresh()
     assert coord.data == {}
+
+
+async def test_fast_pending_updates_not_fetched_when_update_check_disabled(
+    hass: HomeAssistant,
+):
+    """Gated per-environment on updateCheckEnabled (from dashboard stats,
+    Dockhand's own setting) — not a config option on our side at all."""
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": False})
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    client.async_get_pending_updates.assert_not_called()
+    assert coord.data[1]["pending_update_container_ids"] == set()
+
+
+async def test_fast_pending_updates_fetched_when_update_check_enabled(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
+    client.async_get_pending_updates = AsyncMock(
+        return_value=[{"containerId": "abc", "containerName": "web"}]
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    client.async_get_pending_updates.assert_called_once_with(1)
+    assert coord.data[1]["pending_update_container_ids"] == {"abc"}
+
+
+async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
+    client.async_get_pending_updates = AsyncMock(side_effect=Exception("timeout"))
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    assert coord.data[1]["pending_update_container_ids"] == set()
 
 
 async def test_fast_update_interval_from_config(hass: HomeAssistant):
@@ -198,7 +253,7 @@ async def test_fast_update_interval_from_config(hass: HomeAssistant):
 async def test_fast_auth_error_raises_config_entry_auth_failed(hass: HomeAssistant):
     """A 401 from the API must surface as ConfigEntryAuthFailed immediately."""
     client = _make_client()
-    client.async_get_environments = AsyncMock(
+    client.async_get_all_dashboard_stats = AsyncMock(
         side_effect=DockhandAuthError("token revoked")
     )
     with pytest.raises(ConfigEntryAuthFailed):
@@ -208,18 +263,19 @@ async def test_fast_auth_error_raises_config_entry_auth_failed(hass: HomeAssista
 async def test_fast_auth_error_message_mentions_token(hass: HomeAssistant):
     """The ConfigEntryAuthFailed message should mention the token."""
     client = _make_client()
-    client.async_get_environments = AsyncMock(
+    client.async_get_all_dashboard_stats = AsyncMock(
         side_effect=DockhandAuthError("expired")
     )
     with pytest.raises(ConfigEntryAuthFailed, match="token"):
         await _fast(hass, client)._async_update_data()
 
 
-async def test_fast_general_error_raises_update_failed(hass: HomeAssistant):
-    client = _make_client()
-    client.async_get_environments = AsyncMock(side_effect=Exception("network down"))
-    with pytest.raises(UpdateFailed):
-        await _fast(hass, client)._async_update_data()
+# Note: a generic (non-auth) error from async_get_all_dashboard_stats is no
+# longer fatal by design — it's caught and logged, producing an empty
+# environments dict for that cycle (see
+# test_fast_stats_failure_means_no_environments_this_cycle below), and every
+# per-env call is gathered with return_exceptions=True. Auth errors are the
+# one deliberate exception, verified by the two tests above.
 
 
 # ---------------------------------------------------------------------------
@@ -287,10 +343,145 @@ async def test_slow_only_images_enabled(hass: HomeAssistant):
     assert env["volumes"] == []
 
 
-async def test_slow_env_object_stored(hass: HomeAssistant):
-    coord = _slow(hass, _make_client(envs=[ENV1]))
+async def test_slow_derives_environment_ids_from_fast_coordinator(hass: HomeAssistant):
+    """Which environments exist still comes from the fast coordinator's
+    already-fetched data, not from /api/environments — that call is
+    still made (for imagePruneEnabled/hawser agent fields, its only
+    source), but only ever consulted for env_meta content, never for
+    which environments to iterate."""
+    fast_mock = MagicMock()
+    fast_mock.data = {
+        1: {"stats": {"name": "local"}},
+        2: {"stats": {"name": "remote"}},
+    }
+    client = _make_client(envs=[ENV1])
+    coord = _slow(hass, client, fast_coordinator=fast_mock)
     await coord.async_refresh()
-    assert coord.data["environments"][1]["env"] == ENV1
+    assert set(coord.data["environments"].keys()) == {1, 2}
+    client.async_get_environments.assert_called_once()
+
+
+async def test_slow_host_info_fetched_and_stored(hass: HomeAssistant):
+    """GET /api/host is always fetched (not gated behind a feature flag)
+    since it's the only reliable source for hawserVersion on
+    hawser-standard connections."""
+    host_payload = {"environment": {"hawserVersion": "1.5.1"}}
+    client = _make_client(envs=[ENV1], host_info=host_payload)
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    client.async_get_host_info.assert_called_once_with(1)
+    assert coord.data["environments"][1]["host"] == host_payload
+
+
+async def test_slow_host_info_failure_returns_empty_dict(hass: HomeAssistant):
+    """A failed /api/host call shouldn't take down the whole slow poll —
+    the hawser version sensor falls back to /api/environments itself."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_host_info = AsyncMock(side_effect=Exception("timeout"))
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["host"] == {}
+
+
+async def test_slow_runtime_controls_disabled_by_default(hass: HomeAssistant):
+    """Not enabled unless explicitly turned on — real per-container cost."""
+    client = _make_client(envs=[ENV1])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    client.async_get_containers.assert_not_called()
+    assert coord.data["environments"][1]["runtime_config"] == {}
+
+
+async def test_slow_runtime_controls_inspects_stackless_containers_only(
+    hass: HomeAssistant,
+):
+    compose_container = {
+        "id": "def",
+        "name": "compose-web",
+        "state": "running",
+        "labels": {"com.docker.compose.project": "myapp"},
+    }
+    client = _make_client(envs=[ENV1], containers=[CONTAINER1, compose_container])
+    client.async_get_container_inspect = AsyncMock(
+        return_value={
+            "HostConfig": {
+                "Memory": 268435456,
+                "NanoCpus": 500000000,
+                "PidsLimit": 50,
+                "RestartPolicy": {"Name": "always"},
+            }
+        }
+    )
+    coord = _slow(
+        hass,
+        client,
+        config={"poll_interval_slow": 300, "enable_runtime_controls": True},
+    )
+    await coord.async_refresh()
+
+    # Only the stack-less container (CONTAINER1 = "web") was inspected.
+    client.async_get_container_inspect.assert_called_once_with(1, "abc")
+    runtime_config = coord.data["environments"][1]["runtime_config"]
+    assert "web" in runtime_config
+    assert "compose-web" not in runtime_config
+    assert runtime_config["web"] == {
+        "memory": 268435456,
+        "nano_cpus": 500000000,
+        "pids_limit": 50,
+        "restart_policy": "always",
+    }
+
+
+async def test_slow_runtime_controls_inspect_failure_omits_container(
+    hass: HomeAssistant,
+):
+    """A per-container inspect failure is logged and that container is
+    simply omitted, rather than failing the whole environment's slow poll."""
+    client = _make_client(envs=[ENV1], containers=[CONTAINER1])
+    client.async_get_container_inspect = AsyncMock(side_effect=Exception("timeout"))
+    coord = _slow(
+        hass,
+        client,
+        config={"poll_interval_slow": 300, "enable_runtime_controls": True},
+    )
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["runtime_config"] == {}
+
+
+async def test_slow_git_stacks_always_fetched(hass: HomeAssistant):
+    """A single bulk call per environment (not per-stack like runtime
+    controls), so there's no meaningful API cost to gate — entities are
+    only created for stacks that actually appear in this list."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_git_stacks = AsyncMock(
+        return_value=[{"id": 1, "stackName": "app", "syncStatus": "synced"}]
+    )
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    client.async_get_git_stacks.assert_called_once_with(1)
+    assert coord.data["environments"][1]["git_stacks"][0]["stackName"] == "app"
+
+
+async def test_slow_git_stacks_defaults_to_empty_list(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["git_stacks"] == []
+
+
+async def test_slow_auto_update_settings_always_fetched(hass: HomeAssistant):
+    """Unlike git_stacks/runtime_config, this is a single bulk call per
+    environment — cheap enough to not need an opt-in flag."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_auto_update_settings = AsyncMock(
+        return_value={"web": {"enabled": True}}
+    )
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    client.async_get_auto_update_settings.assert_called_once_with(1)
+    assert coord.data["environments"][1]["auto_update_settings"] == {
+        "web": {"enabled": True}
+    }
 
 
 async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
@@ -302,20 +493,31 @@ async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
 
 
 async def test_slow_auth_error_raises_update_failed_with_message(hass: HomeAssistant):
-    """DockhandAuthError is wrapped in UpdateFailed by _async_update_data."""
+    """DockhandAuthError is wrapped in UpdateFailed by _async_update_data.
+
+    /api/environments is the top-level call in the slow coordinator that
+    explicitly propagates auth errors (unconditionally fetched every
+    poll, unlike schedules) — everything else is gathered with
+    return_exceptions=True."""
     client = _make_client()
-    client.async_get_environments = AsyncMock(
-        side_effect=DockhandAuthError("expired")
-    )
+    client.async_get_environments = AsyncMock(side_effect=DockhandAuthError("expired"))
     coord = _slow(hass, client)
     with pytest.raises(UpdateFailed, match="reauth"):
         await coord._async_update_data()
 
 
 async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):
+    """The outer _async_update_data try/except still wraps unexpected
+    errors as UpdateFailed — exercised here via a broken fast_coordinator
+    reference, since every per-env call inside _fetch() itself is now
+    gathered with return_exceptions=True and gracefully logged rather
+    than raised (no remaining call path produces an unhandled generic
+    exception on its own)."""
+    fast_mock = MagicMock()
+    fast_mock.data = MagicMock()
+    fast_mock.data.keys = MagicMock(side_effect=Exception("broken"))
     client = _make_client()
-    client.async_get_environments = AsyncMock(side_effect=Exception("network down"))
-    coord = _slow(hass, client)
+    coord = _slow(hass, client, fast_coordinator=fast_mock)
     with pytest.raises(UpdateFailed):
         await coord._async_update_data()
 

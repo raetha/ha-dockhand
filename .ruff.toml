@@ -37,9 +37,6 @@ ignore = [
     "D401",
 ]
 
-[format]
-exclude = ["tests/*"]
-
 [lint.per-file-ignores]
 "tests/**" = [
     "S101",   # assert is fine in tests

@@ -39,7 +39,12 @@ FAST_DATA = {
 SLOW_DATA = {
     "environments": {
         1: {
-            "env": {"id": 1, "name": "MyHost"},
+            "env": {
+                "id": 1,
+                "name": "MyHost",
+                "tlsKey": "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
+                "hawserToken": "hawser_plaintext_secret_token",
+            },
             "images": [{"id": "sha256:abc", "labels": {"org.label": "x"}}],
             "networks": [],
             "volumes": [],
@@ -88,6 +93,22 @@ async def test_labels_redacted_from_coordinator_data(hass: HomeAssistant):
     slow_dump = result["coordinator"]["slow"]["data"]
     image = slow_dump["environments"][1]["images"][0]
     assert image["labels"] == REDACTED
+
+
+async def test_environment_secrets_redacted_from_coordinator_data(
+    hass: HomeAssistant,
+):
+    """Dockhand's own GET /api/environments returns tlsKey and hawserToken
+    fully decrypted with no redaction on its side — our slow coordinator
+    stores that response verbatim, so we must redact these ourselves or
+    they'd end up in a diagnostics dump attached to a public bug report."""
+    entry = _make_entry_with_runtime_data()
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    env = result["coordinator"]["slow"]["data"]["environments"][1]["env"]
+    assert env["tlsKey"] == REDACTED
+    assert env["hawserToken"] == REDACTED
+    assert env["name"] == "MyHost"  # non-secret fields survive
 
 
 async def test_summary_counts_survive_redaction(hass: HomeAssistant):

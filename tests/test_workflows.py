@@ -12,7 +12,9 @@ import os
 
 import pytest
 
-yaml = pytest.importorskip("yaml", reason="pyyaml not installed — skipping workflow checks")
+yaml = pytest.importorskip(
+    "yaml", reason="pyyaml not installed — skipping workflow checks"
+)
 
 WORKFLOWS_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -117,9 +119,7 @@ def test_checkout_actions_use_pinned_version():
         for fname, job_id, job in _all_jobs()
         for step in (job.get("steps") or [])
         if step.get("uses", "").startswith(("actions/checkout", "actions/setup-python"))
-        and (
-            step["uses"].endswith("@main") or step["uses"].endswith("@master")
-        )
+        and (step["uses"].endswith("@main") or step["uses"].endswith("@master"))
     ]
     assert unpinned == [], (
         "Official actions should use a pinned version (e.g. @v6), not @main/@master:\n"

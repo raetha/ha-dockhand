@@ -4,8 +4,8 @@ When a user opens the integration page and clicks "Download diagnostics",
 HA calls async_get_config_entry_diagnostics and includes the result in a
 ZIP file they can attach to a bug report.
 
-Sensitive fields (API token, container/image labels) are redacted before
-export.
+Sensitive fields (API token, container/image labels, and — defense in
+depth — tlsKey/hawserToken) are redacted before export.
 """
 
 from typing import Any
@@ -24,7 +24,17 @@ TO_REDACT = {"api_token"}
 # and diagnostics are attached to public bug reports. The compose-vs-
 # freestanding breakdown users need for debugging is already computed into
 # environment_summary before redaction.
-COORDINATOR_TO_REDACT = {"labels"}
+#
+# tlsKey/hawserToken: the slow coordinator does call GET /api/environments
+# once per poll cycle (600s) — the only source for a few fields (image-prune
+# enabled, Hawser agent identity, configured connection host/port) — but it
+# extracts only those specific named fields into env_meta immediately on
+# receipt and never stores the raw response (which Dockhand returns with
+# these two fully decrypted and no redaction on its side — confirmed from
+# source, the route spreads the raw DB row straight into its JSON response).
+# So neither key should ever actually appear in coordinator.data; this
+# redaction is a second layer of protection in case that ever changes.
+COORDINATOR_TO_REDACT = {"labels", "tlsKey", "hawserToken"}
 
 
 async def async_get_config_entry_diagnostics(

@@ -2,6 +2,17 @@
 
 Contributions are welcome via pull requests at [github.com/raetha/ha-dockhand](https://github.com/raetha/ha-dockhand).
 
+**Read [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) before adding any new
+entity, device, or config option.** It covers unique ID conventions, the
+central entity-cleanup system, coordinator architecture, and the config
+migration pattern — getting any of these wrong doesn't fail loudly, so
+this is a required step, not optional background reading.
+
+Before proposing a new feature, check [docs/BACKLOG.md](docs/BACKLOG.md)
+— it records ideas that were already evaluated and deliberately deferred
+or rejected, along with why, so they don't need re-litigating from
+scratch.
+
 ## Compatibility baseline
 
 The table below records the last version of each upstream project that was
@@ -12,10 +23,19 @@ than the versions listed here.
 | Project | Last reviewed | Where to check |
 |---|---|---|
 | Home Assistant Core | 2026.3 (minimum); tested against 2026.6.4; dev blog reviewed through 2026-07-05 | https://github.com/home-assistant/core/releases |
-| Dockhand | v1.0.36 | https://github.com/Finsys/dockhand/releases |
+| Dockhand | v1.0.37 | https://github.com/Finsys/dockhand/releases |
 
-Update this table (and the corresponding project memory entry) after each
-review session.
+Update this table after each review session. When picking up new Dockhand
+API work, also regenerate [docs/DOCKHAND_API.md](docs/DOCKHAND_API.md) —
+a navigable index of Dockhand's REST routes — by running
+`scripts/generate_dockhand_api_docs.py` against a fresh Dockhand clone.
+Dockhand has no official OpenAPI spec ([Finsys/dockhand#814](https://github.com/Finsys/dockhand/issues/814),
+open, unimplemented), so this generated index — built from whatever
+leading doc comments exist on each route file — is the closest thing
+available. It's a starting point (only a fraction of routes have doc
+comments), not a substitute for reading the actual route source for
+exact request/response shapes, especially for anything security- or
+data-loss-sensitive.
 
 ## Development setup
 
@@ -34,11 +54,96 @@ See [docs/development.md](docs/development.md) for full setup details, Docker al
 ## Before submitting a PR
 
 - All tests pass (`bash scripts/run_tests.sh --full`)
-- Ruff reports no lint issues (`ruff check custom_components/dockhand/`)
-- Ruff formatting is clean (`ruff format --check custom_components/dockhand/`)
-- If adding a new feature, update `CHANGELOG.md` under the current unreleased section
+- Ruff reports no lint issues on both `custom_components/dockhand/` and `tests/` (`ruff check custom_components/ tests/`)
+- Ruff formatting is clean on both (`ruff format --check custom_components/ tests/`)
+- If adding a new feature, update `CHANGELOG.md` under the current unreleased section (see "CHANGELOG discipline" below)
+- If adding any new entity, device, or config option, work through [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)'s checklist (§5) — unique ID conventions, entity cleanup, and config migrations are easy to get subtly wrong with no visible symptom
+- Never bump the version in `manifest.json`, and never mark a `CHANGELOG.md` section as released (dated, out of `[Unreleased]`), as part of a PR — that's a separate, deliberate release step the maintainer does after confirming everything in the PR actually works, not something to bundle in
+
+## CHANGELOG discipline
+
+`CHANGELOG.md`'s `[Unreleased]` section is release notes for end users, not
+a development log. A few rules that keep it that way:
+
+- **Never edit an already-released section** (anything with a version
+  number and date above `[Unreleased]`). Those entries describe how that
+  version worked at the time; a later change gets its own new entry in
+  `[Unreleased]`, not a retroactive edit to history.
+- **Describe the net difference for a user, not the journey.** If a bug
+  was introduced and fixed within the same unreleased cycle — code that
+  was only ever in development builds, never a release — don't add a
+  "Fixed" entry narrating it. Just write the final `Added`/`Changed` entry
+  as if the feature always worked that way; there's nothing to disclose
+  about something that never shipped broken. Legitimate `Fixed` entries
+  are only for bugs in already-released behavior. The same applies to a
+  sub-aspect of an entirely new feature: if an entity is new this cycle,
+  a detail of how it behaves (e.g. it dynamically relabels itself) is
+  part of describing the new entity, not a separate `Changed` entry
+  saying it "now" does something — there's no prior released state to
+  contrast against.
+- **Cut implementation detail.** API endpoints touched, which coordinator,
+  internal architecture, migration mechanics — all useful in a commit
+  message or code comment, not here. Focus on what a user actually
+  notices: a new entity, a renamed setting, a behavior change.
+- **Before a release, re-read the whole `[Unreleased]` section top to
+  bottom** and cut anything that reads like an engineering journal rather
+  than release notes.
+- **Watch for a specific editing hazard**: a generic search anchor like
+  `### Fixed` can match a heading that recurs in multiple version
+  sections. Re-check where an edit actually landed, especially after
+  inserting near a section boundary.
+
+## Code style
+
+Comments should explain **why**, not what or how — a non-obvious
+constraint, a tradeoff, a reason something isn't the "obvious" approach.
+They shouldn't restate what the code already says, narrate how a bug was
+found, or preserve historical context about a previous version's
+behavior (that belongs in `CHANGELOG.md` git history, not a comment that
+will outlive its relevance). Before adding a comment, ask: would someone
+competent in Python/Home Assistant need this to understand the code, or
+is it documenting the journey to get here?
+
+## Building a local test package
+
+To produce a zip for manual testing (e.g. installing on a real Home
+Assistant instance without HACS):
+
+```bash
+cd ha-dockhand && find . -not -path "./.git/*" -not -path "./.git" \
+  -not -path "./.ruff_cache/*" -not -path "./.ruff_cache" \
+  -not -path "./.pytest_cache/*" -not -path "./.pytest_cache" \
+  -not -path "./.venv*/*" -not -path "./.venv*" \
+  -not -path "*/__pycache__/*" -not -name "__pycache__" \
+  -not -name "*.pyc" -not -name "*.bak" \
+  | zip /path/to/ha-dockhand-VERSION.zip -@
+```
+
+## Release checklist
+
+A more thorough pass than the PR checklist above, run before tagging a
+release (not needed for every PR):
+
+- Full test suite + ruff check/format on both `custom_components/` and `tests/`
+- `manifest.json`: version bumped, field order correct (`domain`, `name`, then alphabetical)
+- `strings.json` and `translations/en.json` are byte-for-byte identical
+- Every locale in `translations/` has exactly the same keys as `en.json` (no missing, no extra) — except `api_url`, which stays English everywhere
+- Every entity `translation_key` used in code has both a `strings.json` and an `icons.json` entry, and vice versa (no orphans)
+- `CHANGELOG.md`: compare-link references at the bottom are correct; re-read the `[Unreleased]` section per the CHANGELOG discipline above
+- `quality_scale.yaml` comments still match current code (coordinator scope, redaction lists, disabled-by-default entity lists all tend to drift as features are added)
+- `README.md` matches the current entity list and behavior
+- Config flow `CREATE_ENTRY` tests are preceded by whatever `setup_options`/options step they depend on
+- The packaging command above produces a clean zip (nothing unexpected included)
 
 ## Translations
+
+If your PR adds any new user-facing string (a new entity name, a config
+option, an error message), add a machine-translated entry for that key
+to all locale files in the same PR — don't leave it for a follow-up.
+`strings.json` and `translations/en.json` must stay byte-for-byte
+identical, and every other locale file must have exactly the same set of
+keys (no missing, no extra) with the sole exception of `api_url`, which
+stays in English everywhere.
 
 The integration ships with machine-generated translations for the following languages:
 

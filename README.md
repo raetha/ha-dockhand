@@ -70,8 +70,9 @@ The following can be changed at any time via the **Configure** button on the int
 | **Enable images** | Create entities for Docker images on each host | off |
 | **Enable volumes** | Create entities for Docker volumes on each host | off |
 | **Enable networks** | Create entities for Docker networks on each host | off |
-| **Enable container updates** | Create update entities for each container, showing image update availability and allowing one-click updates via Dockhand's `batch-update` API | off |
-| **Update check interval** | How often (seconds) to check container registries for image updates. Each check queries the registry for every container — keep this infrequent (minimum: 300). Only shown when container updates are enabled | 86400 |
+| **Enable precise update versions** | Update entities already exist automatically for every container in an environment where update-check is enabled in Dockhand itself, showing an image tag and an `update-pending` status from Dockhand's own cached results — no extra API cost. This adds real registry queries on the interval below, upgrading those same entities to show precise version numbers (image digests) instead | off |
+| **Update check interval** | How often (seconds) the real registry queries above run. Each check queries the registry for every container — keep this infrequent (minimum: 300). Only relevant when **Enable precise update versions** is on | 86400 |
+| **Enable runtime controls** | Create `number`/`select` entities to change a stack-less container's memory limit, CPU limit, process limit, and restart policy live, without recreating it. Not available for Compose-managed containers. Costs one extra API call per stack-less container per slow poll | off |
 
 ### Reconfigure (change URL, SSL, or API token)
 
@@ -160,20 +161,35 @@ If you're also running the Portainer integration, note that this integration use
 ### Environment (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| Online | binary_sensor | Connectivity device class |
-| CPU usage | sensor | % |
+| Online | binary_sensor | Connectivity device class. Attributes: `name` (environment display name), `connection_host`/`connection_port` (the environment's configured Docker connection endpoint, from `/api/environments`) |
+| CPU usage | sensor | %, with a `cpu_count` attribute (logical CPU count, from `GET /api/host`) |
 | Memory usage | sensor | %, with used/total bytes attributes |
 | Containers running | sensor | with total/stopped/unhealthy attributes |
 | Images | sensor | count of Docker images on the environment |
+| Image pruning | binary_sensor | whether automatic image pruning is enabled for this environment. Disabled by default |
+| Update all | button | Updates every container in the environment with a pending update in one batch (pull, scan if configured, recreate) — matches Dockhand's own "Update all" button exactly, including its name (Dockhand shows "Update all (N)" with a live count; ours does the same via the entity's friendly name). System containers are excluded from the count and from the update, same as Dockhand's own button. **Only exists while there's at least one pending update** — like Dockhand's own button, it's not just disabled with nothing to do, it isn't there at all until something needs updating |
+
+The following are sourced from `GET /api/host` (already polled every slow cycle for the Hawser version sensor — no extra API call) but are **disabled by default**, since they're niche/diagnostic. Enable the ones you want in **Settings → Entities**.
+
+| Entity | Type | Notes |
+|---|---|---|
+| Hawser agent version | sensor | Live-fetched from the agent for standard-mode Hawser connections. `agent_name`/`agent_id`/`last_seen` attributes shown only for edge-mode connections (the only mode Dockhand populates them for), sourced from `/api/environments` |
+| Host platform | sensor | OS platform, e.g. `linux` |
+| Host architecture | sensor | CPU architecture, e.g. `x64` |
+| Docker version | sensor | Docker Engine server version |
+| Host last boot | sensor | Timestamp, computed from host uptime |
 
 ### Container (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
 | State | sensor | running / exited / paused / etc. |
 | Health | sensor | healthy / unhealthy / starting. Only created for containers with a Docker healthcheck configured — enabled by default |
-| Container | switch | turn on = start, turn off = stop |
-| Restart | button | restarts running container (use Container to start stopped) |
-| Update | update | Shows when a newer image digest is available. Install triggers a pull-and-recreate via Dockhand's `batch-update` API. Note: vulnerability scanning is not applied by this API endpoint — a warning is shown in the entity when scanning is enabled on the environment. Disabled for system containers and containers with `dockhand.update=false` label. **Optional — enable via Configure** |
+| Container | switch | turn on = start, turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
+| Restart | button | restarts running container (use Container to start stopped). **Not created for system containers** — see note below |
+| Update | update | Created automatically for every container in any environment with update-check enabled in Dockhand — no config option needed. Shows the image tag as `installed_version`, and flips `latest_version` to `update-pending` as soon as Dockhand's own scheduled update-check finds one, with no registry query of its own. Enable **Enable precise update versions** in Configure to also show real image-digest version numbers via periodic registry queries. Install triggers a scanned pull-and-recreate via Dockhand's `batch-update-stream` API (works at either tier — it only needs the container ID), honoring the environment's configured vulnerability blocking policy, and reports live install progress. Disabled for system containers and containers with `dockhand.update=false` label |
+| Memory limit, CPU limit, Process limit | number | Live in-place resource limits (0 = unlimited, except Process limit where -1 = unlimited, matching Docker's own convention). Stack-less (non-Compose) containers only. **Optional — enable via Configure**, disabled by default in the entity registry. **Not created for system containers** — see note below |
+| Restart policy | select | Live restart policy (`no`/`always`/`unless-stopped`/`on-failure`). Stack-less containers only. **Optional — enable via Configure**, disabled by default in the entity registry. **Not created for system containers** — see note below |
+| Auto update | switch | Toggles Dockhand's own scheduled auto-update check for this container (distinct from the Update entity above, which is manual/HA-triggered). Persisted by container name, survives recreation. Not gated behind Configure — always available, disabled by default in the entity registry. **Not created for system containers** — see note below |
 
 The following **diagnostic sensors** are also created for every container but are **disabled by default**. Enable the ones you want individually in **Settings → Entities**. They show as unavailable when the container is stopped or exited.
 
@@ -191,9 +207,23 @@ The following **diagnostic sensors** are also created for every container but ar
 ### Stack (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| Status | sensor | running / partial / stopped |
-| Stack | switch | turn on = start, turn off = stop |
-| Restart | button | restarts running stack (use Running to start stopped) |
+| Status | sensor | running / partial / stopped. The stack device's `model` (Internal Stack / Git Stack / Untracked Stack) shows why a stack does or doesn't have the git-stack entities below. "Untracked" matches Dockhand's own terminology for a stack it discovered but never created/adopted/git-tracked through its own UI |
+| Stack | switch | turn on = start, turn off = stop. **Not created for a stack containing a system container** — see note below |
+| Restart | button | restarts running stack (use Running to start stopped). **Not created for a stack containing a system container** — see note below |
+| Redeploy | button | pulls the latest image for each service and redeploys — matches Dockhand's own Redeploy popover exactly, including its own literal button title, with its default checkboxes (Pull images checked, Build images and Force recreate unchecked), so it behaves the same as clicking Redeploy in Dockhand's own UI without touching any options. Only recreates containers whose config actually changed (e.g. a new image digest) — doesn't force-recreate everything. **Internal stacks only** — git stacks have their own Deploy/Sync from Git button (below) with different mechanics; not created for Untracked stacks (no compose file location for Dockhand to redeploy from) or for a stack containing a system container |
+| Updates available | binary_sensor | on when any container in the stack has a pending image update, with an `update_count` attribute. Requires Dockhand 1.0.37+ — automatically not created on older versions, since this data isn't in the API response at all until then |
+
+> **System containers.** Dockhand classifies its own management container and any Hawser remote agent as "system containers" — Dockhand's own UI hides start/stop/restart for these (and for any stack containing one), since taking them down can break Dockhand's ability to manage the host at all. Dockhand's API itself doesn't enforce this — only its UI does — so this integration enforces it independently: the Container/Stack switch, Restart button, container Auto update switch, and runtime controls (memory/CPU/process limits, restart policy) simply aren't created for a system container or a stack that contains one. Read-only entities (State, Health, resource sensors) are unaffected.
+
+The following are created automatically whenever a stack is detected as **git-tracked** — no config option needed (it's one bulk API call per environment, not per-stack).
+
+| Entity | Type | Notes |
+|---|---|---|
+| Sync status | sensor | `pending`/`syncing`/`synced`/`error`. Attributes include last commit, sync error, auto-deploy, and webhook-enabled |
+| Last sync | sensor | Timestamp of the last git sync |
+| Sync error | binary_sensor | On when the last sync/deploy attempt failed |
+| Deploy / Sync from Git | button | Same underlying action either way (sync from git, then redeploy) — the name and icon change based on the stack's current status to match Dockhand's own labeling exactly: **"Deploy"** (rocket icon) while the stack is down (not yet deployed, or created but not started), **"Sync from Git"** (refresh icon) once it's up. Unlike the internal-stack Redeploy button above, this does **not** guarantee a fresh image pull or a forced recreate: whether containers actually get recreated depends on whether the git sync found real changes, and whether images get re-pulled depends on this git stack's own "repull images" setting in Dockhand (not something this integration can override per-press) — a Dockhand API limitation, not a choice made here. There's no separate check-only Sync button — Dockhand's own `deployGitStack()` always runs the identical sync step first regardless of whether a deploy follows, confirmed from source, so a standalone check-only action would add no real capability. *Dockhand's own terminology/iconography here may change in a future version; if you notice this drift from what Dockhand itself calls it, that's worth flagging.* |
+| Auto deploy | switch | Toggles the stack's own scheduled sync+redeploy job. Disabled by default in the entity registry |
 
 ### Network (optional, 600 s)
 
@@ -261,19 +291,22 @@ automation:
 Dockhand uses three polling coordinators with independent intervals:
 
 **Fast coordinator** (default 60 s, configurable) fetches:
-- Environment dashboard stats for all environments in a single API call (CPU, memory, container/stack/image/volume/network counts)
+- Environment dashboard stats for all environments in a single API call (CPU, memory, container/stack/image/volume/network counts, whether update-check is enabled)
 - Full container list with state, image, and label details
 - Full stack list with status and container counts
 - Container resource stats for all running containers per environment in a single bulk API call (`GET /api/containers/stats?env=N`) — one call per environment regardless of container count. Stopped, exited, or created containers are absent from this response; their stats sensors show unavailable until running again
+- A cheap, no-registry-query check of Dockhand's own cached pending-update flags, for any environment with update-check enabled — this is what powers the `update-pending` status on update entities
 
 **Slow coordinator** (default 600 s, configurable) fetches:
-- Per-environment detailed data for optional features: Images, Networks, Volumes
+- Per-environment detailed data for optional features: Images, Networks, Volumes, runtime controls
+- Git stack sync status, host info (platform/arch/Docker version/uptime), and container auto-update settings — always fetched, no config option needed, since these are single cheap bulk calls per environment
 - Global schedule list
+- A handful of fields with no other source (image-prune enabled, Hawser agent identity, configured connection host/port)
 
-**Update coordinator** (default 86400 s / 24 h, configurable) — only active when container update entities are enabled:
-- Per-environment image update availability via `POST /api/containers/check-updates`, which performs real registry queries against each container's image source. Kept infrequent to avoid unnecessary load on the Docker host. Use the **Check for image updates** button on any environment device to trigger an immediate check on demand.
+**Update coordinator** (default 86400 s / 24 h, configurable) — only active when **Enable precise update versions** is turned on. Update entities themselves always exist for any environment with update-check enabled in Dockhand — this coordinator is purely additive, upgrading their version display from an image tag to a precise digest:
+- Per-environment image update availability via `POST /api/containers/check-updates`, which performs real registry queries against each container's image source. Kept infrequent to avoid unnecessary load on the Docker host. Use the **Check for image updates** button on any environment device (visible when this option is on) to trigger an immediate check on demand.
 
-Entities update automatically when their coordinator refreshes. If a fetch fails, entities remain at their last known value and are marked unavailable after the coordinator's built-in retry threshold. Both coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
+Entities update automatically when their coordinator refreshes. If a fetch fails, entities remain at their last known value and are marked unavailable after the coordinator's built-in retry threshold. All three coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
 
 ## Troubleshooting
 
@@ -281,7 +314,7 @@ Entities update automatically when their coordinator refreshes. If a fetch fails
 Check the API URL is reachable from the HA host. If authentication is enabled, confirm your API token starts with `dh_` and was copied in full.
 
 **Entity IDs have a `_2` or `_3` suffix after a container or image update**
-When a container is recreated with a new image, or a new image is pulled before the old one is pruned, both the old and new objects briefly exist simultaneously. HA assigns a suffix to the new entity to avoid a collision. Once the old object is gone (container removed, image pruned) and the integration has reloaded or polled, the stale entity is cleaned up automatically. To reclaim the clean entity ID, go to **Settings → Devices & Services → ⋮ → Recreate entity IDs** on the Dockhand integration card. HA will rename any suffixed entity whose "natural" ID is now free. Any automations or dashboard cards referencing the suffixed ID will need to be updated after the rename.
+Image sensors specifically now avoid this in the common case: when a container update causes two images to briefly claim the same tag (the newly-pulled one, and the old one not yet marked untagged), the integration waits for that to settle — usually resolved within a poll cycle or two — rather than creating a colliding entity. If you still see a suffix (a device or entity type not covered by that handling, or an unusually long-lived ambiguity), it means HA created a new entity while an old one with the same natural ID still technically existed at that moment. Once the old object is gone and the integration has reloaded or polled, go to **Settings → Devices & Services → ⋮ → Recreate entity IDs** on the Dockhand integration card to reclaim the clean ID — HA will rename any suffixed entity whose "natural" ID is now free. Any automations or dashboard cards referencing the suffixed ID will need to be updated after the rename.
 
 **No entities appear after setup**
 Check HA logs for errors containing `dockhand`. Ensure the user account has permission to view all environments.
