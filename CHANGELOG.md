@@ -177,7 +177,7 @@
   ID first and the environment ID before the object type for a consistent
   instance → environment → object hierarchy.
 
-## [1.7.2] — TBD
+## [1.7.2] — 2026-06-12
 
 ### Changed
 

@@ -73,15 +73,32 @@ docker run --rm \
 
 GitHub Actions (`.github/workflows/ci.yml`) runs the full suite on Python 3.14 with the pinned PHCC version. Push to a branch and check the CI result for authoritative test output.
 
-### Sandbox limitations
+### Claude sandbox: running the full suite
 
-The Claude development sandbox runs Python 3.12 and cannot install PHCC or HA 2026.x. Because every test file imports from `custom_components.dockhand` (which imports `homeassistant` at module level), pytest cannot collect any tests without a real homeassistant install.
+The Claude development sandbox does not have Python 3.14 preinstalled, and
+building CPython from source takes too long to redo every session. Instead,
+Claude uses [`uv`](https://github.com/astral-sh/uv) to fetch a prebuilt
+CPython from the [python-build-standalone](https://github.com/astral-sh/python-build-standalone)
+project's GitHub release assets — this works within the sandbox's network
+allowlist (`release-assets.githubusercontent.com`) and takes seconds instead
+of tens of minutes:
 
-After code changes, Claude runs:
-- **ruff check + format** — full lint and format validation
-- **AST syntax check** — catches syntax errors without imports
+```bash
+pip install uv --break-system-packages
+uv python install 3.14        # fetches a prebuilt 3.14.x, no compiling
+uv venv --python 3.14 .venv
+uv pip install -r requirements_test.txt --python .venv/bin/python
+bash scripts/run_tests.sh --full --venv .venv
+```
 
-The full pytest suite requires Python 3.14.2+ with PHCC. Use your local dev environment or push to GitHub and check CI for authoritative test results.
+This gives Claude a real, working Python 3.14.x with PHCC installed, so the
+full pytest suite (not just ruff + AST) can run in-sandbox routinely. Docker
+is not viable in this sandbox: no `docker` binary is available, and the
+egress proxy blocks all container registries (confirmed via a direct
+`403 host_not_allowed` from Docker Hub), so it isn't a usable fallback
+either. The venv doesn't persist between sessions, but the `uv` install is
+cheap enough to redo every time without a second thought. CI remains
+authoritative for test counts and results regardless.
 
 ## Code quality checks
 

@@ -58,14 +58,13 @@ rules:
   config-flow-test-coverage:
     status: done
     comment: >
-      Full test coverage across all flow steps in test_config_flow.py (18 tests):
-      async_step_user (5 tests), async_step_token (3 tests),
-      async_step_setup_options (covered by all full-flow tests — 3 explicit
-      step_id assertions), async_step_reauth_confirm (3 tests),
-      async_step_reconfigure (5 tests), and options async_step_init (2 tests).
-      Covers all error branches, duplicate detection, auth-detection probe,
-      token merging, origin-routing, no-auth token stripping, token-clear-disables-
-      auth, new-token replacement, and options stored correctly at setup.
+      Full test coverage across all flow steps in test_config_flow.py:
+      async_step_user, async_step_token, async_step_setup_options,
+      async_step_reauth_confirm, async_step_reconfigure, and the options
+      flow. Covers all error branches, duplicate detection, auth-detection
+      probe, token merging, origin-routing, no-auth token stripping,
+      token-clear-disables-auth, new-token replacement, and options stored
+      correctly at setup.
 
   dependency-transparency:
     status: done
@@ -171,10 +170,11 @@ rules:
     comment: >
       README "Configuration parameters" section documents all fields: API URL,
       API token (when auth is enabled), fast poll interval, slow poll interval,
-      all five optional feature flags (schedules, images, volumes, networks,
-      container updates), update check interval, and SSL verification. Separate
-      subsections cover setup-time fields, the Options flow (adjustable via
-      Configure), and Reconfigure (for changing URL/token).
+      the optional feature flags (schedules, images, volumes, networks,
+      precise update versions, runtime controls), update check interval, and
+      SSL verification. Separate subsections cover setup-time fields, the
+      Options flow (adjustable via Configure), and Reconfigure (for changing
+      URL/token).
 
   docs-installation-parameters:
     status: done
@@ -205,7 +205,7 @@ rules:
   parallel-updates:
     status: done
     comment: >
-      PARALLEL_UPDATES = 0 set in all seven platform files (sensor.py,
+      PARALLEL_UPDATES = 0 set in every platform file (sensor.py,
       binary_sensor.py, switch.py, button.py, update.py, number.py,
       select.py). Coordinator-based platforms use 0 to indicate updates are
       managed by the coordinator.
@@ -221,25 +221,17 @@ rules:
   test-coverage:
     status: done
     comment: >
-      Comprehensive pure-pytest suite across ten files (test_api,
-      test_config_flow, test_coordinator, test_diagnostics, test_entities,
-      test_helpers, test_init, test_migration, test_update, test_workflows). Covers all API
-      methods, all config flow steps and options flow (including interval
-      range validation), all migration functions (both historical device and
-      entity formats, per-type rename, no-op on already-migrated IDs,
-      cross-entry isolation, idempotency, orchestration), all three
-      coordinators, all entity classes and platforms, device registration via
-      _ensure_env_devices and _ensure_hub_devices (all branches including
-      idempotency), all URL builders, all DeviceInfo factories, all
-      _container_has_healthcheck / _compose_project / _image_display_name /
-      _sched_key paths, ContainerUpdateEntity (version parsing, availability,
-      release notes including ha-alert type verification, supported-features
-      recomputation, install paths including not-found and action_failed
-      branches), HomeAssistantError propagation for all action methods,
-      diagnostics redaction, setup, and unload. CI is authoritative for test
-      counts and results. The full suite requires Python 3.14.2+ and PHCC;
-      the Claude sandbox runs ruff + AST only, since pytest requires
-      homeassistant at import time.
+      Comprehensive pure-pytest suite covering the API client, config and
+      options flows (including interval validation), all coordinators, all
+      entity classes and platforms, device registration and cleanup,
+      migrations (device/entity registry and config-entry schema),
+      system-container protection, repair issue creation, diagnostics
+      redaction, and setup/unload. CI is authoritative for test counts and
+      results. The full suite requires Python 3.14.2+ and PHCC; the Claude
+      sandbox provisions this via `uv python install 3.14` (prebuilt
+      CPython, seconds not minutes) rather than compiling from source, so
+      the full suite runs in-sandbox routinely rather than being deferred
+      to CI. See docs/development.md for the sandbox setup.
 
   # ── Gold ──────────────────────────────────────────────────────────────────
 
@@ -345,7 +337,7 @@ rules:
     status: done
     comment: >
       EntityCategory.DIAGNOSTIC applied to all monitoring and config-mirror
-      entities, including all eight container resource stats sensors (CPU usage,
+      entities, including the container resource stats sensors (CPU usage,
       memory usage, memory usage %, memory limit, network in/out, disk read/write).
       EntityCategory.CONFIG applied to Restart buttons (user-initiated device
       control actions). Primary state sensors (Container State, Stack Status) and
@@ -356,7 +348,7 @@ rules:
     status: done
     comment: >
       SensorDeviceClass.DATA_SIZE used for containers disk usage, build cache
-      size, and all eight container resource stats sensors (memory usage,
+      size, and the container resource stats sensors (memory usage,
       memory limit, network in/out, disk read/write). SensorDeviceClass.TIMESTAMP
       used for the schedule next-run sensor. BinarySensorDeviceClass.CONNECTIVITY
       used for the environment Online sensor. All other sensors and binary sensors
@@ -369,12 +361,13 @@ rules:
       Niche or verbose entities are disabled by default via
       _attr_entity_registry_enabled_default = False: build cache size,
       containers disk usage, activity events, Hawser agent version (and its
-      agent_name/agent_id/last_seen attributes, edge-mode only), the six
+      agent_name/agent_id/last_seen attributes, edge-mode only), the
       config-mirror binary sensors (activity collection, metrics collection,
       vulnerability scanning, update checks, auto update, image pruning),
       the host info sensors (platform, architecture, Docker version, last
       boot — all share one base class's flag), the container auto-update
-      switch, and all eight container resource stats sensors (CPU usage,
+      switch, the git stack auto-deploy switch, and the container
+      resource stats sensors (CPU usage,
       memory usage, memory usage %, memory limit, network in, network out,
       disk read, disk write). Stats sensors start disabled so users enable
       only what they need; enabled/disabled state survives container
@@ -390,8 +383,8 @@ rules:
       All statically-named entities use _attr_translation_key referencing entries
       in strings.json and translations/*.json. Dynamic-name entities (image repo,
       network name, volume name) use self._attr_name in __init__ since their
-      names are data-driven. Translation keys are defined for all 11 supported
-      locales (en + 10 machine-translated languages).
+      names are data-driven. Translation keys are defined for English plus
+      all machine-translated locales in translations/.
 
   exception-translations:
     status: done
@@ -400,9 +393,10 @@ rules:
       async_turn_off in switch.py, async_install in update.py) catch API
       errors and re-raise as HomeAssistantError with translation_domain=
       "dockhand" and a translation_key referencing entries in strings.json.
-      Two exception keys are defined: action_failed (wraps the API error
-      message via a {error} placeholder) and container_not_found (raised
-      when the coordinator no longer has the container at action time).
+      The defined exception keys are action_failed (wraps the API error
+      message via a {error} placeholder), container_not_found (raised
+      when the coordinator no longer has the container at action time), and
+      git_stack_not_found (the same case for git stack sync/deploy actions).
       Config flow errors use translated error keys (cannot_connect,
       invalid_auth) via strings.json.
 
@@ -426,10 +420,17 @@ rules:
       flags are managed separately via the Options flow (Configure button).
 
   repair-issues:
-    status: exempt
+    status: done
     comment: >
-      No user-actionable repair scenarios beyond session re-authentication,
-      which is handled by the existing reauthentication flow.
+      Runtime control number entities raise repair issues via
+      ir.async_create_issue: runtime_update_warning when Dockhand's API
+      response includes warnings for a live property update (non-fixable,
+      informational), and runtime_memory_reverted when a memory-limit
+      decrease causes the container to stop and the safety net auto-reverts
+      it (non-fixable, actionable — tells the user the container is running
+      on its previous limit again). Both are per-container, keyed on
+      env_id + container name (+ field, for update warnings) so they don't
+      collide across containers.
 
   stale-devices:
     status: done
