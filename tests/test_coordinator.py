@@ -14,6 +14,7 @@ from custom_components.dockhand.api import DockhandAuthError, DockhandClient
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
+    DockhandUpdateCoordinator,
     _safe_list,
     _unwrap,
 )
@@ -75,13 +76,23 @@ def _fast(hass: HomeAssistant, client, config=None, entry=None):
     )
 
 
+def _update_coord(hass: HomeAssistant, client, fast_coordinator=None):
+    if fast_coordinator is None:
+        fast_coordinator = MagicMock()
+        fast_coordinator.data = {"environments": {1: {"stats": {"name": "local"}}}}
+    return DockhandUpdateCoordinator(
+        hass, client, fast_coordinator, {"poll_interval_updates": 86400}
+    )
+
+
 def _slow(hass: HomeAssistant, client, config=None, fast_coordinator=None):
     if fast_coordinator is None:
         fast_coordinator = MagicMock()
         # Matches ENV1 = {"id": 1, "name": "local"} used throughout this
         # file — the slow coordinator derives its environment id list
-        # from fast_coordinator.data.keys(), not a separate API call.
-        fast_coordinator.data = {1: {"stats": {"name": "local"}}}
+        # from fast_coordinator.data["environments"].keys(), not a
+        # separate API call.
+        fast_coordinator.data = {"environments": {1: {"stats": {"name": "local"}}}}
     return DockhandSlowCoordinator(
         hass,
         client,
@@ -130,17 +141,18 @@ def test_unwrap_exception():
 async def test_fast_basic_shape(hass: HomeAssistant):
     coord = _fast(hass, _make_client(stacks=[STACK1]))
     await coord.async_refresh()
-    assert 1 in coord.data
-    stats = coord.data[1]["stats"]
+    assert 1 in coord.data["environments"]
+    stats = coord.data["environments"][1]["stats"]
     assert stats["name"] == STATS1["name"]
     assert stats["cpu"] == STATS1["cpu"]
-    assert coord.data[1]["containers"] == [CONTAINER1]
-    assert coord.data[1]["stacks"] == [STACK1]
-    assert "container_stats" in coord.data[1]
+    assert coord.data["environments"][1]["containers"] == [CONTAINER1]
+    assert coord.data["environments"][1]["stacks"] == [STACK1]
+    assert "container_stats" in coord.data["environments"][1]
 
 
 async def test_fast_container_stats_indexed_by_name(hass: HomeAssistant):
-    """container_stats dict is keyed by container name for O(1) sensor lookup."""
+    """container_stats dict is keyed by container name for O(1) sensor lookup,
+    when "Enable container stats" is on."""
     client = _make_client()
     client.async_get_container_stats = AsyncMock(
         return_value=[
@@ -148,12 +160,36 @@ async def test_fast_container_stats_indexed_by_name(hass: HomeAssistant):
             {"name": "redis", "cpuPercent": 0.2, "memoryUsage": 10485760},
         ]
     )
-    coord = _fast(hass, client)
+    coord = _fast(hass, client, config={"enable_container_stats": True})
     await coord.async_refresh()
-    cs = coord.data[1]["container_stats"]
+    cs = coord.data["environments"][1]["container_stats"]
     assert "nginx" in cs
     assert "redis" in cs
     assert cs["nginx"]["cpuPercent"] == 1.5
+
+
+async def test_fast_container_stats_not_fetched_when_disabled(hass: HomeAssistant):
+    """Zero reason to pay for this API call every 60s when nothing consumes
+    the result — "Enable container stats" off (the default) means the call
+    itself is skipped, not just the resulting sensors left disabled."""
+    client = _make_client()
+    client.async_get_container_stats = AsyncMock(
+        return_value=[{"name": "nginx", "cpuPercent": 1.5}]
+    )
+    coord = _fast(hass, client)  # default config — enable_container_stats off
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["container_stats"] == {}
+    client.async_get_container_stats.assert_not_called()
+
+
+async def test_fast_container_stats_fetched_when_enabled(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_container_stats = AsyncMock(
+        return_value=[{"name": "nginx", "cpuPercent": 1.5}]
+    )
+    coord = _fast(hass, client, config={"enable_container_stats": True})
+    await coord.async_refresh()
+    client.async_get_container_stats.assert_called_once_with(1)
 
 
 async def test_fast_container_stats_failure_returns_empty_dict(hass: HomeAssistant):
@@ -162,8 +198,8 @@ async def test_fast_container_stats_failure_returns_empty_dict(hass: HomeAssista
     client.async_get_container_stats = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client)
     await coord.async_refresh()
-    assert coord.data[1]["container_stats"] == {}
-    assert coord.data[1]["containers"] == [CONTAINER1]
+    assert coord.data["environments"][1]["container_stats"] == {}
+    assert coord.data["environments"][1]["containers"] == [CONTAINER1]
 
 
 async def test_fast_multiple_envs(hass: HomeAssistant):
@@ -175,8 +211,8 @@ async def test_fast_multiple_envs(hass: HomeAssistant):
     client.async_get_stacks = AsyncMock(return_value=[])
     coord = _fast(hass, client)
     await coord.async_refresh()
-    assert 1 in coord.data
-    assert 2 in coord.data
+    assert 1 in coord.data["environments"]
+    assert 2 in coord.data["environments"]
 
 
 async def test_fast_containers_failure_returns_empty(hass: HomeAssistant):
@@ -184,27 +220,53 @@ async def test_fast_containers_failure_returns_empty(hass: HomeAssistant):
     client.async_get_containers = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client)
     await coord.async_refresh()
-    assert coord.data[1]["containers"] == []
+    assert coord.data["environments"][1]["containers"] == []
 
 
-async def test_fast_stats_failure_means_no_environments_this_cycle(hass: HomeAssistant):
-    """/api/dashboard/stats (no env param) is now the fast coordinator's
-    only source of which environments exist — no separate /api/environments
-    call. If it fails, this cycle simply has nothing to iterate; normal
-    coordinator retry picks it back up next cycle (a deliberate tradeoff:
-    one less call every 60s, in exchange for stats-call failures also
-    skipping containers/stacks for that one cycle, not just stats)."""
+async def test_fast_stats_failure_does_not_clear_environments(hass: HomeAssistant):
+    """/api/dashboard/stats (no env param) is the fast coordinator's only
+    source of which environments exist — no separate /api/environments
+    call. If it fails entirely (e.g. DNS resolution failure reaching
+    Dockhand), this must fail the update (last_update_success=False,
+    coordinator.data left at its last-known-good value) rather than
+    silently succeed with an empty dict — an empty-but-successful result
+    previously fed "zero stacks/containers for every environment" through
+    every downstream consumer that trusts non-empty coordinator data as
+    authoritative, including _cleanup_stale_registry's "fast data must be
+    non-empty" guard (empty *all_stats* still produced a non-empty
+    *fast_coordinator.data*, since _fetch_env ran per known env_id
+    regardless — the guard didn't catch this). A transient/total outage
+    should leave everything in place (entities go unavailable via
+    last_update_success) until it resolves, never look like every stack
+    and container just disappeared."""
     client = _make_client()
     client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client)
     await coord.async_refresh()
-    assert coord.data == {}
+    assert coord.last_update_success is False
+
+
+async def test_fast_stats_failure_preserves_previous_data(hass: HomeAssistant):
+    """The actual real-world scenario: environments were successfully
+    fetched once, then a later poll hits a total failure (DNS resolution
+    to the Dockhand host, etc.) — coordinator.data must still hold the
+    last-known-good environments, not go empty, so nothing gets cleaned
+    up while the outage is transient."""
+    client = _make_client(envs=[ENV1], stats=STATS1)
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert 1 in coord.data["environments"]
+
+    client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
+    await coord.async_refresh()
+    assert coord.last_update_success is False
+    assert 1 in coord.data["environments"]
 
 
 async def test_fast_empty_env_list_returns_empty_data(hass: HomeAssistant):
     coord = _fast(hass, _make_client(envs=[]))
     await coord.async_refresh()
-    assert coord.data == {}
+    assert coord.data == {"environments": {}}
 
 
 async def test_fast_pending_updates_not_fetched_when_update_check_disabled(
@@ -216,7 +278,7 @@ async def test_fast_pending_updates_not_fetched_when_update_check_disabled(
     coord = _fast(hass, client, config={"poll_interval": 30})
     await coord.async_refresh()
     client.async_get_pending_updates.assert_not_called()
-    assert coord.data[1]["pending_update_container_ids"] == set()
+    assert coord.data["environments"][1]["pending_update_container_ids"] == set()
 
 
 async def test_fast_pending_updates_fetched_when_update_check_enabled(
@@ -229,7 +291,7 @@ async def test_fast_pending_updates_fetched_when_update_check_enabled(
     coord = _fast(hass, client, config={"poll_interval": 30})
     await coord.async_refresh()
     client.async_get_pending_updates.assert_called_once_with(1)
-    assert coord.data[1]["pending_update_container_ids"] == {"abc"}
+    assert coord.data["environments"][1]["pending_update_container_ids"] == {"abc"}
 
 
 async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistant):
@@ -237,7 +299,7 @@ async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistan
     client.async_get_pending_updates = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client, config={"poll_interval": 30})
     await coord.async_refresh()
-    assert coord.data[1]["pending_update_container_ids"] == set()
+    assert coord.data["environments"][1]["pending_update_container_ids"] == set()
 
 
 async def test_fast_update_interval_from_config(hass: HomeAssistant):
@@ -270,12 +332,14 @@ async def test_fast_auth_error_message_mentions_token(hass: HomeAssistant):
         await _fast(hass, client)._async_update_data()
 
 
-# Note: a generic (non-auth) error from async_get_all_dashboard_stats is no
-# longer fatal by design — it's caught and logged, producing an empty
-# environments dict for that cycle (see
-# test_fast_stats_failure_means_no_environments_this_cycle below), and every
-# per-env call is gathered with return_exceptions=True. Auth errors are the
-# one deliberate exception, verified by the two tests above.
+# Note: a generic (non-auth) error from async_get_all_dashboard_stats now
+# properly fails the update (last_update_success=False, coordinator.data
+# preserved at its last-known-good value — see
+# test_fast_stats_failure_does_not_clear_environments and
+# test_fast_stats_failure_preserves_previous_data above) rather than being
+# swallowed into an empty-but-successful result. Auth errors remain the
+# one deliberate exception that gets special handling (re-auth), verified
+# by the two tests above.
 
 
 # ---------------------------------------------------------------------------
@@ -351,8 +415,10 @@ async def test_slow_derives_environment_ids_from_fast_coordinator(hass: HomeAssi
     which environments to iterate."""
     fast_mock = MagicMock()
     fast_mock.data = {
-        1: {"stats": {"name": "local"}},
-        2: {"stats": {"name": "remote"}},
+        "environments": {
+            1: {"stats": {"name": "local"}},
+            2: {"stats": {"name": "remote"}},
+        }
     }
     client = _make_client(envs=[ENV1])
     coord = _slow(hass, client, fast_coordinator=fast_mock)
@@ -515,7 +581,7 @@ async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):
     exception on its own)."""
     fast_mock = MagicMock()
     fast_mock.data = MagicMock()
-    fast_mock.data.keys = MagicMock(side_effect=Exception("broken"))
+    fast_mock.data.get = MagicMock(side_effect=Exception("broken"))
     client = _make_client()
     coord = _slow(hass, client, fast_coordinator=fast_mock)
     with pytest.raises(UpdateFailed):
@@ -525,3 +591,104 @@ async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):
 async def test_slow_update_interval_from_config(hass: HomeAssistant):
     coord = _slow(hass, _make_client(envs=[]), config={"poll_interval_slow": 1200})
     assert coord.update_interval == timedelta(seconds=1200)
+
+
+# ---------------------------------------------------------------------------
+# Update coordinator — per-env update-check failure handling
+# ---------------------------------------------------------------------------
+
+
+async def test_update_coord_env_failure_preserves_previous_data(hass: HomeAssistant):
+    """A per-environment update-check failure (Dockhand unreachable, etc.)
+    must not look like "confirmed zero pending updates" for that
+    environment — that would flip every container's update entity there
+    to "up to date" when we simply don't know this cycle. Same
+    last-known-good principle as the fast/slow coordinator fixes; see
+    ARCHITECTURE.md §3."""
+    client = _make_client()
+    client.async_check_container_updates = AsyncMock(
+        return_value=[{"containerId": "abc", "hasUpdate": True}]
+    )
+    coord = _update_coord(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["abc"]["hasUpdate"] is True
+
+    client.async_check_container_updates = AsyncMock(side_effect=Exception("timeout"))
+    await coord.async_refresh()
+    # Overall update still "succeeds" (per-env failures are caught, not
+    # raised) but this environment's data must be unchanged, not emptied.
+    assert coord.data["environments"][1]["abc"]["hasUpdate"] is True
+
+
+async def test_update_coord_new_env_failure_is_empty_not_missing(hass: HomeAssistant):
+    """An environment with no previous data that fails its first update
+    check has nothing to "preserve" — it should get an empty dict, not
+    a KeyError, and not be silently absent from coord.data."""
+    client = _make_client()
+    client.async_check_container_updates = AsyncMock(side_effect=Exception("timeout"))
+    coord = _update_coord(hass, client)
+    await coord.async_refresh()
+    assert coord.data == {"environments": {1: {}}}
+
+
+async def test_async_check_environment_only_touches_its_own_environment(
+    hass: HomeAssistant,
+):
+    """The actual design fix from this session: a per-environment "Check
+    for updates" button used to trigger a full coordinator refresh
+    (async_refresh()), which always checks every environment in one
+    gather — so pressing environment 1's button silently also re-checked
+    every other environment too, a real mismatch between what the
+    button's device implies and what pressing it actually does.
+    async_check_environment() is genuinely scoped: checking environment 1
+    must leave environment 2's already-known data completely untouched."""
+    client = _make_client()
+    client.async_check_container_updates = AsyncMock(
+        return_value=[{"containerId": "abc", "hasUpdate": True}]
+    )
+    fast_coordinator = MagicMock()
+    fast_coordinator.data = {
+        "environments": {
+            1: {"stats": {"name": "one"}},
+            2: {"stats": {"name": "two"}},
+        }
+    }
+    coord = _update_coord(hass, client, fast_coordinator=fast_coordinator)
+    await coord.async_refresh()  # seeds both envs via the normal full path
+    assert coord.data["environments"][1]["abc"]["hasUpdate"] is True
+    assert coord.data["environments"][2]["abc"]["hasUpdate"] is True
+
+    client.async_check_container_updates = AsyncMock(
+        return_value=[{"containerId": "xyz", "hasUpdate": False}]
+    )
+    await coord.async_check_environment(1)
+    client.async_check_container_updates.assert_called_once_with(1)
+    assert coord.data["environments"][1] == {
+        "xyz": {"containerId": "xyz", "hasUpdate": False}
+    }
+    # Environment 2's data must be exactly what it was before — untouched
+    # by a check that was only ever supposed to be about environment 1.
+    assert coord.data["environments"][2]["abc"]["hasUpdate"] is True
+
+
+async def test_async_check_environment_raises_on_failure(hass: HomeAssistant):
+    """Deliberately different from _fetch()'s per-environment resilience
+    (which falls back to last-known-good data and never raises): this is
+    an explicit user action via a button press, and silently falling back
+    to stale data here would make a failed check look like nothing
+    happened — the opposite of what pressing a button should communicate."""
+    client = _make_client()
+    client.async_check_container_updates = AsyncMock(side_effect=Exception("boom"))
+    coord = _update_coord(hass, client)
+    with pytest.raises(Exception, match="boom"):
+        await coord.async_check_environment(1)
+
+
+async def test_async_check_environment_marks_coordinator_successful(
+    hass: HomeAssistant,
+):
+    client = _make_client()
+    client.async_check_container_updates = AsyncMock(return_value=[])
+    coord = _update_coord(hass, client)
+    await coord.async_check_environment(1)
+    assert coord.last_update_success is True

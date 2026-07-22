@@ -11,6 +11,7 @@ CONF_ENABLE_NETWORKS = "enable_networks"
 CONF_ENABLE_PRECISE_UPDATES = "enable_precise_updates"
 CONF_POLL_INTERVAL_UPDATES = "poll_interval_updates"
 CONF_ENABLE_RUNTIME_CONTROLS = "enable_runtime_controls"
+CONF_ENABLE_CONTAINER_STATS = "enable_container_stats"
 CONF_VERIFY_SSL = "verify_ssl"
 
 # Removed in 1.2.0 (breaking change) — session-cookie auth replaced by API tokens.
@@ -47,6 +48,7 @@ DEFAULT_ENABLE_PRECISE_UPDATES = False
 # unlike other DIAGNOSTIC entities, this has a real, non-trivial API cost,
 # so it's gated the same way images/networks/volumes are.
 DEFAULT_ENABLE_RUNTIME_CONTROLS = False
+DEFAULT_ENABLE_CONTAINER_STATS = False
 
 PLATFORMS = [
     "sensor",

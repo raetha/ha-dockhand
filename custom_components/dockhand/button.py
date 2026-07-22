@@ -17,8 +17,10 @@ from .coordinator import (
     DockhandUpdateCoordinator,
 )
 from .helpers import (
+    _all_envs,
     _compose_project,
     _container_device,
+    _coordinator_env,
     _env_device,
     _stack_device,
     _stack_has_system_container,
@@ -57,7 +59,7 @@ async def async_setup_entry(
 
     def _build_entities() -> list[ButtonEntity]:
         new: list[ButtonEntity] = []
-        for env_id, env_data in (fast.data or {}).items():
+        for env_id, env_data in _all_envs(fast.data).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
 
@@ -160,10 +162,10 @@ async def async_setup_entry(
 
     def _build_slow_entities() -> list[ButtonEntity]:
         new: list[ButtonEntity] = []
-        slow_envs = (slow.data or {}).get("environments", {})
-        fast_data = fast.data or {}
+        slow_envs = _all_envs(slow.data)
+        fast_data = _all_envs(fast.data)
         for env_id, env_data in slow_envs.items():
-            fast_stats = fast_data.get(env_id, {}).get("stats") or {}
+            fast_stats = (fast_data.get(env_id) or {}).get("stats") or {}
             env_name = fast_stats.get("name", f"Environment {env_id}")
             for git_stack in env_data.get("git_stacks") or []:
                 gsid = f"{env_id}_{git_stack.get('stackName', '')}"
@@ -219,9 +221,10 @@ class _BaseFastContainerButton(
         self._container_name = container.get("name", "")
 
     def _container(self) -> dict | None:
-        for c in (self.coordinator.data or {}).get(self._env_id, {}).get(
-            "containers"
-        ) or []:
+        for c in (
+            _coordinator_env(self.coordinator.data, self._env_id).get("containers")
+            or []
+        ):
             if c.get("name") == self._container_name:
                 return c
         return None
@@ -262,9 +265,9 @@ class _BaseFastStackButton(CoordinatorEntity[DockhandFastCoordinator], ButtonEnt
         self._stack_name = stack.get("name", "")
 
     def _stack(self) -> dict | None:
-        for s in (self.coordinator.data or {}).get(self._env_id, {}).get(
-            "stacks"
-        ) or []:
+        for s in (
+            _coordinator_env(self.coordinator.data, self._env_id).get("stacks") or []
+        ):
             if s.get("name") == self._stack_name:
                 return s
         return None
@@ -319,7 +322,7 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
 
 class DockhandStackRestartButton(_BaseFastStackButton):
@@ -354,7 +357,7 @@ class DockhandStackRestartButton(_BaseFastStackButton):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
 
 class DockhandStackDeployButton(_BaseFastStackButton):
@@ -413,7 +416,7 @@ class DockhandStackDeployButton(_BaseFastStackButton):
                     "error": result.get("error", "Stack deploy failed")
                 },
             )
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
 
 class DockhandEnvBulkUpdateButton(
@@ -432,11 +435,11 @@ class DockhandEnvBulkUpdateButton(
     mirroring how the button disappears in Dockhand's own UI rather than
     just going idle/disabled.
 
-    name is a live @property showing "Update all (N)" with the current
-    count, matching Dockhand's exact wording ("Update all (3)") — same
-    reasoning as other dynamically-named entities this session: this
-    entity persists across polls (not recreated), so a static name would
-    go stale as the count changes.
+    Named "Update all containers" — a static name via translation_key,
+    not a live count in the name. An earlier version showed "Update all
+    (N)" matching Dockhand's own wording, but a changing friendly_name on
+    a persistent (not recreated) entity reads as confusing entity churn
+    in HA's own UI/history, so this reverted to a plain static name.
     """
 
     _attr_has_entity_name = True
@@ -464,7 +467,7 @@ class DockhandEnvBulkUpdateButton(
         """Pending-update container IDs for this env, excluding system
         containers — same exclusion Dockhand's own "Update all" applies
         (confirmed from its frontend: `!container.systemContainer`)."""
-        env_data = (self.coordinator.data or {}).get(self._env_id) or {}
+        env_data = _coordinator_env(self.coordinator.data, self._env_id)
         pending = env_data.get("pending_update_container_ids") or set()
         if not pending:
             return []
@@ -473,11 +476,6 @@ class DockhandEnvBulkUpdateButton(
             c.get("id") for c in containers if c.get("systemContainer") and c.get("id")
         }
         return [cid for cid in pending if cid not in system_ids]
-
-    @property
-    def name(self) -> str:
-        count = len(self._updatable_container_ids())
-        return f"Update all ({count})"
 
     @property
     def available(self) -> bool:
@@ -518,7 +516,7 @@ class DockhandEnvBulkUpdateButton(
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
     async def _poll_job(self, job_id: str) -> None:
         """Poll GET /api/jobs/{id} until the whole batch finishes.
@@ -579,13 +577,36 @@ class DockhandEnvBulkUpdateButton(
 class DockhandCheckUpdatesButton(
     CoordinatorEntity[DockhandFastCoordinator], ButtonEntity
 ):
-    """Trigger an immediate image update check for all containers in an environment.
+    """Trigger an immediate image update check for this environment only.
 
-    Attached to the environment device. Pressing it calls
-    async_request_refresh() on the DockhandUpdateCoordinator, which runs
-    POST /api/containers/check-updates for all environments (the coordinator
-    always fetches all envs in one gather), so pressing any environment's
-    button effectively refreshes update state across all environments.
+    Attached to the environment device, and genuinely scoped to just that
+    environment — calls DockhandUpdateCoordinator.async_check_environment(),
+    which checks only this environment and merges the result into the
+    coordinator's data via async_set_updated_data(), leaving every other
+    environment's data untouched.
+
+    This wasn't the original design: pressing this button used to call
+    async_refresh() on the whole coordinator, which always checks every
+    environment in one gather — so pressing environment 1's button
+    silently also re-checked environments 2 and 3. That seemed like a
+    reasonable "be smart about it" shortcut at the time (Dockhand's own
+    API doesn't expose a bulk endpoint, but the coordinator conveniently
+    already gathers everything), but it's a real mismatch between what
+    the button's device implies and what pressing it actually does — a
+    button on environment 1's device visibly changing environment 3's
+    update state is a legitimately confusing side effect, not a clever
+    optimization. Reverted to matching Dockhand's own UI exactly, which
+    has no global "check everything" action either — it's
+    environment-by-environment there too. The Updates card's own "Check
+    for updates" button presses every environment's button in scope, so
+    the same end result (everything gets checked) is still available
+    when that's what's wanted — it's just no longer a hidden side effect
+    of pressing just one.
+
+    async_check_environment() itself (not async_refresh()) — see its own
+    docstring in coordinator.py for the full reasoning, including why it
+    raises on failure rather than silently falling back to stale data
+    the way the coordinator's own background periodic refresh does.
 
     Only created when CONF_ENABLE_PRECISE_UPDATES is True.
     """
@@ -617,7 +638,7 @@ class DockhandCheckUpdatesButton(
 
     async def async_press(self) -> None:
         try:
-            await self._update_coordinator.async_request_refresh()
+            await self._update_coordinator.async_check_environment(self._env_id)
         except Exception as err:
             raise HomeAssistantError(
                 translation_domain="dockhand",
@@ -656,7 +677,7 @@ class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], Button
 
     def _git_stack(self) -> dict | None:
         slow_data = self.coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         for gs in env.get("git_stacks") or []:
             if gs.get("stackName") == self._stack_name:
                 return gs
@@ -702,8 +723,10 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
         )
 
     def _is_down(self) -> bool:
-        fast_data = self._fast_coordinator.data or {}
-        for s in fast_data.get(self._env_id, {}).get("stacks") or []:
+        for s in (
+            _coordinator_env(self._fast_coordinator.data, self._env_id).get("stacks")
+            or []
+        ):
             if s.get("name") == self._stack_name:
                 return s.get("status") in ("not deployed", "created")
         return False
@@ -733,4 +756,4 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()

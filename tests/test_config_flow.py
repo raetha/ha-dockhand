@@ -77,7 +77,9 @@ def _patch_full_setup():
     """Patch everything needed for async_setup_entry to succeed without network access."""
     fast = MagicMock()
     fast.data = {
-        1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}
+        "environments": {
+            1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}
+        }
     }
     fast.async_config_entry_first_refresh = AsyncMock()
     fast.async_add_listener = MagicMock(return_value=lambda: None)
@@ -592,3 +594,33 @@ async def test_options_flow_no_input_shows_form(hass: HomeAssistant):
     result = await hass.config_entries.options.async_init(entry.entry_id)
     assert result["type"] == FlowResultType.FORM
     assert result["step_id"] == "init"
+
+
+async def test_options_change_triggers_reload(hass: HomeAssistant):
+    """The actual behavior being added: a changed option should take
+    effect right away (via a reload), not only on the next poll or a
+    manual reload — __init__.py registers an update listener for
+    exactly this. Confirmed by re-entering setup with the full mock
+    still active (a real reload calls async_setup_entry again) and
+    watching for a second call, not just checking the option saved."""
+    entry = MockConfigEntry(
+        domain="dockhand",
+        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
+        title="http://dh.test:3000",
+    )
+    entry.add_to_hass(hass)
+
+    with _patch_full_setup():
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+        with patch(
+            "homeassistant.config_entries.ConfigEntries.async_reload",
+            wraps=hass.config_entries.async_reload,
+        ) as mock_reload:
+            result = await hass.config_entries.options.async_init(entry.entry_id)
+            await hass.config_entries.options.async_configure(
+                result["flow_id"], {"poll_interval": 120}
+            )
+            await hass.async_block_till_done()
+            mock_reload.assert_called_once_with(entry.entry_id)

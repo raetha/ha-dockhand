@@ -75,7 +75,11 @@ def _make_slow_coord(git_stacks=None) -> MagicMock:
 
 def _make_fast_coord(containers=None) -> MagicMock:
     coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {ENV_ID: {"containers": containers if containers is not None else []}}
+    coord.data = {
+        "environments": {
+            ENV_ID: {"containers": containers if containers is not None else []}
+        }
+    }
     return coord
 
 
@@ -156,7 +160,7 @@ async def test_deploy_button_uses_git_stack_id():
 def _make_fast_coord_with_stack_status(status: str | None) -> MagicMock:
     coord = MagicMock(spec=DockhandFastCoordinator)
     stacks = [{"name": "myapp", "status": status}] if status is not None else []
-    coord.data = {ENV_ID: {"containers": [], "stacks": stacks}}
+    coord.data = {"environments": {ENV_ID: {"containers": [], "stacks": stacks}}}
     return coord
 
 

@@ -17,6 +17,7 @@ from .const import (
     _LEGACY_CONF_USERNAME,
     CONF_API_TOKEN,
     CONF_API_URL,
+    CONF_ENABLE_CONTAINER_STATS,
     CONF_ENABLE_IMAGES,
     CONF_ENABLE_NETWORKS,
     CONF_ENABLE_PRECISE_UPDATES,
@@ -24,6 +25,7 @@ from .const import (
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_VOLUMES,
     CONF_VERIFY_SSL,
+    DEFAULT_ENABLE_CONTAINER_STATS,
     DOMAIN,
     PLATFORMS,
 )
@@ -33,8 +35,11 @@ from .coordinator import (
     DockhandUpdateCoordinator,
 )
 from .helpers import (
+    CONTAINER_STATS_SUFFIXES,
+    _all_envs,
     _compose_project,
     _container_has_healthcheck,
+    _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
     _sched_key,
@@ -236,8 +241,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
 
     # Run any pending one-time registry migrations (idempotent — safe to call
-    # on every setup). All migration logic lives in migration.py.
-    async_run_migrations(hass, entry.entry_id, fast_coordinator.data or {})
+    # on every setup). All migration logic lives in migration.py. Unwrapped
+    # here (fast_coordinator.data is now {"environments": {...}}) so
+    # migration.py's own functions keep receiving the same flat per-env
+    # dict shape they always have — they don't need to know about the
+    # wrapper at all.
+    async_run_migrations(hass, entry, _all_envs(fast_coordinator.data))
 
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
@@ -264,9 +273,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
             )
         )
 
+    # Reload the whole entry whenever options change (the Configure flow,
+    # config_flow.py's async_step_init), so a changed option takes effect
+    # right away instead of only on the next poll or a manual reload —
+    # standard HA pattern for this. A full reload re-runs async_setup_entry
+    # from scratch, so this also naturally re-evaluates every conditional
+    # entity-creation branch (container stats, precise updates, etc.)
+    # against the new option values immediately.
+    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
+
+
+async def _async_reload_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
+    await hass.config_entries.async_reload(entry.entry_id)
 
 
 def _register_devices(
@@ -293,12 +315,10 @@ def _register_devices(
     enable_volumes = bool(config.get(CONF_ENABLE_VOLUMES, False))
     enable_networks = bool(config.get(CONF_ENABLE_NETWORKS, False))
 
-    for env_id, env_data in (fast_coordinator.data or {}).items():
+    for env_id, env_data in _all_envs(fast_coordinator.data).items():
         stats = env_data.get("stats") or {}
         env_name = stats.get("name", f"Environment {env_id}")
-        slow_env = (slow_coordinator.data or {}).get("environments", {}).get(
-            env_id
-        ) or {}
+        slow_env = _coordinator_env(slow_coordinator.data, env_id)
         _ensure_env_devices(
             hass,
             entry.entry_id,
@@ -350,6 +370,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                                               pending update exists)
         runtime_control_uids     set[str]   — live entity unique_ids (memory/cpu/
                                               pids/restart-policy number/select)
+        container_stats_uids     set[str]   — live entity unique_ids (the 8
+                                              container CPU/memory/network/
+                                              block-I/O sensors, only while
+                                              "Enable container stats" is on)
         git_stack_uids           set[str]   — live entity unique_ids (git stack
                                               sensors/binary_sensor/buttons/switch)
         container_action_uids    set[str]   — live entity unique_ids (running
@@ -372,13 +396,16 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         slow_valid               bool       — slow coordinator last poll succeeded
         slow_env_ids             set[int]   — envs present in slow data (for Guard 3)
     """
-    fast_data = entry.runtime_data.fast_coordinator.data or {}
+    fast_data = _all_envs(entry.runtime_data.fast_coordinator.data)
     slow = entry.runtime_data.slow_coordinator
     slow_data = slow.data or {}
 
     entry_config = {**entry.data, **entry.options}
     runtime_controls_enabled = bool(
         entry_config.get(CONF_ENABLE_RUNTIME_CONTROLS, False)
+    )
+    container_stats_enabled = bool(
+        entry_config.get(CONF_ENABLE_CONTAINER_STATS, DEFAULT_ENABLE_CONTAINER_STATS)
     )
 
     env_ids: set[int] = set(fast_data.keys())
@@ -393,6 +420,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # container-scoped entities) they need explicit tracking rather than
     # relying purely on device-removal cascade.
     runtime_control_uids: set[str] = set()
+    container_stats_uids: set[str] = set()
     # Tier 1 update entities — live whenever the environment has
     # updateCheckEnabled=True, entirely from fast data (Tier 2/update
     # coordinator is purely additive and has no bearing on which update
@@ -453,6 +481,11 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                     health_uids.add(
                         f"{entry.entry_id}_{env_id}_container_{name}_health"
                     )
+                if container_stats_enabled:
+                    for suffix in CONTAINER_STATS_SUFFIXES:
+                        container_stats_uids.add(
+                            f"{entry.entry_id}_{env_id}_container_{name}{suffix}"
+                        )
             is_stackless = not _compose_project(c)
             if is_stackless:
                 has_freestanding = True
@@ -487,13 +520,13 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     online_env_ids: set[int] = {
         env_id
         for env_id, env_data in fast_data.items()
-        if env_data.get("stats", {}).get("online", True)
+        if (env_data.get("stats") or {}).get("online", True)
     }
 
     # Slow-coordinator-derived sets — only meaningful when slow data is valid.
     # slow_valid: slow coordinator has run successfully and returned data.
     slow_valid = slow.last_update_success and bool(slow_data)
-    slow_env_map = slow_data.get("environments", {})
+    slow_env_map = _all_envs(slow_data)
     slow_env_ids: set[int] = set(slow_env_map.keys())
 
     # Only populate schedule live set when schedules are enabled.
@@ -554,6 +587,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         "update_uids": update_uids,
         "bulk_update_uids": bulk_update_uids,
         "runtime_control_uids": runtime_control_uids,
+        "container_stats_uids": container_stats_uids,
         "container_action_uids": container_action_uids,
         "health_uids": health_uids,
         "stack_action_uids": stack_action_uids,
@@ -592,6 +626,14 @@ def _cleanup_stale_registry(
       update_coordinator, real registry queries) has no bearing on cleanup
       at all — it only ever enriches already-existing Tier 1 entities,
       never creates or removes them.
+    - Container stats entity cleanup (the 8 CPU/memory/network/block-I/O
+      sensors) uses the same two-case logic, same fast-data reliability —
+      turning "Enable container stats" off removes any already created
+      while it was on, the same way enable_images/enable_volumes/
+      enable_networks toggles already worked. The "memory_limit" suffix
+      is an intentional exact collision with a runtime control entity of
+      the same name — disambiguated by entity domain (number, not
+      sensor), not by suffix alone; see the comment at that branch.
     - Env hub and group device removal is driven by env_ids — a deleted
       environment disappears from env_ids and all its devices cascade away.
     - Schedule cleanup is gated on schedules being enabled and slow coordinator
@@ -602,7 +644,7 @@ def _cleanup_stale_registry(
       orphaning in the first place by removing devices cleanly via the device
       registry, which cascades entity removal automatically.
     """
-    fast_data = entry.runtime_data.fast_coordinator.data or {}
+    fast_data = _all_envs(entry.runtime_data.fast_coordinator.data)
     if not fast_data:
         # No confirmed environment data — do not remove anything.
         return
@@ -812,8 +854,10 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale bulk update entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
-        elif uid_type == "container" and any(
-            uid.endswith(f"_{suffix}") for suffix in _RUNTIME_CONTROL_SUFFIXES
+        elif (
+            uid_type == "container"
+            and entity_entry.domain in ("number", "select")
+            and any(uid.endswith(f"_{suffix}") for suffix in _RUNTIME_CONTROL_SUFFIXES)
         ):
             # Runtime control number/select entities. Live on the
             # container's own device, but conditionally present (feature
@@ -823,12 +867,44 @@ def _cleanup_stale_registry(
             # feature off, or a container becoming Compose-managed,
             # cleans them up even though the container device itself
             # stays. Same fast-data reliability as containers/update.
+            #
+            # Domain check added deliberately: "memory_limit" collides
+            # exactly with the container-stats sensor of the same name
+            # (sensor.py's DockhandContainerMemoryLimitSensor) — same
+            # class of bug as the update_check_enabled/image_prune_enabled
+            # collision noted in _TYPE_COLLISION_EXCLUDED_SUFFIXES above,
+            # caught the same way (a real, shipped entity disappearing
+            # right after creation). A domain check disambiguates these
+            # two suffix-identical but functionally distinct entities more
+            # precisely than adding to that exclusion list would, since
+            # this one does need its own (different) conditional removal —
+            # see the container_stats_uids branch below — not blanket
+            # exemption from cleanup altogether.
             env_id = uid_env_id
             if env_id not in live["env_ids"] or (
                 env_id in live["online_env_ids"]
                 and uid not in live["runtime_control_uids"]
             ):
                 _LOGGER.debug("Dockhand: removing stale runtime control entity %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+
+        elif uid_type == "container" and uid.endswith(CONTAINER_STATS_SUFFIXES):
+            # Container CPU/memory/network/block-I/O sensors — only
+            # created at all when "Enable container stats" is on (see
+            # sensor.py's async_setup_entry), so — like runtime controls
+            # above — need explicit tracking: turning the option off must
+            # clean these up even though the container device itself
+            # stays. Without this branch, toggling the option off did
+            # nothing to entities already created while it was on (a
+            # real, shipped gap — the option only ever controlled future
+            # creation, cleanup had no way to know these were now
+            # supposed to be gone).
+            env_id = uid_env_id
+            if env_id not in live["env_ids"] or (
+                env_id in live["online_env_ids"]
+                and uid not in live["container_stats_uids"]
+            ):
+                _LOGGER.debug("Dockhand: removing stale container stats entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid_type == "container" and any(

@@ -96,7 +96,8 @@
           "enable_networks": "Netzwerk-Sensoren aktivieren",
           "poll_interval_updates": "Update-Prüfintervall (Sekunden)",
           "enable_runtime_controls": "Laufzeitsteuerung aktivieren (erweitert)",
-          "enable_precise_updates": "Präzise Update-Versionen aktivieren"
+          "enable_precise_updates": "Präzise Update-Versionen aktivieren",
+          "enable_container_stats": "Container-CPU-/Speicher-/Netzwerk-/Festplatten-E/A-Sensoren aktivieren"
         },
         "data_description": {
           "poll_interval": "Wie oft Container-, Stack- und Umgebungsstatistiken aktualisiert werden. Standard: 60. Minimum: 10.",
@@ -107,7 +108,8 @@
           "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
           "poll_interval_updates": "Wie oft die oben aktivierten echten Registry-Abfragen ausgeführt werden (Sekunden). Standard: 86400 (24 Stunden). Minimum: 300. Nur relevant, wenn \"Präzise Update-Versionen aktivieren\" eingeschaltet ist.",
           "enable_runtime_controls": "Aktiviert Number-/Select-Entitäten, um Speicherlimit, CPU-Limit, Prozesslimit und Neustartrichtlinie eines eigenständigen Containers live zu ändern, ohne ihn neu zu erstellen. Nicht verfügbar für Container, die von einem Compose-Stack verwaltet werden. Erfordert einen zusätzlichen API-Aufruf pro eigenständigem Container bei jeder langsamen Abfrage, um aktuelle Werte zu lesen.",
-          "enable_precise_updates": "Update-Entitäten existieren bereits automatisch für jeden Container in einer Umgebung, in der die Update-Prüfung in Dockhand selbst aktiviert ist, und zeigen ein Image-Tag sowie einen Status \"update-pending\" aus Dockhands eigenen zwischengespeicherten Ergebnissen an — ohne zusätzliche API-Kosten. Diese Option aktiviert echte Registry-Abfragen im unten angegebenen Intervall und rüstet dieselben Entitäten auf, um präzise Versionsnummern (Image-Digests) anzuzeigen."
+          "enable_precise_updates": "Update-Entitäten existieren bereits automatisch für jeden Container in einer Umgebung, in der die Update-Prüfung in Dockhand selbst aktiviert ist, und zeigen ein Image-Tag sowie einen Status \"update-pending\" aus Dockhands eigenen zwischengespeicherten Ergebnissen an — ohne zusätzliche API-Kosten. Diese Option aktiviert echte Registry-Abfragen im unten angegebenen Intervall und rüstet dieselben Entitäten auf, um präzise Versionsnummern (Image-Digests) anzuzeigen.",
+          "enable_container_stats": "Erstellt die Pro-Container-Sensoren für CPU, Speicher, Netzwerk und Block-E/A, anstatt sie überhaupt nicht zu erstellen, bis Sie dies aktivieren. Steuert auch den zugrunde liegenden Statistik-API-Aufruf selbst — deaktiviert bedeutet, dass der Aufruf nicht erfolgt, nicht nur, dass die Entitäten ausgeblendet werden. Standardmäßig deaktiviert, da es sich um viele Entitäten handelt, die die meisten Menschen nicht benötigen. Ein gestoppter Container, oder einer, der aus einem anderen Grund aus der Statistikantwort fällt, meldet diese Sensoren als nicht verfügbar statt als veralteten oder Null-Wert. Das Deaktivieren entfernt auch zuvor erstellte Statistik-Entitäten."
         }
       }
     }
@@ -135,11 +137,8 @@
       "network_count": {
         "name": "Netzwerk-Anzahl"
       },
-      "containers_disk_usage": {
-        "name": "Container-Festplattennutzung"
-      },
-      "build_cache_size": {
-        "name": "Build-Cache-Größe"
+      "disk_usage": {
+        "name": "Speicherplatznutzung"
       },
       "activity_events": {
         "name": "Aktivitätsereignisse"
@@ -204,14 +203,23 @@
       "host_platform": {
         "name": "Host-Plattform"
       },
-      "host_arch": {
-        "name": "Host-Architektur"
-      },
       "host_docker_version": {
         "name": "Docker-Version"
       },
-      "host_last_boot": {
-        "name": "Host letzter Start"
+      "uptime": {
+        "name": "Betriebszeit"
+      },
+      "vulnerabilities": {
+        "name": "Schwachstellen"
+      },
+      "connection_type": {
+        "name": "Verbindungstyp",
+        "state": {
+          "socket": "Unix-Socket",
+          "direct": "Direkte Verbindung",
+          "hawser-standard": "Hawser-Agent (Standard)",
+          "hawser-edge": "Hawser-Agent (Edge)"
+        }
       }
     },
     "binary_sensor": {
@@ -265,7 +273,7 @@
         "name": "Neu bereitstellen"
       },
       "env_bulk_update": {
-        "name": "Alle aktualisieren"
+        "name": "Alle Container aktualisieren"
       }
     },
     "number": {

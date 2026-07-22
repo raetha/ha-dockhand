@@ -75,8 +75,11 @@ def _make_entry(hass: HomeAssistant, data=None, options=None) -> MockConfigEntry
 
 
 def _make_fast_coordinator(data) -> MagicMock:
+    """data is the flat {env_id: {...}} shape every call site in this file
+    already uses — wrapped in "environments" here, once, matching
+    _make_runtime_data's same reasoning above."""
     coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = data
+    coord.data = {"environments": data}
     coord.async_config_entry_first_refresh = AsyncMock()
     coord.async_add_listener = MagicMock(return_value=lambda: None)
     return coord
@@ -92,8 +95,12 @@ def _make_slow_coordinator(data) -> MagicMock:
 
 
 def _make_runtime_data(fast_data, slow_data, update_data=None) -> MagicMock:
+    """fast_data is the flat {env_id: {...}} shape every call site in this
+    file already uses — wrapped in "environments" here, once, rather than
+    touching all 60+ call sites individually now that
+    DockhandFastCoordinator.data itself carries that wrapper."""
     rd = MagicMock()
-    rd.fast_coordinator.data = fast_data
+    rd.fast_coordinator.data = {"environments": fast_data}
     rd.fast_coordinator.last_update_success = True
     rd.slow_coordinator.data = slow_data
     rd.slow_coordinator.last_update_success = bool(slow_data)
@@ -129,10 +136,10 @@ def _add_device(hass, entry, identifier) -> dr.DeviceEntry:
     )
 
 
-def _add_entity(hass, entry, unique_id) -> er.RegistryEntry:
+def _add_entity(hass, entry, unique_id, domain="sensor") -> er.RegistryEntry:
     reg = er.async_get(hass)
     return reg.async_get_or_create(
-        domain="sensor",
+        domain=domain,
         platform="dockhand",
         unique_id=unique_id,
         config_entry=entry,
@@ -693,7 +700,9 @@ def test_preserves_live_runtime_control_entity(hass: HomeAssistant):
         },
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit")
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit", domain="number"
+    )
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -716,7 +725,9 @@ def test_removes_runtime_control_entity_when_feature_disabled(hass: HomeAssistan
         },
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit")
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit", domain="number"
+    )
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
 
@@ -746,7 +757,9 @@ def test_removes_runtime_control_entity_when_container_becomes_compose_managed(
         },
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit")
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit", domain="number"
+    )
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
 
@@ -766,7 +779,9 @@ def test_preserves_runtime_control_entity_when_env_offline(hass: HomeAssistant):
         },
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit")
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit", domain="number"
+    )
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -867,7 +882,9 @@ def test_preserves_runtime_control_entities_for_normal_stackless_container(
         },
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_web_memory_limit")
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_web_memory_limit", domain="number"
+    )
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -897,7 +914,147 @@ def test_removes_runtime_control_entities_when_container_is_system(
         },
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_web_memory_limit")
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_web_memory_limit", domain="number"
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+# ---------------------------------------------------------------------------
+# Container stats entity cleanup
+# ---------------------------------------------------------------------------
+
+
+def test_preserves_container_stats_entity_when_option_on(hass: HomeAssistant):
+    entry = _make_entry(hass, options={"enable_container_stats": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_cpu_percent")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_removes_container_stats_entity_when_option_off(hass: HomeAssistant):
+    """The actual bug report: these entities weren't being cleaned up at
+    all when the option was turned off — the config option only ever
+    controlled future creation, cleanup had no tracking for them."""
+    entry = _make_entry(hass, options={"enable_container_stats": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_cpu_percent")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_removes_container_stats_entity_when_container_gone(hass: HomeAssistant):
+    entry = _make_entry(hass, options={"enable_container_stats": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_network_rx")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_preserves_container_stats_entity_when_env_offline(hass: HomeAssistant):
+    entry = _make_entry(hass, options={"enable_container_stats": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"online": False}}},
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_block_write")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_container_stats_memory_limit_collision_disambiguated_by_domain(
+    hass: HomeAssistant,
+):
+    """The actual root cause of the bug report: the container-stats
+    memory_limit sensor and the runtime-control memory_limit number
+    entity share an exact unique_id suffix by design (see
+    _CONTAINER_STATS_SUFFIXES's comment). A container-stats memory_limit
+    *sensor* must not be swept by the runtime-control branch just
+    because both are off/untracked — domain is what disambiguates them,
+    not suffix. Runtime controls off + container stats off: the sensor
+    (container-stats) is removed via the container-stats branch, not
+    preserved by accident, and a same-suffix number entity (a genuine
+    runtime control) is independently removed via its own branch — both
+    correctly evaluated, neither masking the other."""
+    entry = _make_entry(
+        hass,
+        options={"enable_runtime_controls": False, "enable_container_stats": False},
+    )
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    stats_ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_nginx_memory_limit"
+    )
+    control_ent = _add_entity(
+        hass,
+        entry,
+        f"{entry.entry_id}_1_container_nginx_memory_limit",
+        domain="number",
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, stats_ent.entity_id)
+    assert not _entity_exists(hass, control_ent.entity_id)
+
+
+def test_removes_container_stats_entity_predating_the_option(hass: HomeAssistant):
+    """The other half of the bug report: entities created before "Enable
+    container stats" existed at all (option key entirely absent from
+    entry.options, not explicitly False) must also get cleaned up, same
+    as if the option were explicitly turned off. Reads through the same
+    DEFAULT_ENABLE_CONTAINER_STATS fallback as everywhere else — this
+    isn't a special case, just confirming the default (False) behaves
+    like an explicit off for cleanup purposes."""
+    entry = _make_entry(hass)  # no options at all — key genuinely absent
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_memory_usage")
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
 
@@ -1262,15 +1419,15 @@ def test_other_container_entities_untouched_by_action_cleanup(
     hass: HomeAssistant,
 ):
     """A container-scoped entity that isn't a recognized runtime-control,
-    action, or health suffix (e.g. the CPU usage sensor) is left alone
-    by these cleanup paths — it relies on device-removal cascade
-    instead, tested elsewhere."""
+    action, health, or container-stats suffix (e.g. the container State
+    sensor) is left alone by these cleanup paths — it relies on
+    device-removal cascade instead, tested elsewhere."""
     entry = _make_entry(hass, options={"enable_runtime_controls": False})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
         slow_data={"environments": {}, "schedules": []},
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_cpu_percent")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_container_nginx_state")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -1513,9 +1670,9 @@ async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssi
     entities = er.async_entries_for_config_entry(reg, entry.entry_id)
     entity_ids = {e.entity_id for e in entities}
     # Health sensor must be present — its entity_id contains the container name
-    assert any("healthy_app" in eid and "health" in eid for eid in entity_ids), (
-        f"Health sensor not found in: {entity_ids}"
-    )
+    assert any(
+        "healthy_app" in entity_id and "health" in entity_id for entity_id in entity_ids
+    ), f"Health sensor not found in: {entity_ids}"
 
 
 async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssistant):
@@ -1575,10 +1732,12 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
 
         # Container is recreated from an image that adds a HEALTHCHECK.
         fast.data = {
-            1: {
-                "stats": {"name": "MyHost", "online": True},
-                "containers": [{**container, "health": "healthy"}],
-                "stacks": [],
+            "environments": {
+                1: {
+                    "stats": {"name": "MyHost", "online": True},
+                    "containers": [{**container, "health": "healthy"}],
+                    "stacks": [],
+                }
             }
         }
         for cb in listeners:

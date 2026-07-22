@@ -104,6 +104,36 @@ class DockhandClient:
         result = await self._request("GET", "/api/dashboard/stats")
         return result if isinstance(result, list) else []
 
+    async def async_get_vulnerabilities_count(self, env_id: int) -> dict[str, Any]:
+        """Fetch the cached vulnerability-scan summary for an environment.
+
+        GET /api/vulnerabilities/count?env=X
+
+        Cheap and pre-aggregated server-side (Dockhand's own dashboard
+        badge uses this same endpoint) — not a fresh scan trigger, just
+        reads whatever Dockhand already has cached. Shape: {total,
+        summary: {total, critical, high, medium, low, imagesScanned,
+        totalImages}, options: {...}}. We only use `summary`.
+        """
+        return await self._request("GET", f"/api/vulnerabilities/count?env={env_id}")
+
+    async def async_get_recent_activity(
+        self, env_id: int, limit: int = 10
+    ) -> dict[str, Any]:
+        """Fetch the most recent activity events for an environment.
+
+        GET /api/activity?environmentId=X&limit=N
+
+        Distinct from /api/activity/stats (today/total aggregate counts,
+        already covered by async_get_all_dashboard_stats' events field) —
+        this is the individual event list, param name confirmed from
+        Dockhand's own +server.ts (environmentId, not env, unlike every
+        other per-environment endpoint here).
+        """
+        return await self._request(
+            "GET", f"/api/activity?environmentId={env_id}&limit={limit}"
+        )
+
     async def async_get_host_info(self, env_id: int) -> dict[str, Any]:
         """Fetch host/agent info for an environment.
 
@@ -247,8 +277,21 @@ class DockhandClient:
                                        batch-update even when hasUpdate=True.
           updateDisabled  bool       — True when dockhand.update=false label is set
         """
+        # timeout_seconds well above the default 30s: this is a real
+        # registry check across every container in the environment, not
+        # a cheap read — it can legitimately take a minute or more.
+        # Previously used the 30s default, which meant the client gave up
+        # (and any UI awaiting this, like the card's "Check for updates"
+        # button, saw the promise settle) well before Dockhand's server
+        # actually finished — the check kept running server-side, its
+        # result never retrieved, since the synchronous-mode POST has no
+        # job ID to poll afterward. Confirmed via Raetha's own report: a
+        # spinner that cleared after only a few seconds while the check
+        # was still visibly running server-side for close to a minute.
         data = await self._request(
-            "POST", f"/api/containers/check-updates?env={env_id}"
+            "POST",
+            f"/api/containers/check-updates?env={env_id}",
+            timeout_seconds=180,
         )
         results = data.get("results") if isinstance(data, dict) else data
         return results if isinstance(results, list) else []

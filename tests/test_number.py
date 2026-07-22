@@ -60,11 +60,13 @@ CONTAINER_COMPOSE = {
 def _make_fast_coord(containers=None) -> MagicMock:
     coord = MagicMock(spec=DockhandFastCoordinator)
     coord.data = {
-        ENV_ID: {
-            "stats": {"name": ENV_NAME},
-            "containers": containers
-            if containers is not None
-            else [CONTAINER_STANDALONE],
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": containers
+                if containers is not None
+                else [CONTAINER_STANDALONE],
+            }
         }
     }
     coord.client = MagicMock()

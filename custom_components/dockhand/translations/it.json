@@ -96,7 +96,8 @@
           "enable_networks": "Abilita sensori reti",
           "poll_interval_updates": "Intervallo di controllo aggiornamenti (secondi)",
           "enable_runtime_controls": "Abilita controlli runtime (avanzato)",
-          "enable_precise_updates": "Abilita versioni di aggiornamento precise"
+          "enable_precise_updates": "Abilita versioni di aggiornamento precise",
+          "enable_container_stats": "Abilita sensori CPU/memoria/rete/I-O disco per container"
         },
         "data_description": {
           "poll_interval": "Con quale frequenza aggiornare le statistiche. Predefinito: 60. Minimo: 10.",
@@ -107,7 +108,8 @@
           "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente.",
           "poll_interval_updates": "Con quale frequenza eseguire le query al registro reali abilitate sopra (secondi). Predefinito: 86400 (24 ore). Minimo: 300. Rilevante solo se \"Abilita versioni di aggiornamento precise\" è attivo.",
           "enable_runtime_controls": "Abilita entità number/select per modificare in tempo reale il limite di memoria, il limite CPU, il limite di processi e il criterio di riavvio di un container autonomo, senza ricrearlo. Non disponibile per i container gestiti da uno stack Compose. Richiede una chiamata API aggiuntiva per container autonomo a ogni polling lento per leggere i valori attuali.",
-          "enable_precise_updates": "Le entità di aggiornamento esistono già automaticamente per ogni container in un ambiente in cui il controllo aggiornamenti è abilitato in Dockhand stesso, mostrando un tag immagine e uno stato \"update-pending\" dai risultati già memorizzati nella cache da Dockhand — senza costi API aggiuntivi. Attivando questa opzione si aggiungono vere query al registro nell'intervallo indicato sotto, aggiornando le stesse entità per mostrare numeri di versione precisi (digest delle immagini)."
+          "enable_precise_updates": "Le entità di aggiornamento esistono già automaticamente per ogni container in un ambiente in cui il controllo aggiornamenti è abilitato in Dockhand stesso, mostrando un tag immagine e uno stato \"update-pending\" dai risultati già memorizzati nella cache da Dockhand — senza costi API aggiuntivi. Attivando questa opzione si aggiungono vere query al registro nell'intervallo indicato sotto, aggiornando le stesse entità per mostrare numeri di versione precisi (digest delle immagini).",
+          "enable_container_stats": "Crea i sensori per container di CPU, memoria, rete e I/O a blocchi, invece di non crearli affatto finché non lo attivi. Controlla anche la chiamata API di statistiche sottostante stessa — disattivato significa che la chiamata non viene effettuata, non solo che le entità sono nascoste. Disabilitato per impostazione predefinita poiché sono molte entità di cui la maggior parte delle persone non ha bisogno. Un container fermo, o che esce dalla risposta delle statistiche per qualsiasi altro motivo, segnala questi sensori come non disponibili invece di una lettura obsoleta o pari a zero. Disattivare questo rimuove anche le entità statistiche create in precedenza."
         }
       }
     }
@@ -135,11 +137,8 @@
       "network_count": {
         "name": "Numero reti"
       },
-      "containers_disk_usage": {
-        "name": "Utilizzo disco container"
-      },
-      "build_cache_size": {
-        "name": "Dimensione cache build"
+      "disk_usage": {
+        "name": "Utilizzo del disco"
       },
       "activity_events": {
         "name": "Eventi di attività"
@@ -204,14 +203,23 @@
       "host_platform": {
         "name": "Piattaforma host"
       },
-      "host_arch": {
-        "name": "Architettura host"
-      },
       "host_docker_version": {
         "name": "Versione Docker"
       },
-      "host_last_boot": {
-        "name": "Ultimo avvio host"
+      "uptime": {
+        "name": "Tempo di attività"
+      },
+      "vulnerabilities": {
+        "name": "Vulnerabilità"
+      },
+      "connection_type": {
+        "name": "Tipo di connessione",
+        "state": {
+          "socket": "Socket Unix",
+          "direct": "Connessione diretta",
+          "hawser-standard": "Agente Hawser (standard)",
+          "hawser-edge": "Agente Hawser (edge)"
+        }
       }
     },
     "binary_sensor": {
@@ -265,7 +273,7 @@
         "name": "Ridistribuisci"
       },
       "env_bulk_update": {
-        "name": "Aggiorna tutto"
+        "name": "Aggiorna tutti i container"
       }
     },
     "number": {

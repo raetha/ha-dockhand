@@ -48,10 +48,12 @@ STACK_WITH_SYSTEM = {
 def _make_entry(containers, stacks) -> MagicMock:
     fast = MagicMock()
     fast.data = {
-        ENV_ID: {
-            "stats": {"name": ENV_NAME},
-            "containers": containers,
-            "stacks": stacks,
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": containers,
+                "stacks": stacks,
+            }
         }
     }
     fast.async_add_listener = MagicMock(return_value=lambda: None)
@@ -169,10 +171,12 @@ async def test_button_creates_stack_restart_button_for_normal_stack():
 def _make_runtime_control_entry(containers) -> MagicMock:
     fast = MagicMock()
     fast.data = {
-        ENV_ID: {
-            "stats": {"name": ENV_NAME},
-            "containers": containers,
-            "stacks": [],
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": containers,
+                "stacks": [],
+            }
         }
     }
     fast.async_add_listener = MagicMock(return_value=lambda: None)

@@ -96,7 +96,8 @@
           "enable_networks": "Aktiver nettverkssensorer",
           "poll_interval_updates": "Intervall for oppdateringssjekk (sekunder)",
           "enable_runtime_controls": "Aktiver kjøretidskontroller (avansert)",
-          "enable_precise_updates": "Aktiver presise oppdateringsversjoner"
+          "enable_precise_updates": "Aktiver presise oppdateringsversjoner",
+          "enable_container_stats": "Aktiver CPU/minne/nettverk/disk-I/U-sensorer per container"
         },
         "data_description": {
           "poll_interval": "Hvor ofte statistikk oppdateres. Standard: 60. Minimum: 10.",
@@ -107,7 +108,8 @@
           "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø.",
           "poll_interval_updates": "Hvor ofte de ekte registerforespørslene aktivert ovenfor kjøres (sekunder). Standard: 86400 (24 timer). Minimum: 300. Bare relevant når \"Aktiver presise oppdateringsversjoner\" er på.",
           "enable_runtime_controls": "Aktiverer number/select-enheter for å endre minnegrense, CPU-grense, prosessgrense og omstartspolicy for en frittstående container direkte, uten å gjenopprette den. Ikke tilgjengelig for containere som administreres av en Compose-stack. Krever ett ekstra API-kall per frittstående container ved hver trege spørring for å lese gjeldende verdier.",
-          "enable_precise_updates": "Oppdateringsenheter finnes allerede automatisk for hver container i et miljø der oppdateringssjekk er aktivert i Dockhand selv, og viser en image-tag og en \"update-pending\"-status fra Dockhands egne bufrede resultater — uten ekstra API-kostnad. Å aktivere dette legger til ekte registerforespørsler med intervallet nedenfor, og oppgraderer de samme enhetene til å vise presise versjonsnumre (image-digest)."
+          "enable_precise_updates": "Oppdateringsenheter finnes allerede automatisk for hver container i et miljø der oppdateringssjekk er aktivert i Dockhand selv, og viser en image-tag og en \"update-pending\"-status fra Dockhands egne bufrede resultater — uten ekstra API-kostnad. Å aktivere dette legger til ekte registerforespørsler med intervallet nedenfor, og oppgraderer de samme enhetene til å vise presise versjonsnumre (image-digest).",
+          "enable_container_stats": "Oppretter per-container-sensorene for CPU, minne, nettverk og blokk-I/U, i stedet for å ikke opprette dem i det hele tatt før du slår dette på. Styrer også selve det underliggende statistikk-API-kallet — av betyr at kallet ikke gjøres, ikke bare at enhetene er skjult. Deaktivert som standard siden det er mange enheter de fleste ikke trenger. En container som er stoppet, eller som faller ut av statistikkresponsen av annen grunn, rapporterer disse sensorene som utilgjengelige i stedet for en foreldet eller null-verdi. Å slå dette av fjerner også tidligere opprettede statistikkenheter."
         }
       }
     }
@@ -135,11 +137,8 @@
       "network_count": {
         "name": "Antall nettverk"
       },
-      "containers_disk_usage": {
-        "name": "Diskbruk for beholdere"
-      },
-      "build_cache_size": {
-        "name": "Build-cachestørrelse"
+      "disk_usage": {
+        "name": "Diskbruk"
       },
       "activity_events": {
         "name": "Aktivitetshendelser"
@@ -204,14 +203,23 @@
       "host_platform": {
         "name": "Vertsplattform"
       },
-      "host_arch": {
-        "name": "Vertsarkitektur"
-      },
       "host_docker_version": {
         "name": "Docker-versjon"
       },
-      "host_last_boot": {
-        "name": "Sist oppstart av vert"
+      "uptime": {
+        "name": "Oppetid"
+      },
+      "vulnerabilities": {
+        "name": "Sårbarheter"
+      },
+      "connection_type": {
+        "name": "Tilkoblingstype",
+        "state": {
+          "socket": "Unix-socket",
+          "direct": "Direkte tilkobling",
+          "hawser-standard": "Hawser-agent (standard)",
+          "hawser-edge": "Hawser-agent (edge)"
+        }
       }
     },
     "binary_sensor": {
@@ -265,7 +273,7 @@
         "name": "Distribuer på nytt"
       },
       "env_bulk_update": {
-        "name": "Oppdater alle"
+        "name": "Oppdater alle containere"
       }
     },
     "number": {

@@ -13,7 +13,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import CONF_API_URL
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
-from .helpers import _env_device, _stack_device
+from .helpers import _all_envs, _coordinator_env, _env_device, _stack_device
 
 # Coordinator-based read-only platform.
 PARALLEL_UPDATES = 0
@@ -35,7 +35,7 @@ async def async_setup_entry(
 
     def _build_fast_entities() -> list[BinarySensorEntity]:
         new: list[BinarySensorEntity] = []
-        for env_id, env_data in (fast.data or {}).items():
+        for env_id, env_data in _all_envs(fast.data).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
             if env_id not in known_fast_env_ids:
@@ -71,10 +71,10 @@ async def async_setup_entry(
 
     def _build_slow_entities() -> list[BinarySensorEntity]:
         new: list[BinarySensorEntity] = []
-        slow_envs = (slow.data or {}).get("environments", {})
-        fast_data = fast.data or {}
+        slow_envs = _all_envs(slow.data)
+        fast_data = _all_envs(fast.data)
         for env_id, env_data in slow_envs.items():
-            fast_stats = fast_data.get(env_id, {}).get("stats") or {}
+            fast_stats = (fast_data.get(env_id) or {}).get("stats") or {}
             env_name = fast_stats.get("name", f"Environment {env_id}")
 
             if env_id not in known_slow_env_ids:
@@ -132,7 +132,7 @@ class BaseEnvBinarySensor(
         self._base_url = base_url
 
     def _stats(self) -> dict:
-        return (self.coordinator.data or {}).get(self._env_id, {}).get("stats") or {}
+        return _coordinator_env(self.coordinator.data, self._env_id).get("stats") or {}
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -143,8 +143,9 @@ class BaseEnvBinarySensor(
 
 class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
     """Environment connectivity — also carries a few identifying
-    attributes (name, Docker connection host/port) for dashboard cards
-    that want them without cross-referencing the device registry."""
+    attributes (name, Docker connection host/port, user-assigned labels)
+    for dashboard cards that want them without cross-referencing the
+    device registry."""
 
     _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
     _attr_translation_key = "online"
@@ -167,16 +168,18 @@ class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
 
     def _env_meta(self) -> dict:
         slow_data = self._slow_coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         return env.get("env_meta") or {}
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         meta = self._env_meta()
+        labels = self._stats().get("labels")
         return {
             "name": self._stats().get("name"),
             "connection_host": meta.get("connectionHost"),
             "connection_port": meta.get("connectionPort"),
+            "labels": labels if isinstance(labels, list) else [],
         }
 
 
@@ -320,7 +323,7 @@ class DockhandEnvImagePruneBinarySensor(
 
     def _env_meta(self) -> dict:
         slow_data = self.coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         return env.get("env_meta") or {}
 
     @property
@@ -340,7 +343,10 @@ class DockhandStackUpdatesAvailableBinarySensor(
     Sourced from /api/stacks' updatesAvailable/updateCount fields — added
     in Dockhand 1.0.37, computed server-side from the same pending-update
     data our own Tier 1 update entities already use, just pre-aggregated
-    per stack so we don't have to cross-reference containers ourselves.
+    per stack so we don't have to cross-reference containers ourselves
+    for the count itself. Dockhand's own stack object doesn't expose
+    *which* containers specifically (see pending_container_names below),
+    only the count and the boolean.
 
     Feature-detected rather than version-gated: created only when
     "updatesAvailable" is actually present as a key in the stack's data
@@ -349,10 +355,25 @@ class DockhandStackUpdatesAvailableBinarySensor(
     correctly against older Dockhand installs without needing to know
     or compare any specific version number, and adapts automatically if
     Dockhand changes this again later.
+
+    Deliberately no device_class. BinarySensorDeviceClass.PROBLEM was
+    tried first and made this look like something was wrong even when a
+    routine update is simply available — a real, reported issue, not a
+    style preference. BinarySensorDeviceClass.UPDATE was considered as
+    the semantically obvious alternative (it exists specifically for
+    this: "on means update available, off means up-to-date"), but HA's
+    own developer docs explicitly discourage it: "The use of this device
+    class should be avoided, please consider using the update entity
+    instead." A full update-domain entity at the stack level (matching
+    ha-dockhand's own per-container update.py entities) would be the
+    idiomatic fix HA's docs point toward, but is a materially bigger
+    change than this — a real install-action-capable entity, not a
+    read-only summary — so left as a plain, device-class-less binary
+    sensor for now (renders as generic On/Off), which at least stops
+    misrepresenting a routine update as a problem.
     """
 
     _attr_has_entity_name = True
-    _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_translation_key = "stack_updates_available"
 
     def __init__(
@@ -375,9 +396,9 @@ class DockhandStackUpdatesAvailableBinarySensor(
         )
 
     def _stack(self) -> dict | None:
-        for s in (self.coordinator.data or {}).get(self._env_id, {}).get(
-            "stacks"
-        ) or []:
+        for s in (
+            _coordinator_env(self.coordinator.data, self._env_id).get("stacks") or []
+        ):
             if s.get("name") == self._stack_name:
                 return s
         return None
@@ -394,7 +415,30 @@ class DockhandStackUpdatesAvailableBinarySensor(
         s = self._stack()
         if s is None or "updateCount" not in s:
             return None
-        return {"update_count": s["updateCount"]}
+        env = _coordinator_env(self.coordinator.data, self._env_id)
+        # Dockhand's stack object gives us the container ID list and the
+        # aggregate update count, but not which of those containers
+        # specifically have a pending update — cross-referenced here
+        # against the environment's own pending_update_container_ids
+        # (the same set DockhandEnvBulkUpdateButton uses), then resolved
+        # to names against the environment's full container list, same
+        # pattern as DockhandStackStatusSensor's container_names.
+        pending_ids = env.get("pending_update_container_ids") or set()
+        stack_container_ids = s.get("containers") or []
+        env_containers = env.get("containers") or []
+        id_to_name = {c.get("id"): c.get("name") for c in env_containers if c.get("id")}
+        pending_container_names = sorted(
+            (
+                id_to_name.get(cid, cid)
+                for cid in stack_container_ids
+                if cid in pending_ids
+            ),
+            key=str.lower,
+        )
+        return {
+            "update_count": s["updateCount"],
+            "pending_container_names": pending_container_names,
+        }
 
     @property
     def device_info(self) -> DeviceInfo:
@@ -443,7 +487,7 @@ class DockhandGitStackSyncErrorBinarySensor(
 
     def _git_stack(self) -> dict | None:
         slow_data = self.coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         for gs in env.get("git_stacks") or []:
             if gs.get("stackName") == self._stack_name:
                 return gs

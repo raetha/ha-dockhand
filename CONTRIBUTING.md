@@ -22,7 +22,7 @@ than the versions listed here.
 
 | Project | Last reviewed | Where to check |
 |---|---|---|
-| Home Assistant Core | 2026.3 (minimum); tested against 2026.6.4; dev blog reviewed through 2026-07-05 | https://github.com/home-assistant/core/releases |
+| Home Assistant Core | 2026.3 (minimum); tested against 2026.6.4; 2026.7's full backward-incompatible changes list reviewed directly (2026-07-21) — nothing relevant to entity/coordinator/config_entries APIs this integration depends on | https://github.com/home-assistant/core/releases |
 | Dockhand | v1.0.37 | https://github.com/Finsys/dockhand/releases |
 
 Update this table after each review session. When picking up new Dockhand

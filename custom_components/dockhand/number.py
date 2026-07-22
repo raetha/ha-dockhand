@@ -58,7 +58,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import CONF_API_URL, CONF_ENABLE_RUNTIME_CONTROLS, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
-from .helpers import _compose_project
+from .helpers import _all_envs, _compose_project, _coordinator_env
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,10 +91,10 @@ async def async_setup_entry(
 
     def _build_entities() -> list[NumberEntity]:
         new: list[NumberEntity] = []
-        for env_id, env_data in (fast.data or {}).items():
+        for env_id, env_data in _all_envs(fast.data).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
-            slow_env = (slow.data or {}).get("environments", {}).get(env_id, {})
+            slow_env = _coordinator_env(slow.data, env_id)
             host_cpus = (slow_env.get("host") or {}).get("cpus")
 
             for container in env_data.get("containers") or []:
@@ -181,15 +181,19 @@ class _BaseRuntimeControlNumber(
         )
 
     def _container(self) -> dict | None:
-        fast_data = self._fast_coordinator.data or {}
-        for c in fast_data.get(self._env_id, {}).get("containers") or []:
+        for c in (
+            _coordinator_env(self._fast_coordinator.data, self._env_id).get(
+                "containers"
+            )
+            or []
+        ):
             if c.get("name") == self._container_name:
                 return c
         return None
 
     def _runtime_config(self) -> dict:
         slow_data = self.coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         return (env.get("runtime_config") or {}).get(self._container_name) or {}
 
     @property

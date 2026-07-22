@@ -179,6 +179,27 @@ async def test_get_stacks(client_with_mock_request):
     assert client_with_mock_request._request.call_args.args[1] == "/api/stacks?env=2"
 
 
+async def test_check_container_updates_url(client_with_mock_request):
+    client_with_mock_request._request.return_value = []
+    await client_with_mock_request.async_check_container_updates(2)
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/containers/check-updates?env=2"
+    )
+
+
+async def test_check_container_updates_extended_timeout(client_with_mock_request):
+    """A real registry check across every container in an environment can
+    legitimately take a minute or more — the default 30s timeout meant
+    the client gave up (and any UI awaiting this, like the "Check for
+    updates" button, saw its promise settle) well before Dockhand's
+    server actually finished the check. See api.py's own comment on this
+    call for the full story."""
+    client_with_mock_request._request.return_value = []
+    await client_with_mock_request.async_check_container_updates(2)
+    assert client_with_mock_request._request.call_args.kwargs["timeout_seconds"] == 180
+
+
 async def test_get_networks(client_with_mock_request):
     await client_with_mock_request.async_get_networks(2)
     assert client_with_mock_request._request.call_args.args[1] == "/api/networks?env=2"

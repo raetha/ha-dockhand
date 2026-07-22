@@ -53,6 +53,7 @@ matching logic. Both work identically whether or not Tier 2 is enabled.
 
 import asyncio
 import logging
+from typing import Any
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
 from homeassistant.core import HomeAssistant
@@ -64,7 +65,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandUpdateCoordinator
-from .helpers import _is_update_disabled_by_label
+from .helpers import _all_envs, _coordinator_env, _is_update_disabled_by_label
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -145,7 +146,7 @@ async def async_setup_entry(
     seen: set[str] = set()
 
     def _add_new_entities() -> None:
-        fast_data = fast_coordinator.data or {}
+        fast_data = _all_envs(fast_coordinator.data)
         new_entities = []
 
         for env_id, env_data in fast_data.items():
@@ -225,11 +226,15 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
     def _container(self) -> dict | None:
         """Look up the current container dict by name from the fast
         coordinator — name is stable across container recreation."""
-        fast_data = self.coordinator.data or {}
-        for c in fast_data.get(self._env_id, {}).get("containers") or []:
+        fast_data = _all_envs(self.coordinator.data)
+        for c in (fast_data.get(self._env_id) or {}).get("containers") or []:
             if c.get("name") == self._container_name:
                 return c
         return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"name": self._container_name}
 
     def _check_updates_item(self) -> dict:
         """Return the current Tier 2 (check-updates) payload for this
@@ -239,8 +244,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         """
         if self._update_coordinator is None:
             return {}
-        update_data = self._update_coordinator.data or {}
-        env_data = update_data.get(self._env_id, {})
+        env_data = _coordinator_env(self._update_coordinator.data, self._env_id)
         # env_data is indexed by container_id — scan for matching name.
         for item in env_data.values():
             if item.get("containerName") == self._container_name:
@@ -275,7 +279,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         """True if Dockhand's own (cheap, no-registry-query) pending-updates
         cache already flags this container, keyed by its current container
         ID from the fast coordinator's container list."""
-        fast_data = self.coordinator.data or {}
+        fast_data = _all_envs(self.coordinator.data)
         env_data = fast_data.get(self._env_id) or {}
         pending_ids = env_data.get("pending_update_container_ids") or set()
         if not pending_ids:
@@ -298,8 +302,8 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
 
     def _scanner_enabled(self) -> bool:
         """Return True if vulnerability scanning is enabled on this environment."""
-        fast_data = self.coordinator.data or {}
-        stats = fast_data.get(self._env_id, {}).get("stats") or {}
+        fast_data = _all_envs(self.coordinator.data)
+        stats = (fast_data.get(self._env_id) or {}).get("stats") or {}
         return bool(stats.get("scannerEnabled", False))
 
     @property
@@ -395,9 +399,13 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         # Request a refresh so the entity state reflects the result. Also
         # nudge Tier 2 if configured, so a precise digest shows up sooner
         # than its own (up to 24h) schedule would otherwise provide.
-        await self.coordinator.async_request_refresh()
+        # Deliberately async_refresh(), not async_request_refresh() — see
+        # DockhandCheckUpdatesButton's docstring in button.py for why the
+        # latter can silently no-op here (a live, non-obvious debouncer
+        # cooldown gotcha, not a hypothetical).
+        await self.coordinator.async_refresh()
         if self._update_coordinator is not None:
-            await self._update_coordinator.async_request_refresh()
+            await self._update_coordinator.async_refresh()
 
     async def _vulnerability_criteria(self) -> str | None:
         """Fetch this environment's configured vulnerability blocking policy.

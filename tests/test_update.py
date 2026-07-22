@@ -102,20 +102,24 @@ def _make_fast_coord(
 ) -> MagicMock:
     coord = MagicMock(spec=DockhandFastCoordinator)
     coord.data = {
-        ENV_ID: {
-            "containers": containers if containers is not None else [CONTAINER_NORMAL],
-            "stacks": [],
-            "stats": {
-                "scannerEnabled": scanner_enabled,
-                "name": ENV_NAME,
-                "updateCheckEnabled": True,
-            },
-            "container_stats": {},
-            "pending_update_container_ids": pending_ids or set(),
+        "environments": {
+            ENV_ID: {
+                "containers": containers
+                if containers is not None
+                else [CONTAINER_NORMAL],
+                "stacks": [],
+                "stats": {
+                    "scannerEnabled": scanner_enabled,
+                    "name": ENV_NAME,
+                    "updateCheckEnabled": True,
+                },
+                "container_stats": {},
+                "pending_update_container_ids": pending_ids or set(),
+            }
         }
     }
     coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
+    coord.async_refresh = AsyncMock()
     coord.async_add_listener = MagicMock(return_value=lambda: None)
     coord.client = MagicMock()
     coord.client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
@@ -149,9 +153,11 @@ def _make_update_coord(item: dict | None = None) -> MagicMock:
     the same as update_coordinator=None, which means Tier 2 disabled
     entirely — see _make_entity's update_coordinator=... override)."""
     coord = MagicMock(spec=DockhandUpdateCoordinator)
-    coord.data = {ENV_ID: {CONTAINER_ID: item}} if item else {ENV_ID: {}}
+    coord.data = {
+        "environments": {ENV_ID: {CONTAINER_ID: item}} if item else {ENV_ID: {}}
+    }
     coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
+    coord.async_refresh = AsyncMock()
     coord.async_add_listener = MagicMock(return_value=lambda: None)
     return coord
 
@@ -477,7 +483,7 @@ def test_handle_coordinator_update_refreshes_features():
 
     entity = _make_entity(containers=[CONTAINER_NORMAL])
     # Simulate the container becoming system-classified on the next poll.
-    entity.coordinator.data[ENV_ID]["containers"] = [CONTAINER_SYSTEM]
+    entity.coordinator.data["environments"][ENV_ID]["containers"] = [CONTAINER_SYSTEM]
     with patch.object(entity, "async_write_ha_state"):
         entity._handle_coordinator_update()
     assert UpdateEntityFeature.INSTALL not in entity._attr_supported_features
@@ -663,14 +669,14 @@ async def test_async_install_percentage_ignores_events_without_known_step():
 async def test_async_install_requests_refresh_after_update():
     entity = _make_entity(ITEM_HAS_UPDATE)
     await _install(entity)
-    entity.coordinator.async_request_refresh.assert_called_once()
+    entity.coordinator.async_refresh.assert_called_once()
 
 
 async def test_async_install_also_refreshes_tier2_when_present():
     entity = _make_entity(ITEM_HAS_UPDATE)
     update_coord = entity._update_coordinator
     await _install(entity)
-    update_coord.async_request_refresh.assert_called_once()
+    update_coord.async_refresh.assert_called_once()
 
 
 async def test_async_install_skips_tier2_refresh_when_disabled():
@@ -767,12 +773,16 @@ def _make_setup_env(containers=None, update_check_enabled=True):
     fast_coordinator.async_add_listener(cb) would return/store)."""
     fast_coord = MagicMock(spec=DockhandFastCoordinator)
     fast_coord.data = {
-        ENV_ID: {
-            "containers": containers if containers is not None else [CONTAINER_NORMAL],
-            "stats": {
-                "name": ENV_NAME,
-                "updateCheckEnabled": update_check_enabled,
-            },
+        "environments": {
+            ENV_ID: {
+                "containers": containers
+                if containers is not None
+                else [CONTAINER_NORMAL],
+                "stats": {
+                    "name": ENV_NAME,
+                    "updateCheckEnabled": update_check_enabled,
+                },
+            }
         }
     }
     listeners = []
@@ -816,7 +826,7 @@ async def test_setup_entry_creates_entity_when_update_check_enabled_later():
 
     # Simulate the next fast-coordinator poll after update-check was
     # turned on in Dockhand.
-    fast_coord.data[ENV_ID]["stats"]["updateCheckEnabled"] = True
+    fast_coord.data["environments"][ENV_ID]["stats"]["updateCheckEnabled"] = True
     listeners[0]()
 
     add_entities.assert_called_once()

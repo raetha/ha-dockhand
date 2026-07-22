@@ -38,19 +38,16 @@
         "default": "mdi:layers-triple"
       },
       "image_count": {
-        "default": "mdi:package-variant-closed"
+        "default": "mdi:image-multiple"
       },
       "volume_count": {
-        "default": "mdi:database"
-      },
-      "containers_disk_usage": {
         "default": "mdi:harddisk"
       },
-      "build_cache_size": {
-        "default": "mdi:cached"
+      "disk_usage": {
+        "default": "mdi:harddisk"
       },
       "activity_events": {
-        "default": "mdi:timeline-text"
+        "default": "mdi:pulse"
       },
       "state": {
         "default": "mdi:docker",
@@ -102,38 +99,47 @@
       "host_platform": {
         "default": "mdi:laptop"
       },
-      "host_arch": {
-        "default": "mdi:chip"
-      },
       "host_docker_version": {
         "default": "mdi:docker"
       },
-      "host_last_boot": {
+      "uptime": {
         "default": "mdi:restart"
+      },
+      "vulnerabilities": {
+        "default": "mdi:shield-bug"
+      },
+      "connection_type": {
+        "default": "mdi:help-network",
+        "state": {
+          "socket": "mdi:power-plug",
+          "direct": "mdi:docker",
+          "hawser-standard": "mdi:transit-connection-variant",
+          "hawser-edge": "mdi:undo-variant"
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "default": "mdi:server-network",
+        "default": "mdi:wifi",
         "state": {
-          "true": "mdi:server-network",
-          "false": "mdi:server-network-off"
+          "true": "mdi:wifi",
+          "false": "mdi:wifi-off"
         }
       },
       "activity_logging": {
-        "default": "mdi:clipboard-list"
+        "default": "mdi:pulse"
       },
       "metrics_collection": {
-        "default": "mdi:chart-line"
+        "default": "mdi:cpu-64-bit"
       },
       "vulnerability_scanning": {
-        "default": "mdi:shield-search"
+        "default": "mdi:shield-check"
       },
       "update_checks": {
-        "default": "mdi:update"
+        "default": "mdi:arrow-up-circle-outline"
       },
       "auto_update": {
-        "default": "mdi:arrow-up-circle-outline"
+        "default": "mdi:arrow-up-circle"
       },
       "image_pruning": {
         "default": "mdi:broom"

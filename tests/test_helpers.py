@@ -21,14 +21,16 @@ import pytest
 from unittest.mock import MagicMock
 
 from custom_components.dockhand.helpers import (
+    _all_envs,
     _compose_project,
     _container_device,
     _container_has_healthcheck,
     _container_url,
+    _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
     _env_device,
-    _env_url,
+    _env_settings_url,
     _image_display_name,
     _image_group_device,
     _image_url,
@@ -88,8 +90,11 @@ def test_image_url():
     assert _image_url("http://dh.test:3000") == "http://dh.test:3000/images"
 
 
-def test_env_url():
-    assert _env_url("http://dh.test:3000") == "http://dh.test:3000/environments"
+def test_env_settings_url():
+    assert (
+        _env_settings_url("http://dh.test:3000", 5)
+        == "http://dh.test:3000/settings?tab=environments&edit=5"
+    )
 
 
 def test_schedules_url():
@@ -862,3 +867,60 @@ def test_stack_has_system_container_ignores_name_collision_with_id():
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
     assert _stack_has_system_container(stack, all_containers) is False
+
+
+# ---------------------------------------------------------------------------
+# _coordinator_env / _all_envs — null-safety for Dockhand sending an
+# explicit null, and a single accessor shared by all three coordinators
+# ---------------------------------------------------------------------------
+#
+# The actual bug (github.com/raetha/ha-dockhand/issues/20, and a live crash
+# reported in this same session): `dict.get(key, default)` only supplies
+# `default` when `key` is *absent*. If Dockhand's API sends that key present
+# with an explicit `null` — which it does for optional/runtime data, not
+# just when a value is omitted — `.get(key, {})` returns that `None`, and
+# the next chained `.get()`/`.items()`/`.values()` call crashes with
+# `AttributeError: 'NoneType' object has no attribute '...'`. These helpers
+# use `or` instead, which correctly substitutes the default for both cases.
+#
+# _coordinator_env and _all_envs were originally two pairs of near-identical
+# functions (_fast_env/_slow_env for the single-environment case) — merged
+# once the fast, slow, and update coordinators all ended up sharing the same
+# {"environments": {env_id: {...}}} top-level shape, since there was nothing
+# left for two separate functions to document that a shared one couldn't.
+
+
+def test_coordinator_env_missing_key_entirely():
+    assert _coordinator_env({}, 1) == {}
+    assert _coordinator_env(None, 1) == {}
+
+
+def test_coordinator_env_environments_key_explicitly_null():
+    """The exact shape of the reported bug: "environments" present but
+    null, not absent."""
+    assert _coordinator_env({"environments": None}, 1) == {}
+
+
+def test_coordinator_env_specific_env_id_explicitly_null():
+    """The exact shape of the live crash this session: an environment's
+    slice of coordinator data present but null."""
+    assert _coordinator_env({"environments": {1: None, 2: {"host": {}}}}, 1) == {}
+
+
+def test_coordinator_env_returns_real_data_when_present():
+    data = {"environments": {1: {"host": {"cpus": 8}}}}
+    assert _coordinator_env(data, 1) == {"host": {"cpus": 8}}
+
+
+def test_all_envs_missing_key_entirely():
+    assert _all_envs({}) == {}
+    assert _all_envs(None) == {}
+
+
+def test_all_envs_environments_key_explicitly_null():
+    assert _all_envs({"environments": None}) == {}
+
+
+def test_all_envs_returns_real_data_when_present():
+    data = {"environments": {1: {"host": {}}, 2: {"host": {}}}}
+    assert _all_envs(data) == {1: {"host": {}}, 2: {"host": {}}}

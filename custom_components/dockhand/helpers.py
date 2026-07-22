@@ -14,6 +14,75 @@ from homeassistant.helpers.entity import DeviceInfo
 
 from .const import DOMAIN
 
+# Unique_id suffixes for the 8 container-stat sensors (CPU/memory/network/
+# block-I/O), matching how each builds self._attr_unique_id in sensor.py.
+# Consolidated here from three previously-separate copies (__init__.py,
+# migration.py, sensor.py) that had drifted subtly inconsistent — notably,
+# sensor.py's copy lacked the leading underscore migration.py's had, and
+# was passed straight to str.endswith() without adding one, which
+# happened to still work (a bare substring match rather than a real
+# suffix-boundary check) but wasn't doing what it looked like it was
+# doing. Each string here includes its own leading underscore so every
+# call site can use the plain, direct `uid.endswith(CONTAINER_STATS_SUFFIXES)`
+# form — str.endswith() natively accepts a tuple of alternatives — rather
+# than every caller needing to reconstruct the separator itself.
+CONTAINER_STATS_SUFFIXES = (
+    "_cpu_percent",
+    "_memory_usage",
+    "_memory_percent",
+    "_memory_limit",
+    "_network_rx",
+    "_network_tx",
+    "_block_read",
+    "_block_write",
+)
+
+# "_memory_limit" here is a deliberate exact collision with a runtime
+# control entity of the same name (number.py) — disambiguated by entity
+# domain (number vs sensor) wherever both are in scope, not by suffix
+# alone. See __init__.py's entity-registry cleanup pass for the actual
+# disambiguation and ARCHITECTURE.md §2 for the full writeup.
+
+
+def _all_envs(data: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
+    """Safely get every environment's slice of a coordinator's data, for
+    iterating all of them.
+
+    Null-safe against Dockhand sending an explicit `null` rather than
+    omitting a key — `(data or {}).get("environments") or {}`, not
+    `data.get("environments", {})`, so an explicit null doesn't crash the
+    next `.items()`/`.keys()`/`.values()` call. Real, reported bug
+    (github.com/raetha/ha-dockhand/issues/20) that turned out broader
+    than the original report suspected — it hit an environment-level
+    sensor too, not just per-container ones.
+    """
+    return (data or {}).get("environments") or {}
+
+
+def _coordinator_env(data: dict[str, Any] | None, env_id: int) -> dict[str, Any]:
+    """Safely get one environment's slice of a coordinator's data — the
+    single-environment counterpart to _all_envs() above, built on it
+    rather than duplicating its unwrap logic.
+
+    Works identically for the fast, slow, and update coordinators — all
+    three now share the same {"environments": {env_id: {...}}} top-level
+    shape, so there's nothing coordinator-specific left for this function
+    to need to know. (Previously two near-identical functions, _fast_env
+    and _slow_env, kept separate on the reasoning that each name
+    documented which coordinator a call site expected. That reasoning
+    didn't hold up in practice: plenty of call sites had already stopped
+    calling either function and used a locally-unwrapped variable
+    instead, which undermined the "name as documentation" argument it was
+    kept for, while also being outright wrong in six of those places —
+    unwrapping "environments" a second time from something already
+    unwrapped, silently returning empty every time. One function that
+    isn't coordinator-specific removes the "which one do I call" question
+    entirely rather than relying on every call site getting a naming
+    convention right.)
+    """
+    return _all_envs(data).get(env_id) or {}
+
+
 # --------------------------------------------------------------------------- #
 # Section URL helpers
 # --------------------------------------------------------------------------- #
@@ -44,8 +113,15 @@ def _image_url(base_url: str) -> str | None:
     return _section_url(base_url, "images")
 
 
-def _env_url(base_url: str) -> str | None:
-    return _section_url(base_url, "environments")
+def _env_settings_url(base_url: str, env_id: int) -> str | None:
+    """Deep link straight to this environment's edit form.
+
+    Matches Dockhand's own dashboard settings-gear behavior exactly (traced
+    from dashboard-header.svelte's openSettings(): goto(`/settings?tab=
+    environments&edit=${environmentId}`)).
+    """
+    base = _section_url(base_url, "settings")
+    return f"{base}?tab=environments&edit={env_id}" if base else None
 
 
 def _schedules_url(base_url: str) -> str | None:
@@ -65,7 +141,7 @@ def _env_device(
         "name": env_name,
         "manufacturer": "Dockhand",
         "model": "Environment",
-        "configuration_url": _env_url(base_url),
+        "configuration_url": _env_settings_url(base_url, env_id),
         "entry_type": DeviceEntryType.SERVICE,
     }
     if stats:
@@ -80,7 +156,7 @@ def _containers_group_device(env_id: int, env_name: str, base_url: str) -> Devic
         identifiers={(DOMAIN, f"env_{env_id}_Containers")},
         name=f"{env_name} – Containers",
         manufacturer="Dockhand",
-        model="Environment",
+        model="Environment Group",
         configuration_url=_container_url(base_url),
         via_device=(DOMAIN, f"env_{env_id}"),
         entry_type=DeviceEntryType.SERVICE,
@@ -92,7 +168,7 @@ def _stacks_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInf
         identifiers={(DOMAIN, f"env_{env_id}_Stacks")},
         name=f"{env_name} – Stacks",
         manufacturer="Dockhand",
-        model="Environment",
+        model="Environment Group",
         configuration_url=_stack_url(base_url),
         via_device=(DOMAIN, f"env_{env_id}"),
         entry_type=DeviceEntryType.SERVICE,
@@ -104,7 +180,7 @@ def _network_group_device(env_id: int, env_name: str, base_url: str) -> DeviceIn
         identifiers={(DOMAIN, f"env_{env_id}_Networks")},
         name=f"{env_name} – Networks",
         manufacturer="Dockhand",
-        model="Environment",
+        model="Environment Group",
         configuration_url=_network_url(base_url),
         via_device=(DOMAIN, f"env_{env_id}"),
         entry_type=DeviceEntryType.SERVICE,
@@ -116,7 +192,7 @@ def _volume_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInf
         identifiers={(DOMAIN, f"env_{env_id}_Volumes")},
         name=f"{env_name} – Volumes",
         manufacturer="Dockhand",
-        model="Environment",
+        model="Environment Group",
         configuration_url=_volume_url(base_url),
         via_device=(DOMAIN, f"env_{env_id}"),
         entry_type=DeviceEntryType.SERVICE,
@@ -211,7 +287,7 @@ def _image_group_device(env_id: int, env_name: str, base_url: str) -> DeviceInfo
         identifiers={(DOMAIN, f"env_{env_id}_Images")},
         name=f"{env_name} – Images",
         manufacturer="Dockhand",
-        model="Environment",
+        model="Environment Group",
         configuration_url=_image_url(base_url),
         via_device=(DOMAIN, f"env_{env_id}"),
         entry_type=DeviceEntryType.SERVICE,

@@ -99,6 +99,20 @@ risk).
 analog* names its unique_id and copy that pattern exactly. Don't design a
 new naming scheme from first principles.
 
+**`translation_key` is a separate, cross-repo stability contract** —
+unlike `unique_id`, don't treat it as free to refactor. The
+[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) repo
+resolves entities by `translation_key` + `platform: "dockhand"` scoped to
+a device, specifically *because* `unique_id` is documented above as an
+internal detail that can change. Renaming an existing `translation_key`
+is a breaking change for that repo (and any user's own automations keying
+off it) — if one genuinely needs to change, treat it like the
+`CONF_ENABLE_UPDATES` → `CONF_ENABLE_PRECISE_UPDATES` rename (§4): a
+deliberate, documented, migrated change, not a casual cleanup. Adding a
+*new* `translation_key` is free; the cards repo's `resolveEntities` degrades
+gracefully (treats it as "not yet available on this ha-dockhand version")
+when a key it looks for doesn't exist yet.
+
 ## 2. Entity cleanup — read this before adding anything conditionally-present
 
 **This codebase already has a comprehensive, central cleanup system.** It
@@ -194,7 +208,63 @@ naming any new entity, check whether its uid could start with one of the
 six reserved words without actually belonging to that category — if so,
 add its exact suffix to that list.
 
+**A second, related collision type: two different conditionally-present
+entity categories sharing an exact suffix within the same `uid_type`.**
+The container-stats sensors (`sensor.py`'s 8 CPU/memory/network/
+block-I/O entities) and the runtime-control entities (`number.py`/
+`select.py`) both use `uid_type == "container"`, and one suffix is
+identical on purpose: `memory_limit`. Unlike the collision above, adding
+the shared suffix to `_TYPE_COLLISION_EXCLUDED_SUFFIXES` would be wrong
+here — that list is for entities that should be *exempt from cleanup
+entirely* (device cascade only), and both of these genuinely need their
+own independent conditional tracking, just gated on different things
+(`enable_container_stats` vs. `enable_runtime_controls` + stack-less).
+Disambiguated by **entity domain** instead — the container-stats
+sensor is `sensor`, the runtime control is `number` — checked in the
+runtime-control `elif` branch before the suffix match, so a same-suffix
+`sensor`-domain entity falls through to its own `container_stats_uids`
+branch rather than being caught (and incorrectly removed) by the
+runtime-control one. This shipped and was caught the same way as the
+first collision — a container-stats entity disappearing right after its
+first successful poll. Before reusing a suffix across two different
+entity categories that share `uid_type`, either give them distinct
+domains (as here) or distinct suffixes; don't rely on elif ordering
+alone to keep them apart.
+
 ## 3. Coordinator architecture
+
+**A coordinator update must fail (raise `UpdateFailed`) on a total fetch failure — never catch
+the exception and return an empty-but-successful result.** Found the hard way (2026-07-14): the
+fast coordinator's dashboard-stats fetch used to catch any exception, log a warning, and continue
+with an empty environments list — reasoning that a transient failure "just skips this cycle."
+But an empty *successful* result is indistinguishable from "there are genuinely zero
+environments" to everything downstream that trusts non-empty coordinator data as authoritative,
+including `_cleanup_stale_registry`'s own "fast data must be non-empty" guard (an empty
+intermediate list still produced a non-empty `fast_coordinator.data`, since `_fetch_env` ran per
+already-known env_id regardless — the guard didn't actually catch this). A DNS resolution
+failure to the Dockhand host is exactly this scenario, and produced exactly this bug: stacks and
+containers looked deleted, not offline. Raising `UpdateFailed` instead makes HA's own coordinator
+machinery do the right thing for free — `coordinator.data` stays at its last-known-good value,
+`last_update_success` goes `False`, entities report unavailable via the standard
+`CoordinatorEntity.available` check, and (since `__init__.py` uses
+`async_config_entry_first_refresh()`) a failure during setup/reload correctly surfaces as
+`ConfigEntryNotReady`, not a silent success. The general principle: a coordinator's `_fetch()`
+should only ever return "here's what I know is currently true" or raise — never "I don't know,
+so I'll pretend it's empty."
+
+**Same principle applies per-environment, not just to a coordinator's overall fetch — audited
+all three coordinators for it (2026-07-14).** The update coordinator (`DockhandUpdateCoordinator`,
+Tier 2 precise versions) had the identical anti-pattern at per-environment scope: a failed
+`async_check_container_updates(eid)` call was caught and replaced with an empty list, which reads
+as "confirmed zero pending updates" for that environment — flipping every container's update
+entity there to "up to date" during a transient failure, rather than leaving their actual pending
+status alone. Fixed by falling back to that environment's entry in `self.data` (the coordinator's
+own last-known-good data) instead of an empty dict on failure. The slow coordinator's own
+per-environment gather (`return_exceptions=True`, log-and-omit-that-env-this-cycle) was checked
+too and is *not* the same bug — a genuinely missing dict key reads as "no fresh data this cycle,"
+not "confirmed empty," and downstream slow-coordinator consumers already handle a missing env
+gracefully rather than treating it as authoritative — but it's a narrower, more nuanced case
+worth a closer look someday; noted in `docs/BACKLOG.md` rather than changed blind.
 
 - `DockhandFastCoordinator` (60s): dashboard stats, containers, stacks,
   container resource stats, pending-update flags. This is also the sole
@@ -202,10 +272,20 @@ add its exact suffix to that list.
   `/api/environments` for enumeration (see below).
 - `DockhandSlowCoordinator` (600s): images, volumes, networks, schedules,
   runtime controls, git stacks, host info, auto-update settings, and
-  env_meta (see below). Derives its own environment-id list from the fast
-  coordinator's already-fetched data (fast completes its first refresh
-  before slow starts, per `__init__.py`'s setup order) rather than
-  making a call of its own.
+  env_meta (see below) — always fetched, cheap bulk calls. Also two
+  *gated* per-env fetches, each keyed off a flag already present in the
+  fast coordinator's dashboard-stats blob rather than a separate CONF_
+  option: `recent_events` (GET /api/activity, only when `collectActivity`
+  is on for that environment) and `vulnerabilities` (GET
+  /api/vulnerabilities/count, only when `scannerEnabled` is on) — both
+  feed sensor attributes (`sensor.activity_events`'s `recent_events`
+  list, `sensor.vulnerabilities`'s severity breakdown) rather than their
+  own dedicated coordinator-data top-level keys' sensors, since gating on
+  a real Dockhand setting means an environment that doesn't use that
+  Dockhand feature never pays for the extra call. Derives its own
+  environment-id list from the fast coordinator's already-fetched data
+  (fast completes its first refresh before slow starts, per
+  `__init__.py`'s setup order) rather than making a call of its own.
 - `DockhandUpdateCoordinator` (24h default, optional): only created when
   `CONF_ENABLE_PRECISE_UPDATES` is on. Purely additive — see below.
 
@@ -215,7 +295,9 @@ its raw response is never stored. It returns Dockhand's own secrets
 side, so which environments exist is sourced instead from
 `/api/dashboard/stats` (id/name/icon/connectionType/online/labels/
 updateCheckEnabled) — that's what both coordinators actually enumerate
-from. It's used for the one-time connectivity probe during config flow
+from. `labels` from this same blob is surfaced as `binary_sensor.online`'s
+`labels` attribute — no extra fetch, since the fast coordinator already
+has it for every environment on every poll. It's used for the one-time connectivity probe during config flow
 setup (result discarded), and the slow coordinator does call it once per
 600s poll for a narrow purpose: it's the only source for four fields
 nothing else exposes — `imagePruneEnabled`, Hawser agent identity
@@ -238,6 +320,52 @@ on the *same* entities — it never gates entity creation or removal. If you
 build another feature with this "free basic signal, paid precise signal"
 shape, follow this same structure: cheap tier owns entity lifecycle,
 expensive tier is a pure data enrichment layered on top.
+
+**Explicit user actions (button presses, switch toggles, an update entity's
+install) must call `coordinator.async_refresh()`, never
+`async_request_refresh()`.** The latter goes through
+`DataUpdateCoordinator`'s built-in request-refresh debouncer (10s cooldown,
+`immediate=True`), which has a real, non-obvious failure mode for anything
+awaiting its result: if the debouncer's cooldown timer is still armed from
+*any* prior refresh of that coordinator — another button press, or the
+coordinator's own scheduled poll landing within the last 10s, both common
+in practice (e.g. right after HA startup/reload) — calling
+`async_request_refresh()` again returns almost immediately **without
+running the refresh at all**. It just re-arms a background timer to run it
+~10s later, fully detached from the caller. From the caller's perspective
+(and a card's own "in progress" UI state awaiting the service call) that
+looks exactly like something that ran and finished in under a second, when
+nothing has actually happened yet. Found via a real user report: the
+"Check for updates" button's card-side spinner clearing after ~2s while
+the actual check kept running server-side for close to a minute.
+`async_refresh()` skips the debouncer entirely — straight to the
+coordinator's own lock, always genuinely runs — which is the correct
+semantics for "the user pressed something now, actually do the thing and
+tell me when it's done." Reserve `async_request_refresh()` for genuine
+automatic/internal refresh requests (e.g. many entities' state-changed
+listeners firing in quick succession, where coalescing is the whole
+point) — this integration doesn't currently have one of those.
+
+**That debounce fix was real and necessary, but not sufficient on its own
+for the "Check for updates" button specifically — a second, unrelated
+issue was hiding behind it.** `DockhandCheckUpdatesButton` is attached to
+each environment's device, but calling `async_refresh()` on
+`DockhandUpdateCoordinator` always re-checks *every* environment in one
+gather (that's genuinely the right behavior for the coordinator's own
+periodic background refresh). Pressing environment 1's button was
+therefore silently also re-checking environments 2 and 3 — confirmed with
+live timing logs during the same debugging session: 4 environments, 4
+buttons pressed via the card's "check all" action, and each press queued
+a fully redundant re-check of all 4 environments behind the same
+coordinator lock (~20 HTTP calls where ~4 would do, and climbing
+per-press latency as each queued behind the last). Fixed by giving the
+coordinator a genuinely-scoped `async_check_environment(env_id)` method
+(built on `async_set_updated_data()` — see its own docstring in
+coordinator.py) instead of routing the button through the coordinator's
+own all-environments refresh at all. The lesson: a debounce/timing fix
+that resolves the *symptom* (spinner clearing early) doesn't necessarily
+mean the *design* (what actually runs when this specific entity is
+pressed) was right to begin with — worth checking both.
 
 ## 4. Config entry migrations
 
@@ -270,6 +398,40 @@ shipped). Development testing here reloads/re-adds the integration
 rather than upgrading in place, so a migration for that case is pure
 maintenance cost for zero benefit — mention the orphaned entity in your
 response instead, so it can be deleted by hand if needed.
+
+**Re-verify a "no migration needed" conclusion if the underlying design
+changes after that conclusion was reached.** A conclusion like "existing
+registry entries are unaffected by this option" is scoped to the design
+as it existed at the time it was checked — if a later change alters
+*how* those entries get created (e.g. moving from "always created,
+enabled-state varies" to "only created when the option is on"), the
+earlier analysis doesn't automatically still hold. Re-check against the
+new design rather than assume the earlier "no migration needed" verdict
+carries forward.
+
+**An entity removed by our own cleanup and later recreated with the
+same unique_id can come back still disabled — this is HA's own
+behavior, not a bug to route around with `_attr_entity_registry_enabled_default`
+alone.** Home Assistant keeps a `DeletedRegistryEntry` for a removed
+entity and, when `async_get_or_create()` sees the same
+`(domain, platform, unique_id)` again, restores its prior `disabled_by`
+— deliberately, to preserve a user's customization across an
+integration reload or a brief entity absence. The problem: this can't
+distinguish "the user chose to disable this" from "this was only ever
+disabled because of a stale default from before some option existed, or
+from a previous toggle-off removing it." Real, reported symptom: the
+container-stats entities (conditionally created — see §2) staying
+disabled after being toggled off and back on, even though they're meant
+to default to enabled now. Only a targeted fix works, not a broad one:
+check the entity's actual `disabled_by` reason specifically —
+`RegistryEntryDisabler.INTEGRATION` means "disabled because the entity's
+own enabled-by-default flag said so," never a deliberate user choice
+(that's `RegistryEntryDisabler.USER`) — and only clear the former.
+Blindly re-enabling everything on every setup would silently overwrite
+genuine user choices; only doing this once (as a migration) wouldn't fix
+the *next* toggle-off/toggle-on cycle, since the underlying HA behavior
+recurs every time, not just once at upgrade. See
+`_reenable_stale_container_stats_entities()` in `sensor.py`.
 
 ## 5. Before finalizing any session that added entities
 
@@ -362,3 +524,138 @@ setting with no per-call override. Before designing a feature that's
 supposed to behave the same way across two resource types, check the
 actual function signatures for both, not just that similarly-named
 endpoints exist.
+
+## 7. `dict.get(key, default)` is not null-safe against an explicit `null`
+
+**The single most-recurring bug class in this codebase, found via a real
+crash and a previously-open GitHub issue
+(github.com/raetha/ha-dockhand/issues/20) that turned out to share the
+same root cause.** `dict.get(key, default)` only substitutes `default`
+when `key` is *absent*. If Dockhand's API response has the key present
+with an explicit `null` — which it does for optional/runtime data
+(`metrics`, `container_stats`, a specific environment's slice of
+per-env data, etc.), not just when a value is omitted — `.get(key, {})`
+returns that `None`, not `{}`, and the very next chained `.get()`,
+`.items()`, `.values()`, or `.keys()` call crashes with
+`AttributeError: 'NoneType' object has no attribute '...'`.
+
+The original GitHub issue reporter guessed this was specific to stopped
+containers with CPU/memory tracking enabled. It wasn't — the same
+pattern independently crashed an *environment*-level sensor too, tied to
+`metrics` being null on that environment's stats blob specifically, with
+no container involved at all. When you see one instance of this crash,
+audit for the pattern generally rather than patching just the one
+reported call site — this session found roughly 30 vulnerable call
+sites across nearly every platform module once the first one was
+tracked down, most never reported because they hadn't been hit yet.
+
+**The fix is `or`, not a second `.get()` default**, at *every* level of
+a chain, not just the outermost: `(d.get(key) or {}).get(next_key)`, not
+`d.get(key, {}).get(next_key)`. `or` correctly substitutes the fallback
+whether the key is absent or present-but-null; a `.get()` default only
+covers the absent case.
+
+**Two exact patterns were duplicated near-identically across six-plus
+files** — `slow_data.get("environments", {}).get(env_id, {})` and (at
+the time) `fast_data.get(env_id, {})`, since the fast coordinator's data
+didn't have the "environments" wrapper yet — strong signals that a
+shared helper was overdue rather than another find-and-replace across
+copies. `_slow_env(slow_data, env_id)` and `_fast_env(fast_data,
+env_id)` in `helpers.py` were that helper at the time; both have since
+been merged into one `_coordinator_env()` — see §8 for the full story
+of why keeping them separate stopped making sense once all three
+coordinators shared the same shape.
+
+**Not every `.get(key, {})` in this codebase is actually vulnerable —
+check before reflexively "fixing" one.** `all_stats.get(eid, {})` in
+`coordinator.py`'s `_fetch_env` is safe as written: `all_stats` is built
+locally via `{s["id"]: s for s in all_stats_list if isinstance(s, dict)
+and "id" in s}`, so every value it can possibly contain already passed
+an `isinstance(s, dict)` check — there's no code path that could put a
+`None` there. The vulnerability is specifically about *trusting external
+API response shape*, not about dict access in general.
+
+## 8. All three coordinators now share one data shape and one accessor
+
+`DockhandFastCoordinator.data`, `DockhandSlowCoordinator.data`, and
+`DockhandUpdateCoordinator.data` are all `{"environments": {env_id:
+{...}}}` — fast was `{env_id: {...}}` directly until this session;
+update followed the same way shortly after. `_coordinator_env(data,
+env_id)` and `_all_envs(data)` in `helpers.py` are the one accessor pair
+now used everywhere, replacing what used to be `_fast_env`/`_slow_env`
+(two near-identical functions) plus a parallel, inconsistently-applied
+pattern of unwrapping "environments" inline at a local variable's
+assignment point. This was deliberately deferred once (logged in
+`docs/BACKLOG.md`, since removed now that it's done) until the timing
+was right — pre-release, with the null-safety refactor in §7 already
+having routed every consumer through a named helper instead of a raw
+dict-access pattern, which made the actual change far more contained
+than it would have been earlier.
+
+**Two real bugs surfaced while doing the reshape, both worth knowing
+about for any future coordinator shape change:**
+
+1. **A helper that happens to work for two different things today can
+   silently break for one of them once its contract changes.**
+   `_fast_env()` was, before this reshape, also being used (correctly,
+   at the time) to read `DockhandUpdateCoordinator.data` in two places —
+   a *different*, never-reshaped coordinator whose data happened to
+   share the fast coordinator's old flat shape. Once `_fast_env()` was
+   updated to expect the new wrapper, those two call sites kept
+   compiling and kept running — they just silently returned empty data
+   instead of the real thing, since `update_coordinator.data` was never
+   wrapped and never will be (it holds one kind of data, no `schedules`-
+   style second concern to make room for). A test caught it via a
+   `KeyError` where data should have been preserved; nothing in the type
+   system or a lint pass would have. When changing what a shared helper
+   assumes about its input shape, grep every call site's actual
+   variable, not just its name — `self.data` reads the same whether
+   `self` is the coordinator you're thinking of or a different one.
+
+2. **Fixing a raw access pattern at its assignment point, then also
+   fixing every downstream call individually, double-fixes it.** Several
+   files had a local `fast_data = (coordinator.data or {}).get(
+   "environments") or {}` line (the correct, one-time unwrap) followed
+   later by `_fast_env(fast_data, env_id)` — unwrapping `"environments"`
+   a second time from something that no longer has that key, silently
+   returning empty every time. This doesn't raise; it just quietly
+   returns nothing, which is the more dangerous failure mode of the two.
+   When a shape changes, decide *once* where the unwrap happens for a
+   given local variable — either at its assignment or at each read, not
+   both — and grep specifically for the helper being called on an
+   already-processed variable, not just for the raw coordinator
+   reference.
+
+3. **An earlier design decision — keeping `_fast_env`/`_slow_env`
+   separate so each name would document which coordinator a call site
+   expected — didn't survive contact with how the codebase had actually
+   evolved.** By the time this was reconsidered, a meaningful fraction of
+   call sites had already stopped calling either function in favor of a
+   locally-unwrapped variable (bug 2 above is exactly how that happened),
+   which undermined the "the name is documentation" argument: it can't
+   be documenting anything at a call site that isn't calling it. Once
+   `DockhandUpdateCoordinator` also gained the same shape, there was
+   nothing left for two functions to distinguish at all. Worth revisiting
+   a "these should stay separate for clarity" call if the number of call
+   sites actually using the named functions (versus routing around them)
+   drops — that's a sign the reasoning has stopped matching the code, not
+   a reason to defend the original design harder.
+
+4. **A reshape's ripple effects need checking against every consumer,
+   not just the ones with existing tests to catch mistakes.**
+   `diagnostics.py`'s `update_summary` computation iterated
+   `update.data`'s top level directly — correct when that was
+   `{env_id: {...}}`, silently wrong once the update coordinator's
+   reshape (this same section, above) wrapped it in `"environments"`:
+   it started iterating a single bogus `"environments"` key instead of
+   real per-environment data. This shipped and passed the full test
+   suite for several rounds of changes after the reshape, because this
+   specific computation had zero test coverage — the existing
+   diagnostics tests never configured a real update coordinator, so
+   nothing ever exercised that code path. Found only when reviewing the
+   file for an unrelated inconsistency and reading it closely enough to
+   notice what it was actually iterating. A green test suite after a
+   reshape means every *tested* consumer still works — it says nothing
+   about untested ones. Worth deliberately grep'ing for every read of a
+   reshaped coordinator's `.data` after a change like this, not just
+   trusting that existing tests would have caught a break.

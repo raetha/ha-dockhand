@@ -7,6 +7,13 @@ the reasoning first and only revisit if the stated condition has changed.
 
 ## Deferred
 
+- **`_CONTAINER_STATS_SUFFIXES` is duplicated three times** (`__init__.py`,
+  `migration.py`, and now `sensor.py`'s `_reenable_stale_container_stats_entities`)
+  rather than defined once in `helpers.py` and imported. Pre-existing minor
+  inconsistency (the first two duplicates predate this note), not urgent —
+  consolidate next time one of the three copies needs touching anyway,
+  rather than as a standalone change.
+
 - **`UnitOfRatio.PERCENTAGE` for percentage sensors.** A newer HA enum
   than what this integration currently targets — requires HA minimum
   bumped past 2026.7. Current minimum is 2026.3; no other reason to bump
@@ -42,6 +49,18 @@ the reasoning first and only revisit if the stated condition has changed.
   hook into it from an integration. Nothing further to do here unless HA
   core adds a real bulk-install primitive later.
 
+- **Slow coordinator's per-environment gather** (`return_exceptions=True`,
+  logs and omits that env's key from `environments` this cycle on
+  failure) — checked against the fetch-failure principle in
+  `docs/ARCHITECTURE.md` §3 and not currently believed to be the same
+  bug (a missing dict key reads as "no fresh data this cycle" to
+  consumers going through `_coordinator_env`, not "confirmed
+  empty"), but wasn't traced all the way through every
+  slow-coordinator-driven cleanup path (images/volumes/networks) the
+  way the fast coordinator was. Worth a closer look if a similar
+  disappearing-devices report ever surfaces for those entity types
+  specifically.
+
 ## Rejected
 
 - **Activity stats `byAction` breakdown as a separate sensor.** Tried and
@@ -61,3 +80,16 @@ the reasoning first and only revisit if the stated condition has changed.
   for git stacks at all). Went with one Deploy/Redeploy button per stack
   type instead, each mirroring Dockhand's own default UI behavior as
   closely as possible for that type.
+
+- **Stack/container/image/volume/network `configuration_url`s stay pointed
+  at the generic list pages** (`/stacks`, `/containers`, `/images`, etc.),
+  not deep-linked to a specific item, unlike the environment device's
+  settings link (which does deep-link, per `dashboard-header.svelte`'s
+  `goto` call). Checked: these pages do support a `?search=<name>` query
+  param that filters the list client-side, but there's no URL-level
+  environment-scoping anywhere in Dockhand's frontend (`$currentEnvironment`
+  is a plain client-side store, never synced to/from the URL) — a
+  `?search=` link would silently show wrong or empty results if the
+  environment currently selected in Dockhand's own UI doesn't match the
+  one the link was generated for. Not worth the confusion for an
+  imprecise deep link; revisit if Dockhand ever adds env-scoped URLs.

@@ -6,6 +6,10 @@ Covers:
 - container labels redacted from raw coordinator snapshots (labels can carry
   secrets such as reverse-proxy auth hashes)
 - environment summary counts still computed from unredacted data
+- update coordinator summary reflects real per-environment data (regression
+  guard for a real bug the update coordinator's "environments" reshape
+  silently introduced, caught only once this specific computation actually
+  had test coverage)
 """
 
 from __future__ import annotations
@@ -60,7 +64,7 @@ def _make_entry_with_runtime_data() -> MagicMock:
     entry.options = {}
 
     fast = MagicMock()
-    fast.data = FAST_DATA
+    fast.data = {"environments": FAST_DATA}
     fast.last_update_success = True
     fast.last_exception = None
 
@@ -72,6 +76,30 @@ def _make_entry_with_runtime_data() -> MagicMock:
     entry.runtime_data.fast_coordinator = fast
     entry.runtime_data.slow_coordinator = slow
     entry.runtime_data.update_coordinator = None
+    return entry
+
+
+def _make_entry_with_update_coordinator() -> MagicMock:
+    """Same as _make_entry_with_runtime_data, but with a real update
+    coordinator present — the update_summary computation had zero test
+    coverage before this, which is exactly how the update coordinator's
+    reshape (wrapping .data in "environments", same as fast/slow) broke
+    it silently: iterating the old flat shape's top level now just
+    iterated a single bogus "environments" key instead of real
+    per-environment data, and nothing caught it."""
+    entry = _make_entry_with_runtime_data()
+    update = MagicMock()
+    update.data = {
+        "environments": {
+            1: {
+                "c1": {"containerId": "c1", "hasUpdate": True},
+                "c2": {"containerId": "c2", "hasUpdate": False},
+            }
+        }
+    }
+    update.last_update_success = True
+    update.last_exception = None
+    entry.runtime_data.update_coordinator = update
     return entry
 
 
@@ -87,7 +115,7 @@ async def test_labels_redacted_from_coordinator_data(hass: HomeAssistant):
     result = await async_get_config_entry_diagnostics(hass, entry)
 
     fast_dump = result["coordinator"]["fast"]["data"]
-    for container in fast_dump[1]["containers"]:
+    for container in fast_dump["environments"][1]["containers"]:
         assert container["labels"] == REDACTED, container
 
     slow_dump = result["coordinator"]["slow"]["data"]
@@ -121,3 +149,18 @@ async def test_summary_counts_survive_redaction(hass: HomeAssistant):
     assert summary["compose_containers"] == 1
     assert summary["freestanding_containers"] == 1
     assert summary["stack_count"] == 1
+
+
+async def test_update_summary_reflects_real_per_environment_data(
+    hass: HomeAssistant,
+):
+    """Regression guard for the actual bug: update_summary must reflect
+    genuine per-environment container counts, not the wrapper key itself
+    misread as if it were an environment ID."""
+    entry = _make_entry_with_update_coordinator()
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    summary = result["coordinator"]["update"]["summary"]
+    assert "environments" not in summary
+    assert summary["1"]["container_count"] == 2
+    assert summary["1"]["updates_available"] == 1

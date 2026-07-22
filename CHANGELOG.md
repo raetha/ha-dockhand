@@ -2,7 +2,53 @@
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-07-21
+
 ### Added
+
+- **New "Enable container stats" option** (Settings → Configure) — creates the per-container
+  CPU, memory, network, and block I/O sensors, instead of not creating them at all until you turn
+  it on. Off by default since it's a lot of entities most people don't need. Genuinely gates the
+  underlying stats API call too, not just entity creation — when off, that call isn't made at all
+  (previously it ran unconditionally regardless of the option; fixed to actually skip it, since
+  nothing consumes the result when it's off). A container that's stopped, or drops out of the
+  stats response for any other reason, reports these sensors as unavailable rather than a stale
+  or zero reading. Turning the option off now correctly removes any previously-created stats
+  entities via the existing cleanup system, the same way enable_images/enable_volumes/
+  enable_networks already do — they weren't being cleaned up before because they were always
+  being created (just disabled-by-default) regardless of the option. If you'd already manually
+  enabled any of these sensors on an earlier release, a one-time migration turns this option on
+  automatically so you don't lose them.
+
+- **CPU usage sensor now includes a `top_containers` attribute** (top 5 by CPU, with name/CPU%/
+  memory%) when "Enable container stats" is on — same underlying data as the per-container
+  sensors, just ranked and attached to one entity instead of needing all of them individually
+  enabled. Lets a dashboard show "top containers by CPU" with one entity instead of many.
+
+- **Stack status, container state, and container update entities now include a `name`
+  attribute** — the raw Docker name (e.g. `traefik`), not the full device display name (e.g.
+  "Forseti – Containers – Traefik") — for dashboards that want to show just the name. Stack
+  status also gained a `type` attribute (`Internal`/`Git`/`Untracked`).
+
+- **New companion repo: [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards)** —
+  Lovelace dashboard cards (environment, environment overview, vulnerability, stack, and
+  container) built on top of this integration's entities. Separate HACS install (category:
+  Dashboard/Plugin), since a card is a frontend resource, not part of this integration.
+
+- **New "Connection type" sensor per environment** — socket / direct / Hawser (standard or
+  edge), matching Dockhand's own connection-type indicator, with a matching icon per type.
+  Enabled by default.
+
+- **New consolidated "Disk usage" sensor per environment** (disabled by default), replacing the
+  earlier separate "Containers disk usage" and "Build cache size" sensors — one sensor now
+  covers images, volumes, containers, and build cache size together, matching Dockhand's own
+  disk-usage breakdown. A one-time migration removes the two retired sensors' registry entries
+  automatically, rather than leaving them to orphan.
+
+- **Stack status and "Containers in stack" sensors now include a `container_names` attribute**
+  (sorted alphabetically), and the "Updates available" sensor gained a `pending_container_names`
+  attribute (also sorted) listing just the containers with a pending update — useful for a
+  dashboard that wants the container list at a glance without navigating away.
 
 - **New: "Redeploy" button on internal stacks** — pulls the latest image
   for each service and redeploys, recreating only what actually
@@ -58,17 +104,61 @@
   you can tell at a glance why a stack does or doesn't have the git sync
   entities above.
 
+- **Activity events sensor now includes a `recent_events` attribute**
+  (last 10 events, when activity collection is on for that environment)
+  alongside the existing today/total counts — useful for dashboards that
+  want to show a live feed without a separate integration.
+
+- **Online sensor now includes a `labels` attribute** listing the tags
+  you've assigned to the environment in Dockhand.
+
+- **New "Vulnerabilities" sensor per environment** (disabled by default —
+  enable it in **Settings → Entities**), showing the total finding count
+  from Dockhand's own vulnerability scanner with a severity breakdown
+  (critical/high/medium/low) and scan coverage as attributes. Only polled
+  when vulnerability scanning is enabled for that environment.
+
 - **New sensors, disabled by default** (enable what you want in
-  **Settings → Entities**): host platform, architecture, Docker version,
-  and last boot time; an "Image pruning" sensor; and Hawser agent
-  identity details as attributes on the Hawser version sensor
-  (edge-mode connections only).
+  **Settings → Entities**): host platform (with an `architecture`
+  attribute), Docker version, and last boot time; an "Image pruning"
+  sensor; and Hawser agent identity details as attributes on the Hawser
+  version sensor (edge-mode connections only).
 
 - **A few existing sensors gained useful attributes** instead of new
   entities: CPU count on CPU usage, and environment name/connection
   details on the Online sensor.
 
 ### Changed
+
+- **The "Updates available" sensor on each stack no longer uses the "Problem" device class**,
+  which made a routine available update look like something was wrong. It now shows as a plain
+  on/off sensor instead.
+
+- **Changing an option now takes effect immediately** (a reload happens automatically) instead of
+  waiting for the next poll or requiring a manual reload of the integration.
+
+- **"Update all" button no longer includes a live count in its name**
+  (was "Update all (3)") — now a plain "Update all containers". A changing
+  friendly_name on a persistent entity read as confusing churn; the count
+  is still visible via the button's own state/attributes if needed.
+
+- **"Host last boot" renamed to "Uptime"**, matching Dockhand's own API
+  field name. Still a timestamp under the hood (boot time) — set the
+  entity's own "Display as: Relative time" option in Home Assistant if you
+  want it to read "2 days ago" rather than a fixed date/time; that's a
+  native HA display option for any timestamp sensor, not something this
+  integration needs to compute itself.
+
+- **Environment sub-devices (Containers, Stacks, Networks, Images, Volumes)
+  now show as model "Environment Group"** instead of "Environment" — makes
+  it clear at a glance which device is the actual environment versus one of
+  its groupings, in Home Assistant's own device list as well as when
+  picking a device for a dashboard card.
+
+- **The environment device's settings link now opens that specific
+  environment's edit form** (`/settings?tab=environments&edit=<id>`) instead
+  of the generic environments list — matches what Dockhand's own dashboard
+  settings gear does.
 
 - **Installing a container update now runs vulnerability scanning** (if
   configured on the environment) and **honors your configured blocking
@@ -90,7 +180,27 @@
   credentials** during normal polling, and added a second layer of
   redaction in diagnostics exports as a safety net.
 
+- **Several entity icons now match Dockhand's own** (online status,
+  image/volume counts, activity/metrics/scanning/update-check status) so
+  they're easier to recognize across both UIs.
+
 ### Fixed
+
+- **Several sensors could log an `AttributeError` and fail to update instead of just going
+  unavailable**, when Dockhand's API sent certain optional fields as an explicit `null` rather
+  than omitting them — most visibly CPU/memory usage sensors (both the per-container ones
+  originally reported in #20, and an environment-level one found during this fix), but the same
+  underlying gap affected roughly two dozen call sites across nearly every entity type. Fixes
+  #20.
+
+- **A total failure to reach Dockhand (e.g. DNS resolution failure to the configured hostname)
+  no longer looks like every stack and container disappearing.** It was being caught and logged
+  as a warning, then quietly treated as "zero environments right now" — which fed through every
+  safety check that assumes present-but-empty coordinator data is trustworthy, and could trigger
+  the cleanup system to remove devices for environments that were actually just temporarily
+  unreachable. Now correctly fails the update instead: entities go unavailable, nothing gets
+  cleaned up, and reloading the integration while the outage persists surfaces a real "not ready"
+  failure instead of a misleading success.
 
 - **Hawser agent version now reports correctly for standard-mode
   (port-bind) connections** — it previously always showed unavailable
@@ -652,7 +762,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.7.4...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/raetha/ha-dockhand/compare/v1.7.4...v1.8.0
 [1.7.4]: https://github.com/raetha/ha-dockhand/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/raetha/ha-dockhand/compare/v1.7.2...v1.7.3
 [1.7.2]: https://github.com/raetha/ha-dockhand/compare/v1.7.1...v1.7.2

@@ -11,6 +11,8 @@ Monitor and control your Docker environments through **[Dockhand](https://dockha
 
 No cloud services are used. Supports **API token authentication** and works with Dockhand instances where authentication is disabled.
 
+Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards)** — Lovelace cards modeled on Dockhand's own UI (environment, environment overview, vulnerability, stack, and container cards), built on top of the entities this integration provides.
+
 ---
 
 ## Installation
@@ -73,6 +75,7 @@ The following can be changed at any time via the **Configure** button on the int
 | **Enable precise update versions** | Update entities already exist automatically for every container in an environment where update-check is enabled in Dockhand itself, showing an image tag and an `update-pending` status from Dockhand's own cached results — no extra API cost. This adds real registry queries on the interval below, upgrading those same entities to show precise version numbers (image digests) instead | off |
 | **Update check interval** | How often (seconds) the real registry queries above run. Each check queries the registry for every container — keep this infrequent (minimum: 300). Only relevant when **Enable precise update versions** is on | 86400 |
 | **Enable runtime controls** | Create `number`/`select` entities to change a stack-less container's memory limit, CPU limit, process limit, and restart policy live, without recreating it. Not available for Compose-managed containers. Costs one extra API call per stack-less container per slow poll | off |
+| **Enable container stats** | Create the per-container CPU, memory, network, and block I/O sensors — not created at all until this is on, same as Images/Volumes/Networks below. Also gates the underlying stats API call itself, not just entity creation. Off since it's a lot of entities most people don't need | off |
 
 ### Reconfigure (change URL, SSL, or API token)
 
@@ -161,8 +164,9 @@ If you're also running the Portainer integration, note that this integration use
 ### Environment (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| Online | binary_sensor | Connectivity device class. Attributes: `name` (environment display name), `connection_host`/`connection_port` (the environment's configured Docker connection endpoint, from `/api/environments`) |
-| CPU usage | sensor | %, with a `cpu_count` attribute (logical CPU count, from `GET /api/host`) |
+| Online | binary_sensor | Connectivity device class. Attributes: `name` (environment display name), `connection_host`/`connection_port` (the environment's configured Docker connection endpoint, from `/api/environments`), `labels` (the tags you've assigned to the environment in Dockhand) |
+| Connection type | sensor | `socket` / `direct` / `hawser-standard` / `hawser-edge` — matches Dockhand's own connection-type indicator, including its icon per type |
+| CPU usage | sensor | %, with `cpu_count` (logical CPU count, from `GET /api/host`) and `top_containers` (top 5 by CPU — name/CPU%/memory%; only populated when **Enable container stats** is on) attributes |
 | Memory usage | sensor | %, with used/total bytes attributes |
 | Containers running | sensor | with total/stopped/unhealthy attributes |
 | Images | sensor | count of Docker images on the environment |
@@ -174,10 +178,22 @@ The following are sourced from `GET /api/host` (already polled every slow cycle 
 | Entity | Type | Notes |
 |---|---|---|
 | Hawser agent version | sensor | Live-fetched from the agent for standard-mode Hawser connections. `agent_name`/`agent_id`/`last_seen` attributes shown only for edge-mode connections (the only mode Dockhand populates them for), sourced from `/api/environments` |
-| Host platform | sensor | OS platform, e.g. `linux` |
-| Host architecture | sensor | CPU architecture, e.g. `x64` |
+| Host platform | sensor | OS platform, e.g. `linux`, with an `architecture` attribute, e.g. `x64` |
 | Docker version | sensor | Docker Engine server version |
 | Host last boot | sensor | Timestamp, computed from host uptime |
+
+Also disabled by default, but at no extra cost — the data's already part of the same `/api/dashboard/stats` call already polled every 60s:
+
+| Entity | Type | Notes |
+|---|---|---|
+| Disk usage | sensor | Total bytes across images, volumes, containers, and build cache, with each broken out as an attribute — matches Dockhand's own disk-usage breakdown |
+
+Also disabled by default, each sourced from its own gated API call — only fetched at all when the matching Dockhand setting is on for that environment, so an environment that doesn't use the feature never pays for the extra request:
+
+| Entity | Type | Notes |
+|---|---|---|
+| Activity events | sensor | Total event count, with a `today` attribute and a `recent_events` list attribute (last 10, each with container name/action/timestamp). Only polled when **Activity collection** is on for the environment in Dockhand |
+| Vulnerabilities | sensor | Total finding count from Dockhand's own vulnerability scanner, with `critical`/`high`/`medium`/`low` and `images_scanned`/`total_images` attributes. Only polled when **Vulnerability scanning** is on for the environment in Dockhand |
 
 ### Container (always on, 60 s)
 | Entity | Type | Notes |

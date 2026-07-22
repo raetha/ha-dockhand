@@ -12,8 +12,10 @@ from . import DockhandConfigEntry
 from .const import CONF_API_URL
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import (
+    _all_envs,
     _compose_project,
     _container_device,
+    _coordinator_env,
     _stack_device,
     _stack_has_system_container,
 )
@@ -40,7 +42,7 @@ async def async_setup_entry(
 
     def _build_entities() -> list[SwitchEntity]:
         new: list[SwitchEntity] = []
-        for env_id, env_data in (fast.data or {}).items():
+        for env_id, env_data in _all_envs(fast.data).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
 
@@ -95,7 +97,7 @@ async def async_setup_entry(
         the kind of self-inflicted outage those two are already suppressed
         to avoid."""
         new: list[SwitchEntity] = []
-        for env_id, env_data in (fast.data or {}).items():
+        for env_id, env_data in _all_envs(fast.data).items():
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
             for container in env_data.get("containers") or []:
@@ -124,10 +126,10 @@ async def async_setup_entry(
 
     def _build_git_stack_entities() -> list[SwitchEntity]:
         new: list[SwitchEntity] = []
-        slow_envs = (slow.data or {}).get("environments", {})
-        fast_data = fast.data or {}
+        slow_envs = _all_envs(slow.data)
+        fast_data = _all_envs(fast.data)
         for env_id, env_data in slow_envs.items():
-            fast_stats = fast_data.get(env_id, {}).get("stats") or {}
+            fast_stats = (fast_data.get(env_id) or {}).get("stats") or {}
             env_name = fast_stats.get("name", f"Environment {env_id}")
             for git_stack in env_data.get("git_stacks") or []:
                 gsid = f"{env_id}_{git_stack.get('stackName', '')}"
@@ -185,9 +187,10 @@ class _BaseFastContainerSwitch(
         self._container_name = container.get("name", "")
 
     def _container(self) -> dict | None:
-        for c in (self.coordinator.data or {}).get(self._env_id, {}).get(
-            "containers"
-        ) or []:
+        for c in (
+            _coordinator_env(self.coordinator.data, self._env_id).get("containers")
+            or []
+        ):
             if c.get("name") == self._container_name:
                 return c
         return None
@@ -228,9 +231,9 @@ class _BaseFastStackSwitch(CoordinatorEntity[DockhandFastCoordinator], SwitchEnt
         self._stack_name = stack.get("name", "")
 
     def _stack(self) -> dict | None:
-        for s in (self.coordinator.data or {}).get(self._env_id, {}).get(
-            "stacks"
-        ) or []:
+        for s in (
+            _coordinator_env(self.coordinator.data, self._env_id).get("stacks") or []
+        ):
             if s.get("name") == self._stack_name:
                 return s
         return None
@@ -293,7 +296,11 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        # async_refresh(), not async_request_refresh() — see
+        # docs/ARCHITECTURE.md §3 for why (a real, non-hypothetical
+        # debouncer-cooldown gotcha for explicit user actions). Same
+        # reasoning applies to every async_refresh() call in this file.
+        await self.coordinator.async_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         c = self._container()
@@ -310,7 +317,7 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
 
 class DockhandStackRunningSwitch(_BaseFastStackSwitch):
@@ -352,7 +359,7 @@ class DockhandStackRunningSwitch(_BaseFastStackSwitch):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         try:
@@ -363,7 +370,7 @@ class DockhandStackRunningSwitch(_BaseFastStackSwitch):
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_request_refresh()
+        await self.coordinator.async_refresh()
 
 
 class DockhandContainerAutoUpdateSwitch(
@@ -413,8 +420,12 @@ class DockhandContainerAutoUpdateSwitch(
         )
 
     def _container(self) -> dict | None:
-        fast_data = self._fast_coordinator.data or {}
-        for c in fast_data.get(self._env_id, {}).get("containers") or []:
+        for c in (
+            _coordinator_env(self._fast_coordinator.data, self._env_id).get(
+                "containers"
+            )
+            or []
+        ):
             if c.get("name") == self._container_name:
                 return c
         return None
@@ -432,7 +443,7 @@ class DockhandContainerAutoUpdateSwitch(
         if self._optimistic_value is not None:
             return self._optimistic_value
         slow_data = self.coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         settings = env.get("auto_update_settings") or {}
         # Absence from the map means disabled — Dockhand's batch endpoint
         # only includes containers with the setting currently enabled.
@@ -514,7 +525,7 @@ class DockhandGitStackAutoUpdateSwitch(
 
     def _git_stack(self) -> dict | None:
         slow_data = self.coordinator.data or {}
-        env = slow_data.get("environments", {}).get(self._env_id, {})
+        env = _coordinator_env(slow_data, self._env_id)
         for gs in env.get("git_stacks") or []:
             if gs.get("stackName") == self._stack_name:
                 return gs

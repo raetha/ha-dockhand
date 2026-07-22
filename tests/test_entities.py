@@ -29,6 +29,7 @@ ENTRY_ID = "test_entry_id"
 STATS = {
     "name": "MyHost",
     "online": True,
+    "connectionType": "socket",
     "metrics": {
         "memoryPercent": 45.2,
         "memoryUsed": 4724464640,
@@ -150,16 +151,18 @@ SCHEDULE_FAILED = {
 def _fast_coord(env_data=None):
     coord = MagicMock()
     coord.data = {
-        ENV_ID: env_data
-        or {
-            "stats": STATS,
-            "containers": [CONTAINER],
-            "stacks": [STACK],
-            "container_stats": {},
+        "environments": {
+            ENV_ID: env_data
+            or {
+                "stats": STATS,
+                "containers": [CONTAINER],
+                "stacks": [STACK],
+                "container_stats": {},
+            }
         }
     }
     coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
+    coord.async_refresh = AsyncMock()
     return coord
 
 
@@ -178,7 +181,7 @@ def _slow_coord(env_data=None, schedules=None):
         "schedules": schedules if schedules is not None else [SCHEDULE],
     }
     coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
+    coord.async_refresh = AsyncMock()
     return coord
 
 
@@ -200,10 +203,10 @@ def _sensor_classes():
         DockhandContainerNetworkTxSensor,
         DockhandContainerStateSensor,
         DockhandEnvActivityEventsSensor,
-        DockhandEnvBuildCacheSensor,
+        DockhandEnvConnectionTypeSensor,
         DockhandEnvContainerCountSensor,
-        DockhandEnvContainersDiskSensor,
         DockhandEnvCpuSensor,
+        DockhandEnvDiskUsageSensor,
         DockhandEnvHawserVersionSensor,
         DockhandEnvImagesSensor,
         DockhandEnvMemPercentSensor,
@@ -286,10 +289,10 @@ def env_sensors():
         "networks": sc["DockhandEnvNetworksSensor"](
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
-        "disk": sc["DockhandEnvContainersDiskSensor"](
+        "disk_usage": sc["DockhandEnvDiskUsageSensor"](
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
-        "cache": sc["DockhandEnvBuildCacheSensor"](
+        "connection_type": sc["DockhandEnvConnectionTypeSensor"](
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
     }
@@ -307,7 +310,7 @@ def test_cpu_count_attribute_from_slow_coordinator_host_data():
     sensor = DockhandEnvCpuSensor(
         fast_coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
     )
-    assert sensor.extra_state_attributes == {"cpu_count": 8}
+    assert sensor.extra_state_attributes == {"cpu_count": 8, "top_containers": []}
 
 
 def test_cpu_count_attribute_empty_when_absent():
@@ -318,7 +321,58 @@ def test_cpu_count_attribute_empty_when_absent():
     sensor = DockhandEnvCpuSensor(
         fast_coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
     )
-    assert sensor.extra_state_attributes == {}
+    assert sensor.extra_state_attributes == {"top_containers": []}
+
+
+def test_top_containers_ranked_by_cpu_no_extra_api_call():
+    """top_containers is computed from container_stats, which
+    async_get_container_stats() already fetches unconditionally every
+    fast poll for every environment — no new API call, and no dependency
+    on "Enable container stats" being on."""
+    from custom_components.dockhand.sensor import DockhandEnvCpuSensor
+
+    fast_coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [],
+            "stacks": [],
+            "container_stats": {
+                "web": {"name": "web", "cpuPercent": 12.3, "memoryPercent": 40.0},
+                "db": {"name": "db", "cpuPercent": 55.1, "memoryPercent": 70.2},
+                "cache": {"name": "cache", "cpuPercent": 2.0, "memoryPercent": 10.0},
+            },
+        }
+    )
+    slow_coord = _slow_coord()
+    sensor = DockhandEnvCpuSensor(
+        fast_coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    top = sensor.extra_state_attributes["top_containers"]
+    assert [c["name"] for c in top] == ["db", "web", "cache"]
+    assert top[0] == {"name": "db", "cpu_percent": 55.1, "memory_percent": 70.2}
+
+
+def test_top_containers_capped_at_five():
+    from custom_components.dockhand.sensor import DockhandEnvCpuSensor
+
+    fast_coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [],
+            "stacks": [],
+            "container_stats": {
+                f"c{i}": {"name": f"c{i}", "cpuPercent": float(i), "memoryPercent": 1.0}
+                for i in range(10)
+            },
+        }
+    )
+    slow_coord = _slow_coord()
+    sensor = DockhandEnvCpuSensor(
+        fast_coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    top = sensor.extra_state_attributes["top_containers"]
+    assert len(top) == 5
+    assert [c["name"] for c in top] == ["c9", "c8", "c7", "c6", "c5"]
 
 
 def test_mem_percent_value(env_sensors):
@@ -330,6 +384,35 @@ def test_mem_attributes_raw_bytes(env_sensors):
     assert attrs["memory_used_bytes"] == 4724464640
     assert attrs["memory_total_bytes"] == 8589934592
     assert "memory_used_mib" not in attrs
+
+
+def test_env_cpu_and_mem_value_none_when_metrics_explicitly_null():
+    """End-to-end regression test for the actual reported crash
+    (github.com/raetha/ha-dockhand/issues/20, and a live crash this
+    session): Dockhand can send "metrics": null on an environment's stats
+    blob rather than omitting the key. native_value must return None
+    (making the entity unavailable), not raise AttributeError."""
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": {**STATS, "metrics": None},
+            "containers": [CONTAINER],
+            "stacks": [STACK],
+            "container_stats": {},
+        }
+    )
+    cpu_sensor = sc["DockhandEnvCpuSensor"](
+        coord, _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    mem_sensor = sc["DockhandEnvMemPercentSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    assert cpu_sensor.native_value is None
+    assert mem_sensor.native_value is None
+    assert mem_sensor.extra_state_attributes == {
+        "memory_used_bytes": None,
+        "memory_total_bytes": None,
+    }
 
 
 def test_container_count_total(env_sensors):
@@ -371,20 +454,34 @@ def test_networks_count(env_sensors):
     assert env_sensors["networks"].native_value == 3
 
 
-def test_disk_value_bytes(env_sensors):
-    assert env_sensors["disk"].native_value == 524288000
+def test_disk_usage_total_bytes(env_sensors):
+    # images.totalSize + volumes.totalSize + containersSize + buildCacheSize
+    assert (
+        env_sensors["disk_usage"].native_value
+        == 2147483648 + 1073741824 + 524288000 + 104857600
+    )
 
 
-def test_disk_disabled_by_default(env_sensors):
-    assert not env_sensors["disk"]._attr_entity_registry_enabled_default
+def test_disk_usage_attributes(env_sensors):
+    attrs = env_sensors["disk_usage"].extra_state_attributes
+    assert attrs == {
+        "images_size_bytes": 2147483648,
+        "volumes_size_bytes": 1073741824,
+        "containers_size_bytes": 524288000,
+        "build_cache_size_bytes": 104857600,
+    }
 
 
-def test_cache_value_bytes(env_sensors):
-    assert env_sensors["cache"].native_value == 104857600
+def test_disk_usage_disabled_by_default(env_sensors):
+    assert not env_sensors["disk_usage"]._attr_entity_registry_enabled_default
 
 
-def test_cache_disabled_by_default(env_sensors):
-    assert not env_sensors["cache"]._attr_entity_registry_enabled_default
+def test_connection_type_value(env_sensors):
+    assert env_sensors["connection_type"].native_value == "socket"
+
+
+def test_connection_type_enabled_by_default(env_sensors):
+    assert env_sensors["connection_type"]._attr_entity_registry_enabled_default is True
 
 
 def test_env_sensor_unique_ids_are_unique(env_sensors):
@@ -399,8 +496,8 @@ def test_env_sensor_entity_category_diagnostic(env_sensors):
         "images",
         "volumes",
         "networks",
-        "disk",
-        "cache",
+        "disk_usage",
+        "connection_type",
     ]:
         assert env_sensors[key]._attr_entity_category == EntityCategory.DIAGNOSTIC
 
@@ -417,7 +514,7 @@ def test_env_sensor_has_entity_name_true(env_sensors):
 # ===========================================================================
 
 
-def _make_activity(events=None):
+def _make_activity(events=None, recent_events=None):
     from custom_components.dockhand.sensor import DockhandEnvActivityEventsSensor
 
     coord = _fast_coord(
@@ -427,7 +524,12 @@ def _make_activity(events=None):
             "stacks": [],
         }
     )
-    return DockhandEnvActivityEventsSensor(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
+    slow_coord = _slow_coord(
+        env_data={"recent_events": recent_events if recent_events is not None else []}
+    )
+    return DockhandEnvActivityEventsSensor(
+        coord, slow_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
 
 
 def test_activity_total_event_count():
@@ -440,6 +542,24 @@ def test_activity_today_attribute():
 
 def test_activity_disabled_by_default():
     assert not _make_activity()._attr_entity_registry_enabled_default
+
+
+def test_activity_recent_events_attribute():
+    events = [
+        {"containerName": "web", "action": "start", "timestamp": "2026-07-13T00:00:00Z"}
+    ]
+    attrs = _make_activity(recent_events=events).extra_state_attributes
+    assert attrs["recent_events"] == [
+        {
+            "container_name": "web",
+            "action": "start",
+            "timestamp": "2026-07-13T00:00:00Z",
+        }
+    ]
+
+
+def test_activity_recent_events_empty_when_not_collecting():
+    assert _make_activity().extra_state_attributes["recent_events"] == []
 
 
 def test_activity_state_class_is_measurement():
@@ -525,9 +645,16 @@ def test_host_platform_sensor_none_when_absent():
     assert _make_host_sensor("DockhandEnvPlatformSensor").native_value is None
 
 
-def test_host_arch_sensor():
-    sensor = _make_host_sensor("DockhandEnvArchSensor", {"arch": "x64"})
-    assert sensor.native_value == "x64"
+def test_host_platform_sensor_architecture_attribute():
+    sensor = _make_host_sensor(
+        "DockhandEnvPlatformSensor", {"platform": "linux", "arch": "x64"}
+    )
+    assert sensor.extra_state_attributes == {"architecture": "x64"}
+
+
+def test_host_platform_sensor_architecture_attribute_absent_when_missing():
+    sensor = _make_host_sensor("DockhandEnvPlatformSensor", {"platform": "linux"})
+    assert sensor.extra_state_attributes == {}
 
 
 def test_host_docker_version_sensor():
@@ -571,7 +698,6 @@ def test_host_last_boot_sensor_none_when_uptime_negative():
 def test_host_sensors_disabled_by_default():
     for cls_name in [
         "DockhandEnvPlatformSensor",
-        "DockhandEnvArchSensor",
         "DockhandEnvDockerVersionSensor",
         "DockhandEnvLastBootSensor",
     ]:
@@ -618,7 +744,14 @@ def test_container_health_enabled_by_default(container_sensors):
 def test_container_state_none_when_container_gone():
     coord = MagicMock()
     coord.data = {
-        ENV_ID: {"stats": STATS, "containers": [], "stacks": [], "container_stats": {}}
+        "environments": {
+            ENV_ID: {
+                "stats": STATS,
+                "containers": [],
+                "stacks": [],
+                "container_stats": {},
+            }
+        }
     }
     sc = _sensor_classes()
     state = sc["DockhandContainerStateSensor"](
@@ -667,15 +800,19 @@ CONTAINER_STATS = {
 def _stats_coord(stats=None, running=True):
     coord = MagicMock()
     coord.data = {
-        ENV_ID: {
-            "stats": STATS,
-            "containers": [CONTAINER] if running else [],
-            "stacks": [],
-            "container_stats": {"nginx": stats or CONTAINER_STATS} if running else {},
+        "environments": {
+            ENV_ID: {
+                "stats": STATS,
+                "containers": [CONTAINER] if running else [],
+                "stacks": [],
+                "container_stats": {"nginx": stats or CONTAINER_STATS}
+                if running
+                else {},
+            }
         }
     }
     coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
+    coord.async_refresh = AsyncMock()
     return coord
 
 
@@ -683,7 +820,7 @@ def _stats_coord(stats=None, running=True):
 def stats_sensors():
     sc = _sensor_classes()
     coord = _stats_coord()
-    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER, True)
     sensors = {
         "cpu": sc["DockhandContainerCpuSensor"](*args),
         "mem_usage": sc["DockhandContainerMemoryUsageSensor"](*args),
@@ -736,10 +873,17 @@ def test_stats_memory_usage_cache_attribute(stats_sensors):
     assert attrs["memory_cache_bytes"] == 20_971_520
 
 
+def test_stats_available_when_running(stats_sensors):
+    for s in stats_sensors["all"]:
+        assert s.available, (
+            f"{type(s).__name__} should be available when the container has stats"
+        )
+
+
 def test_stats_all_sensors_none_when_container_stopped():
     coord = _stats_coord(running=False)
     sc = _sensor_classes()
-    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
+    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER, True)
     sensors = [
         sc["DockhandContainerCpuSensor"](*args),
         sc["DockhandContainerMemoryUsageSensor"](*args),
@@ -752,13 +896,28 @@ def test_stats_all_sensors_none_when_container_stopped():
     ]
     for s in sensors:
         assert s.native_value is None, f"{type(s).__name__} should be None when stopped"
-
-
-def test_stats_all_disabled_by_default(stats_sensors):
-    for s in stats_sensors["all"]:
-        assert not s._attr_entity_registry_enabled_default, (
-            f"{type(s).__name__} should be disabled by default"
+        assert not s.available, (
+            f"{type(s).__name__} should report unavailable (not just None), when stopped"
         )
+
+
+def test_stats_enabled_default_follows_config_option(stats_sensors):
+    """Enabled-by-default now follows the "Enable container stats" option
+    (passed in at construction) rather than being hardcoded False —
+    stats_sensors fixture constructs with stats_enabled=True."""
+    for s in stats_sensors["all"]:
+        assert s._attr_entity_registry_enabled_default, (
+            f"{type(s).__name__} should follow the stats_enabled flag it was constructed with"
+        )
+
+
+def test_stats_disabled_by_default_when_option_off():
+    sc = _sensor_classes()
+    coord = _stats_coord()
+    sensor = sc["DockhandContainerCpuSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER, False
+    )
+    assert not sensor._attr_entity_registry_enabled_default
 
 
 def test_stats_all_diagnostic_category(stats_sensors):
@@ -812,8 +971,115 @@ def test_stack_container_count(stack_sensors):
     assert stack_sensors["count"].native_value == 3
 
 
+def test_stack_container_count_names_attribute():
+    """The container count entity is the one the card links to for
+    more-info, so this is where the container list is most useful to
+    see at a glance — added alongside the same attribute on the status
+    entity, not instead of it."""
+    sc = _sensor_classes()
+    stack = {"name": "myapp", "status": "running", "containers": ["abc123", "def456"]}
+    containers = [
+        {"id": "abc123", "name": "web", "state": "running"},
+        {"id": "def456", "name": "worker", "state": "running"},
+    ]
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": containers,
+            "stacks": [stack],
+            "container_stats": {},
+        }
+    )
+    sensor = sc["DockhandStackContainerCountSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+    assert sensor.extra_state_attributes == {"container_names": ["web", "worker"]}
+
+
 def test_stack_status_container_count_attribute(stack_sensors):
     assert "container_count" in stack_sensors["status"].extra_state_attributes
+
+
+def test_stack_status_container_names_resolved_from_ids():
+    """Dockhand's own stack.containers field is a list of raw container
+    IDs (verified against Dockhand's source, src/lib/server/stacks.ts),
+    not names — this attribute must resolve them against the
+    environment's actual container list, not just echo the IDs back."""
+    sc = _sensor_classes()
+    stack = {"name": "myapp", "status": "running", "containers": ["abc123", "def456"]}
+    containers = [
+        {"id": "abc123", "name": "web", "state": "running"},
+        {"id": "def456", "name": "worker", "state": "running"},
+    ]
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": containers,
+            "stacks": [stack],
+            "container_stats": {},
+        }
+    )
+    sensor = sc["DockhandStackStatusSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+    assert sensor.extra_state_attributes["container_names"] == ["web", "worker"]
+
+
+def test_stack_status_container_names_sorted_alphabetically():
+    """Real, reported usability issue: an unsorted list is hard to skim
+    for a stack with many containers. Deliberately feeds IDs in an order
+    that would NOT already happen to look sorted, to actually exercise
+    the sort rather than coincidentally pass."""
+    sc = _sensor_classes()
+    stack = {
+        "name": "myapp",
+        "status": "running",
+        "containers": ["id-zebra", "id-alpha", "id-mike"],
+    }
+    containers = [
+        {"id": "id-zebra", "name": "zebra", "state": "running"},
+        {"id": "id-alpha", "name": "alpha", "state": "running"},
+        {"id": "id-mike", "name": "Mike", "state": "running"},
+    ]
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": containers,
+            "stacks": [stack],
+            "container_stats": {},
+        }
+    )
+    sensor = sc["DockhandStackStatusSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+    # Case-insensitive: "Mike" sorts between "alpha" and "zebra", not
+    # before both of them due to capitalization.
+    assert sensor.extra_state_attributes["container_names"] == [
+        "alpha",
+        "Mike",
+        "zebra",
+    ]
+
+
+def test_stack_status_container_names_falls_back_to_id_when_unresolved():
+    """A container ID that isn't in the environment's current container
+    list (e.g. removed since the stack's own list last refreshed) should
+    still show up as its raw ID, not silently vanish from the list."""
+    sc = _sensor_classes()
+    stack = {"name": "myapp", "status": "running", "containers": ["abc123", "gone999"]}
+    containers = [{"id": "abc123", "name": "web", "state": "running"}]
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": containers,
+            "stacks": [stack],
+            "container_stats": {},
+        }
+    )
+    sensor = sc["DockhandStackStatusSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+    assert sensor.extra_state_attributes["container_names"] == ["gone999", "web"]
 
 
 def test_stack_status_model_untracked_when_no_source_record(stack_sensors):
@@ -1170,6 +1436,7 @@ def test_binary_online_carries_name_and_connection_attributes():
         "name": "prod",
         "connection_host": "192.168.1.5",
         "connection_port": 2375,
+        "labels": [],
     }
 
 
@@ -1185,7 +1452,24 @@ def test_binary_online_attributes_none_when_env_meta_absent():
         "name": "prod",
         "connection_host": None,
         "connection_port": None,
+        "labels": [],
     }
+
+
+def test_binary_online_labels_attribute():
+    from custom_components.dockhand.binary_sensor import DockhandEnvOnlineSensor
+
+    fast_coord = _fast_coord(
+        {
+            "stats": {**STATS, "labels": ["prod", "critical"]},
+            "containers": [],
+            "stacks": [],
+        }
+    )
+    sensor = DockhandEnvOnlineSensor(
+        fast_coord, _slow_coord(), ENTRY_ID, ENV_ID, BASE_URL
+    )
+    assert sensor.extra_state_attributes["labels"] == ["prod", "critical"]
 
 
 # ---------------------------------------------------------------------------
@@ -1205,14 +1489,61 @@ def test_stack_updates_available_true():
     stack = {**STACK, "updatesAvailable": True, "updateCount": 2}
     sensor = _make_stack_updates_sensor(stack)
     assert sensor.is_on is True
-    assert sensor.extra_state_attributes == {"update_count": 2}
+    assert sensor.extra_state_attributes == {
+        "update_count": 2,
+        "pending_container_names": [],
+    }
 
 
 def test_stack_updates_available_false():
     stack = {**STACK, "updatesAvailable": False, "updateCount": 0}
     sensor = _make_stack_updates_sensor(stack)
     assert sensor.is_on is False
-    assert sensor.extra_state_attributes == {"update_count": 0}
+    assert sensor.extra_state_attributes == {
+        "update_count": 0,
+        "pending_container_names": [],
+    }
+
+
+def test_stack_updates_available_has_no_device_class():
+    """Regression guard: PROBLEM made a routine available update look
+    like something was wrong (a real, reported issue). UPDATE was
+    considered and rejected too — HA's own developer docs discourage it
+    in favor of a real update-domain entity, a bigger change than this."""
+    stack = {**STACK, "updatesAvailable": True, "updateCount": 1}
+    sensor = _make_stack_updates_sensor(stack)
+    assert sensor.device_class is None
+
+
+def test_stack_updates_available_pending_container_names_resolved():
+    """Dockhand's stack object only gives the container ID list and the
+    aggregate count, never which containers specifically — resolved here
+    by cross-referencing the environment's pending_update_container_ids
+    against the stack's own container IDs, then to names."""
+    bs = _bs_classes()
+    stack = {
+        "name": "myapp",
+        "status": "running",
+        "containers": ["abc123", "def456", "ghi789"],
+        "updatesAvailable": True,
+        "updateCount": 2,
+    }
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [
+                {"id": "abc123", "name": "web"},
+                {"id": "def456", "name": "worker"},
+                {"id": "ghi789", "name": "cache"},
+            ],
+            "stacks": [stack],
+            "pending_update_container_ids": {"abc123", "ghi789"},
+        }
+    )
+    sensor = bs["DockhandStackUpdatesAvailableBinarySensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+    assert sensor.extra_state_attributes["pending_container_names"] == ["cache", "web"]
 
 
 def test_stack_updates_available_none_when_field_absent():
@@ -1231,7 +1562,7 @@ def test_stack_updates_available_none_when_stack_gone():
     stack = {**STACK, "updatesAvailable": True, "updateCount": 1}
     sensor = _make_stack_updates_sensor(stack)
     # Simulate the stack disappearing from live data entirely.
-    sensor.coordinator.data[ENV_ID]["stacks"] = []
+    sensor.coordinator.data["environments"][ENV_ID]["stacks"] = []
     assert sensor.is_on is None
 
 
@@ -1668,7 +1999,11 @@ def _make_image_setup_entry(images):
     given images list — everything else (containers/stacks/schedules)
     left empty so only the images path is meaningfully tested."""
     fast = MagicMock()
-    fast.data = {ENV_ID: {"stats": {"name": ENV_NAME}, "containers": [], "stacks": []}}
+    fast.data = {
+        "environments": {
+            ENV_ID: {"stats": {"name": ENV_NAME}, "containers": [], "stacks": []}
+        }
+    }
     fast.async_add_listener = MagicMock(return_value=lambda: None)
 
     slow = MagicMock()
@@ -1771,12 +2106,14 @@ def _make_bulk_update_button(pending=None, containers=None):
 
     coord = MagicMock()
     coord.data = {
-        ENV_ID: {
-            "pending_update_container_ids": pending or set(),
-            "containers": containers or [],
+        "environments": {
+            ENV_ID: {
+                "pending_update_container_ids": pending or set(),
+                "containers": containers or [],
+            }
         }
     }
-    coord.async_request_refresh = AsyncMock()
+    coord.async_refresh = AsyncMock()
     client = MagicMock()
     client.async_get_update_check_settings = AsyncMock(return_value={})
     return (
@@ -1799,27 +2136,6 @@ def test_bulk_update_updatable_ids_excludes_system_containers():
     assert button._updatable_container_ids() == ["id-web"]
 
 
-def test_bulk_update_name_shows_count():
-    button, _, _ = _make_bulk_update_button(
-        pending={"id-web", "id-db"},
-        containers=[
-            {"id": "id-web", "name": "web", "systemContainer": None},
-            {"id": "id-db", "name": "db", "systemContainer": None},
-        ],
-    )
-    assert button.name == "Update all (2)"
-
-
-def test_bulk_update_name_zero_when_only_system_containers_pending():
-    button, _, _ = _make_bulk_update_button(
-        pending={"id-dockhand"},
-        containers=[
-            {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
-        ],
-    )
-    assert button.name == "Update all (0)"
-
-
 async def test_bulk_update_press_raises_when_nothing_updatable():
     button, _, _ = _make_bulk_update_button()
     with pytest.raises(HomeAssistantError):
@@ -1837,7 +2153,7 @@ async def test_bulk_update_press_success():
     client.async_start_batch_update_stream.assert_called_once_with(
         ENV_ID, ["id-web"], vulnerability_criteria=None
     )
-    coord.async_request_refresh.assert_called_once()
+    coord.async_refresh.assert_called_once()
 
 
 async def test_bulk_update_press_raises_on_job_error():
@@ -1899,11 +2215,15 @@ async def test_setup_entry_creates_bulk_update_button_when_pending():
 
     fast = MagicMock()
     fast.data = {
-        ENV_ID: {
-            "stats": {"name": ENV_NAME},
-            "containers": [{"id": "id-web", "name": "web", "systemContainer": None}],
-            "stacks": [],
-            "pending_update_container_ids": {"id-web"},
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": [
+                    {"id": "id-web", "name": "web", "systemContainer": None}
+                ],
+                "stacks": [],
+                "pending_update_container_ids": {"id-web"},
+            }
         }
     }
     fast.async_add_listener = MagicMock(return_value=lambda: None)
@@ -1935,11 +2255,13 @@ async def test_setup_entry_skips_bulk_update_button_when_nothing_pending():
 
     fast = MagicMock()
     fast.data = {
-        ENV_ID: {
-            "stats": {"name": ENV_NAME},
-            "containers": [],
-            "stacks": [],
-            "pending_update_container_ids": set(),
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": [],
+                "stacks": [],
+                "pending_update_container_ids": set(),
+            }
         }
     }
     fast.async_add_listener = MagicMock(return_value=lambda: None)
@@ -1964,3 +2286,129 @@ async def test_setup_entry_skips_bulk_update_button_when_nothing_pending():
         created.extend(call.args[0])
     names = [type(e).__name__ for e in created]
     assert "DockhandEnvBulkUpdateButton" not in names
+
+
+# ---------------------------------------------------------------------------
+# Check-updates button (env-level "Check for updates", conditionally present)
+# ---------------------------------------------------------------------------
+
+
+def _make_check_updates_button(env_id=ENV_ID):
+    from custom_components.dockhand.button import DockhandCheckUpdatesButton
+
+    fast_coord = MagicMock()
+    fast_coord.data = {"environments": {env_id: {"stats": {"name": ENV_NAME}}}}
+    update_coord = MagicMock()
+    update_coord.async_check_environment = AsyncMock()
+    update_coord.async_refresh = AsyncMock()
+    update_coord.async_request_refresh = AsyncMock()
+    update_coord.last_update_success = True
+    button = DockhandCheckUpdatesButton(
+        fast_coord, update_coord, ENTRY_ID, env_id, ENV_NAME, BASE_URL
+    )
+    return button, update_coord
+
+
+async def test_check_updates_press_checks_only_its_own_environment():
+    """The actual design fix: this button used to call async_refresh() on
+    the whole coordinator, which always re-checks every environment in
+    one gather — so pressing environment 1's button silently also
+    re-checked every other environment too. Genuinely scoped now:
+    async_check_environment(env_id) only ever touches its own
+    environment's data. See DockhandCheckUpdatesButton's own docstring
+    and DockhandUpdateCoordinator.async_check_environment's docstring for
+    the full reasoning."""
+    button, update_coord = _make_check_updates_button(env_id=7)
+    await button.async_press()
+    update_coord.async_check_environment.assert_called_once_with(7)
+    update_coord.async_refresh.assert_not_called()
+    update_coord.async_request_refresh.assert_not_called()
+
+
+async def test_check_updates_press_raises_on_error():
+    button, update_coord = _make_check_updates_button()
+    update_coord.async_check_environment = AsyncMock(side_effect=Exception("boom"))
+    with pytest.raises(HomeAssistantError):
+        await button.async_press()
+
+
+# ---------------------------------------------------------------------------
+# Container stats sensors gated on "Enable container stats" (async_setup_entry)
+# ---------------------------------------------------------------------------
+
+
+def _make_container_stats_setup_entry(enable_container_stats):
+    from custom_components.dockhand.sensor import async_setup_entry  # noqa: F401
+
+    fast = MagicMock()
+    fast.data = {
+        "environments": {
+            ENV_ID: {
+                "stats": STATS,
+                "containers": [CONTAINER],
+                "stacks": [],
+                "container_stats": {},
+                "pending_update_container_ids": set(),
+            }
+        }
+    }
+    fast.async_add_listener = MagicMock(return_value=lambda: None)
+
+    slow = MagicMock()
+    slow.data = {"environments": {}, "schedules": []}
+    slow.async_add_listener = MagicMock(return_value=lambda: None)
+
+    entry = MagicMock()
+    entry.entry_id = ENTRY_ID
+    entry.data = {"api_url": BASE_URL, "enable_container_stats": enable_container_stats}
+    entry.options = {}
+    entry.runtime_data.fast_coordinator = fast
+    entry.runtime_data.slow_coordinator = slow
+    entry.runtime_data.client = MagicMock()
+    entry.runtime_data.update_coordinator = None
+    entry.async_on_unload = MagicMock()
+    return entry
+
+
+async def _created_entity_names(entry):
+    from custom_components.dockhand.sensor import async_setup_entry
+
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    return [type(e).__name__ for e in created]
+
+
+STATS_SENSOR_NAMES = {
+    "DockhandContainerCpuSensor",
+    "DockhandContainerMemoryUsageSensor",
+    "DockhandContainerMemoryPercentSensor",
+    "DockhandContainerMemoryLimitSensor",
+    "DockhandContainerNetworkRxSensor",
+    "DockhandContainerNetworkTxSensor",
+    "DockhandContainerBlockReadSensor",
+    "DockhandContainerBlockWriteSensor",
+}
+
+
+async def test_container_stats_entities_not_created_when_option_off():
+    """Not just disabled-by-default — genuinely not instantiated at all,
+    same as enable_images/enable_volumes/enable_networks, so the existing
+    central cleanup system removes any that already exist from before the
+    option was turned off (Raetha's report: they weren't being cleaned up
+    because they were always being created regardless of the flag)."""
+    entry = _make_container_stats_setup_entry(enable_container_stats=False)
+    names = await _created_entity_names(entry)
+    assert not (STATS_SENSOR_NAMES & set(names)), (
+        f"stats sensors should not be created when the option is off, found: {STATS_SENSOR_NAMES & set(names)}"
+    )
+    # The container's core sensors are unaffected by the flag.
+    assert "DockhandContainerStateSensor" in names
+
+
+async def test_container_stats_entities_created_when_option_on():
+    entry = _make_container_stats_setup_entry(enable_container_stats=True)
+    names = await _created_entity_names(entry)
+    assert STATS_SENSOR_NAMES.issubset(set(names))

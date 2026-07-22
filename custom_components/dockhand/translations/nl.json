@@ -96,7 +96,8 @@
           "enable_networks": "Netwerksensoren inschakelen",
           "poll_interval_updates": "Controle-interval voor updates (seconden)",
           "enable_runtime_controls": "Runtime-besturing inschakelen (geavanceerd)",
-          "enable_precise_updates": "Precieze updateversies inschakelen"
+          "enable_precise_updates": "Precieze updateversies inschakelen",
+          "enable_container_stats": "Container CPU-/geheugen-/netwerk-/schijf-I/O-sensoren inschakelen"
         },
         "data_description": {
           "poll_interval": "Hoe vaak statistieken worden vernieuwd. Standaard: 60. Minimum: 10.",
@@ -107,7 +108,8 @@
           "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving.",
           "poll_interval_updates": "Hoe vaak de hierboven ingeschakelde echte registry-aanvragen worden uitgevoerd (seconden). Standaard: 86400 (24 uur). Minimum: 300. Alleen relevant als \"Precieze updateversies inschakelen\" aanstaat.",
           "enable_runtime_controls": "Schakelt number-/select-entiteiten in om de geheugenlimiet, CPU-limiet, proceslimiet en herstartbeleid van een zelfstandige container live te wijzigen, zonder deze opnieuw aan te maken. Niet beschikbaar voor containers die worden beheerd door een Compose-stack. Vereist één extra API-aanroep per zelfstandige container bij elke trage polling om huidige waarden te lezen.",
-          "enable_precise_updates": "Update-entiteiten bestaan al automatisch voor elke container in een omgeving waar update-controle is ingeschakeld in Dockhand zelf, met een image-tag en een \"update-pending\"-status op basis van Dockhands eigen gecachte resultaten — zonder extra API-kosten. Dit inschakelen voegt echte registry-aanvragen toe met het onderstaande interval, waardoor dezelfde entiteiten worden bijgewerkt met precieze versienummers (image-digests)."
+          "enable_precise_updates": "Update-entiteiten bestaan al automatisch voor elke container in een omgeving waar update-controle is ingeschakeld in Dockhand zelf, met een image-tag en een \"update-pending\"-status op basis van Dockhands eigen gecachte resultaten — zonder extra API-kosten. Dit inschakelen voegt echte registry-aanvragen toe met het onderstaande interval, waardoor dezelfde entiteiten worden bijgewerkt met precieze versienummers (image-digests).",
+          "enable_container_stats": "Maakt de sensoren per container voor CPU, geheugen, netwerk en block-I/O aan, in plaats van ze helemaal niet aan te maken totdat u dit inschakelt. Bepaalt ook de onderliggende statistieken-API-aanroep zelf — uit betekent dat de aanroep niet wordt gedaan, niet alleen dat de entiteiten verborgen zijn. Standaard uitgeschakeld omdat het veel entiteiten zijn die de meeste mensen niet nodig hebben. Een container die gestopt is, of om een andere reden uit de statistiekenrespons valt, meldt deze sensoren als niet beschikbaar in plaats van een verouderde of nulwaarde. Dit uitschakelen verwijdert ook eerder aangemaakte statistiekentiteiten."
         }
       }
     }
@@ -135,11 +137,8 @@
       "network_count": {
         "name": "Aantal netwerken"
       },
-      "containers_disk_usage": {
-        "name": "Schijfgebruik containers"
-      },
-      "build_cache_size": {
-        "name": "Buildcachegrootte"
+      "disk_usage": {
+        "name": "Schijfgebruik"
       },
       "activity_events": {
         "name": "Activiteitsgebeurtenissen"
@@ -204,14 +203,23 @@
       "host_platform": {
         "name": "Hostplatform"
       },
-      "host_arch": {
-        "name": "Hostarchitectuur"
-      },
       "host_docker_version": {
         "name": "Docker-versie"
       },
-      "host_last_boot": {
-        "name": "Laatste opstart van host"
+      "uptime": {
+        "name": "Uptime"
+      },
+      "vulnerabilities": {
+        "name": "Kwetsbaarheden"
+      },
+      "connection_type": {
+        "name": "Verbindingstype",
+        "state": {
+          "socket": "Unix-socket",
+          "direct": "Directe verbinding",
+          "hawser-standard": "Hawser-agent (standaard)",
+          "hawser-edge": "Hawser-agent (edge)"
+        }
       }
     },
     "binary_sensor": {
@@ -265,7 +273,7 @@
         "name": "Opnieuw implementeren"
       },
       "env_bulk_update": {
-        "name": "Alles bijwerken"
+        "name": "Alle containers bijwerken"
       }
     },
     "number": {

@@ -171,10 +171,10 @@ rules:
       README "Configuration parameters" section documents all fields: API URL,
       API token (when auth is enabled), fast poll interval, slow poll interval,
       the optional feature flags (schedules, images, volumes, networks,
-      precise update versions, runtime controls), update check interval, and
-      SSL verification. Separate subsections cover setup-time fields, the
-      Options flow (adjustable via Configure), and Reconfigure (for changing
-      URL/token).
+      precise update versions, runtime controls, container stats), update
+      check interval, and SSL verification. Separate subsections cover
+      setup-time fields, the Options flow (adjustable via Configure), and
+      Reconfigure (for changing URL/token).
 
   docs-installation-parameters:
     status: done
@@ -347,8 +347,8 @@ rules:
   entity-device-class:
     status: done
     comment: >
-      SensorDeviceClass.DATA_SIZE used for containers disk usage, build cache
-      size, and the container resource stats sensors (memory usage,
+      SensorDeviceClass.DATA_SIZE used for the disk usage sensor and the
+      container resource stats sensors (memory usage,
       memory limit, network in/out, disk read/write). SensorDeviceClass.TIMESTAMP
       used for the schedule next-run sensor. BinarySensorDeviceClass.CONNECTIVITY
       used for the environment Online sensor. All other sensors and binary sensors
@@ -359,23 +359,25 @@ rules:
     status: done
     comment: >
       Niche or verbose entities are disabled by default via
-      _attr_entity_registry_enabled_default = False: build cache size,
-      containers disk usage, activity events, Hawser agent version (and its
+      _attr_entity_registry_enabled_default = False: disk usage,
+      activity events, Hawser agent version (and its
       agent_name/agent_id/last_seen attributes, edge-mode only), the
       config-mirror binary sensors (activity collection, metrics collection,
       vulnerability scanning, update checks, auto update, image pruning),
-      the host info sensors (platform, architecture, Docker version, last
+      the host info sensors (platform, Docker version, last
       boot — all share one base class's flag), the container auto-update
-      switch, the git stack auto-deploy switch, and the container
-      resource stats sensors (CPU usage,
-      memory usage, memory usage %, memory limit, network in, network out,
-      disk read, disk write). Stats sensors start disabled so users enable
-      only what they need; enabled/disabled state survives container
-      recreation because it is keyed on env_id + container name. The
+      switch, and the git stack auto-deploy switch. The
       container Health sensor is enabled by default — it is only ever
       created when the container has a Docker healthcheck configured, so
       it is never permanently unavailable. The container Image sensor was
       removed in 1.6.0 (image name is an attribute on the State sensor).
+      Note: the container resource stats sensors (CPU usage, memory usage,
+      memory usage %, memory limit, network in, network out, disk read,
+      disk write) are a stronger case than "disabled by default" — they
+      are not created at all unless "Enable container stats" is on, same
+      pattern as enable_images/enable_volumes/enable_networks, so turning
+      the option off removes them via the existing cleanup system rather
+      than just leaving them disabled in the registry.
 
   entity-translations:
     status: done

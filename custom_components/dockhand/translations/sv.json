@@ -96,7 +96,8 @@
           "enable_networks": "Aktivera nätverkssensorer",
           "poll_interval_updates": "Intervall för uppdateringskontroll (sekunder)",
           "enable_runtime_controls": "Aktivera körtidskontroller (avancerat)",
-          "enable_precise_updates": "Aktivera exakta uppdateringsversioner"
+          "enable_precise_updates": "Aktivera exakta uppdateringsversioner",
+          "enable_container_stats": "Aktivera CPU-/minnes-/nätverks-/disk-I/O-sensorer per container"
         },
         "data_description": {
           "poll_interval": "Hur ofta statistik uppdateras. Standard: 60. Minimum: 10.",
@@ -107,7 +108,8 @@
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
           "poll_interval_updates": "Hur ofta de riktiga registerfrågorna som aktiveras ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300. Endast relevant när \"Aktivera exakta uppdateringsversioner\" är på.",
           "enable_runtime_controls": "Aktiverar number-/select-entiteter för att ändra minnesgräns, CPU-gräns, processgräns och omstartspolicy för en fristående container direkt, utan att återskapa den. Inte tillgängligt för containrar som hanteras av en Compose-stack. Kräver ett extra API-anrop per fristående container vid varje långsam avfrågning för att läsa aktuella värden.",
-          "enable_precise_updates": "Uppdateringsentiteter finns redan automatiskt för varje container i en miljö där uppdateringskontroll är aktiverad i Dockhand själv, och visar en image-tagg och en \"update-pending\"-status från Dockhands egna cachade resultat — utan extra API-kostnad. Att aktivera detta lägger till riktiga registerfrågor med intervallet nedan, vilket uppgraderar samma entiteter till att visa exakta versionsnummer (image-digest)."
+          "enable_precise_updates": "Uppdateringsentiteter finns redan automatiskt för varje container i en miljö där uppdateringskontroll är aktiverad i Dockhand själv, och visar en image-tagg och en \"update-pending\"-status från Dockhands egna cachade resultat — utan extra API-kostnad. Att aktivera detta lägger till riktiga registerfrågor med intervallet nedan, vilket uppgraderar samma entiteter till att visa exakta versionsnummer (image-digest).",
+          "enable_container_stats": "Skapar per-container-sensorerna för CPU, minne, nätverk och block-I/O, istället för att inte skapa dem alls förrän du aktiverar detta. Styr även själva det underliggande statistik-API-anropet — av innebär att anropet inte görs, inte bara att entiteterna är dolda. Inaktiverat som standard eftersom det är många entiteter som de flesta inte behöver. En container som är stoppad, eller som av någon annan anledning faller ur statistiksvaret, rapporterar dessa sensorer som otillgängliga istället för en inaktuell eller nollvärde. Att stänga av detta tar även bort tidigare skapade statistikentiteter."
         }
       }
     }
@@ -135,11 +137,8 @@
       "network_count": {
         "name": "Antal nätverk"
       },
-      "containers_disk_usage": {
-        "name": "Diskanvändning för containrar"
-      },
-      "build_cache_size": {
-        "name": "Build-cachestorlek"
+      "disk_usage": {
+        "name": "Diskanvändning"
       },
       "activity_events": {
         "name": "Aktivitetshändelser"
@@ -204,14 +203,23 @@
       "host_platform": {
         "name": "Värdplattform"
       },
-      "host_arch": {
-        "name": "Värdarkitektur"
-      },
       "host_docker_version": {
         "name": "Docker-version"
       },
-      "host_last_boot": {
-        "name": "Senaste omstart av värd"
+      "uptime": {
+        "name": "Drifttid"
+      },
+      "vulnerabilities": {
+        "name": "Sårbarheter"
+      },
+      "connection_type": {
+        "name": "Anslutningstyp",
+        "state": {
+          "socket": "Unix-uttag",
+          "direct": "Direktanslutning",
+          "hawser-standard": "Hawser-agent (standard)",
+          "hawser-edge": "Hawser-agent (edge)"
+        }
       }
     },
     "binary_sensor": {
@@ -265,7 +273,7 @@
         "name": "Distribuera igen"
       },
       "env_bulk_update": {
-        "name": "Uppdatera alla"
+        "name": "Uppdatera alla containrar"
       }
     },
     "number": {

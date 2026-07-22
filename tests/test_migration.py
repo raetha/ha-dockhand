@@ -23,6 +23,9 @@ from custom_components.dockhand.migration import (
     migrate_1_4_0_update_entity_unique_ids,
     migrate_1_5_0_container_device_identifiers,
     migrate_1_7_3_entry_scoped_unique_ids,
+    migrate_1_8_0_container_stats_option,
+    migrate_1_8_0_reenable_container_stats_entities,
+    migrate_1_8_0_remove_consolidated_disk_sensors,
 )
 
 # ---------------------------------------------------------------------------
@@ -494,7 +497,7 @@ def test_async_run_migrations_is_no_op_when_nothing_to_migrate(hass: HomeAssista
     new_uid = f"{ENTRY_ID}_1_cpu"
     ent = _add_entity(hass, entry, new_uid)
     # Should not raise, and should not touch the already-new-format entity
-    async_run_migrations(hass, ENTRY_ID, {})
+    async_run_migrations(hass, entry, {})
     assert _get_uid(hass, ent.entity_id) == new_uid
 
 
@@ -504,6 +507,178 @@ def test_async_run_migrations_runs_all_in_order(hass: HomeAssistant):
     entry = _make_entry(hass)
     # Seed an entity that would be touched by 1.7.3 if 1.4.0/1.5.0 leave it alone
     ent = _add_entity(hass, entry, "dockhand_env_1_cpu")
-    async_run_migrations(hass, ENTRY_ID, {})
+    async_run_migrations(hass, entry, {})
     # 1.7.3 should have fired and renamed it
     assert _get_uid(hass, ent.entity_id) == f"{ENTRY_ID}_1_cpu"
+
+
+# ---------------------------------------------------------------------------
+# migrate_1_8_0_container_stats_option
+# ---------------------------------------------------------------------------
+
+
+def test_container_stats_option_turned_on_when_stat_entity_enabled(
+    hass: HomeAssistant,
+):
+    """A user who manually enabled even one of the 8 stat sensors before
+    "Enable container stats" existed must not silently lose it — the
+    option gets turned on automatically instead."""
+    entry = _make_entry(hass)
+    _add_entity(hass, entry, f"{ENTRY_ID}_1_container_web_cpu_percent")
+    migrate_1_8_0_container_stats_option(hass, entry)
+    assert entry.options.get("enable_container_stats") is True
+
+
+def test_container_stats_option_untouched_when_nothing_enabled(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    migrate_1_8_0_container_stats_option(hass, entry)
+    assert "enable_container_stats" not in entry.options
+
+
+# ---------------------------------------------------------------------------
+# migrate_1_8_0_reenable_container_stats_entities
+# ---------------------------------------------------------------------------
+#
+# Real, reported bug: a pre-1.8.0 container-stats entity can come back
+# still disabled once a user turns "Enable container stats" on — not our
+# own bug, but HA's own DeletedRegistryEntry mechanism, which restores a
+# recreated entity's prior disabled_by to preserve deliberate user
+# customizations across reloads/removals. It can't tell "the user
+# disabled this" apart from "this was only ever disabled by the
+# pre-1.8.0 default." The fix only touches entities disabled specifically
+# via RegistryEntryDisabler.INTEGRATION (never a user's own choice,
+# always a default) and leaves RegistryEntryDisabler.USER alone. A
+# genuine one-time migration, not a per-load reconciliation — within
+# 1.8.0's own architecture these entities are only ever created with
+# enabled_default=True, so there's no ongoing source of fresh
+# INTEGRATION-disabled entries to keep checking for.
+
+
+def test_reenables_container_stats_entity_disabled_by_integration(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_container_web_cpu_percent")
+    ent_registry = er.async_get(hass)
+    ent_registry.async_update_entity(
+        ent.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+    )
+    assert ent_registry.async_get(ent.entity_id).disabled_by is not None
+
+    migrate_1_8_0_reenable_container_stats_entities(hass, entry)
+
+    assert ent_registry.async_get(ent.entity_id).disabled_by is None
+
+
+def test_does_not_reenable_container_stats_entity_disabled_by_user(
+    hass: HomeAssistant,
+):
+    """The critical safety check: a user's own deliberate "I don't want
+    this specific sensor" choice must survive this migration untouched —
+    only the stale-default case gets cleared."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_container_web_cpu_percent")
+    ent_registry = er.async_get(hass)
+    ent_registry.async_update_entity(
+        ent.entity_id, disabled_by=er.RegistryEntryDisabler.USER
+    )
+
+    migrate_1_8_0_reenable_container_stats_entities(hass, entry)
+
+    assert (
+        ent_registry.async_get(ent.entity_id).disabled_by
+        == er.RegistryEntryDisabler.USER
+    )
+
+
+def test_does_not_reenable_non_container_stats_entity(hass: HomeAssistant):
+    """Only the 8 container-stats suffixes are in scope — an unrelated
+    entity that happens to also be INTEGRATION-disabled (e.g. a niche
+    sensor that's genuinely meant to stay off by default) must not get
+    swept up by this."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_disk_usage")
+    ent_registry = er.async_get(hass)
+    ent_registry.async_update_entity(
+        ent.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+    )
+
+    migrate_1_8_0_reenable_container_stats_entities(hass, entry)
+
+    assert (
+        ent_registry.async_get(ent.entity_id).disabled_by
+        == er.RegistryEntryDisabler.INTEGRATION
+    )
+
+
+def test_container_stats_option_ignores_disabled_entities(hass: HomeAssistant):
+    """A disabled-by-default stat entity that was never actually turned on
+    shouldn't force the option on — only a genuinely enabled one should."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_container_web_cpu_percent")
+    registry.async_update_entity(
+        ent.entity_id, disabled_by=er.RegistryEntryDisabler.INTEGRATION
+    )
+    migrate_1_8_0_container_stats_option(hass, entry)
+    assert "enable_container_stats" not in entry.options
+
+
+def test_container_stats_option_respects_explicit_false(hass: HomeAssistant):
+    """Once the option is explicitly set (even to False), this migration
+    must never override that — it only acts when the key is entirely
+    absent from options."""
+    entry = _make_entry(hass)
+    hass.config_entries.async_update_entry(
+        entry, options={**entry.options, "enable_container_stats": False}
+    )
+    _add_entity(hass, entry, f"{ENTRY_ID}_1_container_web_cpu_percent")
+    migrate_1_8_0_container_stats_option(hass, entry)
+    assert entry.options.get("enable_container_stats") is False
+
+
+def test_container_stats_option_ignores_unrelated_entity(hass: HomeAssistant):
+    """A container's state sensor (not a stats sensor) enabled shouldn't
+    trigger this — only the specific 8 stat-sensor suffixes count."""
+    entry = _make_entry(hass)
+    _add_entity(hass, entry, f"{ENTRY_ID}_1_container_web_state")
+    migrate_1_8_0_container_stats_option(hass, entry)
+    assert "enable_container_stats" not in entry.options
+
+
+# ---------------------------------------------------------------------------
+# migrate_1_8_0_remove_consolidated_disk_sensors
+# ---------------------------------------------------------------------------
+#
+# Real, reported issue: "Containers disk usage" and "Build cache size" were
+# consolidated into attributes on the single "Disk usage" sensor, but their
+# entity classes being removed from sensor.py never removed their registry
+# entries — they'd have orphaned on a future restart, forcing manual
+# cleanup, rather than being cleanly gone the moment a user upgrades.
+
+
+def test_removes_retired_containers_size_entity(hass: HomeAssistant):
+    """Unique_id suffix verified against the actual released v1.7.4
+    source — this sensor's unique_id ("_containers_size") didn't match
+    its own translation_key ("containers_disk_usage"), which is exactly
+    what caused the real, reported bug: assuming they matched (like
+    build_cache_size's did) meant this specific entity was never
+    actually cleaned up."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_containers_size")
+    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
+    assert er.async_get(hass).async_get(ent.entity_id) is None
+
+
+def test_removes_retired_build_cache_size_entity(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_build_cache_size")
+    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
+    assert er.async_get(hass).async_get(ent.entity_id) is None
+
+
+def test_does_not_remove_current_disk_usage_entity(hass: HomeAssistant):
+    """The current, consolidated sensor must not be swept up by its
+    retired predecessors' cleanup — different unique_id suffix entirely."""
+    entry = _make_entry(hass)
+    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_disk_usage")
+    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
+    assert er.async_get(hass).async_get(ent.entity_id) is not None
