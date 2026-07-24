@@ -7,6 +7,22 @@ the reasoning first and only revisit if the stated condition has changed.
 
 ## Deferred
 
+- **Group `enable_update_entities`/`enable_precise_updates`/`poll_interval_updates`
+  visually via HA's `section()` helper in the Configure form.** Tried twice in the
+  unreleased 1.8.1 dev cycle (once with the three fields' `strings.json` labels
+  nested under the section's own key, once flat at the top level) — both times the
+  section's own header (name/description) rendered correctly, but the fields
+  *inside* it showed as raw snake_case config keys with no label or help text in a
+  live HA instance. The actual cause was never confirmed: frontend-source research
+  strongly suggested the flat structure should be right, but it wasn't, and there's
+  no way to render/verify HA's actual frontend from this environment. Reverted
+  rather than keep fighting it blind — `_options_schema()` is back to fully flat
+  fields, `DockhandConfigFlow.VERSION` back to 2 (the brief 2 -> 3 migration for
+  this was deleted outright; nothing ever shipped at version 3). Revisit only with
+  a way to actually verify rendering — e.g. a confirmed-working real HA integration
+  using `section()` to copy the exact translation structure from, or some way to
+  render/test the actual frontend rather than guessing from source reading.
+
 - **`UnitOfRatio.PERCENTAGE` for percentage sensors.** A newer HA enum
   than what this integration currently targets — requires HA minimum
   bumped past 2026.7. Current minimum is 2026.3; no other reason to bump

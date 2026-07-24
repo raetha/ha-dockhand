@@ -38,6 +38,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.exceptions import HomeAssistantError
 
+from custom_components.dockhand.const import CONF_ENABLE_UPDATE_ENTITIES
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandUpdateCoordinator,
@@ -767,7 +768,7 @@ def _make_hass_mock() -> MagicMock:
     return hass
 
 
-def _make_setup_env(containers=None, update_check_enabled=True):
+def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     """A fast coordinator + entry pair for async_setup_entry tests, with a
     capturable listener callback (mimics what
     fast_coordinator.async_add_listener(cb) would return/store)."""
@@ -795,6 +796,7 @@ def _make_setup_env(containers=None, update_check_enabled=True):
     entry.runtime_data.fast_coordinator = fast_coord
     entry.runtime_data.update_coordinator = None
     entry.async_on_unload = MagicMock()
+    entry.options = options if options is not None else {}
 
     return fast_coord, entry, listeners
 
@@ -814,6 +816,23 @@ async def test_setup_entry_skips_non_qualifying_environment():
     add_entities = MagicMock()
     await async_setup_entry(_make_hass_mock(), entry, add_entities)
     add_entities.assert_not_called()
+
+
+async def test_setup_entry_skips_everything_when_update_entities_disabled():
+    """CONF_ENABLE_UPDATE_ENTITIES off must skip entity creation entirely,
+    even for an otherwise-qualifying environment/container — this is the
+    platform-level gate added for github.com/raetha/ha-dockhand/issues/23."""
+    fast_coord, entry, _ = _make_setup_env(options={CONF_ENABLE_UPDATE_ENTITIES: False})
+    add_entities = MagicMock()
+    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    add_entities.assert_not_called()
+
+
+async def test_setup_entry_creates_entities_when_update_entities_explicitly_enabled():
+    fast_coord, entry, _ = _make_setup_env(options={CONF_ENABLE_UPDATE_ENTITIES: True})
+    add_entities = MagicMock()
+    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    add_entities.assert_called_once()
 
 
 async def test_setup_entry_creates_entity_when_update_check_enabled_later():

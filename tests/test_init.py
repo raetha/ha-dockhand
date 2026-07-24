@@ -1241,6 +1241,77 @@ def test_preserves_bulk_update_when_env_offline(hass: HomeAssistant):
     assert _entity_exists(hass, ent.entity_id)
 
 
+def test_removes_update_entity_when_update_entities_option_disabled(
+    hass: HomeAssistant,
+):
+    """CONF_ENABLE_UPDATE_ENTITIES=False removes Tier 1 update entities
+    even though the environment's own updateCheckEnabled is True and the
+    container still exists — the new integration-level platform gate
+    added for github.com/raetha/ha-dockhand/issues/23."""
+    entry = _make_entry(hass, options={"enable_update_entities": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True, "updateCheckEnabled": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_update_nginx")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_preserves_update_entity_when_update_entities_option_explicitly_enabled(
+    hass: HomeAssistant,
+):
+    entry = _make_entry(hass, options={"enable_update_entities": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True, "updateCheckEnabled": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_update_nginx")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_removes_bulk_update_when_update_entities_option_disabled(hass: HomeAssistant):
+    """Tier 1's own pending-updates fetch isn't gated on this option (see
+    _build_live_sets), so pending_update_container_ids can still be
+    non-empty here — the bulk button's own removal must check the option
+    explicitly rather than relying on that data being absent, or it would
+    keep reappearing for a user who disabled update entities entirely."""
+    entry = _make_entry(hass, options={"enable_update_entities": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "web", "id": "id-web", "systemContainer": None}
+                ],
+                "stacks": [],
+                "stats": {"online": True},
+                "pending_update_container_ids": {"id-web"},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_bulk_update")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
 def test_preserves_stack_deploy_for_internal_stack_no_system(hass: HomeAssistant):
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(

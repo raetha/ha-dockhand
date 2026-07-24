@@ -4,18 +4,26 @@
 
 ## [1.8.1] — 2026-07-24
 
+### Added
+
+- **New "Enable update entities" option** (Settings → Configure, on by default). Turn it off if
+  you manage container updates another way and don't want Dockhand's containers showing up in
+  Home Assistant's own update management. The "Update all" button disappears when this is off;
+  "Check for updates" and "Enable precise update versions" keep working regardless, since
+  checking for updates on its own doesn't change anything.
+  ([#23](https://github.com/raetha/ha-dockhand/issues/23))
+- The "Check for updates" button now always appears on every environment device and no longer
+  needs "Enable precise update versions" turned on to work. Pressing it forces an immediate
+  check against Dockhand and updates whatever's enabled locally right away, instead of waiting
+  for the next scheduled poll.
+
 ### Fixed
 
-- **Container update entities could keep showing "update available" for up to 24 hours after
-  the update had already been applied**, when "Enable precise update versions" is on. The
-  precise (Tier 2) check only re-queries the registry once a day and matched its cached result
-  to a container by name; when a container gets recreated by an update (as happens with any
-  normal image update), its cached result for the old container was still being served up as
-  current. It's now matched by the container's current ID instead, so a stale entry for a
-  container that's already been replaced is simply never found. The env-level "Update all"
-  button now also considers the precise check (previously it only looked at Dockhand's own
-  quick cached check), so it can't disagree with what the individual update entities show,
-  while remaining immune to the same staleness for the same reason.
+- Update entities could keep showing "update available" for up to 24 hours after the update had
+  already been applied, when "Enable precise update versions" is on. The "Update all" button
+  could also disagree with what the individual update entities showed, for the same reason.
+- The very first setup screen (shown once, when adding the integration) had been out of date
+  since before 1.8.0 — missing a couple of options that the later Configure screen already had.
 
 ## [1.8.0] — 2026-07-21
 

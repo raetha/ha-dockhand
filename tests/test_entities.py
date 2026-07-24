@@ -2388,48 +2388,210 @@ async def test_setup_entry_skips_bulk_update_button_when_nothing_pending():
     assert "DockhandEnvBulkUpdateButton" not in names
 
 
+async def test_setup_entry_skips_bulk_update_button_when_update_entities_disabled():
+    """CONF_ENABLE_UPDATE_ENTITIES=False must suppress the bulk button even
+    when Tier 1 genuinely has a pending update — Tier 1's own fetch isn't
+    gated on this option (other consumers legitimately want it), so this
+    has to be an explicit check rather than relying on the data being
+    absent. github.com/raetha/ha-dockhand/issues/23."""
+    from custom_components.dockhand.button import async_setup_entry
+    from custom_components.dockhand.const import CONF_ENABLE_UPDATE_ENTITIES
+
+    fast = MagicMock()
+    fast.data = {
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": [
+                    {"id": "id-web", "name": "web", "systemContainer": None}
+                ],
+                "stacks": [],
+                "pending_update_container_ids": {"id-web"},
+            }
+        }
+    }
+    fast.async_add_listener = MagicMock(return_value=lambda: None)
+    slow = MagicMock()
+    slow.data = {"environments": {}, "schedules": []}
+    slow.async_add_listener = MagicMock(return_value=lambda: None)
+
+    entry = MagicMock()
+    entry.entry_id = ENTRY_ID
+    entry.data = {"api_url": BASE_URL}
+    entry.options = {CONF_ENABLE_UPDATE_ENTITIES: False}
+    entry.runtime_data.fast_coordinator = fast
+    entry.runtime_data.slow_coordinator = slow
+    entry.runtime_data.client = MagicMock()
+    entry.runtime_data.update_coordinator = None
+    entry.async_on_unload = MagicMock()
+
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    names = [type(e).__name__ for e in created]
+    assert "DockhandEnvBulkUpdateButton" not in names
+
+
 # ---------------------------------------------------------------------------
 # Check-updates button (env-level "Check for updates", conditionally present)
 # ---------------------------------------------------------------------------
 
 
-def _make_check_updates_button(env_id=ENV_ID):
+def _make_check_updates_button(
+    env_id=ENV_ID,
+    update_coordinator=None,
+    update_entities_enabled=True,
+    check_result=None,
+):
     from custom_components.dockhand.button import DockhandCheckUpdatesButton
 
     fast_coord = MagicMock()
     fast_coord.data = {"environments": {env_id: {"stats": {"name": ENV_NAME}}}}
-    update_coord = MagicMock()
-    update_coord.async_check_environment = AsyncMock()
-    update_coord.async_refresh = AsyncMock()
-    update_coord.async_request_refresh = AsyncMock()
-    update_coord.last_update_success = True
-    button = DockhandCheckUpdatesButton(
-        fast_coord, update_coord, ENTRY_ID, env_id, ENV_NAME, BASE_URL
+    fast_coord.async_merge_pending_updates_from_check = MagicMock()
+    client = MagicMock()
+    client.async_check_container_updates = AsyncMock(
+        return_value=check_result if check_result is not None else []
     )
-    return button, update_coord
+    button = DockhandCheckUpdatesButton(
+        fast_coord,
+        client,
+        update_coordinator,
+        update_entities_enabled,
+        ENTRY_ID,
+        env_id,
+        ENV_NAME,
+        BASE_URL,
+    )
+    return button, fast_coord, client
 
 
-async def test_check_updates_press_checks_only_its_own_environment():
-    """The actual design fix: this button used to call async_refresh() on
-    the whole coordinator, which always re-checks every environment in
-    one gather — so pressing environment 1's button silently also
-    re-checked every other environment too. Genuinely scoped now:
-    async_check_environment(env_id) only ever touches its own
-    environment's data. See DockhandCheckUpdatesButton's own docstring
-    and DockhandUpdateCoordinator.async_check_environment's docstring for
-    the full reasoning."""
-    button, update_coord = _make_check_updates_button(env_id=7)
+async def test_check_updates_press_calls_client_for_its_own_environment_only():
+    """The actual design fix from the original bug report: this button
+    used to call async_refresh() on the whole DockhandUpdateCoordinator,
+    which always re-checked every environment in one gather -- so
+    pressing environment 1's button silently also re-checked every other
+    environment too. Now it calls the client directly, scoped to just
+    its own environment id, regardless of what coordinators exist."""
+    button, _, client = _make_check_updates_button(env_id=7)
     await button.async_press()
-    update_coord.async_check_environment.assert_called_once_with(7)
-    update_coord.async_refresh.assert_not_called()
-    update_coord.async_request_refresh.assert_not_called()
+    client.async_check_container_updates.assert_called_once_with(7)
 
 
 async def test_check_updates_press_raises_on_error():
-    button, update_coord = _make_check_updates_button()
-    update_coord.async_check_environment = AsyncMock(side_effect=Exception("boom"))
+    button, _, client = _make_check_updates_button()
+    client.async_check_container_updates = AsyncMock(side_effect=Exception("boom"))
     with pytest.raises(HomeAssistantError):
         await button.async_press()
+
+
+async def test_check_updates_press_feeds_tier2_when_precise_updates_enabled():
+    """When update_coordinator exists (Tier 2/precise updates on), the
+    already-fetched response feeds it directly via
+    async_merge_check_results() -- not a second, redundant client call."""
+    update_coord = MagicMock()
+    update_coord.async_merge_check_results = MagicMock()
+    result = [{"containerId": "id-web", "containerName": "web", "hasUpdate": True}]
+    button, fast_coord, client = _make_check_updates_button(
+        update_coordinator=update_coord,
+        update_entities_enabled=False,
+        check_result=result,
+    )
+    await button.async_press()
+    update_coord.async_merge_check_results.assert_called_once_with(ENV_ID, result)
+    client.async_check_container_updates.assert_called_once()
+    fast_coord.async_merge_pending_updates_from_check.assert_not_called()
+
+
+async def test_check_updates_press_feeds_tier1_when_update_entities_enabled():
+    """When update_entities_enabled is on, the same response also
+    refreshes Tier 1's pending set for this environment immediately,
+    regardless of whether Tier 2/precise updates is configured at all."""
+    result = [
+        {"containerId": "id-web", "containerName": "web", "hasUpdate": True},
+        {"containerId": "id-db", "containerName": "db", "hasUpdate": False},
+    ]
+    button, fast_coord, _ = _make_check_updates_button(
+        update_coordinator=None,
+        update_entities_enabled=True,
+        check_result=result,
+    )
+    await button.async_press()
+    fast_coord.async_merge_pending_updates_from_check.assert_called_once_with(
+        ENV_ID, {"id-web"}
+    )
+
+
+async def test_check_updates_press_feeds_both_tiers_when_both_enabled():
+    update_coord = MagicMock()
+    update_coord.async_merge_check_results = MagicMock()
+    result = [{"containerId": "id-web", "containerName": "web", "hasUpdate": True}]
+    button, fast_coord, _ = _make_check_updates_button(
+        update_coordinator=update_coord,
+        update_entities_enabled=True,
+        check_result=result,
+    )
+    await button.async_press()
+    update_coord.async_merge_check_results.assert_called_once_with(ENV_ID, result)
+    fast_coord.async_merge_pending_updates_from_check.assert_called_once_with(
+        ENV_ID, {"id-web"}
+    )
+
+
+async def test_check_updates_press_captures_nothing_when_neither_enabled():
+    """The check still runs (Dockhand's own cache still gets refreshed
+    server-side) even when nothing local is configured to consume the
+    response -- but nothing local should be touched in that case."""
+    button, fast_coord, client = _make_check_updates_button(
+        update_coordinator=None,
+        update_entities_enabled=False,
+        check_result=[{"containerId": "id-web", "hasUpdate": True}],
+    )
+    await button.async_press()
+    client.async_check_container_updates.assert_called_once()
+    fast_coord.async_merge_pending_updates_from_check.assert_not_called()
+
+
+async def test_check_updates_button_always_created_regardless_of_options():
+    """No longer gated on update_coordinator or either config option --
+    it's a read-only, user-initiated action, not a way to perform
+    updates, so neither option needs to block its existence."""
+    from custom_components.dockhand.button import async_setup_entry
+
+    fast = MagicMock()
+    fast.data = {
+        "environments": {
+            ENV_ID: {
+                "stats": {"name": ENV_NAME},
+                "containers": [],
+                "stacks": [],
+                "pending_update_container_ids": set(),
+            }
+        }
+    }
+    fast.async_add_listener = MagicMock(return_value=lambda: None)
+    slow = MagicMock()
+    slow.data = {"environments": {}, "schedules": []}
+    slow.async_add_listener = MagicMock(return_value=lambda: None)
+
+    entry = MagicMock()
+    entry.entry_id = ENTRY_ID
+    entry.data = {"api_url": BASE_URL}
+    entry.options = {"enable_update_entities": False}
+    entry.runtime_data.fast_coordinator = fast
+    entry.runtime_data.slow_coordinator = slow
+    entry.runtime_data.client = MagicMock()
+    entry.runtime_data.update_coordinator = None
+    entry.async_on_unload = MagicMock()
+
+    add_entities = MagicMock()
+    await async_setup_entry(MagicMock(), entry, add_entities)
+    created = []
+    for call in add_entities.call_args_list:
+        created.extend(call.args[0])
+    names = [type(e).__name__ for e in created]
+    assert "DockhandCheckUpdatesButton" in names
 
 
 # ---------------------------------------------------------------------------

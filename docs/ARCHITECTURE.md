@@ -321,13 +321,50 @@ removal. If you build another feature with this "free basic signal, paid
 precise signal" shape, follow this same structure: cheap tier owns entity
 lifecycle, expensive tier is a pure data enrichment layered on top.
 
-The env-level bulk "Update all" button is a deliberate exception to "Tier
-2 never gates lifecycle": it's an env-level aggregate rather than a
-per-container entity, and both Tier 1 and Tier 2 are folded together (via
-the shared `_container_has_pending_update()` helper in `helpers.py`) to
-decide whether it exists at all. This is safe specifically because Tier 2
-is always looked up by each container's *current* id, never by name —
-see the next paragraph for why that distinction matters.
+**The whole platform sits behind `CONF_ENABLE_UPDATE_ENTITIES`** (default
+`True`, added for github.com/raetha/ha-dockhand/issues/23 — some users
+manage container updates entirely outside HA and don't want these
+entities in HA's own update management). This is a coarser, higher-level
+gate than either tier: off means neither tier's ENTITIES exist, and the
+bulk "Update all" button disappears too, since with entities gone it
+would otherwise be a backdoor to triggering real updates from HA despite
+the user's explicit choice — the actual concern behind the issue. It
+does NOT gate Tier 2's `update_coordinator` object, and it does NOT gate
+the "Check for updates" button (`DockhandCheckUpdatesButton`) at all —
+that button is read-only and unconditional: it always exists on every
+environment device and always calls Dockhand's real check-updates API
+directly against the client, regardless of either CONF_ENABLE_* option
+or whether `update_coordinator` was even instantiated. What the options
+control is only what happens to the *result* of that forced check —
+see the button's own docstring in button.py for the full breakdown, but
+briefly: if `update_coordinator` exists, the result also updates Tier 2
+(`DockhandUpdateCoordinator.async_merge_check_results()`); if
+`CONF_ENABLE_UPDATE_ENTITIES` is on, the result also immediately updates
+Tier 1's `pending_update_container_ids` for that one environment
+(`DockhandFastCoordinator.async_merge_pending_updates_from_check()`) —
+no need to wait for that environment's next 60s poll to reflect a check
+the user just explicitly forced. Neither merge happens if its
+corresponding option is off; the check still runs either way (Dockhand's
+own cache still gets refreshed server-side), just with nothing local
+capturing the response. Tier 1's own regular, scheduled pending-updates
+*fetch* is likewise NOT gated on this option,
+for the same reason (other consumers legitimately want it regardless of
+whether update entities are shown) — which means `pending_update_container_ids`
+*and* Tier 2 data can both still be non-empty with the platform off.
+Anything gating on "is there a pending update" for the purpose of
+allowing an actual update action (specifically, the bulk button's
+creation and cleanup) must therefore check `CONF_ENABLE_UPDATE_ENTITIES`
+explicitly rather than assuming the absence of update entities implies
+the absence of Tier 1/Tier 2 data.
+
+The env-level bulk "Update all" button is also a deliberate exception to
+"Tier 2 never gates lifecycle" one level down: it's an env-level
+aggregate rather than a per-container entity, and both Tier 1 and Tier 2
+are folded together (via the shared `_container_has_pending_update()`
+helper in `helpers.py`) to decide whether it exists at all. This is safe
+specifically because Tier 2 is always looked up by each container's
+*current* id, never by name — see the next paragraph for why that
+distinction matters.
 
 **Consult Tier 2 (or any coordinator that persists data keyed by an id
 that can change identity) by current id, never by name.** Real bug: an
@@ -393,6 +430,17 @@ that resolves the *symptom* (spinner clearing early) doesn't necessarily
 mean the *design* (what actually runs when this specific entity is
 pressed) was right to begin with — worth checking both.
 
+**Postscript (1.8.1):** `async_check_environment()` still exists and is
+still exactly this env-scoped fix, but `DockhandCheckUpdatesButton`
+itself no longer calls it — see the `CONF_ENABLE_UPDATE_ENTITIES`
+section above. The button now needs the raw check-updates response
+itself (to conditionally feed Tier 1 as well as Tier 2), so it calls the
+client directly and hands the response to the new
+`async_merge_check_results()`, which `async_check_environment()` itself
+now also delegates to. Same env-scoping fix, same underlying mechanism,
+just split so the merge step can be reused with a response the caller
+already has in hand instead of always re-fetching.
+
 ## 4. Config entry migrations
 
 `DockhandConfigFlow.VERSION` (currently 2) must be bumped whenever
@@ -410,8 +458,16 @@ standard Home Assistant pattern, checks `entry.version`, transforms
 version=new_version)`. The 1.8.0 cycle's `enable_updates` →
 `enable_precise_updates` rename is the first (and, as of this writing,
 only) example — copy that pattern for the next one rather than inventing
-a new approach. (The 1.2.0 session-cookie removal used a different,
-force-reauth-inline approach because that migration genuinely required
+a new approach. (A second, 2 -> 3 step briefly existed in an unreleased
+1.8.1 dev cycle, grouping `enable_precise_updates`/`poll_interval_updates`
+into a `section()` alongside the new `enable_update_entities` — reverted
+before release after the section's field labels wouldn't render
+correctly in a live instance and the exact cause couldn't be confirmed
+from source alone; see docs/BACKLOG.md. Nothing shipped at version 3, so
+there was nothing to migrate away from — `VERSION` went back to 2 and
+the 2 -> 3 step was deleted outright rather than kept as a dead migration
+path.) (The 1.2.0 session-cookie removal used a different, force-reauth-inline approach
+because that migration genuinely required
 user interaction — a straightforward value-preserving rename does not,
 and should use the formal `VERSION`/`async_migrate_entry` mechanism
 instead.)

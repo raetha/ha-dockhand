@@ -16,6 +16,9 @@ Covers:
 from __future__ import annotations
 
 import contextlib
+import json
+from pathlib import Path
+
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -24,6 +27,7 @@ from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.api import DockhandAuthError
+from custom_components.dockhand.config_flow import _options_schema
 
 BASE_CONNECTION = {
     "api_url": "http://dh.test:3000",
@@ -38,6 +42,7 @@ BASE_OPTIONS = {
     "enable_images": False,
     "enable_volumes": False,
     "enable_networks": False,
+    "enable_update_entities": True,
     "enable_precise_updates": False,
     "poll_interval_updates": 86400,
 }
@@ -624,3 +629,225 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
             )
             await hass.async_block_till_done()
             mock_reload.assert_called_once_with(entry.entry_id)
+
+
+# ---------------------------------------------------------------------------
+# strings.json / translations coverage: every schema field must resolve to
+# a real, non-empty label — a missing translation key doesn't error
+# anywhere, it just silently falls back to showing the raw snake_case
+# config key in the UI. These tests can only verify that strings.json has
+# non-empty values at the right JSON paths, not that HA's frontend actually
+# renders them correctly — that distinction mattered for real: an attempt
+# to group enable_update_entities/enable_precise_updates/poll_interval_updates
+# via HA's section() helper (briefly, in an unreleased 1.8.1 dev cycle) kept
+# rendering the fields inside the section as raw config keys with no text no
+# matter how the translation JSON was structured, and was reverted — see
+# docs/BACKLOG.md. What these tests reliably do catch is a schema field with
+# no strings.json entry at all, or a locale silently missing/emptying one —
+# which is exactly what caught the second bug below.
+#
+# _options_schema() backs TWO step_ids — config.step.setup_options (first-time
+# setup) and options.step.init (Configure, reused later) — so both need their
+# own full copy of the translations, and both are checked below. They drifted
+# apart for real once already: config.step.setup_options was still showing
+# the pre-1.8.0 "enable_updates" key and was missing enable_runtime_controls/
+# enable_container_stats entirely, undetected until this test existed.
+# ---------------------------------------------------------------------------
+
+_OPTIONS_SCHEMA_STEP_PATHS = [
+    ("config", "step", "setup_options"),
+    ("options", "step", "init"),
+]
+
+
+def _walk_options_schema_fields(schema):
+    """Return (top_level_field_names, {section_name: [nested_field_names]})
+    for the options schema — including reaching inside any section()
+    wrapper, since those fields still need flat top-level translations
+    (only the section's own name/description are looked up separately,
+    under "sections") per how HA's frontend actually resolves labels for
+    fields inside a section."""
+    from homeassistant.data_entry_flow import section as ha_section
+
+    top_level: list[str] = []
+    sections: dict[str, list[str]] = {}
+    for key, validator in schema.schema.items():
+        name = str(key)
+        if isinstance(validator, ha_section):
+            sections[name] = [str(k) for k in validator.schema.schema]
+        else:
+            top_level.append(name)
+    return top_level, sections
+
+
+def _get_path(d: dict, path: tuple[str, ...]) -> dict:
+    for part in path:
+        d = d.get(part, {})
+    return d
+
+
+def _load_strings() -> dict:
+    strings_path = (
+        Path(__file__).parent.parent / "custom_components" / "dockhand" / "strings.json"
+    )
+    with open(strings_path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def test_options_schema_fields_have_non_empty_translations():
+    strings = _load_strings()
+    top_level, sections = _walk_options_schema_fields(_options_schema())
+    all_field_names = list(top_level)
+    for nested in sections.values():
+        all_field_names.extend(nested)
+
+    for step_path in _OPTIONS_SCHEMA_STEP_PATHS:
+        step = _get_path(strings, step_path)
+        data = step.get("data", {})
+        section_strings = step.get("sections", {})
+        step_id = ".".join(step_path)
+
+        # Every field — whether top-level or living inside a section — must
+        # have a non-empty label. data_description is a nice-to-have (some
+        # simple fields like poll intervals could reasonably skip it), so
+        # that's checked separately and more leniently below.
+        missing_labels = [
+            name for name in all_field_names if not (data.get(name) or "").strip()
+        ]
+        assert not missing_labels, (
+            f"Missing/empty strings.json 'data' label under {step_id} for "
+            f"options field(s): {missing_labels} — these will render as raw "
+            f"config keys in the UI."
+        )
+
+        # Every section itself needs a non-empty name (and, since we always
+        # write one, a description) — this is the header text, checked
+        # separately from its fields' own labels above.
+        for section_name in sections:
+            section_entry = section_strings.get(section_name) or {}
+            assert (section_entry.get("name") or "").strip(), (
+                f"Missing/empty strings.json '{step_id}.sections.{section_name}.name' "
+                f"— the section header will render blank or fall back to the raw key."
+            )
+
+
+def test_options_schema_fields_have_data_description():
+    """Stricter than the label check above: this integration's own
+    convention (CONTRIBUTING.md) is that every option gets explanatory
+    help text, not just a label — so hold every field to that bar, not
+    just the ones that happen to have one today."""
+    strings = _load_strings()
+    top_level, sections = _walk_options_schema_fields(_options_schema())
+    all_field_names = list(top_level)
+    for nested in sections.values():
+        all_field_names.extend(nested)
+
+    for step_path in _OPTIONS_SCHEMA_STEP_PATHS:
+        step = _get_path(strings, step_path)
+        data_description = step.get("data_description", {})
+        step_id = ".".join(step_path)
+
+        missing_help_text = [
+            name
+            for name in all_field_names
+            if not (data_description.get(name) or "").strip()
+        ]
+        assert not missing_help_text, (
+            f"Missing/empty strings.json 'data_description' under {step_id} "
+            f"for options field(s): {missing_help_text}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Whole-tree translation coverage. Deliberately generic and exhaustive —
+# walks every single leaf value strings.json defines, anywhere in the file,
+# and requires each locale to have the same leaf paths with non-empty
+# values. This is comprehensive by construction: it needs no updates when a
+# new key is added anywhere (a new abort reason, a new entity name, a new
+# option, a service field, ...) — it just diffs the tree shape against
+# strings.json, which is the single source of truth. This is the test that
+# caught the long-stale config.step.setup_options block (missing keys
+# entirely, in every locale) in one shot. It can only verify a key exists
+# with a non-empty value, not that HA's frontend resolves it to the right
+# place on screen — see the note above this section for the section()
+# rendering issue that check couldn't have caught either way.
+# ---------------------------------------------------------------------------
+
+
+def _flatten_leaves(node, prefix: str = "") -> dict[str, str]:
+    """Return {dotted.path: value} for every leaf (non-dict, non-list)
+    value in a nested translation structure. Lists (none currently used
+    in this integration's strings, but HA's schema allows them e.g. for
+    selector options) are walked by index so a missing/empty entry deep
+    inside one is still caught rather than silently skipped."""
+    leaves: dict[str, str] = {}
+    if isinstance(node, dict):
+        for key, value in node.items():
+            child_prefix = f"{prefix}.{key}" if prefix else key
+            leaves.update(_flatten_leaves(value, child_prefix))
+    elif isinstance(node, list):
+        for i, value in enumerate(node):
+            leaves.update(_flatten_leaves(value, f"{prefix}[{i}]"))
+    else:
+        leaves[prefix] = node
+    return leaves
+
+
+def test_strings_json_has_no_empty_leaf_values():
+    """A mistake in strings.json itself (the source of truth) — checked
+    independently of what any locale file does."""
+    source = _load_strings()
+    empty = [
+        path
+        for path, value in _flatten_leaves(source).items()
+        if isinstance(value, str) and not value.strip()
+    ]
+    assert not empty, f"Empty string value(s) in strings.json: {empty}"
+
+
+def test_translations_en_json_matches_strings_json_exactly():
+    """CONTRIBUTING.md: strings.json and translations/en.json must stay
+    byte-for-byte identical canonical sources."""
+    base_dir = Path(__file__).parent.parent / "custom_components" / "dockhand"
+    source = _load_strings()
+    with open(base_dir / "translations" / "en.json", encoding="utf-8") as f:
+        en = json.load(f)
+    assert source == en, "strings.json and translations/en.json have drifted apart"
+
+
+def test_every_locale_covers_every_strings_json_key_with_non_empty_value():
+    """The comprehensive check: for every non-English locale, every leaf
+    key strings.json defines must exist with a real, non-empty value.
+    Nothing here is hand-picked to a particular step or section — add a
+    key anywhere in strings.json and this test starts covering it
+    automatically, for every locale, with no test changes required."""
+    base_dir = Path(__file__).parent.parent / "custom_components" / "dockhand"
+    source_leaves = _flatten_leaves(_load_strings())
+
+    locales_dir = base_dir / "translations"
+    problems: dict[str, dict[str, list[str]]] = {}
+    for locale_path in sorted(locales_dir.glob("*.json")):
+        if locale_path.stem == "en":
+            continue
+        with open(locale_path, encoding="utf-8") as f:
+            locale_data = json.load(f)
+        locale_leaves = _flatten_leaves(locale_data)
+
+        missing = sorted(set(source_leaves) - set(locale_leaves))
+        empty = sorted(
+            path
+            for path, value in locale_leaves.items()
+            if path in source_leaves and isinstance(value, str) and not value.strip()
+        )
+        locale_problems = {}
+        if missing:
+            locale_problems["missing"] = missing
+        if empty:
+            locale_problems["empty"] = empty
+        if locale_problems:
+            problems[locale_path.stem] = locale_problems
+
+    assert not problems, (
+        f"Locale file(s) missing or with empty values for strings.json "
+        f"key(s): {problems}"
+    )

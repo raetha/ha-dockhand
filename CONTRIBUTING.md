@@ -124,7 +124,7 @@ cd ha-dockhand && find . -not -path "./.git/*" -not -path "./.git" \
 A more thorough pass than the PR checklist above, run before tagging a
 release (not needed for every PR):
 
-- Full test suite + ruff check/format on both `custom_components/` and `tests/`
+- Full test suite + ruff check/format on both `custom_components/` and `tests/` — this now includes `test_config_flow.py`'s whole-tree translation coverage tests (see the "Translations" section below), so a missing/empty key or a locale that's drifted out of sync will already show up as a test failure here, not just at this checklist step
 - `manifest.json`: version bumped, field order correct (`domain`, `name`, then alphabetical)
 - `strings.json` and `translations/en.json` are byte-for-byte identical
 - Every locale in `translations/` has exactly the same keys as `en.json` (no missing, no extra) — except `api_url`, which stays English everywhere
@@ -144,6 +144,42 @@ to all locale files in the same PR — don't leave it for a follow-up.
 identical, and every other locale file must have exactly the same set of
 keys (no missing, no extra) with the sole exception of `api_url`, which
 stays in English everywhere.
+
+**This is enforced by `test_config_flow.py`'s whole-tree translation
+tests** (`test_strings_json_has_no_empty_leaf_values`,
+`test_translations_en_json_matches_strings_json_exactly`,
+`test_every_locale_covers_every_strings_json_key_with_non_empty_value`),
+not just this checklist — they walk every single leaf value anywhere in
+`strings.json`, so a new key added anywhere is covered automatically
+with no test changes required. A real bug slipped past this exact
+checklist item and was only caught by installing and looking at the
+actual first-time-setup screen: `config.step.setup_options` (which
+reuses the same options schema as the later Configure screen) had been
+stale since before the 1.8.0 rename — missing `enable_runtime_controls`/
+`enable_container_stats` entirely and still showing the pre-rename
+`enable_updates` key — undetected for that whole time because nothing
+checked it against the schema. `test_options_schema_fields_have_non_empty_translations`
+and `test_options_schema_fields_have_data_description` close that
+specific gap by walking the actual voluptuous schema and cross-checking
+both `config.step.setup_options` and `options.step.init` against it,
+since they're both driven by the same `_options_schema()` function and
+need their own full copy of the translations.
+
+**What none of these tests can do is confirm the *rendered shape* in
+HA's frontend** — a key existing with a non-empty value doesn't
+guarantee HA resolves it to the right place on screen. This bit twice in
+the same 1.8.1 cycle: an attempt to visually group
+`enable_update_entities`/`enable_precise_updates`/`poll_interval_updates`
+via HA's `section()` helper kept showing those fields' labels as raw
+config keys with no help text in a live instance, under two different
+translation-JSON structures, and the actual cause was never confirmed —
+these tests passed both times regardless, since the values existed and
+were non-empty at the paths tried. Reverted rather than kept fighting
+it; see docs/BACKLOG.md. Any future attempt at `section()` grouping (or
+other structural form changes) needs an actual install-and-look pass
+before merging — these tests are necessary but not sufficient for
+anything involving how fields are visually laid out, only for whether
+the underlying strings exist at all.
 
 The integration ships with machine-generated translations for the following languages:
 
