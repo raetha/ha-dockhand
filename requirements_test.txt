@@ -5,7 +5,7 @@
 #
 # PHCC version ↔ HA version mapping (patch increments daily with HA releases):
 #   0.13.317+ requires Python >=3.14
-#   0.13.340  pins homeassistant==2026.6.4  (current pin below)
+#   0.13.346  pins homeassistant==2026.7.2  (current pin below)
 #
 # To run the full suite locally (see docs/development.md for venv setup):
 #   pytest tests/

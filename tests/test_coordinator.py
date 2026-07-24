@@ -550,6 +550,113 @@ async def test_slow_auto_update_settings_always_fetched(hass: HomeAssistant):
     }
 
 
+def _fast_coord_with_stats(stats: dict):
+    """A minimal fast-coordinator stand-in exposing the given per-env
+    stats blob, for exercising the slow coordinator's collectActivity/
+    scannerEnabled gating (both read from fast_coordinator.data, not a
+    separate config option)."""
+    fast_coordinator = MagicMock()
+    fast_coordinator.data = {"environments": {1: {"stats": stats}}}
+    return fast_coordinator
+
+
+async def test_slow_recent_events_not_fetched_when_collect_activity_disabled(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_recent_activity = AsyncMock(return_value={"events": []})
+    coord = _slow(
+        hass,
+        client,
+        fast_coordinator=_fast_coord_with_stats({"collectActivity": False}),
+    )
+    await coord.async_refresh()
+    client.async_get_recent_activity.assert_not_called()
+    assert coord.data["environments"][1]["recent_events"] == []
+
+
+async def test_slow_recent_events_fetched_when_collect_activity_enabled(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_recent_activity = AsyncMock(
+        return_value={"events": [{"containerName": "web", "action": "start"}]}
+    )
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"collectActivity": True})
+    )
+    await coord.async_refresh()
+    client.async_get_recent_activity.assert_called_once_with(1, limit=10)
+    assert coord.data["environments"][1]["recent_events"] == [
+        {"containerName": "web", "action": "start"}
+    ]
+
+
+async def test_slow_recent_events_malformed_response_defaults_to_empty_list(
+    hass: HomeAssistant,
+):
+    """A response that isn't a dict with an "events" list (e.g. Dockhand
+    changing shape, or a proxy/error page slipping through as JSON) must
+    not crash the coordinator or propagate a non-list into entity
+    attributes — same "safe default, never guess" principle as every
+    other _unwrap()'d field."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_recent_activity = AsyncMock(return_value={"events": "not-a-list"})
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"collectActivity": True})
+    )
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["recent_events"] == []
+
+
+async def test_slow_vulnerabilities_not_fetched_when_scanner_disabled(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_vulnerabilities_count = AsyncMock(
+        return_value={"summary": {"total": 5}}
+    )
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"scannerEnabled": False})
+    )
+    await coord.async_refresh()
+    client.async_get_vulnerabilities_count.assert_not_called()
+    assert coord.data["environments"][1]["vulnerabilities"] == {}
+
+
+async def test_slow_vulnerabilities_fetched_when_scanner_enabled(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    client.async_get_vulnerabilities_count = AsyncMock(
+        return_value={"summary": {"total": 5, "critical": 1}}
+    )
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"scannerEnabled": True})
+    )
+    await coord.async_refresh()
+    client.async_get_vulnerabilities_count.assert_called_once_with(1)
+    assert coord.data["environments"][1]["vulnerabilities"] == {
+        "total": 5,
+        "critical": 1,
+    }
+
+
+async def test_slow_vulnerabilities_malformed_response_defaults_to_empty_dict(
+    hass: HomeAssistant,
+):
+    """Same safe-default principle as recent_events above: a "summary"
+    that isn't a dict (or a response that isn't a dict at all) must
+    default to {}, not propagate garbage into vulnerability sensors."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_vulnerabilities_count = AsyncMock(
+        return_value={"summary": ["not", "a", "dict"]}
+    )
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"scannerEnabled": True})
+    )
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["vulnerabilities"] == {}
+
+
 async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
     client = _make_client(envs=[ENV1])
     client.async_get_images = AsyncMock(side_effect=Exception("timeout"))

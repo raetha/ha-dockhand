@@ -241,15 +241,26 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         container, if update_coordinator is configured and has data for
         it. Empty dict otherwise — Tier 1 properties all handle that
         gracefully, since Tier 2 is purely additive.
+
+        Looked up by the container's *current* id (from Tier 1's fresh
+        container list), not by name. Tier 2's data is keyed by
+        container_id at fetch time; a container recreated since Tier 2
+        last ran (the normal effect of an image update) gets a new id,
+        so its stale entry — still sitting under the old id — simply
+        won't be found here. Previously this scanned by containerName
+        instead, which meant a resolved update kept showing as pending
+        for up to 24h (Tier 2's poll interval) after the container was
+        actually recreated with the update already applied, since the
+        name-matched stale entry doesn't know it's describing a
+        container that no longer exists. Real bug, reported by Raetha.
         """
         if self._update_coordinator is None:
             return {}
+        c = self._container()
+        if not c or not c.get("id"):
+            return {}
         env_data = _coordinator_env(self._update_coordinator.data, self._env_id)
-        # env_data is indexed by container_id — scan for matching name.
-        for item in env_data.values():
-            if item.get("containerName") == self._container_name:
-                return item
-        return {}
+        return env_data.get(c["id"]) or {}
 
     def _update_supported_features(self) -> None:
         c = self._container() or {}

@@ -7,13 +7,6 @@ the reasoning first and only revisit if the stated condition has changed.
 
 ## Deferred
 
-- **`_CONTAINER_STATS_SUFFIXES` is duplicated three times** (`__init__.py`,
-  `migration.py`, and now `sensor.py`'s `_reenable_stale_container_stats_entities`)
-  rather than defined once in `helpers.py` and imported. Pre-existing minor
-  inconsistency (the first two duplicates predate this note), not urgent —
-  consolidate next time one of the three copies needs touching anyway,
-  rather than as a standalone change.
-
 - **`UnitOfRatio.PERCENTAGE` for percentage sensors.** A newer HA enum
   than what this integration currently targets — requires HA minimum
   bumped past 2026.7. Current minimum is 2026.3; no other reason to bump

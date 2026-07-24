@@ -20,6 +20,7 @@ from .helpers import (
     _all_envs,
     _compose_project,
     _container_device,
+    _container_has_pending_update,
     _coordinator_env,
     _env_device,
     _stack_device,
@@ -84,18 +85,41 @@ async def async_setup_entry(
             # matching Dockhand's own {#if updatableContainersCount > 0}
             # gating for its own "Update all" button. Removed via the
             # central cleanup system the moment that's no longer true.
+            #
+            # Considers both Tier 1 (pending_update_container_ids) and
+            # Tier 2 (update_coordinator, when configured) via the shared
+            # _container_has_pending_update() helper — same definition of
+            # "needs an update" the update entities themselves use, so
+            # this can never disagree with what's actually shown per
+            # container. Safe to fold Tier 2 in here specifically because
+            # that helper looks Tier 2 up by each container's *current*
+            # id: a stale entry left over from a since-recreated
+            # container is keyed under an id that no longer exists on
+            # any current container, so it can never cause this button
+            # to appear for an update that's already resolved.
             pending = env_data.get("pending_update_container_ids") or set()
+            env_containers = env_data.get("containers") or []
             system_ids = {
                 c.get("id")
-                for c in env_data.get("containers") or []
+                for c in env_containers
                 if c.get("systemContainer") and c.get("id")
             }
-            has_updatable = bool(pending - system_ids)
+            update_env_data = (
+                _coordinator_env(update_coordinator.data, env_id)
+                if update_coordinator is not None
+                else None
+            )
+            has_updatable = any(
+                _container_has_pending_update(c, pending, update_env_data)
+                for c in env_containers
+                if c.get("id") not in system_ids
+            )
             if has_updatable and env_id not in known_env_bulk_update_ids:
                 known_env_bulk_update_ids.add(env_id)
                 new.append(
                     DockhandEnvBulkUpdateButton(
                         fast,
+                        update_coordinator,
                         client,
                         entry.entry_id,
                         env_id,
@@ -435,6 +459,17 @@ class DockhandEnvBulkUpdateButton(
     mirroring how the button disappears in Dockhand's own UI rather than
     just going idle/disabled.
 
+    "Pending update" here means either Tier 1 (Dockhand's own cached
+    pending-updates check) or Tier 2 (the optional precise digest-based
+    check-updates coordinator) — via the shared _container_has_pending_update()
+    helper, same definition update.py's own entities use. Folding Tier 2
+    in is safe against staleness specifically because that helper looks
+    Tier 2 up by each container's *current* id: a container recreated
+    since Tier 2 last polled (the normal effect of an image update) gets
+    a new id, so Tier 2's old entry — still under the old id — is never
+    found and can't keep this button alive, or its own container list,
+    past the point an update actually resolved.
+
     Named "Update all containers" — a static name via translation_key,
     not a live count in the name. An earlier version showed "Update all
     (N)" matching Dockhand's own wording, but a changing friendly_name on
@@ -449,6 +484,7 @@ class DockhandEnvBulkUpdateButton(
     def __init__(
         self,
         fast_coordinator: DockhandFastCoordinator,
+        update_coordinator: DockhandUpdateCoordinator | None,
         client: Any,
         entry_id: str,
         env_id: int,
@@ -456,6 +492,7 @@ class DockhandEnvBulkUpdateButton(
         base_url: str,
     ) -> None:
         super().__init__(fast_coordinator)
+        self._update_coordinator = update_coordinator
         self._client = client
         self._entry_id = entry_id
         self._env_id = env_id
@@ -466,16 +503,35 @@ class DockhandEnvBulkUpdateButton(
     def _updatable_container_ids(self) -> list[str]:
         """Pending-update container IDs for this env, excluding system
         containers — same exclusion Dockhand's own "Update all" applies
-        (confirmed from its frontend: `!container.systemContainer`)."""
+        (confirmed from its frontend: `!container.systemContainer`).
+
+        Uses the same combined Tier 1 + Tier 2 _container_has_pending_update()
+        definition as this button's own creation gate (see async_setup_entry
+        above) and the update entities in update.py, so the button can
+        never exist while reporting nothing to actually update, and never
+        omit a container Tier 2 alone flagged. Install itself doesn't care
+        which tier flagged a container — batch-update-stream only needs a
+        container id — so there's no reason the trigger list should be
+        more restrictive than the button's own visibility.
+        """
         env_data = _coordinator_env(self.coordinator.data, self._env_id)
-        pending = env_data.get("pending_update_container_ids") or set()
-        if not pending:
-            return []
         containers = env_data.get("containers") or []
+        pending = env_data.get("pending_update_container_ids") or set()
         system_ids = {
             c.get("id") for c in containers if c.get("systemContainer") and c.get("id")
         }
-        return [cid for cid in pending if cid not in system_ids]
+        update_env_data = (
+            _coordinator_env(self._update_coordinator.data, self._env_id)
+            if self._update_coordinator is not None
+            else None
+        )
+        return [
+            c["id"]
+            for c in containers
+            if c.get("id") not in system_ids
+            and c.get("id")
+            and _container_has_pending_update(c, pending, update_env_data)
+        ]
 
     @property
     def available(self) -> bool:

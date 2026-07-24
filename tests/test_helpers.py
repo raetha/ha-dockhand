@@ -25,6 +25,7 @@ from custom_components.dockhand.helpers import (
     _compose_project,
     _container_device,
     _container_has_healthcheck,
+    _container_has_pending_update,
     _container_url,
     _coordinator_env,
     _ensure_env_devices,
@@ -867,6 +868,67 @@ def test_stack_has_system_container_ignores_name_collision_with_id():
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
     assert _stack_has_system_container(stack, all_containers) is False
+
+
+# ---------------------------------------------------------------------------
+# _container_has_pending_update
+# ---------------------------------------------------------------------------
+
+
+def test_container_has_pending_update_true_via_tier1_only():
+    container = {"id": "id-web"}
+    assert _container_has_pending_update(container, {"id-web"}, None) is True
+
+
+def test_container_has_pending_update_true_via_tier2_only():
+    """Tier 2's hasUpdate alone is a valid reason, even with an empty
+    Tier 1 pending set — Tier 2 can catch real digest-level updates
+    Dockhand's own cheap scheduled check hasn't (yet)."""
+    container = {"id": "id-web"}
+    update_env_data = {"id-web": {"containerName": "web", "hasUpdate": True}}
+    assert _container_has_pending_update(container, set(), update_env_data) is True
+
+
+def test_container_has_pending_update_false_when_neither_tier_says_so():
+    container = {"id": "id-web"}
+    update_env_data = {"id-web": {"containerName": "web", "hasUpdate": False}}
+    assert _container_has_pending_update(container, set(), update_env_data) is False
+
+
+def test_container_has_pending_update_false_for_no_container_id():
+    assert _container_has_pending_update({}, {"id-web"}, None) is False
+
+
+def test_container_has_pending_update_ignores_stale_tier2_entry():
+    """The core staleness fix: a Tier 2 entry keyed under an id the
+    container no longer has (left over from before it was recreated by
+    an update) must not count — looking it up by the container's
+    *current* id makes a stale entry simply invisible, rather than
+    needing to be explicitly detected and discarded. Real bug: this
+    used to be a name-based scan, which kept a resolved update looking
+    pending for up to Tier 2's full poll interval."""
+    container = {"id": "id-web-new"}  # recreated since Tier 2 last ran
+    update_env_data = {"id-web-old": {"containerName": "web", "hasUpdate": True}}
+    assert _container_has_pending_update(container, set(), update_env_data) is False
+
+
+def test_container_has_pending_update_tier1_still_wins_over_stale_tier2():
+    """Even when Tier 2's cached entry is stale/invisible for the current
+    id, Tier 1's own live signal must still be honored on its own."""
+    container = {"id": "id-web-new"}
+    update_env_data = {"id-web-old": {"containerName": "web", "hasUpdate": True}}
+    assert (
+        _container_has_pending_update(container, {"id-web-new"}, update_env_data)
+        is True
+    )
+
+
+def test_container_has_pending_update_handles_none_update_env_data():
+    """update_env_data is None when Tier 2 (update_coordinator) isn't
+    configured at all — must behave exactly like Tier 1 alone."""
+    container = {"id": "id-web"}
+    assert _container_has_pending_update(container, {"id-web"}, None) is True
+    assert _container_has_pending_update(container, set(), None) is False
 
 
 # ---------------------------------------------------------------------------

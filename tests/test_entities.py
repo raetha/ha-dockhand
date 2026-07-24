@@ -251,6 +251,7 @@ def _switch_classes():
 def _button_classes():
     from custom_components.dockhand.button import (
         DockhandContainerRestartButton,
+        DockhandStackDeployButton,
         DockhandStackRestartButton,
     )
 
@@ -1713,6 +1714,21 @@ class TestSwitches:
             await switch.async_turn_on()
         assert exc_info.value.translation_key == "action_failed"
 
+    async def test_stack_turn_off_calls_stop(self):
+        switch = self._stack_switch()
+        switch._client = MagicMock()
+        switch._client.async_stop_stack = AsyncMock()
+        await switch.async_turn_off()
+        switch._client.async_stop_stack.assert_called_once_with(ENV_ID, STACK["name"])
+
+    async def test_stack_turn_off_raises_ha_error_on_api_failure(self):
+        switch = self._stack_switch()
+        switch._client = MagicMock()
+        switch._client.async_stop_stack = AsyncMock(side_effect=Exception("down"))
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await switch.async_turn_off()
+        assert exc_info.value.translation_key == "action_failed"
+
 
 # ===========================================================================
 # Buttons
@@ -1821,6 +1837,60 @@ class TestButtons:
         )
         assert "Stacks" in b.device_info["name"]
         assert STACK["name"] in b.device_info["name"]
+
+    def _stack_deploy_btn(self, coord=None):
+        btn = _button_classes()
+        return btn["DockhandStackDeployButton"](
+            coord or _fast_coord(),
+            MagicMock(),
+            ENTRY_ID,
+            ENV_ID,
+            ENV_NAME,
+            BASE_URL,
+            STACK,
+        )
+
+    async def test_stack_deploy_calls_api_and_refreshes(self):
+        b = self._stack_deploy_btn()
+        b._client = MagicMock()
+        b._client.async_deploy_stack = AsyncMock(return_value={"success": True})
+        b.coordinator.async_refresh = AsyncMock()
+        await b.async_press()
+        b._client.async_deploy_stack.assert_called_once_with(ENV_ID, STACK["name"])
+        b.coordinator.async_refresh.assert_called_once()
+
+    async def test_stack_deploy_raises_not_found_when_stack_missing(self):
+        coord = _fast_coord({"stats": STATS, "containers": [], "stacks": []})
+        b = self._stack_deploy_btn(coord=coord)
+        b._client = MagicMock()
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "action_failed"
+
+    async def test_stack_deploy_raises_ha_error_on_client_exception(self):
+        b = self._stack_deploy_btn()
+        b._client = MagicMock()
+        b._client.async_deploy_stack = AsyncMock(side_effect=Exception("refused"))
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "action_failed"
+
+    async def test_stack_deploy_raises_on_success_false_response(self):
+        """Dockhand returns HTTP 200 with {"success": false, "error": ...}
+        for an expected failure mode (e.g. compose file location not
+        configured) rather than an HTTP error — must be checked
+        explicitly rather than relying on the client raising."""
+        b = self._stack_deploy_btn()
+        b._client = MagicMock()
+        b._client.async_deploy_stack = AsyncMock(
+            return_value={"success": False, "error": "compose file not configured"}
+        )
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "action_failed"
+        assert "compose file not configured" in str(
+            exc_info.value.translation_placeholders["error"]
+        )
 
 
 # ===========================================================================
@@ -2101,7 +2171,7 @@ async def test_setup_entry_untagged_images_never_collide_with_each_other():
 # ---------------------------------------------------------------------------
 
 
-def _make_bulk_update_button(pending=None, containers=None):
+def _make_bulk_update_button(pending=None, containers=None, update_data=None):
     from custom_components.dockhand.button import DockhandEnvBulkUpdateButton
 
     coord = MagicMock()
@@ -2114,11 +2184,15 @@ def _make_bulk_update_button(pending=None, containers=None):
         }
     }
     coord.async_refresh = AsyncMock()
+    update_coord = None
+    if update_data is not None:
+        update_coord = MagicMock()
+        update_coord.data = {"environments": {ENV_ID: update_data}}
     client = MagicMock()
     client.async_get_update_check_settings = AsyncMock(return_value={})
     return (
         DockhandEnvBulkUpdateButton(
-            coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+            coord, update_coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
         coord,
         client,
@@ -2134,6 +2208,32 @@ def test_bulk_update_updatable_ids_excludes_system_containers():
         ],
     )
     assert button._updatable_container_ids() == ["id-web"]
+
+
+def test_bulk_update_updatable_ids_includes_tier2_only_container():
+    """A container Tier 1's cheap cache hasn't (yet) flagged, but Tier 2's
+    precise digest check has, should still be included — Tier 2 alone is
+    a valid reason for this button to exist and act."""
+    button, _, _ = _make_bulk_update_button(
+        pending=set(),
+        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+        update_data={"id-web": {"containerName": "web", "hasUpdate": True}},
+    )
+    assert button._updatable_container_ids() == ["id-web"]
+
+
+def test_bulk_update_updatable_ids_ignores_stale_tier2_entry():
+    """A Tier 2 entry keyed under an old container id (left over from
+    before the container was recreated by an update) must not resurrect
+    a resolved update just because Tier 2 hasn't re-polled yet — the
+    *current* container's id isn't a key in that stale snapshot, so the
+    lookup should simply miss."""
+    button, _, _ = _make_bulk_update_button(
+        pending=set(),
+        containers=[{"id": "id-web-new", "name": "web", "systemContainer": None}],
+        update_data={"id-web-old": {"containerName": "web", "hasUpdate": True}},
+    )
+    assert button._updatable_container_ids() == []
 
 
 async def test_bulk_update_press_raises_when_nothing_updatable():

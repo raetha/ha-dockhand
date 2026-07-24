@@ -39,6 +39,7 @@ from .helpers import (
     _all_envs,
     _compose_project,
     _container_has_healthcheck,
+    _container_has_pending_update,
     _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
@@ -451,7 +452,20 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # just conditionally enabled) matching Dockhand's own {#if
     # updatableContainersCount > 0} gating: live only while at least one
     # non-system-container pending update exists in the environment.
+    #
+    # Considers both Tier 1 (pending_updates) and Tier 2 (update_coordinator,
+    # when configured) via the shared _container_has_pending_update()
+    # helper, matching button.py's creation gate exactly — this MUST stay
+    # in sync with that gate, since a mismatch here means the button
+    # either never gets removed once created (this set too permissive) or
+    # gets removed the instant it's created (this set too strict). Safe to
+    # include Tier 2 because that helper looks it up by each container's
+    # current id — a stale entry from a since-recreated container is
+    # keyed under an id nothing currently has, so it can't keep this uid
+    # alive past the point the update actually resolved.
     bulk_update_uids: set[str] = set()
+    update_coordinator = entry.runtime_data.update_coordinator
+    update_data = _all_envs(update_coordinator.data if update_coordinator else None)
 
     for env_id, env_data in fast_data.items():
         has_freestanding = False
@@ -464,7 +478,12 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             for c in env_containers
             if c.get("systemContainer") and c.get("id")
         }
-        if pending_updates - system_ids:
+        update_env_data = update_data.get(env_id)
+        if any(
+            _container_has_pending_update(c, pending_updates, update_env_data)
+            for c in env_containers
+            if c.get("id") not in system_ids
+        ):
             bulk_update_uids.add(f"{entry.entry_id}_{env_id}_bulk_update")
         for c in env_containers:
             name = c.get("name", "")
@@ -619,13 +638,18 @@ def _cleanup_stale_registry(
     - Image, network, volume, and git stack entity cleanup uses the same
       two-case logic, guarded by slow coordinator validity so a failed poll
       doesn't trigger false cleanup.
-    - Update (Tier 1) and runtime control entity cleanup uses the same
-      two-case logic but is fast-data-derived (same reliability as
-      containers/stacks) — no separate coordinator-validity guard needed
-      beyond the top-level fast_data check. Tier 2 (the optional
-      update_coordinator, real registry queries) has no bearing on cleanup
-      at all — it only ever enriches already-existing Tier 1 entities,
-      never creates or removes them.
+    - Update (Tier 1) entity cleanup and runtime control entity cleanup use
+      the same two-case logic and are fast-data-derived (same reliability
+      as containers/stacks) — no separate coordinator-validity guard
+      needed beyond the top-level fast_data check. Tier 2 (the optional
+      update_coordinator, real registry queries) never creates or removes
+      the per-container update entities themselves — it only enriches
+      already-existing Tier 1 ones. It DOES factor into the env-level
+      bulk "Update all" button specifically (via the shared
+      _container_has_pending_update() helper, looked up by each
+      container's current id so a stale Tier 2 entry from a since-
+      recreated container can't keep the button alive past when its
+      update actually resolved) — see bulk_update_uids below.
     - Container stats entity cleanup (the 8 CPU/memory/network/block-I/O
       sensors) uses the same two-case logic, same fast-data reliability —
       turning "Enable container stats" off removes any already created

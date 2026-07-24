@@ -316,10 +316,36 @@ signal + optional expensive precision" features): `ContainerUpdateEntity`'s
 signal from a cheap DB-read endpoint) works completely with Tier 2 absent.
 Tier 2, when present, is consulted directly (not as a primary coordinator)
 purely to upgrade `installed_version`/`latest_version` to precise digests
-on the *same* entities — it never gates entity creation or removal. If you
-build another feature with this "free basic signal, paid precise signal"
-shape, follow this same structure: cheap tier owns entity lifecycle,
-expensive tier is a pure data enrichment layered on top.
+on the *same* entities — it never gates *this entity's* creation or
+removal. If you build another feature with this "free basic signal, paid
+precise signal" shape, follow this same structure: cheap tier owns entity
+lifecycle, expensive tier is a pure data enrichment layered on top.
+
+The env-level bulk "Update all" button is a deliberate exception to "Tier
+2 never gates lifecycle": it's an env-level aggregate rather than a
+per-container entity, and both Tier 1 and Tier 2 are folded together (via
+the shared `_container_has_pending_update()` helper in `helpers.py`) to
+decide whether it exists at all. This is safe specifically because Tier 2
+is always looked up by each container's *current* id, never by name —
+see the next paragraph for why that distinction matters.
+
+**Consult Tier 2 (or any coordinator that persists data keyed by an id
+that can change identity) by current id, never by name.** Real bug: an
+earlier version of `ContainerUpdateEntity`'s Tier 2 lookup scanned
+`update_coordinator.data` for an entry whose `containerName` matched,
+discarding the dict's own `container_id` key in the process. Tier 2 only
+re-polls on a slow schedule (default 24h); a container recreated in the
+meantime (the normal effect of an image update) gets a new id, but its
+*name* is stable across recreation — so the stale entry, describing a
+container that no longer exists, kept matching by name and showing an
+already-resolved update as still pending for up to a full Tier 2 cycle.
+Fixed by looking the entry up as `env_data.get(current_container_id)`
+instead of scanning by name: a stale entry's key is the *old* id, which
+is never a key in the lookup for a container's *current* id, so it's
+simply never found — self-invalidating by construction, no explicit
+staleness check needed. Apply the same shape (lookup by current identity,
+not a human-readable label that survives recreation) to any future
+enrichment layer with its own independent poll cadence.
 
 **Explicit user actions (button presses, switch toggles, an update entity's
 install) must call `coordinator.async_refresh()`, never
