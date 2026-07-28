@@ -12,5 +12,5 @@
 #
 # CI runs on Python 3.14 (latest patch) via .github/workflows/ci.yml
 
-pytest-homeassistant-custom-component==0.13.346
+pytest-homeassistant-custom-component==0.13.348
 ruff
