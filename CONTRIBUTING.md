@@ -119,6 +119,12 @@ cd ha-dockhand && find . -not -path "./.git/*" -not -path "./.git" \
   | zip /path/to/ha-dockhand-VERSION.zip -@
 ```
 
+## Versioning
+
+This repo follows semver — see `docs/SEMVER.md` for what counts as major/minor/patch for this
+repo specifically (it's also the canonical policy `ha-dockhand-cards` references, since the two
+repos share a release flow). Decide the bump before working through the release checklist below.
+
 ## Release checklist
 
 A more thorough pass than the PR checklist above, run before tagging a

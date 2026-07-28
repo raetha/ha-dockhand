@@ -133,6 +133,27 @@ async def test_step_user_no_auth_creates_entry(hass: HomeAssistant):
     assert result["options"]["poll_interval"] == 60
 
 
+async def test_step_user_strips_whitespace_from_api_url(hass: HomeAssistant):
+    """Regression test: a URL with incidental leading/trailing whitespace
+    (e.g. from copy-pasting) used to get stored verbatim, silently
+    breaking every "open in Dockhand" link this integration ever set —
+    see test_helpers.py's identical regression test for the mechanism.
+    The stored entry, not just the unique_id, needs the clean value."""
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "user"}
+    )
+    with _patch_client():
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"api_url": "  http://dh.test:3000  ", "verify_ssl": True},
+        )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], BASE_OPTIONS
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    assert result["data"]["api_url"] == "http://dh.test:3000"
+
+
 async def test_step_user_auth_required_redirects_to_token(hass: HomeAssistant):
     """Server returns 401 → redirect to token step."""
     result = await hass.config_entries.flow.async_init(

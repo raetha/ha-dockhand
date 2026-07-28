@@ -366,6 +366,33 @@ specifically because Tier 2 is always looked up by each container's
 *current* id, never by name — see the next paragraph for why that
 distinction matters.
 
+**"Has a pending update" and "is safe to bulk-update" are two different
+questions, kept structurally separate rather than by caller
+discipline.** `_container_has_pending_update()` answers the first and
+says nothing about system containers either way — correct for its own
+job, but not safe to use directly wherever the answer is about to
+*trigger* an update, since a system container (Dockhand itself, a
+Hawser agent) genuinely must never be bulk-updated. Two places in
+`button.py` used to each independently build a `system_ids` set and
+filter inline before calling it — a real, if latent, duplication risk:
+nothing stopped a future caller (in `button.py` or elsewhere) from
+calling `_container_has_pending_update()` directly for an
+actionable purpose and simply forgetting that filter. Pulled the
+exclusion out into its own named predicate,
+`_container_is_bulk_update_eligible()` (`not
+container.get("systemContainer")`), and a composed helper,
+`_actionable_pending_update_container_ids()`, that's now the one
+function anything about to *act* on a set of containers should call —
+both of `button.py`'s call sites do, and Dockhand's own "containers"
+sensor's `pending_updates` attribute (the bulk-eligible count, as
+opposed to `pending_system_updates`/`pending_updates_total` — see
+sensor.py's own comment on `DockhandEnvContainerCountSensor`) does too.
+The general shape worth repeating elsewhere: when a safety exclusion
+depends on "don't act on X," don't rely on every caller remembering to
+filter X out inline — give the exclusion its own named function so
+using the unsafe primitive directly, for an actionable purpose, is the
+thing that stands out as unusual in a review, not the normal path.
+
 **Consult Tier 2 (or any coordinator that persists data keyed by an id
 that can change identity) by current id, never by name.** Real bug: an
 earlier version of `ContainerUpdateEntity`'s Tier 2 lookup scanned

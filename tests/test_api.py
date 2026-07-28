@@ -167,6 +167,50 @@ async def test_get_dashboard_stats(client_with_mock_request):
     )
 
 
+async def test_env_id_is_url_encoded(client_with_mock_request):
+    """Defense in depth: env_id (and every other identifier this client
+    builds URLs from) ultimately comes from Dockhand's own API responses,
+    not directly from user input. If a Dockhand release were ever
+    compromised, a malicious response could return a crafted identifier
+    specifically to inject extra query parameters into the next request
+    this integration makes back to it — confirm that's neutralized rather
+    than assume it, since a plain f-string interpolation (the previous
+    implementation) would have passed an injected `&other_param=x` straight
+    through unescaped."""
+    client_with_mock_request._request.return_value = {}
+    await client_with_mock_request.async_get_dashboard_stats("1&admin=true")
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/dashboard/stats?env=1%26admin%3Dtrue"
+    )
+
+
+async def test_container_id_is_url_encoded(client_with_mock_request):
+    """Same defense-in-depth concern as env_id, but for a path segment
+    rather than a query value — confirm a crafted container_id can't be
+    used to escape into a different path (e.g. "../other-endpoint")."""
+    client_with_mock_request._request.return_value = None
+    await client_with_mock_request.async_start_container(2, "../evil")
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/containers/..%2Fevil/start?env=2"
+    )
+
+
+async def test_stack_name_with_legitimate_special_characters(
+    client_with_mock_request,
+):
+    """Not just an attack scenario — a stack or container name containing a
+    space or other URL-meaningful character is a legitimate, non-malicious
+    case this encoding also has to get right."""
+    client_with_mock_request._request.return_value = None
+    await client_with_mock_request.async_start_stack(2, "my stack")
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/stacks/my%20stack/start?env=2"
+    )
+
+
 async def test_get_containers(client_with_mock_request):
     await client_with_mock_request.async_get_containers(2)
     assert (

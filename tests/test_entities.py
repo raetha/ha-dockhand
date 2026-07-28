@@ -158,6 +158,7 @@ def _fast_coord(env_data=None):
                 "containers": [CONTAINER],
                 "stacks": [STACK],
                 "container_stats": {},
+                "pending_update_container_ids": {CONTAINER["id"]},
             }
         }
     }
@@ -276,7 +277,7 @@ def env_sensors():
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
         "containers": sc["DockhandEnvContainerCountSensor"](
-            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+            coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
         "stacks": sc["DockhandEnvStacksSensor"](
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
@@ -424,7 +425,133 @@ def test_container_count_attributes(env_sensors):
     attrs = env_sensors["containers"].extra_state_attributes
     assert attrs["running"] == 3
     assert attrs["stopped"] == 1
+    # Sourced from pending_update_container_ids (Tier 1), not Dockhand's
+    # own stats.containers.pendingUpdates — see the sensor's own comment
+    # for why. This fixture's env_data sets pending_update_container_ids
+    # to one container id, matching the pre-existing expectation here.
     assert attrs["pending_updates"] == 1
+
+
+def test_container_count_pending_updates_excludes_system_containers():
+    """pending_updates is the actionable/bulk-eligible count -- must
+    exclude a system container's own pending update, matching
+    _actionable_pending_update_container_ids()'s own exclusion (the same
+    function the bulk-update button uses to decide what it will actually
+    send to Dockhand's batch-update API). This container's update should
+    still be visible somewhere, though -- see pending_system_updates and
+    pending_updates_total below, which is the whole reason this became
+    three attributes instead of one: a single count can't correctly
+    answer both "how many things need attention" (should include this)
+    and "how many things can I safely bulk-update" (should not) at once."""
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [
+                CONTAINER,
+                {
+                    **CONTAINER,
+                    "id": "sys-1",
+                    "name": "watchtower",
+                    "systemContainer": "watchtower",
+                },
+            ],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": {"sys-1"},
+        }
+    )
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    attrs = sensor.extra_state_attributes
+    assert attrs["pending_updates"] == 0
+    assert attrs["pending_system_updates"] == 1
+    assert attrs["pending_updates_total"] == 1
+
+
+def test_container_count_pending_updates_mixed_system_and_normal():
+    """Both a normal and a system container pending at once -- confirms
+    the three attributes stay correctly separated rather than one
+    leaking into another (e.g. a bug that summed both into
+    pending_updates, or double-counted the normal one into
+    pending_system_updates)."""
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [
+                CONTAINER,
+                {
+                    **CONTAINER,
+                    "id": "sys-1",
+                    "name": "watchtower",
+                    "systemContainer": "watchtower",
+                },
+            ],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": {CONTAINER["id"], "sys-1"},
+        }
+    )
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    attrs = sensor.extra_state_attributes
+    assert attrs["pending_updates"] == 1
+    assert attrs["pending_system_updates"] == 1
+    assert attrs["pending_updates_total"] == 2
+
+
+def test_container_count_pending_updates_includes_tier_2_only_containers():
+    """Regression test, same class of bug as the system-container case
+    above but a different specific cause: an earlier version of this fix
+    counted only pending_update_container_ids (Tier 1), reasoning that
+    this sensor platform had no access to update_coordinator (Tier 2) at
+    all. True, but the wrong thing to stop at — Tier 2, when configured,
+    can flag a container's update before Tier 1's own cache catches up,
+    and each container's own update entity (update.py's latest_version)
+    already reflects that Tier-1-or-Tier-2 check. A Tier-1-only count
+    here could still disagree with what that container's own entity (and
+    this environment's Updates card rows) shows. This container is
+    absent from pending_update_container_ids entirely — only Tier 2 (via
+    update_coordinator) flags it — and must still be counted."""
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [{**CONTAINER, "id": "tier2-only"}],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": set(),
+        }
+    )
+    update_coord = MagicMock()
+    update_coord.data = {"environments": {ENV_ID: {"tier2-only": {"hasUpdate": True}}}}
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, update_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    assert sensor.extra_state_attributes["pending_updates"] == 1
+
+
+def test_container_count_pending_updates_none_when_update_coordinator_absent():
+    """update_coordinator is optional (Tier 2 is opt-in) — must not crash
+    or misbehave when it's None, same as _container_has_pending_update's
+    own contract for its update_env_data parameter."""
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [CONTAINER],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": set(),
+        }
+    )
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    assert sensor.extra_state_attributes["pending_updates"] == 0
 
 
 def test_stacks_value(env_sensors):

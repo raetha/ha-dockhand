@@ -1,6 +1,23 @@
 # Changelog
 
-## [Unreleased]
+## [1.8.2] — 2026-07-28
+
+### Fixed
+
+- **The "containers" sensor's pending-updates reporting is now split into three attributes**:
+  `pending_updates` (containers eligible for a bulk update — excludes system containers, which
+  Dockhand's own bulk-update action was never meant to touch), `pending_system_updates` (system
+  containers only), and `pending_updates_total` (both combined). Previously a single
+  `pending_updates` attribute undercounted real pending updates on system containers, matching a
+  quirk of Dockhand's own dashboard tile. **If you have an automation or template using
+  `pending_updates` to mean "any container needs an update," switch it to `pending_updates_total`**
+  — `pending_updates` now specifically means "eligible for the bulk-update button."
+- **A configured API URL with incidental leading/trailing whitespace** (e.g. from copy-pasting)
+  could produce a malformed link, silently breaking every "open in Dockhand" link the companion
+  cards set. Existing configurations are corrected automatically — no need to re-enter anything.
+- Identifiers used in Dockhand API requests are now properly encoded, fixing a rare bug for
+  stacks/containers with spaces or other special characters in their names, and adding defense in
+  depth against a maliciously crafted identifier from a compromised Dockhand instance.
 
 ## [1.8.1] — 2026-07-24
 
@@ -785,7 +802,9 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.8.2...HEAD
+[1.8.2]: https://github.com/raetha/ha-dockhand/compare/v1.8.1...v1.8.2
+[1.8.1]: https://github.com/raetha/ha-dockhand/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/raetha/ha-dockhand/compare/v1.7.4...v1.8.0
 [1.7.4]: https://github.com/raetha/ha-dockhand/compare/v1.7.3...v1.7.4
 [1.7.3]: https://github.com/raetha/ha-dockhand/compare/v1.7.2...v1.7.3

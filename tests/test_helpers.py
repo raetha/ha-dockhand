@@ -21,11 +21,13 @@ import pytest
 from unittest.mock import MagicMock
 
 from custom_components.dockhand.helpers import (
+    _actionable_pending_update_container_ids,
     _all_envs,
     _compose_project,
     _container_device,
     _container_has_healthcheck,
     _container_has_pending_update,
+    _container_is_bulk_update_eligible,
     _container_url,
     _coordinator_env,
     _ensure_env_devices,
@@ -69,6 +71,27 @@ def test_section_url_strips_trailing_slash():
 
 def test_section_url_empty_base_returns_none():
     assert _section_url("", "containers") is None
+
+
+def test_section_url_strips_leading_and_trailing_whitespace():
+    """Regression test: a base_url with incidental leading/trailing
+    whitespace (e.g. from copy-pasting into the config flow's URL field)
+    used to produce a URL with a literal space embedded right before the
+    path segment (" http://host:3000 /containers") — invalid enough that
+    both new URL() and window.open() reject it outright in a browser,
+    silently breaking every "open in Dockhand" link this integration
+    sets with no visible error anywhere. The config flow now also strips
+    this at entry (see test_config_flow.py), but this defends existing
+    stored config entries that predate that fix too, since every
+    _*_url() helper in this file routes through _section_url."""
+    assert (
+        _section_url(" http://dh.test:3000 ", "containers")
+        == "http://dh.test:3000/containers"
+    )
+
+
+def test_section_url_whitespace_only_base_returns_none():
+    assert _section_url("   ", "containers") is None
 
 
 def test_container_url():
@@ -929,6 +952,72 @@ def test_container_has_pending_update_handles_none_update_env_data():
     container = {"id": "id-web"}
     assert _container_has_pending_update(container, {"id-web"}, None) is True
     assert _container_has_pending_update(container, set(), None) is False
+
+
+# ---------------------------------------------------------------------------
+# _container_is_bulk_update_eligible / _actionable_pending_update_container_ids
+# ---------------------------------------------------------------------------
+
+
+def test_container_is_bulk_update_eligible_true_for_normal_container():
+    assert (
+        _container_is_bulk_update_eligible({"id": "id-web", "systemContainer": None})
+        is True
+    )
+
+
+def test_container_is_bulk_update_eligible_false_for_system_container():
+    assert (
+        _container_is_bulk_update_eligible(
+            {"id": "id-dockhand", "systemContainer": "dockhand"}
+        )
+        is False
+    )
+
+
+def test_container_is_bulk_update_eligible_true_when_field_absent():
+    """A container dict missing systemContainer entirely (rather than
+    explicitly None) must still be treated as eligible, not excluded by
+    a missing-key default working out the wrong way."""
+    assert _container_is_bulk_update_eligible({"id": "id-web"}) is True
+
+
+def test_actionable_pending_update_container_ids_excludes_system_containers():
+    """The core safety guarantee this function exists for: a system
+    container with a genuine pending update must never appear in its
+    result, regardless of which tier flags it."""
+    containers = [
+        {"id": "id-web", "systemContainer": None},
+        {"id": "id-dockhand", "systemContainer": "dockhand"},
+    ]
+    pending = {"id-web", "id-dockhand"}
+    assert _actionable_pending_update_container_ids(containers, pending, None) == [
+        "id-web"
+    ]
+
+
+def test_actionable_pending_update_container_ids_empty_when_only_system_pending():
+    containers = [
+        {"id": "id-web", "systemContainer": None},
+        {"id": "id-dockhand", "systemContainer": "dockhand"},
+    ]
+    pending = {"id-dockhand"}
+    assert _actionable_pending_update_container_ids(containers, pending, None) == []
+
+
+def test_actionable_pending_update_container_ids_folds_in_tier_2():
+    """Same Tier 1-or-Tier 2 definition as _container_has_pending_update,
+    applied per container, not just Tier 1's cached set."""
+    containers = [{"id": "id-web", "systemContainer": None}]
+    update_env_data = {"id-web": {"hasUpdate": True}}
+    assert _actionable_pending_update_container_ids(
+        containers, set(), update_env_data
+    ) == ["id-web"]
+
+
+def test_actionable_pending_update_container_ids_skips_containers_without_id():
+    containers = [{"systemContainer": None}]
+    assert _actionable_pending_update_container_ids(containers, {"id-web"}, None) == []
 
 
 # ---------------------------------------------------------------------------
