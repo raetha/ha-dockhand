@@ -329,6 +329,24 @@ def test_container_auto_update_off_when_absent_from_map():
     assert switch.is_on is False
 
 
+def test_container_auto_update_unavailable_when_fetch_failed():
+    """A swallowed auto_update_settings fetch failure used to show
+    whatever the last-known toggle state was — indistinguishable from a
+    genuinely just-fetched one, and specifically risky here since
+    absence-from-map already means "disabled": a failed fetch could look
+    identical to a real, confirmed disable. Now the entity goes
+    unavailable instead."""
+    fast = _make_fast_coord(containers=[{"name": "web", "id": "abc"}])
+    slow = _make_slow_coord()
+    slow.data["environments"][ENV_ID]["auto_update_settings"] = {}
+    slow.data["environments"][ENV_ID]["fetch_failures"] = {"auto_update_settings"}
+    client = MagicMock()
+    switch = DockhandContainerAutoUpdateSwitch(
+        fast, slow, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, "web"
+    )
+    assert switch.available is False
+
+
 async def test_container_auto_update_turn_on_sends_defaults():
     fast = _make_fast_coord(containers=[{"name": "web", "id": "abc"}])
     slow = _make_slow_coord()

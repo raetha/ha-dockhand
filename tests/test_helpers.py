@@ -267,6 +267,87 @@ def test_sched_device_via_schedules_hub():
     assert info["via_device"] == ("dockhand", "schedules_hub")
 
 
+def test_sched_device_env_scoped_name_uses_environment_prefix():
+    """Regression test: shipped bug in initial 1.9.0 device-hierarchy work —
+    via_device was made conditional on environment_id, but name was left
+    hardcoded to always start with "Dockhand", so every env-scoped schedule
+    device showed a misleading name even though it was correctly parented
+    under its own environment's group. Caught after release via a real
+    device name in a live instance; the original tests above never passed
+    environment_id/environment_name at all, so this branch had zero
+    coverage."""
+    info = _sched_device(
+        5,
+        "container_update",
+        "nightly",
+        "http://dh.test:3000",
+        environment_id=3,
+        environment_name="Aurora",
+    )
+    assert info["name"] == "Aurora – Schedules – nightly"
+
+
+def test_sched_device_env_scoped_via_group_device():
+    info = _sched_device(
+        5,
+        "container_update",
+        "nightly",
+        "http://dh.test:3000",
+        environment_id=3,
+        environment_name="Aurora",
+    )
+    assert info["via_device"] == ("dockhand", "env_3_Schedules")
+
+
+def test_sched_device_env_scoped_falls_back_when_name_missing():
+    """environmentName can legitimately be null on Dockhand's own data
+    (confirmed from its /api/schedules source) even when environmentId is
+    set — falls back to a generic but still environment-specific label,
+    matching the same fallback pattern used elsewhere (e.g. the env hub's
+    own "Environment {id}" default) rather than silently reverting to the
+    "Dockhand" global prefix, which would misrepresent it as unscoped."""
+    info = _sched_device(
+        5,
+        "container_update",
+        "nightly",
+        "http://dh.test:3000",
+        environment_id=3,
+        environment_name=None,
+    )
+    assert info["name"] == "Environment 3 – Schedules – nightly"
+
+
+def test_ensure_env_devices_schedule_name_uses_environment_prefix(hass):
+    """Integration-level companion to the _sched_device unit tests above —
+    confirms the fix actually propagates through _ensure_env_devices()
+    (the real call site, not just the factory in isolation). This is the
+    level the original bug shipped at: _sched_device()'s own unit tests
+    never exercised the env-scoped branch, but neither did any test at
+    this level, so the gap was actually two-layers deep."""
+    entry = _make_entry(hass)
+    schedules = [
+        {
+            "id": 5,
+            "type": "container_update",
+            "name": "nightly",
+            "environmentId": 3,
+            "environmentName": "Aurora",
+        }
+    ]
+    _ensure_env_devices(
+        hass,
+        entry.entry_id,
+        "http://dh.test:3000",
+        3,
+        "Aurora",
+        schedules=schedules,
+        enable_schedules=True,
+    )
+    device = _device_by_id_suffix(hass, entry, "schedule_5_container_update")
+    assert device is not None
+    assert device.name == "Aurora – Schedules – nightly"
+
+
 # ---------------------------------------------------------------------------
 # _image_display_name
 # ---------------------------------------------------------------------------

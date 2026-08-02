@@ -62,9 +62,12 @@ def _make_fast_coord(containers=None) -> MagicMock:
     return coord
 
 
-def _make_slow_coord(runtime_config=None) -> MagicMock:
+def _make_slow_coord(runtime_config=None, fetch_failures=None) -> MagicMock:
     coord = MagicMock(spec=DockhandSlowCoordinator)
-    coord.data = {"environments": {ENV_ID: {"runtime_config": runtime_config or {}}}}
+    env_data = {"runtime_config": runtime_config or {}}
+    if fetch_failures is not None:
+        env_data["fetch_failures"] = fetch_failures
+    coord.data = {"environments": {ENV_ID: env_data}}
     coord.last_update_success = True
     return coord
 
@@ -79,6 +82,19 @@ def _make_entity(runtime_config=None, containers=None):
     return entity
 
 
+def test_unavailable_when_runtime_config_fetch_failed():
+    """Same reasoning as the equivalent number.py test — a swallowed
+    runtime_config fetch failure now makes this entity unavailable
+    instead of silently showing a possibly-stale restart policy."""
+    fast = _make_fast_coord()
+    slow = _make_slow_coord({}, fetch_failures={"runtime_config"})
+    entity = DockhandContainerRestartPolicySelect(
+        fast, slow, ENTRY_ID, ENV_ID, CONTAINER_NAME
+    )
+    entity.hass = MagicMock()
+    assert entity.available is False
+
+
 async def test_setup_entry_skips_when_disabled():
     entry = MagicMock()
     entry.options = {}
@@ -88,7 +104,7 @@ async def test_setup_entry_skips_when_disabled():
     add_entities.assert_not_called()
 
 
-async def test_setup_entry_creates_only_for_stackless():
+async def test_setup_entry_creates_only_for_stackless(hass):
     entry = MagicMock()
     entry.options = {"enable_runtime_controls": True}
     entry.data = {}
@@ -100,7 +116,7 @@ async def test_setup_entry_creates_only_for_stackless():
     entry.async_on_unload = MagicMock()
     add_entities = MagicMock()
 
-    await async_setup_entry(MagicMock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
 
     created = add_entities.call_args.args[0]
     assert len(created) == 1

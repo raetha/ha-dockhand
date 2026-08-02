@@ -82,82 +82,82 @@ def _all_created(add_entities: MagicMock) -> list:
     return created
 
 
-async def test_switch_skips_running_switch_for_system_container():
+async def test_switch_skips_running_switch_for_system_container(hass):
     entry = _make_entry([CONTAINER_SYSTEM], [])
     add_entities = MagicMock()
-    await switch_setup(MagicMock(), entry, add_entities)
+    await switch_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandContainerRunningSwitch" not in names
 
 
-async def test_switch_creates_running_switch_for_normal_container():
+async def test_switch_creates_running_switch_for_normal_container(hass):
     entry = _make_entry([CONTAINER_NORMAL], [])
     add_entities = MagicMock()
-    await switch_setup(MagicMock(), entry, add_entities)
+    await switch_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandContainerRunningSwitch" in names
 
 
-async def test_switch_skips_stack_running_switch_when_stack_has_system_container():
+async def test_switch_skips_stack_running_switch_when_stack_has_system_container(hass):
     entry = _make_entry([CONTAINER_NORMAL, CONTAINER_SYSTEM], [STACK_WITH_SYSTEM])
     add_entities = MagicMock()
-    await switch_setup(MagicMock(), entry, add_entities)
+    await switch_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackRunningSwitch" not in names
 
 
-async def test_switch_creates_stack_running_switch_for_normal_stack():
+async def test_switch_creates_stack_running_switch_for_normal_stack(hass):
     entry = _make_entry([CONTAINER_NORMAL], [STACK_NORMAL])
     add_entities = MagicMock()
-    await switch_setup(MagicMock(), entry, add_entities)
+    await switch_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackRunningSwitch" in names
 
 
-async def test_switch_skips_auto_update_switch_for_system_container():
+async def test_switch_skips_auto_update_switch_for_system_container(hass):
     entry = _make_entry([CONTAINER_SYSTEM], [])
     add_entities = MagicMock()
-    await switch_setup(MagicMock(), entry, add_entities)
+    await switch_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandContainerAutoUpdateSwitch" not in names
 
 
-async def test_switch_creates_auto_update_switch_for_normal_container():
+async def test_switch_creates_auto_update_switch_for_normal_container(hass):
     entry = _make_entry([CONTAINER_NORMAL], [])
     add_entities = MagicMock()
-    await switch_setup(MagicMock(), entry, add_entities)
+    await switch_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandContainerAutoUpdateSwitch" in names
 
 
-async def test_button_skips_restart_button_for_system_container():
+async def test_button_skips_restart_button_for_system_container(hass):
     entry = _make_entry([CONTAINER_SYSTEM], [])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandContainerRestartButton" not in names
 
 
-async def test_button_creates_restart_button_for_normal_container():
+async def test_button_creates_restart_button_for_normal_container(hass):
     entry = _make_entry([CONTAINER_NORMAL], [])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandContainerRestartButton" in names
 
 
-async def test_button_skips_stack_restart_button_when_stack_has_system_container():
+async def test_button_skips_stack_restart_button_when_stack_has_system_container(hass):
     entry = _make_entry([CONTAINER_NORMAL, CONTAINER_SYSTEM], [STACK_WITH_SYSTEM])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackRestartButton" not in names
 
 
-async def test_button_creates_stack_restart_button_for_normal_stack():
+async def test_button_creates_stack_restart_button_for_normal_stack(hass):
     entry = _make_entry([CONTAINER_NORMAL], [STACK_NORMAL])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackRestartButton" in names
 
@@ -195,18 +195,18 @@ def _make_runtime_control_entry(containers) -> MagicMock:
     return entry
 
 
-async def test_number_skips_runtime_controls_for_system_container():
+async def test_number_skips_runtime_controls_for_system_container(hass):
     entry = _make_runtime_control_entry([CONTAINER_SYSTEM])
     add_entities = MagicMock()
-    await number_setup(MagicMock(), entry, add_entities)
+    await number_setup(hass, entry, add_entities)
     created = add_entities.call_args.args[0] if add_entities.call_args else []
     assert created == []
 
 
-async def test_number_creates_runtime_controls_for_normal_container():
+async def test_number_creates_runtime_controls_for_normal_container(hass):
     entry = _make_runtime_control_entry([CONTAINER_NORMAL])
     add_entities = MagicMock()
-    await number_setup(MagicMock(), entry, add_entities)
+    await number_setup(hass, entry, add_entities)
     created = add_entities.call_args.args[0]
     names = {type(e).__name__ for e in created}
     assert "DockhandContainerMemoryLimitNumber" in names
@@ -214,18 +214,18 @@ async def test_number_creates_runtime_controls_for_normal_container():
     assert "DockhandContainerPidsLimitNumber" in names
 
 
-async def test_select_skips_restart_policy_for_system_container():
+async def test_select_skips_restart_policy_for_system_container(hass):
     entry = _make_runtime_control_entry([CONTAINER_SYSTEM])
     add_entities = MagicMock()
-    await select_setup(MagicMock(), entry, add_entities)
+    await select_setup(hass, entry, add_entities)
     created = add_entities.call_args.args[0] if add_entities.call_args else []
     assert created == []
 
 
-async def test_select_creates_restart_policy_for_normal_container():
+async def test_select_creates_restart_policy_for_normal_container(hass):
     entry = _make_runtime_control_entry([CONTAINER_NORMAL])
     add_entities = MagicMock()
-    await select_setup(MagicMock(), entry, add_entities)
+    await select_setup(hass, entry, add_entities)
     created = add_entities.call_args.args[0]
     names = [type(e).__name__ for e in created]
     assert "DockhandContainerRestartPolicySelect" in names
@@ -256,41 +256,43 @@ STACK_INTERNAL_WITH_SYSTEM = {
 }
 
 
-async def test_button_creates_deploy_button_for_internal_stack():
+async def test_button_creates_deploy_button_for_internal_stack(hass):
     entry = _make_entry([CONTAINER_NORMAL], [STACK_INTERNAL])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackDeployButton" in names
 
 
-async def test_button_skips_deploy_button_for_git_stack():
+async def test_button_skips_deploy_button_for_git_stack(hass):
     """Git stacks already have their own Deploy button via a completely
     separate code path — the internal-stack Deploy button must not also
     be created for them."""
     entry = _make_entry([CONTAINER_NORMAL], [STACK_GIT])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackDeployButton" not in names
 
 
-async def test_button_skips_deploy_button_for_untracked_stack():
+async def test_button_skips_deploy_button_for_untracked_stack(hass):
     """Confirmed from Dockhand's own frontend: its Redeploy control is
     hidden entirely for stacks with no known compose file location
     (sourceType absent/'external')."""
     entry = _make_entry([CONTAINER_NORMAL], [STACK_UNTRACKED])
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackDeployButton" not in names
 
 
-async def test_button_skips_deploy_button_for_internal_stack_with_system_container():
+async def test_button_skips_deploy_button_for_internal_stack_with_system_container(
+    hass,
+):
     entry = _make_entry(
         [CONTAINER_NORMAL, CONTAINER_SYSTEM], [STACK_INTERNAL_WITH_SYSTEM]
     )
     add_entities = MagicMock()
-    await button_setup(MagicMock(), entry, add_entities)
+    await button_setup(hass, entry, add_entities)
     names = [type(e).__name__ for e in _all_created(add_entities)]
     assert "DockhandStackDeployButton" not in names

@@ -78,13 +78,12 @@ def _make_fast_coord(containers=None) -> MagicMock:
     return coord
 
 
-def _make_slow_coord(runtime_config=None) -> MagicMock:
+def _make_slow_coord(runtime_config=None, fetch_failures=None) -> MagicMock:
     coord = MagicMock(spec=DockhandSlowCoordinator)
-    coord.data = {
-        "environments": {
-            ENV_ID: {"runtime_config": runtime_config or {}},
-        }
-    }
+    env_data = {"runtime_config": runtime_config or {}}
+    if fetch_failures is not None:
+        env_data["fetch_failures"] = fetch_failures
+    coord.data = {"environments": {ENV_ID: env_data}}
     coord.last_update_success = True
     coord.async_add_listener = MagicMock(return_value=lambda: None)
     return coord
@@ -141,7 +140,7 @@ async def test_setup_entry_skips_when_runtime_controls_disabled():
     add_entities.assert_not_called()
 
 
-async def test_setup_entry_creates_entities_only_for_stackless_containers():
+async def test_setup_entry_creates_entities_only_for_stackless_containers(hass):
     entry = MagicMock()
     entry.options = {"enable_runtime_controls": True}
     entry.data = {}
@@ -153,7 +152,7 @@ async def test_setup_entry_creates_entities_only_for_stackless_containers():
     entry.async_on_unload = MagicMock()
     add_entities = MagicMock()
 
-    await async_setup_entry(MagicMock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
 
     add_entities.assert_called_once()
     created = add_entities.call_args.args[0]
@@ -177,6 +176,31 @@ def test_memory_native_value_from_runtime_config():
 def test_memory_native_value_unknown_when_not_yet_inspected():
     entity = _make_memory_entity({})
     assert entity.native_value is None
+
+
+# ---------------------------------------------------------------------------
+# availability
+# ---------------------------------------------------------------------------
+
+
+def test_memory_available_when_runtime_config_fetch_succeeded():
+    entity = _make_memory_entity({CONTAINER_NAME: {"memory": 268435456}})
+    assert entity.available is True
+
+
+def test_memory_unavailable_when_runtime_config_fetch_failed():
+    """A swallowed runtime_config fetch failure used to show whatever the
+    last-known limit was (or None) with no indication it might be stale —
+    indistinguishable from a genuinely just-inspected container. Now the
+    entity goes unavailable instead, same reasoning as the vulnerabilities/
+    host sensors in test_entities.py."""
+    fast = _make_fast_coord()
+    slow = _make_slow_coord({}, fetch_failures={"runtime_config"})
+    entity = DockhandContainerMemoryLimitNumber(
+        fast, slow, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER_NAME
+    )
+    entity.hass = MagicMock()
+    assert entity.available is False
 
 
 def test_cpu_native_value_converts_nano_cpus():

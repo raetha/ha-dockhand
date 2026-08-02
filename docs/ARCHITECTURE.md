@@ -44,11 +44,25 @@ sites now build every `DeviceInfo` by calling the *same* shared factory
 function (`_env_device()`, `_container_device()`, `_stack_device()`,
 `_containers_group_device()`, `_stacks_group_device()`,
 `_network_group_device()`, `_image_group_device()`,
-`_volume_group_device()` — all in `helpers.py`) — `_ensure_env_devices()`
-calls them via `registry.async_get_or_create(config_entry_id=..., **factory(...))`
+`_volume_group_device()`, `_schedule_group_device()`, `_sched_device()` —
+all in `helpers.py`) — `_ensure_env_devices()`/`_ensure_hub_devices()`
+call them via `registry.async_get_or_create(config_entry_id=..., **factory(...))`
 rather than duplicating their field construction inline. There is now
 exactly one place that computes each device's fields; the two call sites
 just differ in *when* they run, which no longer matters for correctness.
+
+**`_sched_device()` was, until 1.9.0, a real (if latent) instance of this
+exact bug**: `_ensure_hub_devices()` built its `DeviceInfo` fields inline
+instead of calling the factory, and the factory itself wasn't in the list
+above. No visible symptom yet, only because both copies happened to compute
+identical fields — but the moment `_sched_device()`'s `via_device` became
+conditional (on whether the schedule is env-scoped or global, added in
+1.9.0 — see §2 and `_schedule_group_device()`), this would have become the
+exact silent-drift bug described above. Fixed by consolidating
+`_ensure_hub_devices()` onto the shared factory rather than by adding a
+second inline copy of the new conditional. If you're auditing other device
+types for this same gap, the tell is a factory function that exists but
+isn't in the list above.
 
 **When adding a new device type or a new dynamically-computed field**:
 add or extend the shared factory function first, then call it from *both*
@@ -64,9 +78,28 @@ call.
 **Entity unique IDs:** `{entry_id}_{env_id}_{type}_{discriminator}`
 
 `type` is always a single recognizable category word matching one already
-in use — `container`, `stack`, `image`, `network`, `volume`, `update`,
-`schedule`. **Never introduce a new compound type word** (e.g. `git_stack`,
-`auto_update_switch`). If an entity is scoped to an existing category (a
+in use — `container`, `stack`, `image`, `network`, `volume`, `update`.
+**Never introduce a new compound type word** (e.g. `git_stack`,
+`auto_update_switch`).
+
+**Schedules are a deliberate exception to this convention**, not an
+oversight: their actual unique_id is `{entry_id}_sched_{id}_{type}_{...}` —
+`env_id` never appears, because a schedule may be genuinely global
+(`environmentId: null` on Dockhand's own `ScheduleInfo` — confirmed from its
+`/api/schedules` source; system_cleanup and destination-scoped repo_prune/
+check/verify have no environment at all), so there's no single slot every
+schedule could put an env_id in. This was considered and rejected during
+the 1.9.0 device-hierarchy work: renaming to fit the convention would force
+a real migration (new unique_id → new entity_id → broken automations/
+dashboards) for zero functional gain, since `unique_id.split("_")[2]` (the
+type-dispatch used by the entity-registry cleanup pass, see §2) parses
+`"sched"`'s numeric id at that position, matches no branch, and schedule
+entities correctly fall through untouched — they rely entirely on
+device-cascade removal instead, which already works correctly and needs no
+type dispatch. The **device hierarchy** (which environment, if any, a
+schedule belongs to) is expressed through `via_device` instead — see
+`_sched_device()`/`_schedule_group_device()` in `helpers.py` and §2's
+schedule cleanup notes — not through the identifier or unique_id contents. If an entity is scoped to an existing category (a
 container, a stack), its type word is that category's word, and whatever
 makes the entity distinct goes entirely in `discriminator` — including a
 qualifying prefix if needed, e.g. `stack_{name}_git_sync_status`, not
@@ -120,6 +153,16 @@ is not something to build per-platform. It lives entirely in `__init__.py`:
 `_build_live_sets` (computes what currently exists, from all three
 coordinators) and `_cleanup_stale_registry` (removes anything no longer in
 those sets), both called after every entry setup.
+
+**The other half of this — actually recreating an entity cleanup removed —
+lives in each platform's own dynamic entity-creation logic, not here.**
+See §9's own section on the entity-recreation bug: every platform checks
+`helpers.py`'s `already_registered()` against `entry.runtime_data.known_entity_ids`
+— a plain set, scoped to the current session (reset fresh on every reload or
+restart) — rather than a bare local variable duplicated per platform file.
+Don't add a new `known_*_ids: set()` local to a platform file, and don't be
+tempted to check the real entity registry instead — both are exactly the
+mistakes §9 describes, the second one considerably worse than the first.
 
 Two-part design:
 
@@ -230,6 +273,70 @@ first successful poll. Before reusing a suffix across two different
 entity categories that share `uid_type`, either give them distinct
 domains (as here) or distinct suffixes; don't rely on elif ordering
 alone to keep them apart.
+
+**Group devices need their own explicit cleanup — device cascade only
+covers entities, never child devices.** The Containers/Images/Networks/
+Volumes/Schedules-per-environment group devices, and the Schedules hub with
+its individual schedule devices, all sit in a `via_device` hierarchy. Two
+things are easy to get wrong here, both real bugs found and fixed in 1.9.0:
+
+1. **`async_remove_device` does not cascade to devices parented via
+   `via_device`** — confirmed against HA core's own `device_registry.py`:
+   removing a device clears `via_device_id` to `None` on anything that
+   pointed to it, it does not recursively remove those devices. It *does*
+   remove entities living directly on the removed device — that part of
+   "device cascade" is real. So a parent-only removal (e.g. removing
+   `schedules_hub` when the schedules feature is disabled) leaves every
+   child device (individual `schedule_*` devices) un-parented and
+   permanently present, never cleaned up, unless each layer is checked
+   independently. Before 1.9.0, only `schedules_hub` had this "feature
+   disabled → remove" check; individual schedule devices did not, so
+   disabling "Enable schedules" silently orphaned them. Fixed by giving
+   every layer (hub, each env's Schedules group, each individual schedule
+   device) its own explicit "feature disabled" check.
+2. **An empty group device has no cleanup path unless one is written for
+   it.** Before 1.9.0, this existed only for the Containers group (which
+   has no enable/disable toggle of its own, so only needed the "confirmed
+   empty" check). Images/Networks/Volumes groups had *no* cleanup logic at
+   all — their child entities correctly disappeared when the feature was
+   toggled off (via the entity-registry pass), but the group device itself
+   sat empty in the registry forever. Fixed by adding the same two-check
+   pattern (feature-disabled, poll-independent; confirmed-empty, gated on
+   `slow_valid` + `online_env_ids`) to all four group types plus the new
+   per-environment Schedules group.
+
+**When adding any new group-of-entities or group-of-devices device**, ask
+explicitly: (a) does it have its own enable/disable toggle, and if so is
+that checked unconditionally (poll-independent) rather than folded into a
+poll-gated "enabled" variable that could be `False` merely because of a
+transient coordinator failure? and (b) is there an explicit "confirmed
+empty while enabled" check, gated on the same online/`slow_valid` two-case
+safety rule as everything else in this section? Neither of these happens
+for free just because the device sits in a `via_device` hierarchy.
+
+**This partially overlaps with, but does not replace, the per-item entity
+cleanup already covered below.** Images/networks/volumes don't get their
+own per-item device — unlike containers/stacks, they're entities living
+directly on the shared group device — so removing the group device (via
+the fix above) cascades away *all* of them at once, same as any other
+device removal. Confirmed against HA core's `entity_registry.py`: it
+listens for device removal via a `@callback`-registered handler, which HA's
+event bus runs synchronously, so by the time
+`dev_registry.async_remove_device()` returns, every entity on that device
+is already gone from the entity registry — not merely scheduled to be.
+That makes the per-item entity-registry-pass branches for `image`/
+`network`/`volume` redundant specifically in the "whole group is now gone"
+cases (feature disabled, or confirmed fully empty) — those entities won't
+even appear when the entity-registry pass later calls
+`er.async_entries_for_config_entry`. But it does **not** cover partial
+removal: if an environment still has some images/networks/volumes and just
+loses one, the group device stays (not empty), nothing fires at the device
+level, and the per-item entity comparison remains the only mechanism that
+notices. Keep both — the redundancy in the full-removal case is real but
+harmless (`entity_registry.async_remove()` is deliberately a no-op on an
+already-gone `entity_id`, per its own docstring, precisely to make
+overlapping cleanup passes like this safe), and removing the per-item logic
+would silently break partial-removal cleanup.
 
 ## 3. Coordinator architecture
 
@@ -768,3 +875,223 @@ about for any future coordinator shape change:**
    about untested ones. Worth deliberately grep'ing for every read of a
    reshaped coordinator's `.data` after a change like this, not just
    trusting that existing tests would have caught a break.
+
+## 9. A successful poll can still contain a failed fetch — `fetch_failures`
+
+Both `DockhandFastCoordinator._fetch()` and `DockhandSlowCoordinator._fetch()`
+gather several independent API calls per poll (fast: containers/stacks/
+container_stats/pending_updates, per environment; slow: schedules and
+environments at the top level, images/networks/volumes/runtime_config/
+git_stacks/auto_update_settings/recent_events/vulnerabilities/host per
+environment) via `asyncio.gather(..., return_exceptions=True)`, so one
+failing call doesn't take down the whole poll — a real, worthwhile
+resilience goal. The bug was in how that resilience used to be
+implemented: `_unwrap()` caught the exception, logged it, and returned an
+empty default (`[]`/`{}`) with no other trace — meaning
+`last_update_success` could be `True` for a poll where one of its own
+sub-fetches genuinely failed, with the empty result looking *exactly* like
+"this environment genuinely has zero images" or "there really are no
+schedules anymore."
+
+**The fast coordinator's containers/stacks fetches were the highest-stakes
+version of this and initially got missed** — found only on a deliberate
+final review specifically hunting for exactly this, after the schedules
+incident that prompted the whole fix had already been closed. Containers
+and stacks are the single most commonly-used entities this integration
+creates; a transient failure fetching either one for an environment that
+otherwise stayed online (dashboard-stats, a separate call, still
+succeeding) used to be able to wipe every container or stack device for
+that environment, the exact same mechanism as the schedules bug, just for
+the data most users interact with the most. If you're extending this
+pattern to a new resource fetch in either coordinator, thread it through
+`_unwrap()`'s `failures`/`key` params the same way — don't assume "it's in
+the slow coordinator" or "it's in the fast coordinator" narrows which one
+needs it; both did.
+
+Entity cleanup (§2) trusts `slow_valid`/`schedules_enabled`/
+`online_env_ids` as its safety signal before treating an empty list as
+grounds for removal — that's precisely the signal `_unwrap`'s silent
+defaulting was corrupting. A transient DNS/network failure fetching
+schedules (or containers, or stacks) would silently become an empty list,
+the poll would still report success, and cleanup would
+correctly-per-its-own-logic (but wrongly, given the underlying cause) treat
+every existing schedule as confirmed-deleted — removing every schedule
+device and, via cascade, every one of its entities. Reported directly: "all
+my schedule entities are gone."
+
+Fixed by having `_unwrap()` optionally record *which* resource failed (a
+`failures: set[str]` collector, threaded through every call site that
+matters), surfaced in each coordinator's data as `fetch_failures` — a
+top-level set for the slow coordinator's schedules/environments, and a
+per-environment set in both coordinators (fast: containers/stacks;
+slow: images/networks/volumes/git_stacks). `_build_live_sets()` in
+`__init__.py` checks this before trusting an empty resource list as
+confirmed-empty:
+`schedules_enabled` now also requires `"schedules" not in top_failures`,
+and four new `*_fetch_ok_env_ids` sets (images/networks/volumes/git_stacks)
+gate the corresponding device- and entity-removal conditions the same way
+— an environment absent from `images_fetch_ok_env_ids`, for instance, means
+"don't trust this environment's absence from `images_group_env_ids` as
+confirmed-empty; the fetch itself failed, this is the same as if the whole
+environment fetch had failed."
+
+**The update coordinator (Tier 2 precise versions) deliberately doesn't use
+`fetch_failures` at all — it never had this bug in the first place.**
+`DockhandUpdateCoordinator._fetch()` uses a different, older strategy for
+the same underlying concern: on a per-environment failure, it explicitly
+keeps whatever data it already had for that environment
+(`_coordinator_env(self.data, env_id)`) rather than defaulting to empty —
+see its own `_fetch_env_resilient`'s comment. That sidesteps the false-
+empty problem by construction, and predates this session's fix. It also
+doesn't need to, since Tier 2 data is purely additive to the update
+platform (see update.py's own module docstring) — entity *existence* is
+entirely Tier 1/fast-coordinator-derived, Tier 2 only ever layers extra
+attribute detail onto entities that already exist for other reasons, so
+even a genuinely-empty Tier 2 result for one poll couldn't trigger
+wrongful cleanup regardless of how it got that way.
+
+**Two different failure modes, from the same root cause.** Schedules, images,
+networks, volumes, and git_stacks directly determine entity/device
+*existence* via cleanup — a swallowed failure there risks wrongful deletion,
+which is what `*_fetch_ok_env_ids` above exists to prevent. The other
+resources `_unwrap` also tracks failures for (`runtime_config`,
+`vulnerabilities`, `host`, `auto_update_settings`, `recent_events`) only
+ever feed *displayed values* on entities whose existence is gated by
+fast-coordinator data instead (confirmed by grep: none of those five keys
+appear anywhere in `_cleanup_stale_registry`'s removal conditions) — a
+swallowed failure there doesn't delete anything, it produces a
+stale/wrong-looking value (e.g. a vulnerability count reading 0 when the
+real answer is unknown) on an entity that still exists. Same root confusion
+between "empty" and "unknown," different symptom — handled differently,
+not left half-fixed:
+
+- **`BaseSlowEnvSensor._fetch_failure_key`** (sensor.py) — subclasses whose
+  value depends on one of these resources declare which one via this class
+  attribute; the shared `available` property checks `fetch_failures` for
+  it automatically. Set on `DockhandEnvVulnerabilitiesSensor`
+  (`"vulnerabilities"`) and `BaseSlowEnvHostSensor`/
+  `DockhandEnvHawserVersionSensor` (`"host"`). The runtime-control number/
+  select entities and the auto-update switch aren't `BaseSlowEnvSensor`
+  subclasses (different platforms), so they each check
+  `fetch_failures` directly in their own `available` property instead —
+  same idea, no shared base class to hang it on across `number.py`/
+  `select.py`/`switch.py`.
+- **`recent_events` is the one exception, deliberately not gated on
+  `available`** — `DockhandEnvActivityEventsSensor`'s state (today/total
+  event counts) is fast-coordinator-derived and stays valid even when this
+  one slow-coordinator attribute's fetch fails; marking the whole entity
+  unavailable would wrongly hide a still-good state along with one stale
+  attribute. Instead just that attribute reports `None` (not `[]`) when its
+  fetch failed — HA has no concept of "this one attribute is unavailable,"
+  so absence-via-`None` is the closest equivalent, distinguishable from a
+  genuinely-empty list the same way `available=False` distinguishes a
+  whole failed entity from a genuinely-empty one.
+
+**Discoverability: `_sync_fetch_issues()`.** `_unwrap()` logging a warning
+isn't much good if nobody's watching the log — the actual reported gap
+that prompted this: entities going unavailable with no obvious place to
+find out why. `DockhandSlowCoordinator._async_update_data()` calls
+`_sync_fetch_issues()` after every fetch, which creates a HA Repair issue
+(Settings → System → Repairs) for each thing currently failing and deletes
+it the moment that thing succeeds again — one issue for top-level failures
+(`{entry_id}_fetch_failed_top_level`), one per affected environment
+(`{entry_id}_fetch_failed_env_{env_id}`), each listing every
+currently-failing resource for that scope in its own description rather
+than one issue per resource per environment (which could mean up to 9
+issues per environment during a broad outage — a wall of near-identical
+issues is a worse diagnostic tool than one that says everything at once).
+No-ops silently if `self.config_entry` is `None` (only true in tests that
+construct the coordinator without one) — nothing meaningful to attach
+issue tracking to in that case.
+
+**The entity-recreation half of this same incident.** The `_unwrap` fix
+above stops a swallowed fetch failure from *causing* wrongful cleanup, but
+a separate, more severe bug meant that even a correctly-triggered removal
+(or an incorrectly-triggered one, before this session's fix) could
+permanently orphan an entity: every platform's dynamic entity-creation
+logic used to gate on an in-memory "known ids" set — sensor.py alone had
+ten of these (`known_*_ids`); `binary_sensor.py`, `button.py`, `number.py`,
+and `select.py` each had their own too — populated the first time an ID
+was seen and never cleared. `update.py` had the identical bug under a
+*different* variable name (`seen`, not `known_*`) — missed by the first
+pass specifically because it went looking for `known_*_ids` by name rather
+than the pattern itself, and only found on a later, deliberate review.
+Worth remembering if this ever needs auditing again: grep for the
+*shape* ("a `set()` populated once, checked before creating an entity,
+never cleared"), not a specific naming convention — a bug fixed under one
+name doesn't mean every instance of it uses that name.
+
+A device would correctly reappear after removal
+(`registry.async_get_or_create()` is idempotent, doesn't care about any
+local tracking), but its entity never would, since the "known ids" set
+still remembered it from before — until an HA restart, the only thing
+that ever reset those sets.
+
+**The first fix attempt made this considerably worse, and is worth
+understanding precisely so it doesn't happen again.** It replaced every
+`known_*_ids` set with a check against the *real* HA entity registry
+(`ent_registry.async_get_entity_id(...)`), reasoning that checking the
+actual current state directly would be self-correcting — no separate
+cache to keep in sync at all. That reasoning had a real flaw: the entity
+registry is *deliberately* persistent across reloads and restarts (that's
+what lets a renamed/customized entity keep its identity) — but the live
+Python object backing an entity is not, and has to be freshly constructed
+and handed to `async_add_entities()` on *every* `async_setup_entry` call,
+reload or not, regardless of what the registry already remembers. The
+registry check answered "did this unique_id ever exist," not "is a live
+object backing it right now" — and after any reload, the honest answer to
+that second question is "no" for literally everything, while the registry
+happily said "yes, already registered" for all of it too. The result:
+every entity in the integration looked permanently "already handled"
+after the very first setup, and nothing after that ever got its live
+object reattached again — not even across a restart, which is a
+materially *worse* failure mode than the bug being fixed, which at least
+self-healed on the next reload or restart. Caught during pre-release
+testing (all entities went unavailable, no errors anywhere — confirmed via
+diagnostics that every coordinator was reporting success with real,
+current data; the entities simply had nothing live behind them), not
+after a real release.
+
+**The actual fix**: `entry.runtime_data` gained a `known_entity_ids: set[str]`
+field (see `__init__.py`'s `DockhandData`), created fresh every time
+`async_setup_entry` runs — the same freshness a bare local `known_ids`
+variable inside a platform's own `async_setup_entry` always had, just
+consolidated into `helpers.py`'s `already_registered(hass, known_ids,
+domain, unique_id)` instead of duplicated per file. This restores the
+self-healing-on-reload property the original bug always had, while still
+avoiding a fifth-plus copy of the same local variable.
+
+That alone doesn't close the narrower case that motivated looking at the
+registry in the first place: if an entity is removed and its data
+genuinely comes back within the *same* session (no reload in between), a
+bare local set has no way to find out — it only ever grows. Closed with a
+second, narrowly-scoped check: on a cache *hit* (this session already
+added the id), `already_registered()` also confirms the entity is still
+actually in the real registry before trusting that, and if it isn't
+(`_cleanup_stale_registry` removed it sometime since), forgets it and
+returns "not registered" so the caller creates it fresh. Deliberately not
+the same mistake as the registry-based rewrite above: that version used
+the registry as the *primary* signal for everything, including entities
+this session never touched at all, which is what let a persistent store
+answer a question about live, in-session state. This version only ever
+consults the registry to confirm something *this session itself already
+added* — a cheap, bounded check (one lookup per cache hit, none at all on
+the common case of a genuinely new entity) that can only narrow an answer
+already scoped to the current session, never widen it back into
+cross-session territory.
+
+Confirmed (by grep, not assumption) that every platform file with
+`async_setup_entry` uses `already_registered()` with the session-scoped
+set — `binary_sensor.py`, `button.py`, `number.py`, `select.py`,
+`sensor.py`, `switch.py`, `update.py`, no exceptions left.
+
+**The Stacks group device (`env_{id}_Stacks`) had no cleanup condition at
+all**, unlike every other group device (Containers/Images/Networks/
+Volumes/Schedules) — unrelated to `fetch_failures` itself (nothing was
+being wrongly deleted; the opposite problem, an empty device that should
+have been removed just never was), found on the same review pass and
+fixed the same way: `stacks_group_env_ids` + `stacks_fetch_ok_env_ids`
+gating, mirroring the Containers group device's own condition exactly
+(both lack a config toggle to turn the feature off entirely, unlike
+Images/Networks/Volumes, so both only ever have the "confirmed empty"
+case to check, not an "explicitly disabled" one too).

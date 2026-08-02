@@ -104,6 +104,27 @@ will outlive its relevance). Before adding a comment, ask: would someone
 competent in Python/Home Assistant need this to understand the code, or
 is it documenting the journey to get here?
 
+**Don't duplicate logic across platform files — extract it to `helpers.py`
+instead, even for something small.** Six platform files
+(`sensor.py`/`binary_sensor.py`/`button.py`/`number.py`/`select.py`/
+`switch.py`/`update.py`) each having their own small per-container/
+per-stack lookup, their own copy of an entity-registry "have I already
+created this" check, etc. is exactly how a real bug shipped in 1.9.0: one
+copy of the same idea quietly drifted from the others (different variable
+name, then different implementation entirely), so a fix applied to the
+"obvious" copies missed it. `helpers.py` already has real precedent for
+this — `_coordinator_env()` itself replaced two near-identical
+`_fast_env`/`_slow_env` functions for the same reason (see its own
+docstring), and `already_registered()`/`_find_container()`/`_find_stack()`
+are the same move applied again. This isn't about naming consistency for
+its own sake — a full pass to make every variable name uniform across the
+codebase would be high-risk churn for low value, and isn't the actual
+fix. It's specifically about *logic* that exists in more than one place:
+if you're about to write a loop/lookup/check that another platform file
+already has a version of, that's the signal to add a shared helper
+instead of a fourth (or eighth) copy, not a naming convention to follow
+more carefully.
+
 ## Building a local test package
 
 To produce a zip for manual testing (e.g. installing on a real Home

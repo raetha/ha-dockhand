@@ -259,6 +259,138 @@ def test_schedules_hub_not_created_when_disabled(hass: HomeAssistant):
     assert "schedules_hub" not in _identifiers(hass, entry)
 
 
+def test_env_scoped_schedule_creates_env_group(hass: HomeAssistant):
+    """A schedule with environmentId set gets its own env's Schedules group,
+    not just the flat hub — see helpers.py's _schedule_group_device."""
+    slow = {
+        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "schedules": [
+            {
+                "id": 5,
+                "type": "container_update",
+                "name": "Update nginx",
+                "environmentId": 1,
+            }
+        ],
+    }
+    entry = _run_register(
+        hass,
+        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data=slow,
+        config_overrides={"enable_schedules": True},
+    )
+    ids = _identifiers(hass, entry)
+    assert "env_1_Schedules" in ids
+    assert "schedule_5_container_update" in ids
+
+
+def test_env_scoped_schedule_device_parented_to_env_group(hass: HomeAssistant):
+    slow = {
+        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "schedules": [
+            {
+                "id": 5,
+                "type": "container_update",
+                "name": "Update nginx",
+                "environmentId": 1,
+            }
+        ],
+    }
+    entry = _run_register(
+        hass,
+        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data=slow,
+        config_overrides={"enable_schedules": True},
+    )
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    sched_dev = next(
+        d for d in devs if ("dockhand", "schedule_5_container_update") in d.identifiers
+    )
+    group_dev = next(
+        d for d in devs if ("dockhand", "env_1_Schedules") in d.identifiers
+    )
+    assert sched_dev.via_device_id == group_dev.id
+
+
+def test_global_schedule_has_no_env_group_and_stays_under_hub(hass: HomeAssistant):
+    """environmentId: None (system_cleanup, repo_prune/check/verify) parents
+    to schedules_hub, and no per-env Schedules group is created for it."""
+    slow = {
+        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "schedules": [
+            {
+                "id": 1,
+                "type": "system_cleanup",
+                "name": "Schedule execution cleanup",
+                "environmentId": None,
+            }
+        ],
+    }
+    entry = _run_register(
+        hass,
+        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data=slow,
+        config_overrides={"enable_schedules": True},
+    )
+    ids = _identifiers(hass, entry)
+    assert "env_1_Schedules" not in ids
+    assert "schedules_hub" in ids
+    assert "schedule_1_system_cleanup" in ids
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    sched_dev = next(
+        d for d in devs if ("dockhand", "schedule_1_system_cleanup") in d.identifiers
+    )
+    hub_dev = next(d for d in devs if ("dockhand", "schedules_hub") in d.identifiers)
+    assert sched_dev.via_device_id == hub_dev.id
+
+
+def test_schedule_device_via_device_consistent_across_repeated_calls(
+    hass: HomeAssistant,
+):
+    """Regression test for the consolidation pattern in ARCHITECTURE.md §0:
+    _ensure_hub_devices() must build schedule DeviceInfo via the same
+    _sched_device() factory the entity's own device_info uses, not duplicate
+    fields inline — otherwise a repeated call could silently revert an
+    env-scoped schedule's via_device back to schedules_hub on the next
+    coordinator update, the same class of bug that hit the stack device's
+    model field once before."""
+    slow = {
+        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "schedules": [
+            {
+                "id": 5,
+                "type": "container_update",
+                "name": "Update nginx",
+                "environmentId": 1,
+            }
+        ],
+    }
+    entry = _run_register(
+        hass,
+        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data=slow,
+        config_overrides={"enable_schedules": True},
+    )
+    fast = _make_fast_coordinator(
+        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
+    )
+    slow_coord = _make_slow_coordinator(slow)
+    _register_devices(
+        hass, entry, fast, slow_coord, dict(entry.data), "http://dh.test:3000"
+    )
+    reg = dr.async_get(hass)
+    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    sched_dev = next(
+        d for d in devs if ("dockhand", "schedule_5_container_update") in d.identifiers
+    )
+    group_dev = next(
+        d for d in devs if ("dockhand", "env_1_Schedules") in d.identifiers
+    )
+    assert sched_dev.via_device_id == group_dev.id
+
+
 def test_empty_fast_data_creates_no_devices(hass: HomeAssistant):
     entry = _run_register(hass, {})
     env_ids = {i for i in _identifiers(hass, entry) if i.startswith("env_")}
@@ -400,6 +532,54 @@ def test_removes_stale_container_when_env_online(hass: HomeAssistant):
     assert not _device_exists(hass, dev.id)
 
 
+def test_preserves_container_when_containers_fetch_specifically_failed(
+    hass: HomeAssistant,
+):
+    """The most severe of this session's findings, reproduced directly:
+    containers == [] with the environment still online looks identical to
+    "every container was genuinely removed" unless fetch_failures says
+    otherwise — see coordinator.py's DockhandFastCoordinator._fetch and
+    docs/ARCHITECTURE.md §9. Container/stack existence is the single
+    most commonly-used data this integration has; a transient DNS/
+    network failure fetching /api/containers used to be able to wipe
+    every container device for an environment that was, in every other
+    respect, perfectly healthy."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [],
+                "stacks": [],
+                "stats": {"online": True},
+                "fetch_failures": {"containers"},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, "container_1_nginx")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
+def test_preserves_stack_when_stacks_fetch_specifically_failed(hass: HomeAssistant):
+    """Same mechanism as the containers case above, for stacks."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [],
+                "stacks": [],
+                "stats": {"online": True},
+                "fetch_failures": {"stacks"},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, "stack_1_myapp")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
 def test_removes_container_when_env_deleted(hass: HomeAssistant):
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
@@ -456,6 +636,65 @@ def test_removes_containers_group_when_no_freestanding(hass: HomeAssistant):
     assert not _device_exists(hass, dev.id)
 
 
+def test_removes_stacks_group_when_no_stacks(hass: HomeAssistant):
+    """The Stacks group device (env_{id}_Stacks) had no cleanup condition
+    at all until this — an empty, useless group device would linger
+    indefinitely once an environment's last stack was genuinely removed.
+    Found during final review, unrelated to the fetch_failures bugs
+    themselves (nothing was being wrongly deleted here — quite the
+    opposite, this device was never being cleaned up when it legitimately
+    should be), fixed alongside them anyway per explicit request to
+    handle all cleanup-related gaps together for this release."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
+        slow_data={"environments": {}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, "env_1_Stacks")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, dev.id)
+
+
+def test_preserves_stacks_group_when_stacks_exist(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [],
+                "stacks": [{"name": "myapp"}],
+                "stats": {"online": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, "env_1_Stacks")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
+def test_preserves_stacks_group_when_stacks_fetch_specifically_failed(
+    hass: HomeAssistant,
+):
+    """Same mechanism as the individual stack device version of this test
+    above — the group device needs the identical stacks_fetch_ok_env_ids
+    gating, not just the individual stack devices/entities."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [],
+                "stacks": [],
+                "stats": {"online": True},
+                "fetch_failures": {"stacks"},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, "env_1_Stacks")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
 def test_removes_stale_schedule_device(hass: HomeAssistant):
     entry = _make_entry(hass, data={"enable_schedules": True})
     entry.runtime_data = _make_runtime_data(
@@ -478,9 +717,242 @@ def test_preserves_live_schedule_device(hass: HomeAssistant):
     assert _device_exists(hass, dev.id)
 
 
+def test_preserves_schedule_device_when_schedules_fetch_specifically_failed(
+    hass: HomeAssistant,
+):
+    """The actual reported incident, reproduced directly: schedules == []
+    looks identical to "genuinely zero schedules" unless fetch_failures
+    says otherwise. Same slow_data shape as
+    test_removes_stale_schedule_device above — schedules: [] — except
+    this time fetch_failures records that the schedules fetch itself is
+    what produced that empty list, not a real answer. The device must
+    survive here where it wouldn't in that other test; this is the one
+    line of difference that distinguishes a swallowed exception from a
+    real "someone deleted this schedule in Dockhand.\""""
+    entry = _make_entry(hass, data={"enable_schedules": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": []}},
+        slow_data={
+            "environments": {},
+            "schedules": [],
+            "fetch_failures": {"schedules"},
+        },
+    )
+    dev = _add_device(hass, entry, "schedule_99")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
+def test_preserves_image_entities_when_images_fetch_specifically_failed(
+    hass: HomeAssistant,
+):
+    """Same mechanism as the schedules case above, for the per-environment
+    resources (images/networks/volumes/git_stacks) — a specific
+    environment's images fetch failing must not wipe that environment's
+    existing image entities, even though the poll as a whole succeeds and
+    other environments' data (or this same environment's other
+    resources) may be perfectly fine."""
+    entry = _make_entry(hass, data={"enable_images": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
+        slow_data={
+            "environments": {
+                1: {"images": [], "fetch_failures": {"images"}},
+            },
+            "schedules": [],
+        },
+    )
+    ent_registry = er.async_get(hass)
+    entity_entry = ent_registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        f"{entry.entry_id}_1_image_abc123",
+        config_entry=entry,
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert ent_registry.async_get(entity_entry.entity_id) is not None
+
+
+def test_disabling_schedules_removes_hub_env_group_and_child_device(
+    hass: HomeAssistant,
+):
+    """Regression test for a real gap: disabling "Enable schedules" used to
+    remove only schedules_hub. HA's device registry clears via_device_id on
+    removal rather than cascading (confirmed against HA core's
+    device_registry.py), so every individual schedule device — and now each
+    env's Schedules group — needs its own explicit unconditional removal too,
+    not just the top-level hub."""
+    entry = _make_entry(hass, data={"enable_schedules": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={"environments": {1: {}}, "schedules": []},
+    )
+    hub = _add_device(hass, entry, "schedules_hub")
+    group = _add_device(hass, entry, "env_1_Schedules")
+    sched = _add_device(hass, entry, "schedule_5_container_update")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, hub.id)
+    assert not _device_exists(hass, group.id)
+    assert not _device_exists(hass, sched.id)
+
+
+def test_removes_empty_env_schedules_group_when_enabled(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_schedules": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={"environments": {1: {}}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, "env_1_Schedules")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, dev.id)
+
+
+def test_preserves_populated_env_schedules_group(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_schedules": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {}},
+            "schedules": [
+                {
+                    "id": 5,
+                    "type": "container_update",
+                    "name": "Update nginx",
+                    "environmentId": 1,
+                }
+            ],
+        },
+    )
+    dev = _add_device(hass, entry, "env_1_Schedules")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
+def test_removes_images_group_when_disabled(hass: HomeAssistant):
+    """Regression test: previously nothing ever removed Images/Networks/
+    Volumes group devices at all, even when the toggle was off or the
+    resource list was confirmed empty — only their child entities were
+    cleaned up. Same fix applied to Networks/Volumes below."""
+    entry = _make_entry(hass, data={"enable_images": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    dev = _add_device(hass, entry, "env_1_Images")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, dev.id)
+
+
+def test_removes_empty_images_group_when_enabled(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_images": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    dev = _add_device(hass, entry, "env_1_Images")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, dev.id)
+
+
+def test_preserves_populated_images_group_when_enabled(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_images": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {
+                1: {"images": [{"id": "sha256:abc"}], "networks": [], "volumes": []}
+            },
+            "schedules": [],
+        },
+    )
+    dev = _add_device(hass, entry, "env_1_Images")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
+def test_removes_networks_group_when_disabled(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_networks": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    dev = _add_device(hass, entry, "env_1_Networks")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, dev.id)
+
+
+def test_removes_volumes_group_when_disabled(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_volumes": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    dev = _add_device(hass, entry, "env_1_Volumes")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, dev.id)
+
+
+def test_preserves_images_group_during_slow_poll_failure(hass: HomeAssistant):
+    """Two-case safety rule: a failed slow poll must never be mistaken for
+    "confirmed empty" — the group device must survive."""
+    entry = _make_entry(hass, data={"enable_images": True})
+    rd = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    rd.slow_coordinator.last_update_success = False
+    entry.runtime_data = rd
+    dev = _add_device(hass, entry, "env_1_Images")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
 # ---------------------------------------------------------------------------
 # _cleanup_stale_registry — entity cleanup
 # ---------------------------------------------------------------------------
+
+
+def test_removing_images_group_device_cascades_entity_removal(hass: HomeAssistant):
+    """Confirms the redundancy called out in ARCHITECTURE.md §2 is real and
+    safe: removing a group device (here, Images, because the toggle is off)
+    cascades away entities living on it synchronously, so the entity-registry
+    pass below never even sees them — not "attempts and no-ops", genuinely
+    already gone."""
+    entry = _make_entry(hass, data={"enable_images": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    group_dev = _add_device(hass, entry, "env_1_Images")
+    image_entity = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_image_deadbeef", domain="sensor"
+    )
+    reg = dr.async_get(hass)
+    reg.async_update_device(group_dev.id, add_config_entry_id=entry.entry_id)
+    er.async_get(hass).async_update_entity(
+        image_entity.entity_id, device_id=group_dev.id
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, group_dev.id)
+    assert not _entity_exists(hass, image_entity.entity_id)
 
 
 def test_guard_slow_invalid_skips_entity_cleanup(hass: HomeAssistant):
@@ -672,6 +1144,37 @@ def test_preserves_update_entity_when_container_missing_but_env_offline(
                     "online": False,
                     "updateCheckEnabled": True,
                 },
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_update_nginx")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_preserves_update_entity_when_containers_fetch_specifically_failed(
+    hass: HomeAssistant,
+):
+    """Same mechanism as
+    test_preserves_container_when_containers_fetch_specifically_failed
+    in this file's device-registry tests, but for the entity-registry
+    pass instead — a genuinely separate code path (this uid never reaches
+    device-cascade removal, since update entities live on the container's
+    own device but are tracked independently). Both had to be fixed;
+    this confirms the entity-level half actually is."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [],
+                "stacks": [],
+                "stats": {
+                    "name": "myenv",
+                    "online": True,
+                    "updateCheckEnabled": True,
+                },
+                "fetch_failures": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},

@@ -801,46 +801,48 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     return fast_coord, entry, listeners
 
 
-async def test_setup_entry_creates_entity_for_qualifying_environment():
+async def test_setup_entry_creates_entity_for_qualifying_environment(hass):
     fast_coord, entry, _ = _make_setup_env()
     add_entities = MagicMock()
-    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_called_once()
     created = add_entities.call_args.args[0]
     assert len(created) == 1
     assert created[0]._container_name == CONTAINER_NAME
 
 
-async def test_setup_entry_skips_non_qualifying_environment():
+async def test_setup_entry_skips_non_qualifying_environment(hass):
     fast_coord, entry, _ = _make_setup_env(update_check_enabled=False)
     add_entities = MagicMock()
-    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_not_called()
 
 
-async def test_setup_entry_skips_everything_when_update_entities_disabled():
+async def test_setup_entry_skips_everything_when_update_entities_disabled(hass):
     """CONF_ENABLE_UPDATE_ENTITIES off must skip entity creation entirely,
     even for an otherwise-qualifying environment/container — this is the
     platform-level gate added for github.com/raetha/ha-dockhand/issues/23."""
     fast_coord, entry, _ = _make_setup_env(options={CONF_ENABLE_UPDATE_ENTITIES: False})
     add_entities = MagicMock()
-    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_not_called()
 
 
-async def test_setup_entry_creates_entities_when_update_entities_explicitly_enabled():
+async def test_setup_entry_creates_entities_when_update_entities_explicitly_enabled(
+    hass,
+):
     fast_coord, entry, _ = _make_setup_env(options={CONF_ENABLE_UPDATE_ENTITIES: True})
     add_entities = MagicMock()
-    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_called_once()
 
 
-async def test_setup_entry_creates_entity_when_update_check_enabled_later():
+async def test_setup_entry_creates_entity_when_update_check_enabled_later(hass):
     """Turning on update-check for an environment (in Dockhand) creates
     entities on the next poll, without needing a reload."""
     fast_coord, entry, listeners = _make_setup_env(update_check_enabled=False)
     add_entities = MagicMock()
-    await async_setup_entry(_make_hass_mock(), entry, add_entities)
+    await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_not_called()
 
     # Simulate the next fast-coordinator poll after update-check was
@@ -851,6 +853,104 @@ async def test_setup_entry_creates_entity_when_update_check_enabled_later():
     add_entities.assert_called_once()
     created = add_entities.call_args.args[0]
     assert len(created) == 1
+
+
+async def test_entity_not_duplicated_within_the_same_session(hass):
+    """Within one continuous setup call's known_entity_ids, calling the
+    dynamic entity-creation path again with the same data must not try to
+    recreate what's already been added this session. See
+    test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it
+    below for the other half of this — and for why checking the real
+    entity registry instead of a session-scoped set (which is what
+    update.py's own 'seen' set was replaced with, alongside every other
+    platform's equivalent) was actually wrong, not just differently
+    named, the bug this whole file's own history already covers. Seeds
+    the registry directly between the two calls to stand in for what a
+    real (not mocked) add_entities call would have done as a side effect
+    of the first one — already_registered() now re-confirms a cache hit
+    is still actually registered, so without this the mock's lack of
+    real side effects would make the second call look like the entity
+    had vanished."""
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    fast_coord, entry, _ = _make_setup_env()
+    mock_entry = MockConfigEntry(domain="dockhand", entry_id=ENTRY_ID, title="test")
+    mock_entry.add_to_hass(hass)
+    entry.entry_id = mock_entry.entry_id
+    entry.runtime_data.known_entity_ids = set()
+    ent_registry = er.async_get(hass)
+    uid = f"{ENTRY_ID}_{ENV_ID}_update_{CONTAINER_NAME}"
+
+    await async_setup_entry(hass, entry, MagicMock())
+    ent_registry.async_get_or_create("update", "dockhand", uid, config_entry=mock_entry)
+
+    add_entities_again = MagicMock()
+    await async_setup_entry(hass, entry, add_entities_again)
+    add_entities_again.assert_not_called()
+
+
+async def test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it(
+    hass,
+):
+    """The actual regression this guards, and the one that shipped
+    briefly during development before being caught: entity creation must
+    never be gated on the real entity registry remembering a unique_id
+    from a *previous* session — the registry is deliberately persistent
+    across reloads and restarts, but the live entity object backing it is
+    not, and has to be freshly constructed and handed to
+    async_add_entities() on every single async_setup_entry call. Seed the
+    registry (simulating a previous session having created this), but
+    deliberately leave known_entity_ids alone (a fresh, empty one — as it
+    would genuinely be on a new session) and confirm it still gets
+    recreated regardless of what the registry remembers."""
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    fast_coord, entry, _ = _make_setup_env()
+    mock_entry = MockConfigEntry(domain="dockhand", entry_id=ENTRY_ID, title="test")
+    mock_entry.add_to_hass(hass)
+    entry.entry_id = mock_entry.entry_id
+    ent_registry = er.async_get(hass)
+    uid = f"{ENTRY_ID}_{ENV_ID}_update_{CONTAINER_NAME}"
+
+    ent_registry.async_get_or_create("update", "dockhand", uid, config_entry=mock_entry)
+    assert ent_registry.async_get_entity_id("update", "dockhand", uid) is not None
+
+    add_entities = MagicMock()
+    await async_setup_entry(hass, entry, add_entities)
+    add_entities.assert_called_once()
+    assert len(add_entities.call_args.args[0]) == 1
+
+
+async def test_entity_recreated_within_the_same_session_if_removed(hass):
+    """The actual capability already_registered()'s re-verification
+    exists for: an entity removed mid-session must come back on the very
+    next poll where its data is confirmed present again, not just on the
+    next reload/restart. See test_entities.py's identical test for the
+    full reasoning — this is the same mechanism, exercised here since
+    update.py had its own separate bug (a differently-named 'seen' set)
+    that made it worth explicit coverage in this file too."""
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    fast_coord, entry, _ = _make_setup_env()
+    mock_entry = MockConfigEntry(domain="dockhand", entry_id=ENTRY_ID, title="test")
+    mock_entry.add_to_hass(hass)
+    entry.entry_id = mock_entry.entry_id
+    ent_registry = er.async_get(hass)
+    uid = f"{ENTRY_ID}_{ENV_ID}_update_{CONTAINER_NAME}"
+
+    await async_setup_entry(hass, entry, MagicMock())
+    entity_entry = ent_registry.async_get_or_create(
+        "update", "dockhand", uid, config_entry=mock_entry
+    )
+    ent_registry.async_remove(entity_entry.entity_id)
+
+    add_entities_after_removal = MagicMock()
+    await async_setup_entry(hass, entry, add_entities_after_removal)
+    add_entities_after_removal.assert_called_once()
+    assert len(add_entities_after_removal.call_args.args[0]) == 1
 
 
 # Note: removal when updateCheckEnabled turns off, or a container

@@ -8,7 +8,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.api import DockhandAuthError, DockhandClient
 from custom_components.dockhand.coordinator import (
@@ -441,12 +443,19 @@ async def test_slow_host_info_fetched_and_stored(hass: HomeAssistant):
 
 async def test_slow_host_info_failure_returns_empty_dict(hass: HomeAssistant):
     """A failed /api/host call shouldn't take down the whole slow poll —
-    the hawser version sensor falls back to /api/environments itself."""
+    the hawser version sensor falls back to /api/environments itself.
+    Also must be recorded in fetch_failures (not just silently defaulted
+    to empty) so cleanup logic downstream can tell "host info genuinely
+    empty" apart from "host info fetch failed" — see _unwrap's own doc
+    comment. host itself doesn't currently drive any cleanup decision,
+    but the tracking is unconditional across every resource this
+    coordinator fetches, not scoped only to the ones that do today."""
     client = _make_client(envs=[ENV1])
     client.async_get_host_info = AsyncMock(side_effect=Exception("timeout"))
     coord = _slow(hass, client)
     await coord.async_refresh()
     assert coord.data["environments"][1]["host"] == {}
+    assert "host" in coord.data["environments"][1]["fetch_failures"]
 
 
 async def test_slow_runtime_controls_disabled_by_default(hass: HomeAssistant):
@@ -658,11 +667,57 @@ async def test_slow_vulnerabilities_malformed_response_defaults_to_empty_dict(
 
 
 async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
+    """The real bug this whole file's _unwrap tracking exists for: a
+    failed images fetch (DNS failure, timeout, 5xx — anything) must not
+    look identical to "this environment genuinely has zero images." Both
+    conditions previously produced images == [] with no way to tell them
+    apart; fetch_failures is what makes that distinction visible to
+    downstream cleanup logic (__init__.py's _build_live_sets)."""
     client = _make_client(envs=[ENV1])
     client.async_get_images = AsyncMock(side_effect=Exception("timeout"))
     coord = _slow(hass, client)
     await coord.async_refresh()
     assert coord.data["environments"][1]["images"] == []
+    assert "images" in coord.data["environments"][1]["fetch_failures"]
+
+
+async def test_slow_schedules_api_failure_recorded_not_silently_empty(
+    hass: HomeAssistant,
+):
+    """The actual reported incident: a transient schedules-fetch failure
+    (the report's own suspicion: DNS resolution failing intermittently)
+    used to become schedules: [] with the coordinator still reporting
+    success — indistinguishable from "there really are zero schedules
+    now" — which caused every existing schedule device and its entities
+    to be wrongly treated as confirmed-deleted by cleanup. This is the
+    top-level fetch_failures set (schedules is fetched once, not
+    per-environment, unlike images/networks/volumes above)."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_schedules = AsyncMock(
+        side_effect=Exception("Name or service not known")
+    )
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["schedules"] == []
+    assert "schedules" in coord.data["fetch_failures"]
+    # The poll as a whole still succeeds — that's the point. Only the one
+    # sub-fetch that actually failed is marked as such; the rest of the
+    # poll's data (this environment's images/networks/etc., assuming
+    # those succeeded) is still trustworthy and shouldn't be thrown away
+    # over an unrelated failure.
+    assert coord.last_update_success is True
+
+
+async def test_slow_fetch_failures_empty_on_full_success(hass: HomeAssistant):
+    """The other half of the same guarantee: a genuinely successful poll
+    with genuinely empty results must NOT be marked as failed — otherwise
+    cleanup would never trust anything as confirmed-empty, and stale
+    entities would never get cleaned up at all."""
+    client = _make_client(envs=[ENV1])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["fetch_failures"] == set()
+    assert coord.data["environments"][1]["fetch_failures"] == set()
 
 
 async def test_slow_auth_error_raises_update_failed_with_message(hass: HomeAssistant):
@@ -799,3 +854,104 @@ async def test_async_check_environment_marks_coordinator_successful(
     coord = _update_coord(hass, client)
     await coord.async_check_environment(1)
     assert coord.last_update_success is True
+
+
+# ---------------------------------------------------------------------------
+# _sync_fetch_issues — HA Repair issues for fetch failures
+# ---------------------------------------------------------------------------
+
+
+def _slow_with_entry(
+    hass: HomeAssistant, client, config=None
+) -> DockhandSlowCoordinator:
+    """Same as _slow() above, but with a real, registered config entry —
+    needed here specifically because _sync_fetch_issues silently no-ops
+    without one (see its own doc comment: nothing meaningful to attach
+    issue tracking to in that case). Every other test in this file
+    doesn't need this, since none of them exercise issue creation."""
+    entry = MockConfigEntry(domain="dockhand", title="test")
+    entry.add_to_hass(hass)
+    fast_coordinator = MagicMock()
+    fast_coordinator.data = {"environments": {1: {"stats": {"name": "local"}}}}
+    coord = DockhandSlowCoordinator(
+        hass,
+        client,
+        config
+        or {
+            "poll_interval_slow": 300,
+            "enable_images": True,
+            "enable_schedules": True,
+        },
+        fast_coordinator,
+        entry=entry,
+    )
+    return coord
+
+
+async def test_sync_creates_issue_for_top_level_fetch_failure(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    client.async_get_schedules = AsyncMock(side_effect=Exception("timeout"))
+    coord = _slow_with_entry(hass, client)
+    await coord.async_refresh()
+
+    issue = ir.async_get(hass).async_get_issue(
+        "dockhand", f"{coord.config_entry.entry_id}_fetch_failed_top_level_slow"
+    )
+    assert issue is not None
+    assert issue.translation_key == "fetch_failed_top_level"
+    assert issue.translation_placeholders == {"resources": "schedules"}
+
+
+async def test_sync_clears_top_level_issue_once_fetch_recovers(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    client.async_get_schedules = AsyncMock(side_effect=Exception("timeout"))
+    coord = _slow_with_entry(hass, client)
+    await coord.async_refresh()
+    issue_id = f"{coord.config_entry.entry_id}_fetch_failed_top_level_slow"
+    assert ir.async_get(hass).async_get_issue("dockhand", issue_id) is not None
+
+    # Recovery: the same call now succeeds.
+    client.async_get_schedules = AsyncMock(return_value=[])
+    await coord.async_refresh()
+    assert ir.async_get(hass).async_get_issue("dockhand", issue_id) is None
+
+
+async def test_sync_creates_issue_for_per_environment_fetch_failure(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_images = AsyncMock(side_effect=Exception("connection refused"))
+    coord = _slow_with_entry(hass, client)
+    await coord.async_refresh()
+
+    issue_id = f"{coord.config_entry.entry_id}_fetch_failed_env_1_slow"
+    issue = ir.async_get(hass).async_get_issue("dockhand", issue_id)
+    assert issue is not None
+    assert issue.translation_key == "fetch_failed_env"
+    assert issue.translation_placeholders["env_name"] == "local"
+    assert issue.translation_placeholders["resources"] == "images"
+
+
+async def test_sync_clears_per_environment_issue_once_fetch_recovers(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_images = AsyncMock(side_effect=Exception("connection refused"))
+    coord = _slow_with_entry(hass, client)
+    await coord.async_refresh()
+    issue_id = f"{coord.config_entry.entry_id}_fetch_failed_env_1_slow"
+    assert ir.async_get(hass).async_get_issue("dockhand", issue_id) is not None
+
+    client.async_get_images = AsyncMock(return_value=[])
+    await coord.async_refresh()
+    assert ir.async_get(hass).async_get_issue("dockhand", issue_id) is None
+
+
+async def test_sync_creates_no_issues_on_a_fully_successful_poll(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1])
+    coord = _slow_with_entry(hass, client)
+    await coord.async_refresh()
+
+    all_issues = ir.async_get(hass).issues
+    dockhand_issues = [k for k in all_issues if k[0] == "dockhand"]
+    assert dockhand_issues == []

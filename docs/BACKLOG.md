@@ -7,6 +7,29 @@ the reasoning first and only revisit if the stated condition has changed.
 
 ## Deferred
 
+- **Proper destination-level device grouping for `repo_prune`/`repo_check`/
+  `repo_verify` schedule types.** Discovered during the 1.9.0 Schedules
+  device-hierarchy work by reading Dockhand's actual `/api/schedules` source
+  (`Finsys/dockhand`, currently 1.0.39 — two patch releases ahead of the
+  1.0.37 this integration was last fully reviewed against). These are backup
+  *destination*-scoped maintenance jobs (prune/check/verify policies on a
+  configured backup destination), not environment-scoped and not truly
+  "system" either (`isSystem: false`, but `environmentId: null` — a third
+  bucket distinct from both env-scoped schedules and genuine system jobs
+  like `system_cleanup`). Not yet seen in a live Dockhand instance (no
+  backup destinations configured at review time), so unconfirmed whether
+  they're commonly used. For 1.9.0 they're handled safely but generically —
+  `environmentId: null` routes them to the flat `schedules_hub` alongside
+  real system jobs, same as before this rework, just without a dedicated
+  "Destinations" grouping of their own. Revisit if/when backup destinations
+  with these policies show up in practice and a dedicated group device
+  (`_destination_group_device`, parented directly under the hub rather than
+  an environment) seems worth the added complexity. The `backup` schedule
+  type (destination-linked but genuinely environment-scoped via
+  `config.environmentId`) is unaffected — it already groups correctly under
+  its owning environment's Schedules group like any other env-scoped
+  schedule.
+
 - **Group `enable_update_entities`/`enable_precise_updates`/`poll_interval_updates`
   visually via HA's `section()` helper in the Configure form.** Tried twice in the
   unreleased 1.8.1 dev cycle (once with the three fields' `strings.json` labels

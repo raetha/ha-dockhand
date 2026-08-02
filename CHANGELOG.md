@@ -1,5 +1,129 @@
 # Changelog
 
+## [1.9.0] — 2026-07-30
+
+### Added
+
+- **Environment-scoped Schedules devices.** Schedules tied to a specific environment
+  (container auto-update, git stack sync, environment update check, image prune,
+  backup) now group under that environment's own "Schedules" device, the same way
+  Stacks/Images/Networks/Volumes already do — instead of every schedule sitting flat
+  under the single "Dockhand – Schedules" hub regardless of which environment it
+  belongs to. Each env-scoped schedule device's name is prefixed with that
+  environment's own name too (e.g. "Aurora – Schedules – nightly-backup"), not
+  "Dockhand". Genuinely global schedules (system cleanup jobs, and any
+  destination-level maintenance jobs Dockhand may expose) still live under the hub,
+  keeping the "Dockhand" prefix, since they have no environment to group under. No
+  action needed — existing schedule entities keep their same `entity_id`; only where
+  they show up in the device list (and their device's display name) changes, and it
+  corrects itself automatically on the next reload.
+- The "Next run" schedule sensor now also exposes `name`, `description`, and
+  `is_system` attributes, sourced directly from Dockhand's own schedule data.
+- **A Home Assistant Repair issue (Settings → System → Repairs) now appears whenever
+  Dockhand can't fetch part of its data** — one for schedules/environments-level
+  failures, one per affected environment listing whichever of its own resources
+  (images, networks, volumes, runtime controls, vulnerabilities, etc.) are currently
+  failing to fetch. Previously the only trace of this was a warning logged and easy to
+  miss; existing devices and entities are always left untouched while this is
+  happening (see the Fixed section below), but there was no obvious place to actually
+  go check *why* something looked stale or unavailable. Clears itself automatically
+  the moment a fetch succeeds again — nothing to dismiss or clean up by hand.
+
+### Changed
+
+- **The "Last status" schedule sensor is no longer a diagnostic entity.** It now
+  shows in the main section of a schedule device rather than tucked under
+  "Diagnostic," matching how every other "current status" sensor in this
+  integration is treated (stack status, git stack sync status). It's also now the
+  more complete of the two schedule sensors: alongside its existing execution
+  details, it carries `name`, `description`, `is_system`, `cron_expression`,
+  `enabled`, `environment`, and `schedule_type` — the last four duplicated from
+  "Next run" (which keeps them too, unchanged) rather than moved, so nothing
+  already depending on them there is affected.
+
+### Fixed
+
+- **A transient API failure fetching containers, stacks, schedules, images, networks,
+  volumes, or git stacks could silently look identical to "this is genuinely empty
+  now," causing the corresponding entities and devices to be wrongly removed as
+  confirmed-deleted.** Reported directly: schedule entities disappearing with no
+  clear cause, suspected to follow a DNS resolution failure or similar transient
+  network issue. Root cause: several per-resource fetches were gathered with
+  `return_exceptions=True` and any failure silently defaulted to an empty
+  list/dict, with the overall poll still reporting success — meaning cleanup logic
+  had no way to distinguish "the fetch actually failed" from "there's really
+  nothing here anymore." Fixed by tracking which specific resource failed to
+  fetch each cycle (not just whether the poll as a whole succeeded), and having
+  cleanup logic check that signal before trusting an empty result as grounds for
+  removal — for containers, stacks, schedules, images, networks, volumes, and git
+  stacks (every
+  resource whose data determines entity/device existence via cleanup, not just
+  displayed values on already-existing entities). See `docs/ARCHITECTURE.md` §9.
+- **A device removed by cleanup — correctly or incorrectly — could permanently
+  lose its entities, surviving even a restart.** The device itself would come
+  back correctly (device creation is idempotent), but entity creation was gated
+  by an in-memory "have I already added this" cache that was never cleared when
+  something removed the entity out from under it — so once an ID was ever marked
+  "known," nothing ever tried to recreate it again. Fixed by scoping that cache
+  to the current session (`entry.runtime_data`, reset fresh on every reload or
+  restart) rather than letting it persist indefinitely, and by having it
+  double-check a cache hit is still actually present before trusting it — a
+  device/entity removed during a session reappears correctly the next time its
+  data is confirmed genuinely back, without needing a reload or restart at all.
+  Affects every dynamically-created entity type (containers, stacks, images,
+  networks, volumes, schedules, git stacks, update entities, and the
+  per-environment sensors) — same underlying mechanism, all fixed together. Also
+  fixed one related latent gap this surfaced: turning on "Enable container
+  stats" for a container that already existed before that point would never
+  create its stats sensors until a restart, since they were incorrectly nested
+  inside the container's own already-registered check rather than tracked
+  independently. If you were already missing entities because of the bug above
+  before upgrading, reloading the integration (or restarting Home Assistant)
+  after upgrading will bring them back.
+- **The Stacks group device (the "Stacks" device an environment's individual
+  stack devices live under) had no cleanup path at all** — unlike every other
+  group device (Containers/Images/Networks/Volumes/Schedules), which all do. Not
+  related to the fetch-failure or entity-recreation bugs above — the opposite
+  problem, actually: an empty, no-longer-needed group device just never got
+  removed once an environment's last stack was genuinely deleted. Fixed the same
+  way as the Containers group device it was always meant to mirror.
+- **Disabling "Enable schedules" could leave individual schedule devices behind
+  permanently**, un-parented from the hub that had just been removed, instead of
+  being cleaned up. Existing installs will see these disappear automatically on the
+  next reload after upgrading, if any were left over from before.
+- **The Images/Networks/Volumes group devices had no cleanup path at all** — toggling
+  the corresponding option off correctly removed the individual entities but left an
+  empty, useless group device behind indefinitely. These are now removed correctly,
+  whether the option is off or the resource list is simply confirmed empty.
+- **A swallowed fetch failure for `runtime_config`, `vulnerabilities`, `host`,
+  `auto_update_settings`, or `recent_events` used to show a stale or misleadingly
+  empty value with no indication anything was wrong** — e.g. a vulnerability count
+  reading 0 when the real answer was unknown, or a container's memory limit number
+  showing its last-known value (or nothing at all) indefinitely if that one fetch kept
+  failing. These five don't determine entity/device *existence* the way schedules/
+  images/networks/volumes/git stacks do (nothing gets deleted), so this is the
+  companion fix for the other half of the same root cause: the runtime-control
+  number/select entities, the vulnerabilities and Hawser-agent-version sensors, and
+  the container auto-update switch now correctly report unavailable instead of a
+  possibly-wrong value while their specific data can't be fetched — and the
+  environment activity sensor's `recent_events` attribute reports unknown rather than
+  an empty list, without affecting the sensor's own (unaffected, fast-data-derived)
+  state. See `docs/ARCHITECTURE.md` §9.
+
+### Internal
+
+- **A container/stack lookup-by-name helper was duplicated across seven and four
+  platform files respectively** (`_container()`/`_stack()` in `sensor.py`,
+  `binary_sensor.py`, `button.py`, `number.py`, `select.py`, `switch.py`,
+  `update.py`) — one copy (`update.py`'s) had already drifted to bypass the
+  existing `_coordinator_env()` helper and reimplement its equivalent manually,
+  functionally identical but a real example of exactly the kind of silent
+  divergence that let the entity-recreation bug above go unnoticed in one file
+  while already fixed in the others. Consolidated into `helpers.py`'s new
+  `_find_container()`/`_find_stack()`, same move this file's own `_coordinator_env()`
+  already made once before for the same reason. See `CONTRIBUTING.md`'s Code
+  style section for the resulting guideline.
+
 ## [1.8.2] — 2026-07-28
 
 ### Fixed
