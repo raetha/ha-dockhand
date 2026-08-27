@@ -1,4 +1,4 @@
-[![HACS Badge](https://img.shields.io/badge/HACS-Custom-orange.svg?style=for-the-badge)](https://github.com/hacs/integration)
+[![HACS Badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/default)
 [![Release](https://img.shields.io/github/v/release/raetha/ha-dockhand?style=for-the-badge)](https://github.com/raetha/ha-dockhand/releases)
 [![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/ci.yml?label=validation&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/ci.yml)
 [![Installs](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=blue&label=installs&cacheSeconds=3600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.dockhand.total)](https://analytics.home-assistant.io/custom_integrations.json)
@@ -19,15 +19,12 @@ Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://githu
 
 ### HACS (Recommended)
 
-This integration is not yet in the default HACS catalog. You can add it as a custom repository:
+This integration is available in the default HACS catalog.
 
 1. Open HACS in Home Assistant
 2. Go to **Integrations**
-3. Click the **⋮** menu → **Custom repositories**
-4. Enter the repository URL: `https://github.com/raetha/ha-dockhand`
-5. Set category to **Integration** and click **Add**
-6. Find **Dockhand** in the integration list and install it
-7. Restart Home Assistant
+3. Find **Dockhand** in the integration list and install it
+4. Restart Home Assistant
 
 [![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=raetha&repository=ha-dockhand&category=integration)
 
