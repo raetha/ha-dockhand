@@ -967,7 +967,7 @@ def test_unique_id_format():
 def test_device_info_references_container_device():
     entity = _make_entity()
     identifiers = entity._attr_device_info["identifiers"]
-    assert list(identifiers)[0][1] == f"container_{ENV_ID}_{CONTAINER_NAME}"
+    assert list(identifiers)[0][1] == f"{ENTRY_ID}_container_{ENV_ID}_{CONTAINER_NAME}"
 
 
 def test_has_entity_name():

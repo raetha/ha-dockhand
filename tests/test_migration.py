@@ -26,6 +26,7 @@ from custom_components.dockhand.migration import (
     migrate_1_8_0_container_stats_option,
     migrate_1_8_0_reenable_container_stats_entities,
     migrate_1_8_0_remove_consolidated_disk_sensors,
+    migrate_1_9_0_entry_scoped_device_identifiers,
 )
 
 # ---------------------------------------------------------------------------
@@ -682,3 +683,98 @@ def test_does_not_remove_current_disk_usage_entity(hass: HomeAssistant):
     ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_disk_usage")
     migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
     assert er.async_get(hass).async_get(ent.entity_id) is not None
+
+
+# ---------------------------------------------------------------------------
+# migrate_1_9_0_entry_scoped_device_identifiers
+# ---------------------------------------------------------------------------
+#
+# Pre-1.9.1 device identifiers were bare strings like "env_1", "container_1_nginx",
+# "stack_1_myapp", "schedules_hub", "schedule_5_container_update".  The migration
+# renames them to "{entry_id}_env_1" etc. so multiple Dockhand config entries on
+# the same HA instance no longer collide in the device registry.
+
+
+def test_1_9_0_renames_bare_env_device(hass: HomeAssistant):
+    """A bare 'env_{id}' identifier is renamed to '{entry_id}_env_{id}'."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "env_1")
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"{ENTRY_ID}_env_1") in idents
+    assert (DOMAIN, "env_1") not in idents
+
+
+def test_1_9_0_renames_bare_container_device(hass: HomeAssistant):
+    """A bare 'container_{env_id}_{name}' identifier is prefixed."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "container_1_nginx")
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"{ENTRY_ID}_container_1_nginx") in idents
+    assert (DOMAIN, "container_1_nginx") not in idents
+
+
+def test_1_9_0_renames_bare_stack_device(hass: HomeAssistant):
+    """A bare 'stack_{env_id}_{name}' identifier is prefixed."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "stack_1_myapp")
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"{ENTRY_ID}_stack_1_myapp") in idents
+    assert (DOMAIN, "stack_1_myapp") not in idents
+
+
+def test_1_9_0_renames_bare_schedules_hub(hass: HomeAssistant):
+    """The flat 'schedules_hub' identifier is prefixed."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "schedules_hub")
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"{ENTRY_ID}_schedules_hub") in idents
+    assert (DOMAIN, "schedules_hub") not in idents
+
+
+def test_1_9_0_renames_bare_schedule_device(hass: HomeAssistant):
+    """A bare 'schedule_{key}' identifier is prefixed."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "schedule_5_container_update")
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"{ENTRY_ID}_schedule_5_container_update") in idents
+    assert (DOMAIN, "schedule_5_container_update") not in idents
+
+
+def test_1_9_0_renames_bare_env_group_device(hass: HomeAssistant):
+    """'env_{id}_Containers' and siblings are prefixed."""
+    entry = _make_entry(hass)
+    dev = _add_device(hass, entry, "env_1_Containers")
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, f"{ENTRY_ID}_env_1_Containers") in idents
+    assert (DOMAIN, "env_1_Containers") not in idents
+
+
+def test_1_9_0_skips_already_prefixed_device(hass: HomeAssistant):
+    """Idempotent: a device whose identifier already starts with the entry_id
+    prefix is left unchanged."""
+    entry = _make_entry(hass)
+    prefixed = f"{ENTRY_ID}_env_1"
+    dev = _add_device(hass, entry, prefixed)
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert (DOMAIN, prefixed) in idents
+
+
+def test_1_9_0_skips_device_for_different_domain(hass: HomeAssistant):
+    """A device whose only identifier is for a different domain is untouched."""
+    entry = _make_entry(hass)
+    dev_reg = dr.async_get(hass)
+    dev = dev_reg.async_get_or_create(
+        config_entry_id=entry.entry_id,
+        identifiers={("other_domain", "env_1")},
+    )
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+    idents = _get_device_identifiers(hass, dev.id)
+    assert ("other_domain", "env_1") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_1") not in idents

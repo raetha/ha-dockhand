@@ -16,6 +16,7 @@ Usage:
 Re-run this after bumping DOCKHAND_LAST_REVIEWED (see CONTRIBUTING.md) so the
 reference tracks whatever Dockhand release we last reviewed.
 """
+
 from __future__ import annotations
 
 import re
@@ -72,13 +73,15 @@ def main() -> None:
 
         interfaces = INTERFACE_RE.findall(text)
 
-        entries.append({
-            "path": route_path(routes_root, server_file),
-            "methods": methods,
-            "comment": first_comment,
-            "interfaces": interfaces,
-            "file": str(server_file.relative_to(src_root)),
-        })
+        entries.append(
+            {
+                "path": route_path(routes_root, server_file),
+                "methods": methods,
+                "comment": first_comment,
+                "interfaces": interfaces,
+                "file": str(server_file.relative_to(src_root)),
+            }
+        )
 
     # Group by top-level resource (first path segment).
     groups: dict[str, list[dict]] = {}

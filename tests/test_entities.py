@@ -1443,7 +1443,7 @@ def test_image_containers_using_attribute():
 
 def test_image_device_is_images_group():
     idents = _make_image().device_info.get("identifiers", set())
-    assert (DOMAIN, f"env_{ENV_ID}_Images") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Images") in idents
 
 
 # ===========================================================================
@@ -1488,7 +1488,7 @@ def test_network_name_is_network_name():
 
 def test_network_device_is_networks_group():
     idents = _make_network().device_info.get("identifiers", set())
-    assert (DOMAIN, f"env_{ENV_ID}_Networks") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Networks") in idents
     assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
 
 
@@ -1546,7 +1546,7 @@ def test_volume_name_is_volume_name():
 
 def test_volume_device_is_volumes_group():
     idents = _make_volume().device_info.get("identifiers", set())
-    assert (DOMAIN, f"env_{ENV_ID}_Volumes") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Volumes") in idents
 
 
 # ===========================================================================
@@ -1649,7 +1649,7 @@ def test_schedule_both_sensors_share_device():
 
 def test_schedule_device_is_child_of_hub():
     via = _make_next_run().device_info.get("via_device")
-    assert via == ("dockhand", "schedules_hub")
+    assert via == ("dockhand", f"{ENTRY_ID}_schedules_hub")
 
 
 def test_schedule_device_env_scoped_uses_environment_prefix_and_group():
@@ -1663,7 +1663,7 @@ def test_schedule_device_env_scoped_uses_environment_prefix_and_group():
     sched = {**SCHEDULE, "environmentId": 3, "environmentName": "Aurora"}
     info = _make_next_run(sched).device_info
     assert info.get("name") == "Aurora – Schedules – nightly-backup"
-    assert info.get("via_device") == ("dockhand", "env_3_Schedules")
+    assert info.get("via_device") == ("dockhand", f"{ENTRY_ID}_env_3_Schedules")
 
 
 def test_schedule_last_status_not_diagnostic():
@@ -2234,7 +2234,7 @@ def test_stack_device_helper_name_format():
     """_stack_device() must produce '{env} – Stacks – {name}' (regression guard)."""
     from custom_components.dockhand.helpers import _stack_device
 
-    info = _stack_device(STACK["name"], ENV_ID, ENV_NAME, BASE_URL)
+    info = _stack_device(ENTRY_ID, STACK["name"], ENV_ID, ENV_NAME, BASE_URL)
     assert info["name"] == f"{ENV_NAME} \u2013 Stacks \u2013 {STACK['name']}"
 
 
@@ -2244,7 +2244,7 @@ def test_network_entity_under_group_device():
         _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, NETWORK
     )
     idents = sensor.device_info.get("identifiers", set())
-    assert (DOMAIN, f"env_{ENV_ID}_Networks") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Networks") in idents
     assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
 
 
@@ -2254,7 +2254,7 @@ def test_volume_entity_under_group_device():
         _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, VOLUME
     )
     idents = sensor.device_info.get("identifiers", set())
-    assert (DOMAIN, f"env_{ENV_ID}_Volumes") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Volumes") in idents
 
 
 def test_image_entity_under_group_device():
@@ -2263,7 +2263,7 @@ def test_image_entity_under_group_device():
         _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
     )
     idents = sensor.device_info.get("identifiers", set())
-    assert (DOMAIN, f"env_{ENV_ID}_Images") in idents
+    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Images") in idents
 
 
 # ===========================================================================

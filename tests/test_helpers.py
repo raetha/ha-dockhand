@@ -51,6 +51,8 @@ from custom_components.dockhand.helpers import (
     _volume_url,
 )
 
+ENTRY_ID = "test_helpers_eid"
+
 # ---------------------------------------------------------------------------
 # _section_url and derived helpers
 # ---------------------------------------------------------------------------
@@ -138,29 +140,29 @@ def test_container_url_empty_base_returns_none():
 
 
 def test_env_device_identifier():
-    info = _env_device(1, "myenv", "http://dh.test:3000")
-    assert ("dockhand", "env_1") in info["identifiers"]
+    info = _env_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_env_1") in info["identifiers"]
 
 
 def test_env_device_name():
-    info = _env_device(1, "myenv", "http://dh.test:3000")
+    info = _env_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["name"] == "myenv"
 
 
 def test_env_device_sets_hw_version_from_connection_type():
     info = _env_device(
-        1, "myenv", "http://dh.test:3000", stats={"connectionType": "local"}
+        ENTRY_ID, 1, "myenv", "http://dh.test:3000", stats={"connectionType": "local"}
     )
     assert info["hw_version"] == "local"
 
 
 def test_env_device_no_hw_version_when_stats_missing_connection():
-    info = _env_device(1, "myenv", "http://dh.test:3000", stats={"cpu": 10})
+    info = _env_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000", stats={"cpu": 10})
     assert "hw_version" not in info
 
 
 def test_env_device_no_hw_version_when_no_stats():
-    info = _env_device(1, "myenv", "http://dh.test:3000")
+    info = _env_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert "hw_version" not in info
 
 
@@ -170,31 +172,31 @@ def test_env_device_no_hw_version_when_no_stats():
 
 
 def test_container_device_identifier():
-    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000")
-    assert ("dockhand", "container_1_nginx") in info["identifiers"]
+    info = _container_device(ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_container_1_nginx") in info["identifiers"]
 
 
 def test_container_device_name_format():
-    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000")
+    info = _container_device(ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
     assert info["name"] == "myenv – Containers – nginx"
 
 
 def test_container_device_via_containers_group_when_freestanding():
     info = _container_device(
-        "nginx", 1, "myenv", "http://dh.test:3000", stack_name=None
+        ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000", stack_name=None
     )
-    assert info["via_device"] == ("dockhand", "env_1_Containers")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1_Containers")
 
 
 def test_container_device_via_stack_when_compose():
     info = _container_device(
-        "web", 1, "myenv", "http://dh.test:3000", stack_name="myapp"
+        ENTRY_ID, "web", 1, "myenv", "http://dh.test:3000", stack_name="myapp"
     )
-    assert info["via_device"] == ("dockhand", "stack_1_myapp")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_stack_1_myapp")
 
 
 def test_container_device_configuration_url():
-    info = _container_device("nginx", 1, "myenv", "http://dh.test:3000")
+    info = _container_device(ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/containers"
 
 
@@ -204,18 +206,18 @@ def test_container_device_configuration_url():
 
 
 def test_stack_device_identifier():
-    info = _stack_device("myapp", 1, "myenv", "http://dh.test:3000")
-    assert ("dockhand", "stack_1_myapp") in info["identifiers"]
+    info = _stack_device(ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_stack_1_myapp") in info["identifiers"]
 
 
 def test_stack_device_name_format():
-    info = _stack_device("myapp", 1, "myenv", "http://dh.test:3000")
+    info = _stack_device(ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
     assert info["name"] == "myenv – Stacks – myapp"
 
 
 def test_stack_device_via_stacks_group():
-    info = _stack_device("myapp", 1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", "env_1_Stacks")
+    info = _stack_device(ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1_Stacks")
 
 
 # ---------------------------------------------------------------------------
@@ -224,23 +226,23 @@ def test_stack_device_via_stacks_group():
 
 
 def test_network_group_device_identifier():
-    info = _network_group_device(1, "myenv", "http://dh.test:3000")
-    assert ("dockhand", "env_1_Networks") in info["identifiers"]
+    info = _network_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_env_1_Networks") in info["identifiers"]
 
 
 def test_network_group_device_via_env():
-    info = _network_group_device(1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", "env_1")
+    info = _network_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1")
 
 
 def test_volume_group_device_identifier():
-    info = _volume_group_device(1, "myenv", "http://dh.test:3000")
-    assert ("dockhand", "env_1_Volumes") in info["identifiers"]
+    info = _volume_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_env_1_Volumes") in info["identifiers"]
 
 
 def test_image_group_device_identifier():
-    info = _image_group_device(1, "myenv", "http://dh.test:3000")
-    assert ("dockhand", "env_1_Images") in info["identifiers"]
+    info = _image_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_env_1_Images") in info["identifiers"]
 
 
 # ---------------------------------------------------------------------------
@@ -253,18 +255,18 @@ def test_sched_key_format():
 
 
 def test_sched_device_identifier():
-    info = _sched_device(5, "maintenance", "nightly", "http://dh.test:3000")
-    assert ("dockhand", "schedule_5_maintenance") in info["identifiers"]
+    info = _sched_device(ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000")
+    assert ("dockhand", f"{ENTRY_ID}_schedule_5_maintenance") in info["identifiers"]
 
 
 def test_sched_device_name_format():
-    info = _sched_device(5, "maintenance", "nightly", "http://dh.test:3000")
+    info = _sched_device(ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000")
     assert info["name"] == "Dockhand – Schedules – nightly"
 
 
 def test_sched_device_via_schedules_hub():
-    info = _sched_device(5, "maintenance", "nightly", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", "schedules_hub")
+    info = _sched_device(ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_schedules_hub")
 
 
 def test_sched_device_env_scoped_name_uses_environment_prefix():
@@ -277,6 +279,7 @@ def test_sched_device_env_scoped_name_uses_environment_prefix():
     environment_id/environment_name at all, so this branch had zero
     coverage."""
     info = _sched_device(
+        ENTRY_ID,
         5,
         "container_update",
         "nightly",
@@ -289,6 +292,7 @@ def test_sched_device_env_scoped_name_uses_environment_prefix():
 
 def test_sched_device_env_scoped_via_group_device():
     info = _sched_device(
+        ENTRY_ID,
         5,
         "container_update",
         "nightly",
@@ -296,7 +300,7 @@ def test_sched_device_env_scoped_via_group_device():
         environment_id=3,
         environment_name="Aurora",
     )
-    assert info["via_device"] == ("dockhand", "env_3_Schedules")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_3_Schedules")
 
 
 def test_sched_device_env_scoped_falls_back_when_name_missing():
@@ -307,6 +311,7 @@ def test_sched_device_env_scoped_falls_back_when_name_missing():
     own "Environment {id}" default) rather than silently reverting to the
     "Dockhand" global prefix, which would misrepresent it as unscoped."""
     info = _sched_device(
+        ENTRY_ID,
         5,
         "container_update",
         "nightly",
@@ -517,20 +522,28 @@ def _make_entry(hass):
 
 
 def _device_ids(hass, entry) -> set[str]:
+    """Return bare identifier suffixes (entry_id prefix stripped)."""
     from homeassistant.helpers import device_registry as dr
 
     reg = dr.async_get(hass)
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
-    return {next(iter(d.identifiers))[1] for d in devs}
+    prefix = f"{entry.entry_id}_"
+    result = set()
+    for d in devs:
+        raw = next(iter(d.identifiers))[1]
+        result.add(raw.removeprefix(prefix))
+    return result
 
 
 def _device_by_id_suffix(hass, entry, id_suffix: str):
+    """Find a device by bare identifier suffix (entry_id prefix is added internally)."""
     from homeassistant.helpers import device_registry as dr
 
     reg = dr.async_get(hass)
     devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    full_id = f"{entry.entry_id}_{id_suffix}"
     for d in devs:
-        if next(iter(d.identifiers))[1] == id_suffix:
+        if next(iter(d.identifiers))[1] == full_id:
             return d
     return None
 
@@ -839,42 +852,42 @@ def test_ensure_hub_devices_is_idempotent(hass):
 
 
 def test_network_group_device_configuration_url():
-    info = _network_group_device(1, "myenv", "http://dh.test:3000")
+    info = _network_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/networks"
 
 
 def test_volume_group_device_via_env():
-    info = _volume_group_device(1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", "env_1")
+    info = _volume_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1")
 
 
 def test_volume_group_device_configuration_url():
-    info = _volume_group_device(1, "myenv", "http://dh.test:3000")
+    info = _volume_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/volumes"
 
 
 def test_image_group_device_via_env():
-    info = _image_group_device(1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", "env_1")
+    info = _image_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1")
 
 
 def test_image_group_device_configuration_url():
-    info = _image_group_device(1, "myenv", "http://dh.test:3000")
+    info = _image_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/images"
 
 
 def test_image_group_device_name():
-    info = _image_group_device(2, "prodenv", "http://dh.test:3000")
+    info = _image_group_device(ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
     assert info["name"] == "prodenv \u2013 Images"
 
 
 def test_volume_group_device_name():
-    info = _volume_group_device(2, "prodenv", "http://dh.test:3000")
+    info = _volume_group_device(ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
     assert info["name"] == "prodenv \u2013 Volumes"
 
 
 def test_network_group_device_name():
-    info = _network_group_device(2, "prodenv", "http://dh.test:3000")
+    info = _network_group_device(ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
     assert info["name"] == "prodenv \u2013 Networks"
 
 

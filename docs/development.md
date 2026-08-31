@@ -84,12 +84,18 @@ allowlist (`release-assets.githubusercontent.com`) and takes seconds instead
 of tens of minutes:
 
 ```bash
-pip install uv --break-system-packages
-uv python install 3.14        # fetches a prebuilt 3.14.x, no compiling
+pip install --upgrade uv --break-system-packages   # upgrade from sandbox's stale uv (≥0.12.x needed for 3.14.x)
+uv python install 3.14        # fetches a prebuilt 3.14.x (e.g. 3.14.7), no compiling
 uv venv --python 3.14 .venv
 uv pip install -r requirements_test.txt --python .venv/bin/python
 bash scripts/run_tests.sh --full --venv .venv
 ```
+
+**Important:** The sandbox ships an outdated `uv` (e.g. v0.8.x) at
+`/root/.local/bin/uv` that only resolves `3.14` to a release candidate.
+The `pip install --upgrade uv` step installs a current uv at
+`/usr/local/bin/uv` which takes precedence and fetches the final 3.14.x
+release. Skip this step and you'll get rc2 instead of the real thing.
 
 This gives Claude a real, working Python 3.14.x with PHCC installed, so the
 full pytest suite (not just ruff + AST) can run in-sandbox routinely. Docker

@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.9.1] — 2026-08-31
+
+**ha-dockhand-cards users:** the device identifier format change below requires
+ha-dockhand-cards 1.2.1 or later. Install it before (or immediately after)
+upgrading ha-dockhand to restore card functionality.
+
+### Fixed
+
+- **Device identifier collisions when two Dockhand instances are configured in the same
+  Home Assistant installation** (issue #28). Each Dockhand config entry now scopes its
+  device identifiers with its own `entry_id` prefix (e.g. `env_1` becomes
+  `abc12345-..._env_1`), so two entries that each manage an environment numbered `1`
+  no longer merge into the same device in HA's device registry. This pattern matches
+  how unique entity IDs have been scoped since v1.7.3 — the device identifier side was
+  simply missed at the time.
+
+  A one-time migration runs automatically on upgrade: every device belonging to this
+  config entry that still has the old bare identifier is renamed to the new
+  `{entry_id}_…` form. No action needed; existing devices and their entity_ids are
+  unchanged — only the internal registry key updates.
+
+  The migration runs before device pre-registration in the setup sequence, so
+  the registry is already in the correct state by the time `async_get_or_create`
+  is called — no `DeviceIdentifierCollisionError` on first boot after upgrade.
+
 ## [1.9.0] — 2026-07-30
 
 ### Added
