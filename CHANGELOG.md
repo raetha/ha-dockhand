@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.9.2] — 2026-09-01
+
+### Fixed
+
+- **Transient Dockhand 401 responses no longer immediately trigger a re-authentication
+  prompt** (issue #18). Previously, a single 401 on the fast coordinator's first API
+  call would surface `ConfigEntryAuthFailed` right away — prompting the user to
+  re-enter credentials that hadn't actually changed. The integration now retries up to
+  twice (waiting 5 s then 25 s) before concluding the token is genuinely invalid and
+  surfacing the re-auth dialog. If the token recovers — as it reliably does when the
+  cause is a brief Dockhand restart or Hawser connectivity hiccup rather than a
+  revoked token — the failure is logged and the poll continues normally without
+  disturbing the user. If all three attempts return 401, re-auth is surfaced as before.
+  Non-auth failures (network errors, 5xx, etc.) still propagate immediately and are
+  unaffected by this change.
+
+- **The specific endpoint and response body are now logged when a 401 is received**,
+  making future occurrences easier to diagnose — the log now shows which API call
+  returned 401 and what Dockhand said in the response body, rather than only "token
+  invalid or revoked."
+
 ## [1.9.1] — 2026-08-31
 
 **ha-dockhand-cards users:** the device identifier format change below requires
@@ -951,7 +972,10 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.8.2...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.9.2...HEAD
+[1.9.2]: https://github.com/raetha/ha-dockhand/compare/v1.9.1...v1.9.2
+[1.9.1]: https://github.com/raetha/ha-dockhand/compare/v1.9.0...v1.9.1
+[1.9.0]: https://github.com/raetha/ha-dockhand/compare/v1.8.2...v1.9.0
 [1.8.2]: https://github.com/raetha/ha-dockhand/compare/v1.8.1...v1.8.2
 [1.8.1]: https://github.com/raetha/ha-dockhand/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/raetha/ha-dockhand/compare/v1.7.4...v1.8.0
