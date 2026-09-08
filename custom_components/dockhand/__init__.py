@@ -417,10 +417,16 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                                               Stacks group device is only
                                               valid for these
         containers_fetch_ok_env_ids set[int] — env_ids whose containers fetch
-                                              specifically succeeded this
-                                              cycle (regardless of result).
-                                              Gates every container-derived
-                                              set above (containers, update_uids,
+                                              succeeded this cycle AND whose
+                                              result is trusted as ground truth.
+                                              An env is excluded when the fetch
+                                              raised an exception (fetch_failures)
+                                              OR when stats.containers.total > 0
+                                              but the API returned an empty list
+                                              (Hawser-online / Docker-daemon-down
+                                              scenario — see issue #34). Gates
+                                              every container-derived set above
+                                              (containers, update_uids,
                                               bulk_update_uids, runtime_control_uids,
                                               container_stats_uids,
                                               container_action_uids, health_uids)
@@ -639,7 +645,29 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         }
         update_env_data = update_data.get(env_id)
         if "containers" not in env_failures:
-            containers_fetch_ok_env_ids.add(env_id)
+            # Cross-validate: stats.containers.total > 0 but list empty (HTTP
+            # 200, no exception) is the fingerprint of the Hawser-online /
+            # Docker-daemon-temporarily-unreachable scenario — Hawser proxies
+            # Docker's empty response with a 200 and no error, so _unwrap()
+            # sees a "success" that is actually incomplete data. Trusting that
+            # as "confirmed zero containers" would cause _cleanup_stale_registry
+            # to remove all container devices for this env, then re-add them
+            # ~60 s later when Docker recovers, producing "unique ID already
+            # registered" duplicates (github.com/raetha/ha-dockhand/issues/34).
+            # Only mark the fetch as OK when either: containers were returned
+            # (non-empty list is ground truth) OR stats also confirm zero (env
+            # with genuinely no running containers).
+            stats_containers_total = (stats.get("containers") or {}).get("total", 0)
+            if env_containers or not stats_containers_total:
+                containers_fetch_ok_env_ids.add(env_id)
+            else:
+                _LOGGER.debug(
+                    "Skipping container cleanup for env %d: API returned empty "
+                    "but stats.containers.total=%d — Docker daemon may be "
+                    "temporarily unreachable via Hawser",
+                    env_id,
+                    stats_containers_total,
+                )
             if update_entities_enabled and any(
                 _container_has_pending_update(c, pending_updates, update_env_data)
                 for c in env_containers

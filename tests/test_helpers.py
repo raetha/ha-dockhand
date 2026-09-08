@@ -183,7 +183,7 @@ def mock_dr(monkeypatch):
 
     mock_reg = MagicMock()
 
-    def _get_device(identifiers):
+    def _async_get_device(*, identifiers=None, connections=None):
         key = next(iter(identifiers))[1]
         if key in registry_map:
             dev = MagicMock()
@@ -191,7 +191,7 @@ def mock_dr(monkeypatch):
             return dev
         return None
 
-    mock_reg.async_get_device = _get_device
+    mock_reg.async_get_device = _async_get_device
 
     mock_dr_module = MagicMock()
     mock_dr_module.async_get.return_value = mock_reg
@@ -602,8 +602,7 @@ def _device_ids(hass, entry) -> set[str]:
     """Return bare identifier suffixes (entry_id prefix stripped)."""
     from homeassistant.helpers import device_registry as dr
 
-    reg = dr.async_get(hass)
-    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    devs = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     prefix = f"{entry.entry_id}_"
     result = set()
     for d in devs:
@@ -616,8 +615,7 @@ def _device_by_id_suffix(hass, entry, id_suffix: str):
     """Find a device by bare identifier suffix (entry_id prefix is added internally)."""
     from homeassistant.helpers import device_registry as dr
 
-    reg = dr.async_get(hass)
-    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    devs = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     full_id = f"{entry.entry_id}_{id_suffix}"
     for d in devs:
         if next(iter(d.identifiers))[1] == full_id:
@@ -856,8 +854,7 @@ def test_ensure_env_devices_is_idempotent(hass):
         )
     from homeassistant.helpers import device_registry as dr
 
-    reg = dr.async_get(hass)
-    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    devs = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     ids = [next(iter(d.identifiers))[1] for d in devs]
     assert len(ids) == len(set(ids))  # no duplicates
 
@@ -916,8 +913,7 @@ def test_ensure_hub_devices_is_idempotent(hass):
         )
     from homeassistant.helpers import device_registry as dr
 
-    reg = dr.async_get(hass)
-    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    devs = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     ids = [next(iter(d.identifiers))[1] for d in devs]
     assert len(ids) == len(set(ids))
 
@@ -1002,8 +998,7 @@ def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
         "myenv",
         containers=containers,
     )
-    reg = dr.async_get(hass)
-    devs = reg.devices.get_devices_for_config_entry_id(entry.entry_id)
+    devs = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     ids = {next(iter(d.identifiers))[1] for d in devs}
     assert "env_1_Containers" not in ids
 

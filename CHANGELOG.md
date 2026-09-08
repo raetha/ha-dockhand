@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.9.4] — 2026-09-08
+
+### Fixed
+
+- **Duplicate device / entity errors ~60 s after Docker daemon recovery** (issue #34).
+  When the Hawser agent is online but the Docker daemon is temporarily unreachable,
+  the containers API returns an empty list with HTTP 200 and no fetch exception. The
+  previous logic treated that "silent empty" as confirmed ground truth and removed all
+  container devices for the environment via `_cleanup_stale_registry`; when Docker
+  recovered ~60 s later the devices were re-added, producing
+  `"unique ID … already registered"` errors in the log.
+
+  Fixed with a stats cross-validation gate in `_build_live_sets`: before adding an
+  environment to `containers_fetch_ok_env_ids`, the code now checks whether
+  `stats.containers.total > 0` while the containers list is empty. That combination
+  is the fingerprint of the Hawser-online / Docker-unreachable scenario (a genuinely
+  empty environment has `stats.containers.total == 0` as well). When the mismatch is
+  detected, the environment is excluded from `containers_fetch_ok_env_ids` for that
+  cycle — preventing cleanup — and a DEBUG log entry is emitted. When Docker recovers
+  and the API returns actual containers, the cross-validation passes and normal
+  operation resumes. Environments that truly have no containers (stats confirms zero)
+  are still cleaned up correctly.
+
+### Tests
+
+- Five new tests covering the issue #34 fix: the root-cause Hawser scenario
+  (`stats.total > 0`, containers list empty), entity-level preservation, genuine empty
+  environment (stats confirms zero → cleanup proceeds), missing `containers` stats key,
+  and a non-empty list that overrides any stats mismatch.
+
+- **PHCC bumped to 0.13.363** (tracks HA 2026.7.8). Updated deprecated test-side
+  registry API calls that became hard failures under this release:
+  - `reg.devices.get_devices_for_config_entry_id(…)` → `dr.async_entries_for_config_entry(dr.async_get(hass), …)`
+    in the `_identifiers()` helper (`test_init.py`), two helpers (`_device_ids`,
+    `_device_by_id_suffix`) in `test_helpers.py`, and five inline test functions.
+  - `reg.async_update_device(…, add_config_entry_id=…)` removed from
+    `test_removing_images_group_device_cascades_entity_removal`; devices belong to a
+    single config entry in the new registry model and the call was already redundant.
+  - `mock_dr` fixture updated to mock `async_get_device` (single entry or None return)
+    matching the signature used in production.
+
 ## [1.9.3] — 2026-09-08
 
 ### Fixed

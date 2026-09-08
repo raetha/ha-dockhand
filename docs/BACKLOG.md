@@ -46,11 +46,97 @@ the reasoning first and only revisit if the stated condition has changed.
   using `section()` to copy the exact translation structure from, or some way to
   render/test the actual frontend rather than guessing from source reading.
 
+- **`async_get_device_by_identifier` / `async_get_device` migration
+  (target: 2.0.0, Major — raises HA floor to 2026.8.0).** HA 2026.8
+  deprecated `dr.async_get(hass).async_get_device(identifiers=...)` in
+  favour of two new scoped lookups (announced at
+  https://developers.home-assistant.io/blog/2026/07/21/device-registry-single-config-entry/).
+  The integration is deliberately staying on the old API for 1.x so the
+  HA minimum stays at 2026.3.0, but the old API is marked
+  `breaks_in_ha_version="2027.8.0"` — so the migration **must** land
+  before 2.0.0 ships. Per SEMVER.md, raising the HA floor is a Major
+  change, and per the floor rule, `ha-dockhand-cards` minimum must be
+  raised to match in the same release.
+
+  **Full implementation plan (do not reinvent):**
+
+  1. **`helpers.py` — `_device_entry_id` function.** Change the
+     2-argument signature `(hass, identifier)` to 3 arguments
+     `(hass, identifier, config_entry_id)` and swap the lookup:
+
+     ```python
+     # Before (1.x — deprecated):
+     device = dr.async_get(hass).async_get_device(identifiers={(DOMAIN, identifier)})
+
+     # After (2.0.0 — HA 2026.8+):
+     device = dr.async_get(hass).async_get_device_by_identifier(
+         (DOMAIN, identifier), config_entry_id
+     )
+     ```
+
+     `async_get_device_by_identifier` is O(1) (keyed by `(identifier,
+     config_entry_id)`) and scoped to the config entry, which is
+     semantically correct since every device this integration registers
+     belongs to exactly one config entry.
+
+  2. **All 9 call sites in `helpers.py`** — add `entry_id` (or the
+     relevant `config_entry_id`/`entry.entry_id`) as the third argument.
+     The nine sites are:
+
+     - `_device_entry_id(hass, _device_id_env(entry_id, env_id))` — 6
+       occurrences → `_device_entry_id(hass, _device_id_env(entry_id, env_id), entry_id)`
+     - `_device_entry_id(hass, _device_id_stacks_group(entry_id, env_id))` — 1
+       occurrence → `..., entry_id)`
+     - `_device_entry_id(hass, parent_identifier)` — 2 occurrences →
+       `_device_entry_id(hass, parent_identifier, entry_id)` (the
+       `entry_id` is already in scope at both call sites)
+
+  3. **`tests/test_helpers.py` — `mock_dr` fixture.** Swap the mocked
+     method from `async_get_device` to `async_get_device_by_identifier`.
+     The new API takes a positional `(DOMAIN, identifier)` tuple and a
+     positional `config_entry_id` string (no keyword args); adjust the
+     fixture's inner function accordingly:
+
+     ```python
+     def _async_get_device_by_identifier(identifier_tuple, _config_entry_id=None):
+         key = identifier_tuple[1]          # second element of (DOMAIN, key)
+         if key in registry_map:
+             dev = MagicMock()
+             dev.id = registry_map[key]
+             return dev
+         return None
+
+     mock_reg.async_get_device_by_identifier = _async_get_device_by_identifier
+     ```
+
+  4. **`hacs.json`** — bump `"homeassistant"` from `"2026.3.0"` to
+     `"2026.8.0"`.
+
+  5. **`manifest.json`** — no change needed (no explicit HA version
+     floor declared there).
+
+  6. **Version bump** — `manifest.json` `"version"` from `1.9.x` to
+     `"2.0.0"`. Also update `CHANGELOG.md`.
+
+  7. **`ha-dockhand-cards`** — per SEMVER.md floor rule, update its
+     minimum HA version to 2026.8.0 in the same release.
+
+  8. **`UnitOfRatio.PERCENTAGE`** (see item below) — can be bundled
+     into 2.0.0 at the same time, since that item also requires the HA
+     minimum to be bumped past 2026.7.
+
+  *Why not `async_get_devices` (plural)?* That API was also introduced
+  in HA 2026.8 and returns a *list* of matching devices across all config
+  entries. The singular `async_get_device_by_identifier` is the right
+  choice: scoped to one config entry, single return value, O(1), and an
+  exact semantic match for "find the one device this config entry
+  registered under this identifier."
+
 - **`UnitOfRatio.PERCENTAGE` for percentage sensors.** A newer HA enum
   than what this integration currently targets — requires HA minimum
   bumped past 2026.7. Current minimum is 2026.3; no other reason to bump
-  it has come up yet. Revisit once the minimum moves for an unrelated
-  reason.
+  it has come up yet. Bundle into the 2.0.0 release (see above) once the
+  HA minimum moves for the `async_get_device_by_identifier` migration.
 
 - **Runtime controls: Block I/O (`Blkio*`) fields.** Left out of the
   first pass — low value for home-lab use, and real complexity (per-device
