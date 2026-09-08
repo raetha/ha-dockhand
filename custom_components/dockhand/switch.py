@@ -39,6 +39,7 @@ async def async_setup_entry(
     base_url: str = entry.data.get(CONF_API_URL, "")
 
     known_ids = entry.runtime_data.known_entity_ids
+    pending_readd_ids = entry.runtime_data.pending_readd_entity_ids
 
     def _build_entities() -> list[SwitchEntity]:
         new: list[SwitchEntity] = []
@@ -59,7 +60,11 @@ async def async_setup_entry(
                     container,
                 )
                 if already_registered(
-                    hass, known_ids, "switch", running_switch.unique_id
+                    hass,
+                    known_ids,
+                    "switch",
+                    running_switch.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     continue
                 new.append(running_switch)
@@ -77,7 +82,11 @@ async def async_setup_entry(
                     stack,
                 )
                 if already_registered(
-                    hass, known_ids, "switch", stack_switch.unique_id
+                    hass,
+                    known_ids,
+                    "switch",
+                    stack_switch.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     continue
                 new.append(stack_switch)
@@ -115,7 +124,11 @@ async def async_setup_entry(
                     name,
                 )
                 if already_registered(
-                    hass, known_ids, "switch", auto_update_switch.unique_id
+                    hass,
+                    known_ids,
+                    "switch",
+                    auto_update_switch.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     continue
                 new.append(auto_update_switch)
@@ -138,7 +151,13 @@ async def async_setup_entry(
                     base_url,
                     git_stack,
                 )
-                if already_registered(hass, known_ids, "switch", git_switch.unique_id):
+                if already_registered(
+                    hass,
+                    known_ids,
+                    "switch",
+                    git_switch.unique_id,
+                    pending_readd_ids=pending_readd_ids,
+                ):
                     continue
                 new.append(git_switch)
         return new
@@ -190,6 +209,7 @@ class _BaseFastContainerSwitch(
     def device_info(self) -> DeviceInfo:
         c = self._container()
         return _container_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._container_name,
             self._env_id,
@@ -229,6 +249,7 @@ class _BaseFastStackSwitch(CoordinatorEntity[DockhandFastCoordinator], SwitchEnt
     def device_info(self) -> DeviceInfo:
         s = self._stack()
         return _stack_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._stack_name,
             self._env_id,
@@ -463,6 +484,7 @@ class DockhandContainerAutoUpdateSwitch(
     def device_info(self) -> DeviceInfo:
         c = self._container()
         return _container_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._container_name,
             self._env_id,
@@ -555,6 +577,7 @@ class DockhandGitStackAutoUpdateSwitch(
     @property
     def device_info(self) -> DeviceInfo:
         return _stack_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._stack_name,
             self._env_id,

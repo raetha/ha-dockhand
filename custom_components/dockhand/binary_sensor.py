@@ -36,6 +36,7 @@ async def async_setup_entry(
     base_url: str = entry.data.get(CONF_API_URL, "")
 
     known_ids = entry.runtime_data.known_entity_ids
+    pending_readd_ids = entry.runtime_data.pending_readd_entity_ids
 
     def _build_fast_entities() -> list[BinarySensorEntity]:
         new: list[BinarySensorEntity] = []
@@ -46,7 +47,11 @@ async def async_setup_entry(
                 fast, slow, entry.entry_id, env_id, base_url
             )
             if not already_registered(
-                hass, known_ids, "binary_sensor", online_sensor.unique_id
+                hass,
+                known_ids,
+                "binary_sensor",
+                online_sensor.unique_id,
+                pending_readd_ids=pending_readd_ids,
             ):
                 new += [
                     online_sensor,
@@ -71,7 +76,11 @@ async def async_setup_entry(
                     fast, entry.entry_id, env_id, env_name, base_url, stack
                 )
                 if not already_registered(
-                    hass, known_ids, "binary_sensor", stack_sensor.unique_id
+                    hass,
+                    known_ids,
+                    "binary_sensor",
+                    stack_sensor.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(stack_sensor)
         return new
@@ -88,7 +97,11 @@ async def async_setup_entry(
                 slow, entry.entry_id, env_id, env_name, base_url
             )
             if not already_registered(
-                hass, known_ids, "binary_sensor", image_prune_sensor.unique_id
+                hass,
+                known_ids,
+                "binary_sensor",
+                image_prune_sensor.unique_id,
+                pending_readd_ids=pending_readd_ids,
             ):
                 new.append(image_prune_sensor)
 
@@ -102,7 +115,11 @@ async def async_setup_entry(
                     git_stack,
                 )
                 if not already_registered(
-                    hass, known_ids, "binary_sensor", git_sensor.unique_id
+                    hass,
+                    known_ids,
+                    "binary_sensor",
+                    git_sensor.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(git_sensor)
         return new
@@ -447,6 +464,7 @@ class DockhandStackUpdatesAvailableBinarySensor(
     def device_info(self) -> DeviceInfo:
         s = self._stack()
         return _stack_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._stack_name,
             self._env_id,
@@ -510,6 +528,7 @@ class DockhandGitStackSyncErrorBinarySensor(
     @property
     def device_info(self) -> DeviceInfo:
         return _stack_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._stack_name,
             self._env_id,

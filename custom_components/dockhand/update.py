@@ -200,7 +200,13 @@ async def async_setup_entry(
                     env_name=env_name,
                     container_name=container_name,
                 )
-                if already_registered(hass, known_ids, "update", entity.unique_id):
+                if already_registered(
+                    hass,
+                    known_ids,
+                    "update",
+                    entity.unique_id,
+                    pending_readd_ids=entry.runtime_data.pending_readd_entity_ids,
+                ):
                     continue
                 new_entities.append(entity)
 

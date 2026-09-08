@@ -167,36 +167,90 @@ def test_env_device_no_hw_version_when_no_stats():
 
 
 # ---------------------------------------------------------------------------
+# Fixture: mock device registry for via_device_id tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def mock_dr(monkeypatch):
+    """Patch helpers.dr so _device_entry_id resolves known identifiers to UUIDs.
+
+    Returns (registry_map, mock_hass): populate registry_map with
+    {identifier_string: uuid_string} before calling a factory function
+    with mock_hass as the first argument.
+    """
+    registry_map: dict[str, str] = {}
+
+    mock_reg = MagicMock()
+
+    def _get_device(identifiers):
+        key = next(iter(identifiers))[1]
+        if key in registry_map:
+            dev = MagicMock()
+            dev.id = registry_map[key]
+            return dev
+        return None
+
+    mock_reg.async_get_device = _get_device
+
+    mock_dr_module = MagicMock()
+    mock_dr_module.async_get.return_value = mock_reg
+
+    monkeypatch.setattr("custom_components.dockhand.helpers.dr", mock_dr_module)
+
+    mock_hass = MagicMock()
+    return registry_map, mock_hass
+
+
+# ---------------------------------------------------------------------------
 # _container_device
 # ---------------------------------------------------------------------------
 
 
 def test_container_device_identifier():
-    info = _container_device(ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
+    info = _container_device(None, ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
     assert ("dockhand", f"{ENTRY_ID}_container_1_nginx") in info["identifiers"]
 
 
 def test_container_device_name_format():
-    info = _container_device(ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
+    info = _container_device(None, ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
     assert info["name"] == "myenv – Containers – nginx"
 
 
-def test_container_device_via_containers_group_when_freestanding():
+def test_container_device_via_containers_group_when_freestanding(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-containers-group-001"
+    registry_map[f"{ENTRY_ID}_env_1_Containers"] = parent_uuid
     info = _container_device(
-        ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000", stack_name=None
+        mock_hass, ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000", stack_name=None
     )
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1_Containers")
+    assert info["via_device_id"] == parent_uuid
 
 
-def test_container_device_via_stack_when_compose():
+def test_container_device_via_stack_when_compose(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-stack-myapp-001"
+    registry_map[f"{ENTRY_ID}_stack_1_myapp"] = parent_uuid
     info = _container_device(
-        ENTRY_ID, "web", 1, "myenv", "http://dh.test:3000", stack_name="myapp"
+        mock_hass,
+        ENTRY_ID,
+        "web",
+        1,
+        "myenv",
+        "http://dh.test:3000",
+        stack_name="myapp",
     )
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_stack_1_myapp")
+    assert info["via_device_id"] == parent_uuid
+
+
+def test_container_device_via_device_id_absent_when_parent_not_registered():
+    """When hass is None (unit-test context), via_device_id is not set."""
+    info = _container_device(None, ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
+    assert "via_device_id" not in info
 
 
 def test_container_device_configuration_url():
-    info = _container_device(ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
+    info = _container_device(None, ENTRY_ID, "nginx", 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/containers"
 
 
@@ -206,18 +260,23 @@ def test_container_device_configuration_url():
 
 
 def test_stack_device_identifier():
-    info = _stack_device(ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
+    info = _stack_device(None, ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
     assert ("dockhand", f"{ENTRY_ID}_stack_1_myapp") in info["identifiers"]
 
 
 def test_stack_device_name_format():
-    info = _stack_device(ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
+    info = _stack_device(None, ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
     assert info["name"] == "myenv – Stacks – myapp"
 
 
-def test_stack_device_via_stacks_group():
-    info = _stack_device(ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1_Stacks")
+def test_stack_device_via_stacks_group(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-stacks-group-001"
+    registry_map[f"{ENTRY_ID}_env_1_Stacks"] = parent_uuid
+    info = _stack_device(
+        mock_hass, ENTRY_ID, "myapp", 1, "myenv", "http://dh.test:3000"
+    )
+    assert info["via_device_id"] == parent_uuid
 
 
 # ---------------------------------------------------------------------------
@@ -226,22 +285,25 @@ def test_stack_device_via_stacks_group():
 
 
 def test_network_group_device_identifier():
-    info = _network_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    info = _network_group_device(None, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert ("dockhand", f"{ENTRY_ID}_env_1_Networks") in info["identifiers"]
 
 
-def test_network_group_device_via_env():
-    info = _network_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1")
+def test_network_group_device_via_env(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-env-1-device-001"
+    registry_map[f"{ENTRY_ID}_env_1"] = parent_uuid
+    info = _network_group_device(mock_hass, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert info["via_device_id"] == parent_uuid
 
 
 def test_volume_group_device_identifier():
-    info = _volume_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    info = _volume_group_device(None, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert ("dockhand", f"{ENTRY_ID}_env_1_Volumes") in info["identifiers"]
 
 
 def test_image_group_device_identifier():
-    info = _image_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    info = _image_group_device(None, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert ("dockhand", f"{ENTRY_ID}_env_1_Images") in info["identifiers"]
 
 
@@ -255,18 +317,27 @@ def test_sched_key_format():
 
 
 def test_sched_device_identifier():
-    info = _sched_device(ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000")
+    info = _sched_device(
+        None, ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000"
+    )
     assert ("dockhand", f"{ENTRY_ID}_schedule_5_maintenance") in info["identifiers"]
 
 
 def test_sched_device_name_format():
-    info = _sched_device(ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000")
+    info = _sched_device(
+        None, ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000"
+    )
     assert info["name"] == "Dockhand – Schedules – nightly"
 
 
-def test_sched_device_via_schedules_hub():
-    info = _sched_device(ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_schedules_hub")
+def test_sched_device_via_schedules_hub(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-schedules-hub-001"
+    registry_map[f"{ENTRY_ID}_schedules_hub"] = parent_uuid
+    info = _sched_device(
+        mock_hass, ENTRY_ID, 5, "maintenance", "nightly", "http://dh.test:3000"
+    )
+    assert info["via_device_id"] == parent_uuid
 
 
 def test_sched_device_env_scoped_name_uses_environment_prefix():
@@ -279,6 +350,7 @@ def test_sched_device_env_scoped_name_uses_environment_prefix():
     environment_id/environment_name at all, so this branch had zero
     coverage."""
     info = _sched_device(
+        None,
         ENTRY_ID,
         5,
         "container_update",
@@ -290,8 +362,12 @@ def test_sched_device_env_scoped_name_uses_environment_prefix():
     assert info["name"] == "Aurora – Schedules – nightly"
 
 
-def test_sched_device_env_scoped_via_group_device():
+def test_sched_device_env_scoped_via_group_device(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-env-3-schedules-001"
+    registry_map[f"{ENTRY_ID}_env_3_Schedules"] = parent_uuid
     info = _sched_device(
+        mock_hass,
         ENTRY_ID,
         5,
         "container_update",
@@ -300,7 +376,7 @@ def test_sched_device_env_scoped_via_group_device():
         environment_id=3,
         environment_name="Aurora",
     )
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_3_Schedules")
+    assert info["via_device_id"] == parent_uuid
 
 
 def test_sched_device_env_scoped_falls_back_when_name_missing():
@@ -311,6 +387,7 @@ def test_sched_device_env_scoped_falls_back_when_name_missing():
     own "Environment {id}" default) rather than silently reverting to the
     "Dockhand" global prefix, which would misrepresent it as unscoped."""
     info = _sched_device(
+        None,
         ENTRY_ID,
         5,
         "container_update",
@@ -852,42 +929,48 @@ def test_ensure_hub_devices_is_idempotent(hass):
 
 
 def test_network_group_device_configuration_url():
-    info = _network_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    info = _network_group_device(None, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/networks"
 
 
-def test_volume_group_device_via_env():
-    info = _volume_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1")
+def test_volume_group_device_via_env(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-env-1-device-002"
+    registry_map[f"{ENTRY_ID}_env_1"] = parent_uuid
+    info = _volume_group_device(mock_hass, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert info["via_device_id"] == parent_uuid
 
 
 def test_volume_group_device_configuration_url():
-    info = _volume_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    info = _volume_group_device(None, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/volumes"
 
 
-def test_image_group_device_via_env():
-    info = _image_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
-    assert info["via_device"] == ("dockhand", f"{ENTRY_ID}_env_1")
+def test_image_group_device_via_env(mock_dr):
+    registry_map, mock_hass = mock_dr
+    parent_uuid = "uuid-env-1-device-003"
+    registry_map[f"{ENTRY_ID}_env_1"] = parent_uuid
+    info = _image_group_device(mock_hass, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    assert info["via_device_id"] == parent_uuid
 
 
 def test_image_group_device_configuration_url():
-    info = _image_group_device(ENTRY_ID, 1, "myenv", "http://dh.test:3000")
+    info = _image_group_device(None, ENTRY_ID, 1, "myenv", "http://dh.test:3000")
     assert info["configuration_url"] == "http://dh.test:3000/images"
 
 
 def test_image_group_device_name():
-    info = _image_group_device(ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
+    info = _image_group_device(None, ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
     assert info["name"] == "prodenv \u2013 Images"
 
 
 def test_volume_group_device_name():
-    info = _volume_group_device(ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
+    info = _volume_group_device(None, ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
     assert info["name"] == "prodenv \u2013 Volumes"
 
 
 def test_network_group_device_name():
-    info = _network_group_device(ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
+    info = _network_group_device(None, ENTRY_ID, 2, "prodenv", "http://dh.test:3000")
     assert info["name"] == "prodenv \u2013 Networks"
 
 

@@ -121,6 +121,14 @@ class DockhandData:
     # now," and after any reload the answer to the second question is
     # "no" for everything, regardless of what the registry remembers.
     known_entity_ids: set[str] = field(default_factory=set)
+    # Tracks entities whose re-add has been scheduled via async_add_entities
+    # but whose asyncio task has not yet completed (i.e. the entity is not
+    # yet back in the registry). Prevents duplicate re-add tasks from being
+    # scheduled when the coordinator fires multiple refreshes in quick
+    # succession during the narrow window between "cleanup removed the
+    # registry entry" and "the re-add task finishes." See
+    # helpers.py's already_registered() for the full explanation.
+    pending_readd_entity_ids: set[str] = field(default_factory=set)
 
 
 # Typed config entry alias — used throughout all platform setup functions

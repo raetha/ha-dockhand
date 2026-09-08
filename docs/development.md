@@ -155,3 +155,22 @@ custom_components/dockhand/
 ├── update.py            # Container image update entities
 └── translations/        # One file per language, en.json = strings.json
 ```
+
+## Claude sandbox: packaging and delivery
+
+When delivering changes from the Claude sandbox, always package the **entire
+repo tree** as a zip — not a patch file, not a zip of only `custom_components/`.
+The zip lets the user diff, review, and commit in their own clone.
+
+```bash
+cd /tmp/ha-dockhand
+zip -r /path/to/ha-dockhand-X.Y.Z.zip . \
+  --exclude ".git/*" --exclude ".venv/*" --exclude ".venv-full/*" \
+  --exclude ".venv-sandbox/*" --exclude "__pycache__/*" \
+  --exclude "*.pyc" --exclude ".pytest_cache/*"
+```
+
+Then `SendUserFile` the `.zip`. The user extracts it, compares against their
+clone (e.g. `diff -rq --exclude=".git" repo/ extracted/`), cherry-picks the
+changes, and commits. Always run the full test suite (`bash scripts/run_tests.sh
+--full --venv .venv`) and confirm all checks pass before packaging.

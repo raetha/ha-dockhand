@@ -68,6 +68,7 @@ async def async_setup_entry(
     )
 
     known_ids = entry.runtime_data.known_entity_ids
+    pending_readd_ids = entry.runtime_data.pending_readd_entity_ids
 
     def _build_entities() -> list[ButtonEntity]:
         new: list[ButtonEntity] = []
@@ -94,7 +95,11 @@ async def async_setup_entry(
                 base_url,
             )
             if not already_registered(
-                hass, known_ids, "button", check_updates_button.unique_id
+                hass,
+                known_ids,
+                "button",
+                check_updates_button.unique_id,
+                pending_readd_ids=pending_readd_ids,
             ):
                 new.append(check_updates_button)
 
@@ -142,7 +147,11 @@ async def async_setup_entry(
                     base_url,
                 )
                 if not already_registered(
-                    hass, known_ids, "button", bulk_button.unique_id
+                    hass,
+                    known_ids,
+                    "button",
+                    bulk_button.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(bulk_button)
 
@@ -159,7 +168,11 @@ async def async_setup_entry(
                     container,
                 )
                 if not already_registered(
-                    hass, known_ids, "button", restart_button.unique_id
+                    hass,
+                    known_ids,
+                    "button",
+                    restart_button.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(restart_button)
 
@@ -178,7 +191,11 @@ async def async_setup_entry(
                         stack,
                     )
                     if not already_registered(
-                        hass, known_ids, "button", restart_button.unique_id
+                        hass,
+                        known_ids,
+                        "button",
+                        restart_button.unique_id,
+                        pending_readd_ids=pending_readd_ids,
                     ):
                         new.append(restart_button)
                     if stack.get("sourceType") == "internal":
@@ -192,7 +209,11 @@ async def async_setup_entry(
                             stack,
                         )
                         if not already_registered(
-                            hass, known_ids, "button", deploy_button.unique_id
+                            hass,
+                            known_ids,
+                            "button",
+                            deploy_button.unique_id,
+                            pending_readd_ids=pending_readd_ids,
                         ):
                             new.append(deploy_button)
 
@@ -217,7 +238,11 @@ async def async_setup_entry(
                     git_stack,
                 )
                 if not already_registered(
-                    hass, known_ids, "button", git_deploy_button.unique_id
+                    hass,
+                    known_ids,
+                    "button",
+                    git_deploy_button.unique_id,
+                    pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(git_deploy_button)
         return new
@@ -266,6 +291,7 @@ class _BaseFastContainerButton(
     def device_info(self) -> DeviceInfo:
         c = self._container()
         return _container_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._container_name,
             self._env_id,
@@ -305,6 +331,7 @@ class _BaseFastStackButton(CoordinatorEntity[DockhandFastCoordinator], ButtonEnt
     def device_info(self) -> DeviceInfo:
         s = self._stack()
         return _stack_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._stack_name,
             self._env_id,
@@ -782,6 +809,7 @@ class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], Button
     @property
     def device_info(self) -> DeviceInfo:
         return _stack_device(
+            getattr(self, "hass", None),
             self._entry_id,
             self._stack_name,
             self._env_id,

@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.9.3] — 2026-09-08
+
+### Fixed
+
+- **HA deprecation warning for `via_device` parameter eliminated** (detected by HA's
+  integration audit: `"calls device_registry.async_get_or_create with a deprecated
+  via_device parameter; use via_device_id instead"`). All device-hierarchy parent links
+  previously expressed as `via_device=(DOMAIN, identifier_string)` tuples have been
+  migrated to `via_device_id=<registry_uuid>`. A new `_device_entry_id()` helper
+  performs the registry lookup; when the parent device is not yet registered (including
+  unit-test contexts where `hass` is not available), `via_device_id` is simply omitted
+  rather than falling back to the deprecated form. Parent devices are always registered
+  before children in `_ensure_env_devices` / `_ensure_hub_devices`, so the lookup
+  succeeds in all real (non-test) scenarios. This suppresses the deprecation warning
+  that would have become a hard failure in HA 2027.8.0.
+
+- **Duplicate update entity registration errors after applying container updates**
+  (issue observed in 1.9.1/1.9.2 logs: `"Platform dockhand does not generate unique
+  IDs. ID … already exists — ignoring …"`). These errors appeared immediately after
+  updating 2+ containers whose entities had previously been briefly removed from the
+  HA entity registry mid-session (the normal effect of a container disappearing during
+  its own pull-and-recreate). The root cause was a race in `already_registered()`: when
+  cleanup removed an entity from the registry, the guard discarded its key from
+  `known_ids` and returned False — allowing the caller to schedule a re-add task via
+  `async_add_entities`. But `async_add_entities` is fire-and-forget (HA schedules the
+  work as an asyncio task that hasn't run yet). If a second coordinator refresh fired
+  before that task completed — the common case when multiple concurrent
+  `async_install()` calls each trigger `coordinator.async_refresh()` after their
+  install finishes — the second firing saw the key absent from `known_ids`, added it,
+  and scheduled a second re-add for the same entity. Both tasks eventually ran; the
+  second found the entity already loaded in the platform and HA logged the error.
+
+  Fixed by adding a dedicated `pending_readd_entity_ids: set[str]` field to
+  `DockhandData` (runtime_data) and an optional `pending_readd_ids` parameter to
+  `already_registered()`. When cleanup detects a registry gap for an entity this
+  session has previously added, the key is marked in `pending_readd_entity_ids` and
+  the re-add proceeds; subsequent calls during the same coordinator cycle that see the
+  same gap return True immediately (one re-add is already in flight — skip). The key
+  is cleared from pending once the entity is confirmed live in the registry again. The
+  primary `known_ids` key is never discarded — it accurately tracks "this session
+  added this entity" throughout — preventing the loss of the deduplication guard that
+  caused the original race. All platform call sites (`update.py`, `sensor.py`,
+  `switch.py`, `button.py`, `binary_sensor.py`, `number.py`, `select.py`) pass the
+  new set.
+
 ## [1.9.2] — 2026-09-01
 
 ### Fixed

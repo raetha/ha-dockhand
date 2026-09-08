@@ -795,6 +795,8 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     entry.entry_id = ENTRY_ID
     entry.runtime_data.fast_coordinator = fast_coord
     entry.runtime_data.update_coordinator = None
+    entry.runtime_data.known_entity_ids = set()
+    entry.runtime_data.pending_readd_entity_ids = set()
     entry.async_on_unload = MagicMock()
     entry.options = options if options is not None else {}
 
@@ -878,7 +880,6 @@ async def test_entity_not_duplicated_within_the_same_session(hass):
     mock_entry = MockConfigEntry(domain="dockhand", entry_id=ENTRY_ID, title="test")
     mock_entry.add_to_hass(hass)
     entry.entry_id = mock_entry.entry_id
-    entry.runtime_data.known_entity_ids = set()
     ent_registry = er.async_get(hass)
     uid = f"{ENTRY_ID}_{ENV_ID}_update_{CONTAINER_NAME}"
 
@@ -951,6 +952,82 @@ async def test_entity_recreated_within_the_same_session_if_removed(hass):
     await async_setup_entry(hass, entry, add_entities_after_removal)
     add_entities_after_removal.assert_called_once()
     assert len(add_entities_after_removal.call_args.args[0]) == 1
+
+
+async def test_entity_not_double_scheduled_when_add_fires_twice_before_task_runs(hass):
+    """Regression: when cleanup removes an update entity from the registry
+    mid-session, the re-add path in already_registered() must not schedule
+    two concurrent async_add_entities calls for the same unique_id.
+
+    The race: async_add_entities() is fire-and-forget (HA schedules the
+    work as a task). If _add_new_entities fires a second time before the
+    first task has landed — e.g. because a second coordinator refresh
+    completes before the event-loop processes the first re-add task, which
+    is exactly what happens when multiple async_install() calls each
+    trigger coordinator.async_refresh() at nearly the same time — the
+    second call also sees the entity absent from the registry and schedules
+    another re-add. Both tasks eventually run; the second one finds the
+    entity already loaded in the platform and HA logs:
+      "Platform dockhand does not generate unique IDs. ID … already exists"
+
+    The fix (pending_readd_entity_ids in DockhandData): after the first
+    detection of "entity gone from registry," the key is added to the
+    dedicated pending_readd_entity_ids set. Subsequent calls that see the
+    same gap while the key is in pending_readd_ids return True (skip)
+    instead of False (re-add), so the second concurrent firing never
+    schedules a duplicate task. The primary key is never removed from
+    known_entity_ids — it accurately tracks "this session added this
+    entity" throughout.
+
+    Simulated here by calling _add_new_entities directly twice in sequence
+    with the entity absent from the registry between both calls, verifying
+    that async_add_entities is called exactly once (not twice).
+    """
+    from homeassistant.helpers import entity_registry as er
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    fast_coord, entry, _ = _make_setup_env()
+    mock_entry = MockConfigEntry(domain="dockhand", entry_id=ENTRY_ID, title="test")
+    mock_entry.add_to_hass(hass)
+    entry.entry_id = mock_entry.entry_id
+    ent_registry = er.async_get(hass)
+    uid = f"{ENTRY_ID}_{ENV_ID}_update_{CONTAINER_NAME}"
+
+    # Phase 1: entity added this session — populates known_entity_ids
+    add_initial = MagicMock()
+    await async_setup_entry(hass, entry, add_initial)
+    add_initial.assert_called_once()
+
+    # Seed the registry (stands in for what async_add_entities does)
+    entity_entry = ent_registry.async_get_or_create(
+        "update", "dockhand", uid, config_entry=mock_entry
+    )
+
+    # Phase 2: simulate cleanup removing the entity from the registry
+    # (e.g. container briefly absent during a pull-and-recreate update)
+    ent_registry.async_remove(entity_entry.entity_id)
+    assert ent_registry.async_get_entity_id("update", "dockhand", uid) is None
+
+    # Phase 3: _add_new_entities fires twice in rapid succession before the
+    # first async_add_entities task has a chance to re-add the entity to
+    # the registry. This simulates two coordinator refreshes landing back-
+    # to-back (four concurrent async_install() calls each calling
+    # coordinator.async_refresh() are the common trigger in production).
+    add_concurrent = MagicMock()
+    await async_setup_entry(hass, entry, add_concurrent)  # first firing
+    await async_setup_entry(
+        hass, entry, add_concurrent
+    )  # second firing, entity still absent
+
+    # async_add_entities must have been called exactly once — not twice.
+    # Two calls would cause HA's "ID already exists" platform error when
+    # both tasks land (the second finds the entity already loaded).
+    assert add_concurrent.call_count == 1, (
+        f"async_add_entities called {add_concurrent.call_count} times — "
+        "expected 1; a second call schedules a duplicate re-add that "
+        "triggers HA's 'Platform does not generate unique IDs' error"
+    )
+    assert len(add_concurrent.call_args.args[0]) == 1
 
 
 # Note: removal when updateCheckEnabled turns off, or a container
