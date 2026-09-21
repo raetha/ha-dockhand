@@ -50,7 +50,7 @@
           "enable_container_stats": "Erstellt CPU-, Speicher-, Netzwerk- und Festplatten-I/O-Sensoren pro Container. Standardmäßig deaktiviert, da es sich um viele Entitäten handelt, die die meisten Nutzer nicht benötigen; das Deaktivieren entfernt auch bereits erstellte Sensoren.",
           "poll_interval_updates": "Wie oft die obigen Registry-Abfragen ausgeführt werden (Sekunden). Standard: 86400 (24 Stunden). Minimum: 300.",
           "enable_update_entities": "Erstellt eine Home-Assistant-Update-Entität für jeden Container. Deaktivieren Sie dies, wenn Sie Updates auf andere Weise verwalten und Dockhands Container nicht in HAs eigener Update-Verwaltung sehen möchten. Blendet auch die Schaltfläche „Alle aktualisieren“ aus; „Nach Updates suchen“ funktioniert trotzdem weiter.",
-          "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Erfordert „Update-Entitäten aktivieren“ oben."
+          "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Außerdem die einzige Möglichkeit, den Update-Status von Dockhands eigenen geschützten Containern (es selbst und Hawser) zu sehen – Dockhand gibt deren Update-Status nie über die regulären zwischengespeicherten Update-Check-Daten preis. Erfordert „Update-Entitäten aktivieren“ oben."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Erstellt CPU-, Speicher-, Netzwerk- und Festplatten-I/O-Sensoren pro Container. Standardmäßig deaktiviert, da es sich um viele Entitäten handelt, die die meisten Nutzer nicht benötigen; das Deaktivieren entfernt auch bereits erstellte Sensoren.",
           "poll_interval_updates": "Wie oft die obigen Registry-Abfragen ausgeführt werden (Sekunden). Standard: 86400 (24 Stunden). Minimum: 300.",
           "enable_update_entities": "Erstellt eine Home-Assistant-Update-Entität für jeden Container. Deaktivieren Sie dies, wenn Sie Updates auf andere Weise verwalten und Dockhands Container nicht in HAs eigener Update-Verwaltung sehen möchten. Blendet auch die Schaltfläche „Alle aktualisieren“ aus; „Nach Updates suchen“ funktioniert trotzdem weiter.",
-          "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Erfordert „Update-Entitäten aktivieren“ oben."
+          "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Außerdem die einzige Möglichkeit, den Update-Status von Dockhands eigenen geschützten Containern (es selbst und Hawser) zu sehen – Dockhand gibt deren Update-Status nie über die regulären zwischengespeicherten Update-Check-Daten preis. Erfordert „Update-Entitäten aktivieren“ oben."
         }
       }
     }

@@ -374,6 +374,71 @@ async def test_get_update_check_settings_missing_settings_key_returns_empty(
     assert await client_with_mock_request.async_get_update_check_settings(5) == {}
 
 
+async def test_get_version_notes_url_and_params(client_with_mock_request):
+    client_with_mock_request._request.return_value = {
+        "changelogUrl": "https://github.com/nginxinc/docker-nginx/releases",
+        "source": "nginxinc/docker-nginx",
+        "rateLimited": False,
+        "notes": [],
+    }
+    result = await client_with_mock_request.async_get_version_notes(
+        5, "abc123", ["16.3-alpine", "16.4-alpine"]
+    )
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/containers/abc123/version-notes?env=5&versions=16.3-alpine%2C16.4-alpine"
+    )
+    assert result["source"] == "nginxinc/docker-nginx"
+
+
+async def test_get_version_notes_non_dict_response_returns_empty(
+    client_with_mock_request,
+):
+    client_with_mock_request._request.return_value = None
+    assert (
+        await client_with_mock_request.async_get_version_notes(5, "abc123", ["1.0"])
+        == {}
+    )
+
+
+async def test_get_version_notes_empty_versions_produces_well_formed_url(
+    client_with_mock_request,
+):
+    """versions=[] must still produce a well-formed URL — confirmed against
+    Dockhand's own route (version-notes/+server.ts): it parses an empty
+    `versions` query param the same way whether it's omitted or sent as
+    an empty string (`.split(',').filter(Boolean)` on '' yields []), so
+    ",".join([]) producing a bare "versions=" is correct and equivalent
+    to omitting the param."""
+    client_with_mock_request._request.return_value = {
+        "changelogUrl": "https://github.com/nginxinc/docker-nginx/releases",
+        "source": "nginxinc/docker-nginx",
+        "rateLimited": False,
+        "notes": [],
+    }
+    result = await client_with_mock_request.async_get_version_notes(5, "abc123", [])
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/containers/abc123/version-notes?env=5&versions="
+    )
+    assert result["changelogUrl"] == "https://github.com/nginxinc/docker-nginx/releases"
+
+
+async def test_get_version_notes_encodes_special_characters(client_with_mock_request):
+    """Container id and versions both get URL-encoded, same defense-in-depth
+    reasoning as every other identifier this client builds URLs from — a
+    crafted version string containing '&env=' must not inject an extra
+    query parameter."""
+    client_with_mock_request._request.return_value = {}
+    await client_with_mock_request.async_get_version_notes(
+        5, "weird/id", ["16.4-alpine&env=99"]
+    )
+    url = client_with_mock_request._request.call_args.args[1]
+    assert "weird%2Fid" in url
+    assert "16.4-alpine%26env%3D99" in url
+    assert "&env=99" not in url
+
+
 async def test_start_batch_update_stream_includes_criteria(action_client):
     action_client._request.return_value = {"jobId": "job-42"}
     job_id = await action_client.async_start_batch_update_stream(
@@ -502,6 +567,8 @@ async def test_get_pending_updates(client_with_mock_request):
                 "containerName": "web",
                 "currentImage": "nginx:latest",
                 "checkedAt": "2026-07-01T00:00:00Z",
+                "hasImageUpdate": True,
+                "newerVersion": None,
             }
         ],
     }
@@ -511,6 +578,35 @@ async def test_get_pending_updates(client_with_mock_request):
         == "/api/containers/pending-updates?env=1"
     )
     assert r[0]["containerId"] == "abc"
+    assert r[0]["hasImageUpdate"] is True
+
+
+async def test_get_pending_updates_carries_semver_only_newer_version(
+    client_with_mock_request,
+):
+    """Confirmed from Dockhand's own source: hasImageUpdate can be False
+    while newerVersion is still populated — a pure semver-only suggestion
+    with no actionable digest update, still persisted here. See
+    coordinator.py's DockhandFastCoordinator docstring for why this
+    matters (it's what made pending_update_container_ids over-inclusive
+    before that fix)."""
+    newer_version = {"tag": "16.4-alpine", "bump": "minor", "skipped": ["16.4-alpine"]}
+    client_with_mock_request._request.return_value = {
+        "environmentId": 1,
+        "pendingUpdates": [
+            {
+                "containerId": "abc",
+                "containerName": "web",
+                "currentImage": "nginx:1.2",
+                "checkedAt": "2026-07-01T00:00:00Z",
+                "hasImageUpdate": False,
+                "newerVersion": newer_version,
+            }
+        ],
+    }
+    r = await client_with_mock_request.async_get_pending_updates(1)
+    assert r[0]["hasImageUpdate"] is False
+    assert r[0]["newerVersion"] == newer_version
 
 
 async def test_get_pending_updates_empty_when_none_configured(

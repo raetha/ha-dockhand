@@ -50,7 +50,7 @@
           "enable_container_stats": "Tworzy czujniki CPU, pamięci, sieci i we/wy dysku dla każdego kontenera. Domyślnie wyłączone, ponieważ to dużo encji, których większość osób nie potrzebuje; wyłączenie usuwa też już utworzone czujniki.",
           "poll_interval_updates": "Jak często wykonywane są powyższe zapytania do rejestru (sekundy). Domyślnie: 86400 (24 godziny). Minimum: 300.",
           "enable_update_entities": "Tworzy encję aktualizacji Home Assistant dla każdego kontenera. Wyłącz tę opcję, jeśli zarządzasz aktualizacjami w inny sposób i nie chcesz, aby kontenery Dockhand pojawiały się we własnym zarządzaniu aktualizacjami HA. Ukrywa też przycisk „Zaktualizuj wszystko”; „Sprawdź aktualizacje” nadal działa.",
-          "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
+          "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. To także jedyny sposób, by zobaczyć status aktualizacji własnych, chronionych kontenerów Dockhand (jego samego i Hawsera) — Dockhand nigdy nie udostępnia ich statusu aktualizacji poprzez zwykłe zbuforowane dane sprawdzania aktualizacji. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Tworzy czujniki CPU, pamięci, sieci i we/wy dysku dla każdego kontenera. Domyślnie wyłączone, ponieważ to dużo encji, których większość osób nie potrzebuje; wyłączenie usuwa też już utworzone czujniki.",
           "poll_interval_updates": "Jak często wykonywane są powyższe zapytania do rejestru (sekundy). Domyślnie: 86400 (24 godziny). Minimum: 300.",
           "enable_update_entities": "Tworzy encję aktualizacji Home Assistant dla każdego kontenera. Wyłącz tę opcję, jeśli zarządzasz aktualizacjami w inny sposób i nie chcesz, aby kontenery Dockhand pojawiały się we własnym zarządzaniu aktualizacjami HA. Ukrywa też przycisk „Zaktualizuj wszystko”; „Sprawdź aktualizacje” nadal działa.",
-          "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
+          "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. To także jedyny sposób, by zobaczyć status aktualizacji własnych, chronionych kontenerów Dockhand (jego samego i Hawsera) — Dockhand nigdy nie udostępnia ich statusu aktualizacji poprzez zwykłe zbuforowane dane sprawdzania aktualizacji. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
         }
       }
     }

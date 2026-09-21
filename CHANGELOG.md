@@ -1,5 +1,47 @@
 # Changelog
 
+## [Unreleased]
+
+## [1.10.0] — 2026-09-21
+
+### Added
+
+- **Container update entities now show a real application version** (e.g.
+  `v3.1.0`) as the installed version, read from the image's own
+  `org.opencontainers.image.version` label when the image author set one —
+  instead of the raw image reference or a digest.
+- **Container update entities now surface Dockhand's "newer version tag"
+  detection** (Dockhand 1.0.43+, opt-in in Dockhand's own Settings) as a real
+  target version (e.g. `16.4-alpine`) on pinned-version images, even when the
+  image's digest itself hasn't changed — a case a plain digest comparison can
+  never catch. The entity's "What's new" dialog shows that version's real
+  release notes (resolved and fetched by Dockhand itself, from GitHub or a
+  self-hosted Gitea/Forgejo) plus a link to the full changelog. This is
+  advisory only, matching Dockhand's own UI: the container stays pinned to
+  its current tag, so Install isn't offered on this signal alone — moving to
+  the suggested version means updating the tag in your compose file or
+  container config yourself.
+- **Update entities show accurate status whether or not "Enable precise
+  update versions" (the opt-in real registry check) is turned on.** Dockhand's
+  own cheap, always-polled pending-updates cache carries the same
+  update-available flag and "newer version tag" suggestion the opt-in check
+  provides, so a pending update — or a semver suggestion — now surfaces
+  immediately without needing the opt-in check enabled at all; enabling it
+  additionally layers real image digests on top of the same entities. An
+  update entity showing "update available" with no precise digest yet now
+  displays the container's own image tag as the target version, instead of
+  looking like nothing is available.
+- **A "What's new" changelog link now appears for a pending update even when
+  Dockhand has no specific "newer version tag" suggestion for it** — resolved
+  from the image's declared source (a GitHub/Gitea/Forgejo label, or a
+  `ghcr.io/<owner>/<repo>` image name) the same way the semver suggestion's
+  own release notes are, just without a specific version target.
+- Semver-only "newer version tag" suggestions (advisory only, no actionable
+  digest update) are no longer counted as a pending update anywhere in the
+  integration — the stack "pending updates" list, the bulk "Update all"
+  button's eligibility, and entity cleanup gating all now agree on
+  "pending" meaning an actual, actionable update.
+
 ## [1.9.4] — 2026-09-08
 
 ### Fixed
@@ -1058,7 +1100,10 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.9.2...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.10.0...HEAD
+[1.10.0]: https://github.com/raetha/ha-dockhand/compare/v1.9.4...v1.10.0
+[1.9.4]: https://github.com/raetha/ha-dockhand/compare/v1.9.3...v1.9.4
+[1.9.3]: https://github.com/raetha/ha-dockhand/compare/v1.9.2...v1.9.3
 [1.9.2]: https://github.com/raetha/ha-dockhand/compare/v1.9.1...v1.9.2
 [1.9.1]: https://github.com/raetha/ha-dockhand/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/raetha/ha-dockhand/compare/v1.8.2...v1.9.0

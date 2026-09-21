@@ -681,11 +681,20 @@ class DockhandCheckUpdatesButton(
         already in hand instead of triggering a second, redundant check.
 
       - CONF_ENABLE_UPDATE_ENTITIES on: the result also updates Tier 1's
-        pending_update_container_ids for this environment immediately,
-        via DockhandFastCoordinator.async_merge_pending_updates_from_check()
+        pending_update_container_ids AND pending_update_details for this
+        environment immediately, via
+        DockhandFastCoordinator.async_merge_pending_updates_from_check()
         — this is new: previously Tier 1 had no way to reflect a forced
         check at all until its own next 60s poll happened to line up
-        with whatever Dockhand's own cache ended up holding.
+        with whatever Dockhand's own cache ended up holding. Also new:
+        the full per-container response (hasUpdate, newerVersion,
+        digests) is now passed straight through to that merge, rather
+        than collapsed into a lossy set of "has an update" container
+        ids first — a manual "Check for updates" press used to throw
+        away newerVersion/digest data before it ever reached Tier 1,
+        which meant a press could confirm a real update or a semver
+        suggestion in Dockhand's own UI while ha-dockhand's own update
+        entity still showed nothing until the next periodic poll.
 
       - Neither on: the check still runs (Dockhand's cache still gets
         refreshed), but nothing local captures the response — there's
@@ -760,14 +769,13 @@ class DockhandCheckUpdatesButton(
             self._update_coordinator.async_merge_check_results(self._env_id, items)
 
         if self._update_entities_enabled:
-            pending_ids = {
-                item["containerId"]
-                for item in items
-                if item.get("hasUpdate") and item.get("containerId")
-            }
-            self.coordinator.async_merge_pending_updates_from_check(
-                self._env_id, pending_ids
-            )
+            # Pass the full per-container response straight through — the
+            # coordinator itself now derives both pending_update_container_ids
+            # (actionable only) and pending_update_details (actionable +
+            # semver-only, with newerVersion) from it, the same split the
+            # periodic 60s poll applies to pending-updates. See this
+            # button's own docstring above.
+            self.coordinator.async_merge_pending_updates_from_check(self._env_id, items)
 
 
 class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], ButtonEntity):

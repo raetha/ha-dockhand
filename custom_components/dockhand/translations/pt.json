@@ -50,7 +50,7 @@
           "enable_container_stats": "Cria sensores de CPU, memória, rede e E/S de disco por contêiner. Desativado por padrão, pois são muitas entidades que a maioria das pessoas não precisa; desativar também remove os sensores já criados.",
           "poll_interval_updates": "Com que frequência as consultas ao registro acima são executadas (segundos). Padrão: 86400 (24 horas). Mínimo: 300.",
           "enable_update_entities": "Cria uma entidade de atualização do Home Assistant para cada contêiner. Desative esta opção se você gerencia atualizações de outra forma e não quer que os contêineres do Dockhand apareçam no gerenciamento de atualizações do HA. Também oculta o botão \"Atualizar tudo\"; \"Verificar atualizações\" continua funcionando de qualquer forma.",
-          "enable_precise_updates": "Atualiza as entidades de atualização para mostrar números de versão precisos (digests de imagem) por meio de consultas periódicas ao registro, em vez de apenas uma tag de imagem. Requer \"Ativar entidades de atualização\" acima."
+          "enable_precise_updates": "Atualiza as entidades de atualização para mostrar números de versão precisos (digests de imagem) por meio de consultas periódicas ao registro, em vez de apenas uma tag de imagem. Também é a única forma de ver o status de atualização dos próprios contêineres protegidos do Dockhand (ele mesmo e o Hawser) — o Dockhand nunca expõe o status de atualização deles pelos dados normais de verificação de atualização em cache. Requer \"Ativar entidades de atualização\" acima."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Cria sensores de CPU, memória, rede e E/S de disco por contêiner. Desativado por padrão, pois são muitas entidades que a maioria das pessoas não precisa; desativar também remove os sensores já criados.",
           "poll_interval_updates": "Com que frequência as consultas ao registro acima são executadas (segundos). Padrão: 86400 (24 horas). Mínimo: 300.",
           "enable_update_entities": "Cria uma entidade de atualização do Home Assistant para cada contêiner. Desative esta opção se você gerencia atualizações de outra forma e não quer que os contêineres do Dockhand apareçam no gerenciamento de atualizações do HA. Também oculta o botão \"Atualizar tudo\"; \"Verificar atualizações\" continua funcionando de qualquer forma.",
-          "enable_precise_updates": "Atualiza as entidades de atualização para mostrar números de versão precisos (digests de imagem) por meio de consultas periódicas ao registro, em vez de apenas uma tag de imagem. Requer \"Ativar entidades de atualização\" acima."
+          "enable_precise_updates": "Atualiza as entidades de atualização para mostrar números de versão precisos (digests de imagem) por meio de consultas periódicas ao registro, em vez de apenas uma tag de imagem. Também é a única forma de ver o status de atualização dos próprios contêineres protegidos do Dockhand (ele mesmo e o Hawser) — o Dockhand nunca expõe o status de atualização deles pelos dados normais de verificação de atualização em cache. Requer \"Ativar entidades de atualização\" acima."
         }
       }
     }

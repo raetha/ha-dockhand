@@ -2922,7 +2922,12 @@ async def test_check_updates_press_feeds_tier2_when_precise_updates_enabled():
 async def test_check_updates_press_feeds_tier1_when_update_entities_enabled():
     """When update_entities_enabled is on, the same response also
     refreshes Tier 1's pending set for this environment immediately,
-    regardless of whether Tier 2/precise updates is configured at all."""
+    regardless of whether Tier 2/precise updates is configured at all.
+
+    The FULL per-container response is passed through — not a lossy
+    id-only set — so the coordinator's own merge can still recover
+    newerVersion/digest data from a manual button press. See button.py's
+    async_press() docstring/history for why this changed from an id set."""
     result = [
         {"containerId": "id-web", "containerName": "web", "hasUpdate": True},
         {"containerId": "id-db", "containerName": "db", "hasUpdate": False},
@@ -2934,7 +2939,7 @@ async def test_check_updates_press_feeds_tier1_when_update_entities_enabled():
     )
     await button.async_press()
     fast_coord.async_merge_pending_updates_from_check.assert_called_once_with(
-        ENV_ID, {"id-web"}
+        ENV_ID, result
     )
 
 
@@ -2950,7 +2955,7 @@ async def test_check_updates_press_feeds_both_tiers_when_both_enabled():
     await button.async_press()
     update_coord.async_merge_check_results.assert_called_once_with(ENV_ID, result)
     fast_coord.async_merge_pending_updates_from_check.assert_called_once_with(
-        ENV_ID, {"id-web"}
+        ENV_ID, result
     )
 
 

@@ -341,28 +341,52 @@ class DockhandClient:
         the whole point, it's cheap enough to poll frequently.
 
         Response shape (confirmed fields, per item):
-          containerId    str  — Docker container ID
-          containerName  str  — Container name
-          currentImage   str  — Image reference at the time Dockhand's
-                                 check found the update (no digest — this
-                                 endpoint doesn't carry one, only
-                                 check-updates does)
-          checkedAt      str  — ISO timestamp of Dockhand's own check
+          containerId    str          — Docker container ID
+          containerName  str          — Container name
+          currentImage   str          — Image reference at the time
+                                        Dockhand's check found the update
+                                        (no digest — this endpoint doesn't
+                                        carry one, only check-updates does)
+          checkedAt      str          — ISO timestamp of Dockhand's own check
+          hasImageUpdate bool         — True when a real, actionable digest
+                                        update was found (same concept
+                                        check-updates calls hasUpdate)
+          newerVersion   dict | None  — Semver "newer version tag"
+                                        suggestion, same shape as
+                                        check-updates' own newerVersion
+                                        field ({tag, bump, skipped, ...}),
+                                        or None
 
         Returns an empty list if the user hasn't configured update-check
         in Dockhand for this environment — that's a normal, expected state,
         not an error.
 
-        NOTE (Dockhand 1.0.37+): Dockhand added a byte-for-byte identical
-        GET handler colocated at POST /api/containers/check-updates (the
-        route Tier 2 already uses for its own POST), confirmed from source
-        to call the exact same underlying getPendingContainerUpdates() and
-        return the same shape. Currently just a duplicate for API
-        discoverability (issue #1266 in their tracker), not a deprecation
-        of this route — but worth checking on future Dockhand upgrades
-        whether pending-updates itself gets formally deprecated in favor
-        of the colocated version, since Dockhand has no API versioning
-        scheme to signal that explicitly.
+        IMPORTANT: hasImageUpdate and newerVersion are per-row, independent
+        signals — Dockhand's scheduled update-check job
+        (env-update-check.ts, runEnvUpdateCheckJob) persists a row here for
+        the UNION of (a) containers with an actionable digest update
+        (hasImageUpdate=True) and (b) containers with ONLY a semver
+        newerVersion suggestion and no actionable update
+        (hasImageUpdate=False, newerVersion still populated). A row
+        existing in this list does NOT by itself mean "actionable" — check
+        hasImageUpdate. See coordinator.py's DockhandFastCoordinator
+        docstring for how this integration derives its own
+        pending_update_container_ids (actionable subset only) vs.
+        pending_update_details (every row) from this response, and why
+        that split exists (a real over-inclusion bug this integration had
+        before hasImageUpdate/newerVersion were known to exist on this
+        endpoint).
+
+        CORRECTED NOTE (was backwards in an earlier revision of this
+        docstring — corrected once hasImageUpdate/newerVersion were
+        actually verified from Dockhand's source): pending-updates is the
+        RICHER of the two related endpoints, not a thinner duplicate at
+        risk of deprecation. GET /api/containers/check-updates (colocated
+        on the same route file as Tier 2's own POST) is a separate, much
+        thinner cached read — {containerId, containerName, currentImage,
+        checkedAt} only, no hasImageUpdate/newerVersion at all — confirmed
+        from src/routes/api/containers/check-updates/+server.ts. Do not
+        confuse the two, and do not switch this method to that route.
         """
         data = await self._request(
             "GET", f"/api/containers/pending-updates?env={_q(env_id)}"
@@ -409,6 +433,64 @@ class DockhandClient:
         )
         settings = result.get("settings") if isinstance(result, dict) else None
         return settings if isinstance(settings, dict) else {}
+
+    async def async_get_version_notes(
+        self, env_id: int, container_id: str, versions: list[str]
+    ) -> dict[str, Any]:
+        """Fetch release notes for a semver-detected newer version tag, or
+        (with an empty `versions` list) just a best-available changelog
+        link with no specific target version.
+
+        GET /api/containers/{id}/version-notes?env=X&versions=a,b,c
+
+        Two call shapes, both confirmed against
+        src/routes/api/containers/[id]/version-notes/+server.ts:
+
+          versions=[skipped tag(s), ..., target tag] — the normal case,
+          after a check-updates/pending-updates response carried a
+          newerVersion field (itself only present on Dockhand 1.0.43+,
+          with the global "newer version tag" setting enabled, for
+          pinned-version images). Should be newerVersion["skipped"] as-is:
+          Dockhand orders it oldest -> newest with the target tag last,
+          and its route relies on that position (the last entry is what a
+          dockhand.changelog.url {{version}} template resolves against) —
+          sending anything else loses that.
+
+          versions=[] (empty list) — no specific version target (e.g.
+          there's a pending/actionable update but no semver newerVersion
+          suggestion for it). Confirmed from source: the route's own
+          `.split(',').filter(Boolean)` on an empty `versions` query
+          param parses to an empty array either way, so passing versions=
+          explicitly and omitting the param entirely behave identically —
+          `",".join([])` below naturally produces the former. With no
+          wanted versions, Dockhand's own resolveAndFetchReleaseNotes()
+          short-circuits (zero extra network calls) but
+          resolveChangelogUrl() still runs unconditionally, so a
+          "CONFIDENT" source (an org.opencontainers.image.source label
+          pointing at GitHub/Gitea/Forgejo, or a ghcr.io/<owner>/<repo>
+          image name) still yields a real changelogUrl in the response —
+          `notes` will just be empty. A "GUESSED"/unconfident source
+          correctly yields no changelogUrl in this case, same as the
+          normal call shape. This is the right way to get "best available
+          changelog link Dockhand can confidently resolve" when there's no
+          specific version to target — no client-side scraping fallback
+          needed.
+
+        Response shape (confirmed fields):
+          changelogUrl str | None
+          source       str | None  — resolved forge slug, e.g. "owner/repo"
+          rateLimited  bool        — True if the forge (usually
+                                      unauthenticated GitHub) refused
+                                      further requests
+          notes        list[dict]  — {version, name, githubTag, body,
+                                      publishedAt, url} per matched version
+        """
+        result = await self._request(
+            "GET",
+            f"/api/containers/{_q(container_id)}/version-notes"
+            f"?env={_q(env_id)}&versions={_q(','.join(versions))}",
+        )
+        return result if isinstance(result, dict) else {}
 
     async def async_start_batch_update_stream(
         self,

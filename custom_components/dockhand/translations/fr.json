@@ -50,7 +50,7 @@
           "enable_container_stats": "Crée des capteurs de CPU, mémoire, réseau et E/S disque par conteneur. Désactivé par défaut car cela représente beaucoup d'entités dont la plupart des utilisateurs n'ont pas besoin ; le désactiver supprime aussi les capteurs déjà créés.",
           "poll_interval_updates": "Fréquence d'exécution des requêtes de registre ci-dessus (secondes). Par défaut : 86400 (24 heures). Minimum : 300.",
           "enable_update_entities": "Crée une entité de mise à jour Home Assistant pour chaque conteneur. Désactivez cette option si vous gérez les mises à jour autrement et ne voulez pas que les conteneurs de Dockhand apparaissent dans la gestion des mises à jour de HA. Masque aussi le bouton « Tout mettre à jour » ; « Vérifier les mises à jour » continue de fonctionner quand même.",
-          "enable_precise_updates": "Met à niveau les entités de mise à jour pour afficher des numéros de version précis (digests d'image) via des requêtes de registre périodiques, au lieu d'une simple étiquette d'image. Nécessite « Activer les entités de mise à jour » ci-dessus."
+          "enable_precise_updates": "Met à niveau les entités de mise à jour pour afficher des numéros de version précis (digests d'image) via des requêtes de registre périodiques, au lieu d'une simple étiquette d'image. C'est aussi le seul moyen de voir l'état de mise à jour des propres conteneurs protégés de Dockhand (lui-même et Hawser) — Dockhand n'expose jamais leur état de mise à jour via ses données habituelles de vérification de mise à jour en cache. Nécessite « Activer les entités de mise à jour » ci-dessus."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Crée des capteurs de CPU, mémoire, réseau et E/S disque par conteneur. Désactivé par défaut car cela représente beaucoup d'entités dont la plupart des utilisateurs n'ont pas besoin ; le désactiver supprime aussi les capteurs déjà créés.",
           "poll_interval_updates": "Fréquence d'exécution des requêtes de registre ci-dessus (secondes). Par défaut : 86400 (24 heures). Minimum : 300.",
           "enable_update_entities": "Crée une entité de mise à jour Home Assistant pour chaque conteneur. Désactivez cette option si vous gérez les mises à jour autrement et ne voulez pas que les conteneurs de Dockhand apparaissent dans la gestion des mises à jour de HA. Masque aussi le bouton « Tout mettre à jour » ; « Vérifier les mises à jour » continue de fonctionner quand même.",
-          "enable_precise_updates": "Met à niveau les entités de mise à jour pour afficher des numéros de version précis (digests d'image) via des requêtes de registre périodiques, au lieu d'une simple étiquette d'image. Nécessite « Activer les entités de mise à jour » ci-dessus."
+          "enable_precise_updates": "Met à niveau les entités de mise à jour pour afficher des numéros de version précis (digests d'image) via des requêtes de registre périodiques, au lieu d'une simple étiquette d'image. C'est aussi le seul moyen de voir l'état de mise à jour des propres conteneurs protégés de Dockhand (lui-même et Hawser) — Dockhand n'expose jamais leur état de mise à jour via ses données habituelles de vérification de mise à jour en cache. Nécessite « Activer les entités de mise à jour » ci-dessus."
         }
       }
     }

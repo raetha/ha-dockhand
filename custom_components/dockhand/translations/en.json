@@ -49,7 +49,7 @@
           "enable_runtime_controls": "Creates number/select entities to change a stack-less container's CPU, memory, and process limits, and restart policy, live. Not available for Compose-managed containers.",
           "enable_container_stats": "Creates per-container CPU, memory, network, and disk I/O sensors. Off by default since it's a lot of entities most people don't need; turning it off also removes any already-created ones.",
           "enable_update_entities": "Creates a Home Assistant update entity for every container. Turn this off if you manage updates another way and don't want Dockhand's containers in HA's own update management. Also hides the 'Update all' button; 'Check for updates' keeps working either way.",
-          "enable_precise_updates": "Upgrades update entities to show precise version numbers (image digests) via periodic registry queries, instead of just an image tag. Requires 'Enable update entities' above.",
+          "enable_precise_updates": "Upgrades update entities to show precise version numbers (image digests) via periodic registry queries, instead of just an image tag. Also the only way to see update status for Dockhand's own protected containers (itself and Hawser) — Dockhand never exposes their update status through its regular cached update-check data. Requires 'Enable update entities' above.",
           "poll_interval_updates": "How often to run the registry queries above (seconds). Default: 86400 (24 hours). Minimum: 300."
         }
       },
@@ -116,7 +116,7 @@
           "enable_runtime_controls": "Creates number/select entities to change a stack-less container's CPU, memory, and process limits, and restart policy, live. Not available for Compose-managed containers.",
           "enable_container_stats": "Creates per-container CPU, memory, network, and disk I/O sensors. Off by default since it's a lot of entities most people don't need; turning it off also removes any already-created ones.",
           "enable_update_entities": "Creates a Home Assistant update entity for every container. Turn this off if you manage updates another way and don't want Dockhand's containers in HA's own update management. Also hides the 'Update all' button; 'Check for updates' keeps working either way.",
-          "enable_precise_updates": "Upgrades update entities to show precise version numbers (image digests) via periodic registry queries, instead of just an image tag. Requires 'Enable update entities' above.",
+          "enable_precise_updates": "Upgrades update entities to show precise version numbers (image digests) via periodic registry queries, instead of just an image tag. Also the only way to see update status for Dockhand's own protected containers (itself and Hawser) — Dockhand never exposes their update status through its regular cached update-check data. Requires 'Enable update entities' above.",
           "poll_interval_updates": "How often to run the registry queries above (seconds). Default: 86400 (24 hours). Minimum: 300."
         }
       }

@@ -50,7 +50,7 @@
           "enable_container_stats": "Skapar CPU-, minnes-, nätverks- och disk-I/O-sensorer per container. Avstängt som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar även bort redan skapade sensorer.",
           "poll_interval_updates": "Hur ofta registerfrågorna ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
-          "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Kräver \"Aktivera uppdateringsentiteter\" ovan."
+          "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Skapar CPU-, minnes-, nätverks- och disk-I/O-sensorer per container. Avstängt som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar även bort redan skapade sensorer.",
           "poll_interval_updates": "Hur ofta registerfrågorna ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
-          "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Kräver \"Aktivera uppdateringsentiteter\" ovan."
+          "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
         }
       }
     }

@@ -37,6 +37,7 @@ from custom_components.dockhand.helpers import (
     _image_display_name,
     _image_group_device,
     _image_url,
+    _image_version_label,
     _is_update_disabled_by_label,
     _network_group_device,
     _network_url,
@@ -522,6 +523,35 @@ def test_compose_project_none_for_no_labels():
 
 def test_compose_project_none_for_none_container():
     assert _compose_project(None) is None
+
+
+# ---------------------------------------------------------------------------
+# _image_version_label
+# ---------------------------------------------------------------------------
+
+
+def test_image_version_label_returns_value():
+    labels = {"org.opencontainers.image.version": "v3.1.0"}
+    assert _image_version_label(labels) == "v3.1.0"
+
+
+def test_image_version_label_strips_whitespace():
+    labels = {"org.opencontainers.image.version": "  v3.1.0  "}
+    assert _image_version_label(labels) == "v3.1.0"
+
+
+def test_image_version_label_none_for_blank_value():
+    labels = {"org.opencontainers.image.version": "   "}
+    assert _image_version_label(labels) is None
+
+
+def test_image_version_label_none_when_missing():
+    assert _image_version_label({"some.other.label": "x"}) is None
+
+
+def test_image_version_label_none_for_no_labels():
+    assert _image_version_label({}) is None
+    assert _image_version_label(None) is None
 
 
 # ---------------------------------------------------------------------------

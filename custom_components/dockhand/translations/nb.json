@@ -50,7 +50,7 @@
           "enable_container_stats": "Oppretter CPU-, minne-, nettverk- og disk-I/O-sensorer per container. Av som standard siden det er mange enheter de fleste ikke trenger; å slå det av fjerner også allerede opprettede sensorer.",
           "poll_interval_updates": "Hvor ofte registerspørringene ovenfor kjøres (sekunder). Standard: 86400 (24 timer). Minimum: 300.",
           "enable_update_entities": "Oppretter en Home Assistant-oppdateringsenhet for hver container. Slå dette av hvis du håndterer oppdateringer på en annen måte og ikke vil at Dockhands containere skal vises i HAs egen oppdateringshåndtering. Skjuler også «Oppdater alle»-knappen; «Se etter oppdateringer» fungerer likevel fortsatt.",
-          "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Krever «Aktiver oppdateringsenheter» ovenfor."
+          "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Dette er også den eneste måten å se oppdateringsstatus for Dockhands egne beskyttede containere (seg selv og Hawser) — Dockhand eksponerer aldri oppdateringsstatusen deres via de vanlige mellomlagrede oppdateringssjekk-dataene. Krever «Aktiver oppdateringsenheter» ovenfor."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Oppretter CPU-, minne-, nettverk- og disk-I/O-sensorer per container. Av som standard siden det er mange enheter de fleste ikke trenger; å slå det av fjerner også allerede opprettede sensorer.",
           "poll_interval_updates": "Hvor ofte registerspørringene ovenfor kjøres (sekunder). Standard: 86400 (24 timer). Minimum: 300.",
           "enable_update_entities": "Oppretter en Home Assistant-oppdateringsenhet for hver container. Slå dette av hvis du håndterer oppdateringer på en annen måte og ikke vil at Dockhands containere skal vises i HAs egen oppdateringshåndtering. Skjuler også «Oppdater alle»-knappen; «Se etter oppdateringer» fungerer likevel fortsatt.",
-          "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Krever «Aktiver oppdateringsenheter» ovenfor."
+          "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Dette er også den eneste måten å se oppdateringsstatus for Dockhands egne beskyttede containere (seg selv og Hawser) — Dockhand eksponerer aldri oppdateringsstatusen deres via de vanlige mellomlagrede oppdateringssjekk-dataene. Krever «Aktiver oppdateringsenheter» ovenfor."
         }
       }
     }

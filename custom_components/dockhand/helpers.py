@@ -863,6 +863,33 @@ def _is_update_disabled_by_label(labels: dict | None) -> bool:
     return value.strip().lower() in _FALSY_LABEL_VALUES
 
 
+_OCI_VERSION_LABEL = "org.opencontainers.image.version"
+
+
+def _image_version_label(labels: dict | None) -> str | None:
+    """Return the running container's baked-in application version (e.g.
+    "v3.1.0") from the OCI-standard org.opencontainers.image.version label,
+    when the image author set one.
+
+    Most maintained images do set this, even when the pull tag itself is a
+    floating/variant name (e.g. "latest") that never changes across
+    releases and is therefore useless as a version string on its own.
+    Docker copies image config labels onto the container at creation time,
+    so this reads straight off the container's already-fetched labels —
+    no extra API call.
+
+    Only reflects the *currently installed* image. There is no equivalent
+    for the not-yet-pulled "latest" image from a plain digest comparison
+    (see latest_version's docstring in update.py) — Dockhand's own
+    check-updates only gets a real version number for that side via its
+    separate, opt-in semver "newer version tag" detection.
+    """
+    if not labels:
+        return None
+    value = labels.get(_OCI_VERSION_LABEL)
+    return value.strip() if value and value.strip() else None
+
+
 def _compose_project(container: dict | None) -> str | None:
     """Return the Compose project name for a container, or None if freestanding.
 

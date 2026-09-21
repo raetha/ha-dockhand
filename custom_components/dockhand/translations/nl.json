@@ -50,7 +50,7 @@
           "enable_container_stats": "Maakt CPU-, geheugen-, netwerk- en schijf-I/O-sensoren per container aan. Standaard uitgeschakeld omdat het veel entiteiten zijn die de meeste mensen niet nodig hebben; uitschakelen verwijdert ook reeds aangemaakte sensoren.",
           "poll_interval_updates": "Hoe vaak de bovenstaande registerquery's worden uitgevoerd (seconden). Standaard: 86400 (24 uur). Minimum: 300.",
           "enable_update_entities": "Maakt een Home Assistant-update-entiteit aan voor elke container. Schakel dit uit als je updates op een andere manier beheert en niet wilt dat Dockhands containers verschijnen in HA's eigen updatebeheer. Verbergt ook de knop \"Alles bijwerken\"; \"Controleren op updates\" blijft hoe dan ook werken.",
-          "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Vereist \"Update-entiteiten inschakelen\" hierboven."
+          "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Dit is ook de enige manier om de updatestatus te zien van Dockhands eigen beschermde containers (zichzelf en Hawser) — Dockhand toont hun updatestatus nooit via de normale gecachte update-controlegegevens. Vereist \"Update-entiteiten inschakelen\" hierboven."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Maakt CPU-, geheugen-, netwerk- en schijf-I/O-sensoren per container aan. Standaard uitgeschakeld omdat het veel entiteiten zijn die de meeste mensen niet nodig hebben; uitschakelen verwijdert ook reeds aangemaakte sensoren.",
           "poll_interval_updates": "Hoe vaak de bovenstaande registerquery's worden uitgevoerd (seconden). Standaard: 86400 (24 uur). Minimum: 300.",
           "enable_update_entities": "Maakt een Home Assistant-update-entiteit aan voor elke container. Schakel dit uit als je updates op een andere manier beheert en niet wilt dat Dockhands containers verschijnen in HA's eigen updatebeheer. Verbergt ook de knop \"Alles bijwerken\"; \"Controleren op updates\" blijft hoe dan ook werken.",
-          "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Vereist \"Update-entiteiten inschakelen\" hierboven."
+          "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Dit is ook de enige manier om de updatestatus te zien van Dockhands eigen beschermde containers (zichzelf en Hawser) — Dockhand toont hun updatestatus nooit via de normale gecachte update-controlegegevens. Vereist \"Update-entiteiten inschakelen\" hierboven."
         }
       }
     }

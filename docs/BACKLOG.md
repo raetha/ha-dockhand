@@ -7,6 +7,70 @@ the reasoning first and only revisit if the stated condition has changed.
 
 ## Deferred
 
+- **Inline release-notes body content (not just a link) for floating-tag
+  images with no Dockhand `newerVersion` suggestion** — e.g. AudiobookShelf
+  (`ghcr.io/advplyr/audiobookshelf:latest`) shows a "View release notes"
+  link (via `_pending_update_changelog_section()`'s empty-`versions` call)
+  but not the "What's Changed" body content Authentik gets when Dockhand's
+  semver engine finds a concrete `newerVersion` target. Root cause is
+  structural, not a bug: Dockhand's `checkNewerVersion()` explicitly skips
+  floating tags ("Floating tag -> nothing to compare, and we skip the
+  registry call entirely", `semver/check.ts`), so it never produces a
+  target tag for these images, and `version-notes` can only fetch notes
+  for tags it's given by name — there's no "everything newer than X" call
+  on Dockhand's side. `resolveAndFetchReleaseNotes`'s wanted-list matching
+  is also why the empty-`versions` call deliberately returns `notes: []`
+  (short-circuits before any network call) even for a confident source.
+  The fix would be a client-side release fetch: use the `source`/
+  `changelogUrl` Dockhand's empty-`versions` call already resolves for us
+  (confident sources only — GitHub or Gitea/Forgejo) to hit that forge's
+  releases API ourselves, filter to releases newer than the container's
+  OCI `image.version` label, and render their bodies the same way
+  `_semver_advisory_section()` does.
+  **Scope this narrowly if it's ever built**: only do the "everything
+  newer than installed" fetch when the container's raw image tag has NO
+  digits at all (`latest`, `stable`, `edge`, `nightly`, `main`, and
+  similar) — a tag with any digit in it (`v3`, `16-alpine`, a partial
+  CalVer pin like `2026.2`) still imposes a ceiling Install can never
+  cross (Traefik's `v3` will never become `v4` via Install), and correctly
+  bounding "newer than X" to that ceiling means reimplementing Dockhand's
+  own flavor/major-bump constraint logic (`tag-parser.ts`) ourselves —
+  real duplicated complexity, and exactly the kind of "displayed content
+  doesn't match what Install can deliver" mismatch this integration has
+  gone out of its way to avoid elsewhere (see the hasUpdate-vs-newerVersion
+  precedence in `update.py`'s module docstring). Confirmed with the
+  maintainer directly (a real example: an Authentik container with both an
+  actionable same-tag update AND a newerVersion suggestion requiring
+  re-pinning) that showing inline notes for anything beyond a genuinely
+  ceiling-free tag is not acceptable.
+  Also worth weighing before building: unauthenticated GitHub is 60
+  req/hour, shared across every zero-digit-tag container a user checks
+  release notes for in a session — Dockhand's own server-side fetch has
+  the same limit but at least centralizes it per-Dockhand-instance rather
+  than per-HA-instance.
+  Deliberately not built for the 1.10.0 release — maintainer wants to see
+  whether Dockhand's own semver/release-notes feature grows to cover this
+  (e.g. extending `newerVersion` detection to floating tags, or a
+  "since version X" mode on `version-notes`) before duplicating any of
+  that logic client-side. Revisit after a few more Dockhand releases, or
+  sooner if Dockhand ships something that makes this moot or easier.
+
+- **Auto-applying a semver "newer version tag" suggestion** (i.e. having
+  Install move a container to the tag `newerVersion` recommends, or editing
+  the pinned tag in the container's compose file/config on the user's
+  behalf). Rejected outright, not just deferred — Dockhand's own frontend
+  treats this purely as an advisory, session-only badge with no install
+  action (confirmed by reading `VersionUpdateModal.svelte`: a "view
+  releases" link and a Close button, nothing else), and for good reason:
+  the compose file is the user's own, and this integration doesn't own it.
+  Editing it out from under the user, or silently changing what tag a
+  freestanding container is configured with, is a correctness/trust
+  problem, not a convenience — see `update.py`'s
+  `_semver_advisory_only()`/module docstring for how the update entity
+  reflects this (Install withheld when this is the only signal). Not
+  worth revisiting unless Dockhand itself ships a "move to this tag"
+  action we could call instead of reimplementing our own.
+
 - **Proper destination-level device grouping for `repo_prune`/`repo_check`/
   `repo_verify` schedule types.** Discovered during the 1.9.0 Schedules
   device-hierarchy work by reading Dockhand's actual `/api/schedules` source
@@ -45,6 +109,44 @@ the reasoning first and only revisit if the stated condition has changed.
   a way to actually verify rendering — e.g. a confirmed-working real HA integration
   using `section()` to copy the exact translation structure from, or some way to
   render/test the actual frontend rather than guessing from source reading.
+
+- **Deprecate `DockhandUpdateCoordinator` (Tier 2 / `CONF_ENABLE_PRECISE_UPDATES`)
+  in a future major release.** After the 1.10.0 update-entity rework, Tier 1
+  (the always-on `pending-updates` poll) already carries `hasImageUpdate`/
+  `newerVersion` sourced from a real registry digest check — Dockhand's own
+  scheduled job (`env-update-check.ts`) computes that via the same
+  `checkImageUpdateAvailable()` call Tier 2's interactive `check-updates` POST
+  uses, just on Dockhand's own cron instead of ours. So Tier 2 no longer adds
+  a new "is there an update" signal for ordinary containers — confirmed by
+  reading both `env-update-check.ts` and `check-updates/+server.ts` directly,
+  not assumed.
+  **However, do not remove Tier 2 without solving this first:** Dockhand
+  deliberately never persists a `pending_container_updates` row for a system
+  container (Hawser, Dockhand itself) — both `env-update-check.ts`
+  (`if (isSystemContainer(imageName)) continue`) and the interactive
+  check-updates route (`if (result.systemContainer || result.updateDisabled)
+  continue`) skip writing that row, since Dockhand's own UI intentionally
+  hides system-container updates from the normal container-update flow. This
+  means Tier 1's `pending-updates` cache can **never** carry update status
+  for Hawser/Dockhand's own update entities, no matter how it's polled or
+  improved — that data simply doesn't exist server-side outside the raw,
+  unpersisted POST response. Tier 2's `DockhandUpdateCoordinator` captures
+  that raw response in memory (indexed by container ID, no system-container
+  filter applied client-side), which is the *only* reason our Hawser/Dockhand
+  update entities can ever show "update available" today. Confirmed live:
+  disabling `enable_precise_updates` makes those two entities permanently
+  read as up to date, even when an update genuinely exists.
+  Real remaining value of Tier 2, in order: (1) system-container update
+  detection above — a hard blocker on removal as things stand; (2) a
+  registry check on our own configurable cadence rather than Dockhand's
+  per-environment schedule; (3) the real short digest string for display,
+  which the maintainer has said isn't valuable on its own. The manual
+  "Check for updates" button stays regardless of this coordinator's fate —
+  it's independently useful and not the thing being reconsidered here.
+  Revisit if/when Dockhand adds a way to read system-container update status
+  from a cached/persisted endpoint (so Tier 1 could pick it up directly), or
+  if the maintainer decides losing accurate Hawser/Dockhand update entities
+  is an acceptable trade for removing the option.
 
 - **`async_get_device_by_identifier` / `async_get_device` migration
   (target: 2.0.0, Major — raises HA floor to 2026.8.0).** HA 2026.8

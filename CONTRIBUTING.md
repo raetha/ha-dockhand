@@ -23,7 +23,7 @@ than the versions listed here.
 | Project | Last reviewed | Where to check |
 |---|---|---|
 | Home Assistant Core | 2026.3 (minimum); tested against 2026.7.2; 2026.7's full backward-incompatible changes list reviewed directly (2026-07-21) — nothing relevant to entity/coordinator/config_entries APIs this integration depends on | https://github.com/home-assistant/core/releases |
-| Dockhand | v1.0.37 | https://github.com/Finsys/dockhand/releases |
+| Dockhand | v1.0.48 (diffed v1.0.46→v1.0.48 source directly against every endpoint this integration calls — containers list/stats/inspect/start/stop/restart/check-updates/pending-updates/version-notes/update-runtime/batch-update-stream, environments, schedules, settings/semver, jobs/{id}, stacks start/stop/restart/deploy — for the full-project compatibility review ahead of the 1.10.0 release; nothing relevant found — the update/semver/version-notes route files and their supporting `src/lib/server` modules are byte-for-byte unchanged since v1.0.46) | https://github.com/Finsys/dockhand/releases |
 
 Update this table after each review session. When picking up new Dockhand
 API work, also regenerate [docs/DOCKHAND_API.md](docs/DOCKHAND_API.md) —

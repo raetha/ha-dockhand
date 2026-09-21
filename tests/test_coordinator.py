@@ -280,7 +280,9 @@ async def test_fast_pending_updates_not_fetched_when_update_check_disabled(
     coord = _fast(hass, client, config={"poll_interval": 30})
     await coord.async_refresh()
     client.async_get_pending_updates.assert_not_called()
-    assert coord.data["environments"][1]["pending_update_container_ids"] == set()
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == set()
+    assert env_data["pending_update_details"] == {}
 
 
 async def test_fast_pending_updates_fetched_when_update_check_enabled(
@@ -288,12 +290,23 @@ async def test_fast_pending_updates_fetched_when_update_check_enabled(
 ):
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
     client.async_get_pending_updates = AsyncMock(
-        return_value=[{"containerId": "abc", "containerName": "web"}]
+        return_value=[
+            {
+                "containerId": "abc",
+                "containerName": "web",
+                "hasImageUpdate": True,
+                "newerVersion": None,
+            }
+        ]
     )
     coord = _fast(hass, client, config={"poll_interval": 30})
     await coord.async_refresh()
     client.async_get_pending_updates.assert_called_once_with(1)
-    assert coord.data["environments"][1]["pending_update_container_ids"] == {"abc"}
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == {"abc"}
+    assert env_data["pending_update_details"] == {
+        "abc": {"hasImageUpdate": True, "newerVersion": None}
+    }
 
 
 async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistant):
@@ -301,12 +314,142 @@ async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistan
     client.async_get_pending_updates = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client, config={"poll_interval": 30})
     await coord.async_refresh()
-    assert coord.data["environments"][1]["pending_update_container_ids"] == set()
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == set()
+    assert env_data["pending_update_details"] == {}
+
+
+async def test_fast_pending_updates_semver_only_row_excluded_from_ids(
+    hass: HomeAssistant,
+):
+    """A row with hasImageUpdate=False but a newerVersion suggestion is a
+    real, previously-unnoticed case: Dockhand's own scheduled update-check
+    job persists a row here for semver-only suggestions too (no actionable
+    digest update). Such a row must NOT contribute to
+    pending_update_container_ids (that set means "actionable"), but its
+    newerVersion must still be reachable via pending_update_details — this
+    is the fix for the over-inclusion bug this whole feature branch
+    uncovered."""
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
+    newer_version = {"tag": "16.4-alpine", "bump": "minor", "skipped": ["16.4-alpine"]}
+    client.async_get_pending_updates = AsyncMock(
+        return_value=[
+            {
+                "containerId": "abc",
+                "containerName": "web",
+                "hasImageUpdate": False,
+                "newerVersion": newer_version,
+            }
+        ]
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == set()
+    assert env_data["pending_update_details"] == {
+        "abc": {"hasImageUpdate": False, "newerVersion": newer_version}
+    }
+
+
+async def test_fast_pending_updates_mixed_actionable_and_semver_only_rows(
+    hass: HomeAssistant,
+):
+    """One actionable row and one semver-only row in the same poll — only
+    the actionable one's id ends up in pending_update_container_ids, but
+    pending_update_details keeps both."""
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
+    client.async_get_pending_updates = AsyncMock(
+        return_value=[
+            {
+                "containerId": "abc",
+                "containerName": "web",
+                "hasImageUpdate": True,
+                "newerVersion": None,
+            },
+            {
+                "containerId": "def",
+                "containerName": "db",
+                "hasImageUpdate": False,
+                "newerVersion": {"tag": "9.0", "bump": "major", "skipped": ["9.0"]},
+            },
+        ]
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == {"abc"}
+    assert set(env_data["pending_update_details"].keys()) == {"abc", "def"}
+    assert env_data["pending_update_details"]["def"]["hasImageUpdate"] is False
 
 
 async def test_fast_update_interval_from_config(hass: HomeAssistant):
     coord = _fast(hass, _make_client(envs=[]), config={"poll_interval": 90})
     assert coord.update_interval == timedelta(seconds=90)
+
+
+# ---------------------------------------------------------------------------
+# Fast coordinator — async_merge_pending_updates_from_check
+# ---------------------------------------------------------------------------
+
+
+async def test_merge_pending_updates_from_check_builds_both_fields(
+    hass: HomeAssistant,
+):
+    """Fed the raw check-updates POST response shape (containerId,
+    hasUpdate, newerVersion, ...) — must rebuild both
+    pending_update_container_ids (actionable subset only) and
+    pending_update_details (every item), same split _fetch_env applies
+    to the periodic pending-updates poll."""
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+
+    newer_version = {"tag": "9.0", "bump": "major", "skipped": ["9.0"]}
+    items = [
+        {"containerId": "abc", "containerName": "web", "hasUpdate": True},
+        {
+            "containerId": "def",
+            "containerName": "db",
+            "hasUpdate": False,
+            "newerVersion": newer_version,
+        },
+    ]
+    coord.async_merge_pending_updates_from_check(1, items)
+
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == {"abc"}
+    assert env_data["pending_update_details"] == {
+        "abc": {"hasImageUpdate": True, "newerVersion": None},
+        "def": {"hasImageUpdate": False, "newerVersion": newer_version},
+    }
+
+
+async def test_merge_pending_updates_from_check_noop_when_env_missing(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    # env 999 was never fetched — merging into it must be a silent no-op,
+    # not raise or fabricate an environment entry.
+    coord.async_merge_pending_updates_from_check(
+        999, [{"containerId": "abc", "hasUpdate": True}]
+    )
+    assert 999 not in coord.data["environments"]
+
+
+async def test_merge_pending_updates_from_check_ignores_items_without_id(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    coord.async_merge_pending_updates_from_check(
+        1, [{"containerName": "web", "hasUpdate": True}]
+    )
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == set()
+    assert env_data["pending_update_details"] == {}
 
 
 # ---------------------------------------------------------------------------

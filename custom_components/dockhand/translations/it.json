@@ -50,7 +50,7 @@
           "enable_container_stats": "Crea sensori di CPU, memoria, rete e I/O disco per ogni container. Disattivato per impostazione predefinita poiché sono molte entità che la maggior parte delle persone non necessita; disattivarlo rimuove anche quelli già creati.",
           "poll_interval_updates": "Con quale frequenza vengono eseguite le query al registro sopra indicate (secondi). Predefinito: 86400 (24 ore). Minimo: 300.",
           "enable_update_entities": "Crea un'entità di aggiornamento di Home Assistant per ogni container. Disattiva questa opzione se gestisci gli aggiornamenti in un altro modo e non vuoi che i container di Dockhand appaiano nella gestione aggiornamenti di HA. Nasconde anche il pulsante \"Aggiorna tutto\"; \"Controlla aggiornamenti\" continua comunque a funzionare.",
-          "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. Richiede \"Abilita entità di aggiornamento\" sopra."
+          "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. È anche l'unico modo per vedere lo stato di aggiornamento dei contenitori protetti di Dockhand stesso (Dockhand e Hawser) — Dockhand non espone mai il loro stato di aggiornamento tramite i normali dati di controllo aggiornamenti in cache. Richiede \"Abilita entità di aggiornamento\" sopra."
         }
       },
       "reauth_confirm": {
@@ -117,7 +117,7 @@
           "enable_container_stats": "Crea sensori di CPU, memoria, rete e I/O disco per ogni container. Disattivato per impostazione predefinita poiché sono molte entità che la maggior parte delle persone non necessita; disattivarlo rimuove anche quelli già creati.",
           "poll_interval_updates": "Con quale frequenza vengono eseguite le query al registro sopra indicate (secondi). Predefinito: 86400 (24 ore). Minimo: 300.",
           "enable_update_entities": "Crea un'entità di aggiornamento di Home Assistant per ogni container. Disattiva questa opzione se gestisci gli aggiornamenti in un altro modo e non vuoi che i container di Dockhand appaiano nella gestione aggiornamenti di HA. Nasconde anche il pulsante \"Aggiorna tutto\"; \"Controlla aggiornamenti\" continua comunque a funzionare.",
-          "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. Richiede \"Abilita entità di aggiornamento\" sopra."
+          "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. È anche l'unico modo per vedere lo stato di aggiornamento dei contenitori protetti di Dockhand stesso (Dockhand e Hawser) — Dockhand non espone mai il loro stato di aggiornamento tramite i normali dati di controllo aggiornamenti in cache. Richiede \"Abilita entità di aggiornamento\" sopra."
         }
       }
     }

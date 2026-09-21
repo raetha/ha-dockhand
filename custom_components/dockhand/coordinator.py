@@ -104,9 +104,43 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "stacks": [],
                 "container_stats": {name: {}},
                 "pending_update_container_ids": {container_id, ...},
+                "pending_update_details": {
+                    container_id: {
+                        "hasImageUpdate": bool,
+                        "newerVersion": {"tag": str, "bump": str,
+                                         "skipped": [str, ...],
+                                         "digest": str | None} | None,
+                    }
+                },
             }
         }
     }
+
+    pending_update_container_ids vs. pending_update_details: GET
+    /api/containers/pending-updates?env=X (confirmed from Dockhand's own
+    source, src/routes/api/containers/pending-updates/+server.ts) returns
+    one row per container Dockhand's scheduled update-check job persisted
+    a record for — and that job (env-update-check.ts,
+    runEnvUpdateCheckJob) persists a row for the UNION of (a) containers
+    with a real, actionable digest update (hasImageUpdate=True) and (b)
+    containers with ONLY a semver "newer version tag" suggestion and no
+    actionable digest update (hasImageUpdate=False, newerVersion still
+    populated). Case (b) is a real, previously-unnoticed bug source: this
+    coordinator used to add EVERY row's containerId to
+    pending_update_container_ids regardless of hasImageUpdate, which made
+    a pure semver-only suggestion (advisory-only — see update.py's module
+    docstring on why Install must never be offered for that case alone)
+    indistinguishable from a genuine actionable update everywhere that set
+    is consumed (the stack "pending updates" binary sensor, the bulk
+    "Update all" button's eligibility list, __init__.py's entity-cleanup
+    gating, and update.py's own Tier-1 "update-pending" sentinel).
+
+    Fixed by keeping both: pending_update_details holds every row
+    (actionable or semver-only alike) so update.py can still surface
+    newerVersion/hasImageUpdate per container, while
+    pending_update_container_ids is rebuilt to include ONLY the ids where
+    hasImageUpdate is True — restoring "pending" to mean "actionable"
+    everywhere else in the integration that already assumed that.
     """
 
     def __init__(
@@ -298,6 +332,16 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     if isinstance(s, dict) and "name" in s
                 }
 
+            # pending_update_details keeps EVERY row from pending-updates —
+            # both actionable (hasImageUpdate=True) and semver-advisory-only
+            # (hasImageUpdate=False, newerVersion populated) — since
+            # update.py's Tier-1 merge needs newerVersion even when there's
+            # no actionable update to go with it. pending_update_container_ids
+            # is then rebuilt from only the actionable subset — see this
+            # coordinator's own docstring above ("pending_update_container_ids
+            # vs. pending_update_details") for why the two must not be the
+            # same set.
+            pending_update_details: dict[str, dict] = {}
             pending_update_container_ids: set[str] = set()
             if "pending_updates" in results:
                 pending = _safe_list(
@@ -309,11 +353,17 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         "pending_updates",
                     )
                 )
-                pending_update_container_ids = {
-                    p["containerId"]
-                    for p in pending
-                    if isinstance(p, dict) and p.get("containerId")
-                }
+                for p in pending:
+                    if not isinstance(p, dict) or not p.get("containerId"):
+                        continue
+                    container_id = p["containerId"]
+                    has_image_update = bool(p.get("hasImageUpdate"))
+                    pending_update_details[container_id] = {
+                        "hasImageUpdate": has_image_update,
+                        "newerVersion": p.get("newerVersion") or None,
+                    }
+                    if has_image_update:
+                        pending_update_container_ids.add(container_id)
             return env_id, {
                 "stats": all_stats.get(env_id, {}),
                 "containers": _safe_list(
@@ -336,6 +386,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 ),
                 "container_stats": container_stats,
                 "pending_update_container_ids": pending_update_container_ids,
+                "pending_update_details": pending_update_details,
                 # Which of the above failed to fetch this cycle, rather
                 # than genuinely being empty — see _unwrap's own doc
                 # comment. Checked by __init__.py's _build_live_sets
@@ -361,7 +412,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {"environments": out}
 
     def async_merge_pending_updates_from_check(
-        self, env_id: int, container_ids_with_updates: set[str]
+        self, env_id: int, items: list[dict]
     ) -> None:
         """Merge a fresh Tier 1 pending-update signal for one environment,
         obtained from an on-demand real registry check (the env-level
@@ -369,9 +420,30 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         into this coordinator's existing data — without waiting for this
         environment's next scheduled 60s poll.
 
+        `items` is the raw list POST /api/containers/check-updates?env=X
+        returns (client.async_check_container_updates's own return shape):
+        per-item {containerId, containerName, imageName, hasUpdate,
+        currentDigest, newDigest, systemContainer, updateDisabled,
+        newerVersion?} — the same shape button.py already has in hand
+        after firing the check itself, so it can hand it here directly
+        instead of building a lossy id-only set first (see button.py's
+        own docstring for that history: it used to throw away
+        newerVersion/digest data before calling this).
+
+        Rebuilds both pending_update_container_ids and
+        pending_update_details for this environment from `items`, mirroring
+        exactly how the periodic 60s poll (_fetch_env above) builds them
+        from pending-updates — hasUpdate is check-updates' own name for the
+        same "actionable digest update" concept pending-updates calls
+        hasImageUpdate, so it's mapped the same way: only items with
+        hasUpdate=True contribute to pending_update_container_ids, while
+        pending_update_details keeps every item (actionable or
+        semver-only) so its newerVersion still reaches update.py's merge
+        even when hasUpdate is False.
+
         Uses async_set_updated_data() rather than a full refresh, same
         reasoning as DockhandUpdateCoordinator.async_check_environment():
-        replaces just this one field for this one environment, leaves
+        replaces just these two fields for this one environment, leaves
         every other environment and every other field of this
         environment's data untouched, and notifies listeners without
         triggering a full refresh of anything else.
@@ -385,8 +457,24 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         env_data = environments.get(env_id)
         if not env_data:
             return
+
+        pending_update_details: dict[str, dict] = {}
+        pending_update_container_ids: set[str] = set()
+        for item in items:
+            container_id = item.get("containerId")
+            if not container_id:
+                continue
+            has_update = bool(item.get("hasUpdate"))
+            pending_update_details[container_id] = {
+                "hasImageUpdate": has_update,
+                "newerVersion": item.get("newerVersion") or None,
+            }
+            if has_update:
+                pending_update_container_ids.add(container_id)
+
         new_env_data = dict(env_data)
-        new_env_data["pending_update_container_ids"] = set(container_ids_with_updates)
+        new_env_data["pending_update_container_ids"] = pending_update_container_ids
+        new_env_data["pending_update_details"] = pending_update_details
         environments[env_id] = new_env_data
         self.async_set_updated_data({"environments": environments})
 

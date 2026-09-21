@@ -95,11 +95,51 @@ ITEM_HAS_UPDATE = {
     "hasUpdate": True,
 }
 
+# Semver "newer version tag" (Dockhand 1.0.43+) — advisory only, can appear
+# with hasUpdate True or False since it's an independent signal.
+NEWER_VERSION = {
+    "tag": "16.4-alpine",
+    "bump": "minor",
+    "skipped": ["16.3-alpine", "16.4-alpine"],
+}
+
+ITEM_NEWER_VERSION_ONLY = {
+    **ITEM_UP_TO_DATE,
+    "newerVersion": NEWER_VERSION,
+}
+
+ITEM_HAS_UPDATE_AND_NEWER_VERSION = {
+    **ITEM_HAS_UPDATE,
+    "newerVersion": NEWER_VERSION,
+}
+
+CONTAINER_WITH_VERSION_LABEL = {
+    **CONTAINER_NORMAL,
+    "labels": {"org.opencontainers.image.version": "v3.1.0"},
+}
+
+VERSION_NOTES_RESPONSE = {
+    "changelogUrl": "https://github.com/nginxinc/docker-nginx/releases",
+    "source": "nginxinc/docker-nginx",
+    "rateLimited": False,
+    "notes": [
+        {
+            "version": "16.4-alpine",
+            "name": "v16.4",
+            "githubTag": "v16.4",
+            "body": "Fixed a thing.",
+            "publishedAt": "2026-08-01T00:00:00Z",
+            "url": "https://github.com/nginxinc/docker-nginx/releases/tag/v16.4",
+        }
+    ],
+}
+
 
 def _make_fast_coord(
     containers: list | None = None,
     scanner_enabled: bool = False,
     pending_ids: set | None = None,
+    pending_update_details: dict | None = None,
 ) -> MagicMock:
     coord = MagicMock(spec=DockhandFastCoordinator)
     coord.data = {
@@ -116,6 +156,7 @@ def _make_fast_coord(
                 },
                 "container_stats": {},
                 "pending_update_container_ids": pending_ids or set(),
+                "pending_update_details": pending_update_details or {},
             }
         }
     }
@@ -126,6 +167,9 @@ def _make_fast_coord(
     coord.client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
     coord.client.async_get_update_check_settings = AsyncMock(
         return_value={"vulnerabilityCriteria": "critical_high"}
+    )
+    coord.client.async_get_version_notes = AsyncMock(
+        return_value=VERSION_NOTES_RESPONSE
     )
     # Default: job completes immediately in "done" status with one progress
     # line reporting 100%, matching a successful single-container update.
@@ -171,11 +215,12 @@ def _make_entity(
     containers: list | None = None,
     scanner_enabled: bool = False,
     pending_ids: set | None = None,
+    pending_update_details: dict | None = None,
     update_coordinator=_UNSET,
     fast_coordinator: MagicMock | None = None,
 ) -> ContainerUpdateEntity:
     fast_coord = fast_coordinator or _make_fast_coord(
-        containers, scanner_enabled, pending_ids
+        containers, scanner_enabled, pending_ids, pending_update_details
     )
     if update_coordinator is _UNSET:
         update_coord = _make_update_coord(update_item)
@@ -261,6 +306,22 @@ def test_tier1_latest_version_pending_cache_ignored_for_different_container():
     assert entity.latest_version == entity.installed_version
 
 
+def test_tier1_installed_version_prefers_oci_label_over_image_tag():
+    """org.opencontainers.image.version label beats the raw image tag,
+    even with no Tier 2 data at all."""
+    entity = _make_entity(update_item=None, containers=[CONTAINER_WITH_VERSION_LABEL])
+    assert entity.installed_version == "v3.1.0"
+
+
+def test_tier1_installed_version_blank_label_falls_back_to_image_tag():
+    container = {
+        **CONTAINER_NORMAL,
+        "labels": {"org.opencontainers.image.version": "   "},
+    }
+    entity = _make_entity(update_item=None, containers=[container])
+    assert entity.installed_version == "nginx:latest"
+
+
 def test_tier1_works_fully_with_update_coordinator_none():
     """Tier 2 entirely disabled (not just empty data) — Tier 1 still
     works: image tag as installed_version, update-pending when flagged."""
@@ -295,10 +356,17 @@ def test_tier2_latest_version_new_digest_when_update_available():
     assert entity.latest_version == "79f926e8d8fe"
 
 
-def test_tier2_latest_version_falls_back_when_new_digest_missing():
+def test_tier2_latest_version_falls_back_to_raw_tag_when_new_digest_missing():
+    """hasUpdate=True with no real digest attached — the fix for bug #2:
+    falls back to the container's raw image tag (distinguishable from
+    installed_version, which here is the currentDigest-derived short
+    digest), not to installed_version itself (which would falsely read
+    as "up to date")."""
     item = {**ITEM_HAS_UPDATE, "newDigest": ""}
     entity = _make_entity(item)
-    assert entity.latest_version == entity.installed_version
+    assert entity.installed_version == "53bb1e23fb30"
+    assert entity.latest_version == "nginx:latest"
+    assert entity.latest_version != entity.installed_version
 
 
 def test_tier2_real_digest_prioritized_over_pending_cache():
@@ -314,6 +382,198 @@ def test_tier2_falls_back_to_tier1_pending_when_no_item_yet():
     for this container yet — Tier 1's pending signal still works."""
     entity = _make_entity(update_item=None, pending_ids={CONTAINER_ID})
     assert entity.latest_version == "update-pending"
+
+
+def test_tier2_installed_version_label_beats_digest():
+    """The OCI version label still wins even with a real Tier 2 digest
+    present — it's a strictly better version string when available."""
+    entity = _make_entity(ITEM_UP_TO_DATE, containers=[CONTAINER_WITH_VERSION_LABEL])
+    assert entity.installed_version == "v3.1.0"
+
+
+# ---------------------------------------------------------------------------
+# latest_version — semver "newer version tag" (newerVersion, Dockhand 1.0.43+)
+# ---------------------------------------------------------------------------
+
+
+def test_latest_version_uses_newer_version_tag_when_no_digest_update():
+    """The case a pure digest comparison can never catch: hasUpdate is
+    False (this exact tag's digest hasn't changed) but a newer pinned
+    version tag has been published."""
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    assert entity.latest_version == "16.4-alpine"
+
+
+def test_latest_version_hasupdate_digest_wins_over_newer_version_tag():
+    """Real-world scenario: pinned to a floating minor tag like "1.2", and
+    both an actionable same-tag patch ("1.2.3", hasUpdate=True) and a
+    non-actionable higher line ("1.3.0", newerVersion) are available at
+    once. The actionable digest update must win the display — newerVersion
+    always targets the HIGHEST version it finds (see module docstring),
+    which here is the one Install can't actually deliver."""
+    entity = _make_entity(ITEM_HAS_UPDATE_AND_NEWER_VERSION)
+    assert entity.latest_version == "79f926e8d8fe"
+
+
+def test_latest_version_ignores_newer_version_without_tag():
+    item = {**ITEM_UP_TO_DATE, "newerVersion": {}}
+    entity = _make_entity(item)
+    assert entity.latest_version == entity.installed_version
+
+
+def test_latest_version_pending_cache_beats_absent_newer_version():
+    """No newerVersion field at all (Tier 2 present, semver just didn't
+    fire) — existing Tier 1 pending-cache fallback still applies."""
+    entity = _make_entity(ITEM_UP_TO_DATE, pending_ids={CONTAINER_ID})
+    assert entity.latest_version == "update-pending"
+
+
+# ---------------------------------------------------------------------------
+# _check_updates_item — Tier 1 / Tier 2 merge (bug #1/#2 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_check_updates_item_tier1_only_no_tier2_at_all():
+    """Tier 2 entirely disabled — the merged item is built purely from
+    Tier 1's pending_update_details, and hasUpdate/newerVersion still
+    surface. This is the fix for bug #1/#2: previously returned {}
+    unconditionally whenever update_coordinator was None."""
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    item = entity._check_updates_item()
+    assert item == {"hasUpdate": True, "newerVersion": None}
+
+
+def test_check_updates_item_tier1_only_semver_suggestion_no_tier2():
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": False, "newerVersion": NEWER_VERSION}
+        },
+    )
+    item = entity._check_updates_item()
+    assert item == {"hasUpdate": False, "newerVersion": NEWER_VERSION}
+
+
+def test_check_updates_item_tier2_present_but_no_row_falls_back_to_tier1():
+    """Tier 2 is configured (update_coordinator exists) but has no entry
+    for this specific container (e.g. hasn't reached it yet, or it's
+    excluded) — Tier 1's detail is used instead of an empty dict."""
+    entity = _make_entity(
+        update_item=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    item = entity._check_updates_item()
+    assert item == {"hasUpdate": True, "newerVersion": None}
+
+
+def test_check_updates_item_tier2_row_wins_hasupdate_over_tier1():
+    """Tier 2 has an actual row for this container — its hasUpdate is
+    authoritative, even if Tier 1's own detail disagrees (e.g. stale)."""
+    entity = _make_entity(
+        ITEM_UP_TO_DATE,  # hasUpdate=False from Tier 2
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    item = entity._check_updates_item()
+    assert item["hasUpdate"] is False
+
+
+def test_check_updates_item_tier1_newer_version_fills_gap_when_tier2_lacks_one():
+    """Tier 2 has a row for this container but no newerVersion of its
+    own — Tier 1's newerVersion still fills that gap."""
+    entity = _make_entity(
+        ITEM_UP_TO_DATE,  # no newerVersion field
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": False, "newerVersion": NEWER_VERSION}
+        },
+    )
+    item = entity._check_updates_item()
+    assert item["newerVersion"] == NEWER_VERSION
+
+
+def test_check_updates_item_tier2_newer_version_wins_over_tier1():
+    """Tier 2's own newerVersion (from its own check-updates response)
+    takes priority over Tier 1's pending-updates newerVersion when both
+    are present."""
+    tier2_newer = {"tag": "99.0", "bump": "major", "skipped": ["99.0"]}
+    entity = _make_entity(
+        {**ITEM_UP_TO_DATE, "newerVersion": tier2_newer},
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": False, "newerVersion": NEWER_VERSION}
+        },
+    )
+    item = entity._check_updates_item()
+    assert item["newerVersion"] == tier2_newer
+
+
+def test_check_updates_item_empty_when_no_tier1_and_no_tier2():
+    entity = _make_entity(update_coordinator=None)
+    assert entity._check_updates_item() == {}
+
+
+def test_check_updates_item_empty_when_container_missing():
+    entity = _make_entity(containers=[])
+    assert entity._check_updates_item() == {}
+
+
+# ---------------------------------------------------------------------------
+# latest_version — raw-tag-vs-sentinel fix (bug #2)
+# ---------------------------------------------------------------------------
+
+
+def test_latest_version_falls_back_to_sentinel_when_raw_tag_not_distinguishable():
+    """No OCI version label on this container — installed_version is
+    already just the raw image tag ("nginx:latest"), so showing the tag
+    again as latest_version would collide (both equal) and falsely read
+    as "up to date" (HA renders STATE_OFF whenever latest_version ==
+    installed_version). The synthetic "update-pending" sentinel is used
+    instead — same sentinel Tier 1's own pending-cache signal already
+    used for exactly this reason."""
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    assert entity.installed_version == "nginx:latest"
+    assert entity.latest_version == "update-pending"
+    assert entity.latest_version != entity.installed_version
+
+
+def test_latest_version_uses_raw_tag_when_installed_version_is_oci_label():
+    """The intended real-world case: installed_version is an OCI-label
+    application version distinct from the pull tag — raw tag then
+    genuinely differs and is shown as latest_version."""
+    container = {
+        **CONTAINER_WITH_VERSION_LABEL,
+        "image": "myapp:latest",
+    }
+    entity = _make_entity(
+        update_coordinator=None,
+        containers=[container],
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    assert entity.installed_version == "v3.1.0"
+    assert entity.latest_version == "myapp:latest"
+    assert entity.latest_version != entity.installed_version
+
+
+def test_latest_version_tier2_digest_still_wins_over_tier1_raw_tag_path():
+    """Sanity check that the new raw-tag fallback only applies when
+    there's no real digest at all — Tier 2's real digest still takes
+    priority as before."""
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    assert entity.latest_version == "79f926e8d8fe"
 
 
 # ---------------------------------------------------------------------------
@@ -383,6 +643,36 @@ def test_supported_features_work_without_tier2_data_at_all():
 
     entity = _make_entity(containers=[CONTAINER_SYSTEM], update_coordinator=None)
     assert UpdateEntityFeature.INSTALL not in entity._attr_supported_features
+
+
+def test_install_suppressed_when_newer_version_is_only_signal():
+    """A newerVersion suggestion with no real digest update and no Tier 1
+    pending flag — Install would silently re-pull the same pinned tag, so
+    it must not be offered. See _semver_advisory_only()."""
+    from homeassistant.components.update import UpdateEntityFeature
+
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    assert UpdateEntityFeature.INSTALL not in entity._attr_supported_features
+    assert UpdateEntityFeature.RELEASE_NOTES in entity._attr_supported_features
+
+
+def test_install_offered_when_newer_version_and_real_digest_update():
+    """A genuine digest-level update exists too — Install is legitimate
+    here (it pulls the current tag's new content), even though it won't
+    move the container to the semver-suggested tag."""
+    from homeassistant.components.update import UpdateEntityFeature
+
+    entity = _make_entity(ITEM_HAS_UPDATE_AND_NEWER_VERSION)
+    assert UpdateEntityFeature.INSTALL in entity._attr_supported_features
+
+
+def test_install_offered_when_newer_version_but_pending_cache_flags_it():
+    """Tier 1's own pending-cache signal is present alongside the semver
+    suggestion — Install is still legitimate via that Tier 1 signal."""
+    from homeassistant.components.update import UpdateEntityFeature
+
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY, pending_ids={CONTAINER_ID})
+    assert UpdateEntityFeature.INSTALL in entity._attr_supported_features
 
 
 # ---------------------------------------------------------------------------
@@ -472,6 +762,256 @@ async def test_release_notes_work_without_tier2_data_at_all():
     notes = await entity.async_release_notes()
     assert notes is not None
     assert "nginx:latest" in notes
+
+
+# ---------------------------------------------------------------------------
+# async_release_notes — newerVersion section (Dockhand 1.0.43+)
+# ---------------------------------------------------------------------------
+
+
+async def test_release_notes_omit_newer_version_section_when_absent():
+    entity = _make_entity(ITEM_UP_TO_DATE)
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "newer version tag" not in notes.lower()
+
+
+async def test_release_notes_no_newer_version_call_without_hass():
+    """self.hass is None (never added to hass, as in these unit tests) —
+    the section is silently omitted rather than trying to call the client,
+    which needs a real aiohttp session from hass."""
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    assert entity.hass is None
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "newer version tag" not in notes.lower()
+    entity.coordinator.client.async_get_version_notes.assert_not_awaited()
+
+
+async def test_release_notes_include_newer_version_section_when_attached():
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "16.4-alpine" in notes
+    assert "Fixed a thing." in notes
+    assert "https://github.com/nginxinc/docker-nginx/releases" in notes
+    # Advisory caveat always present alongside the section.
+    assert "advisory only" in notes.lower()
+    assert "will not move it to this version" in notes
+
+
+async def test_release_notes_suppress_newer_version_while_actionable_update_pending():
+    """Same real-world scenario as latest_version's: pinned to "1.2", with
+    both an actionable same-tag patch (hasUpdate=True) and a non-actionable
+    higher newerVersion suggestion available at once. The dialog must not
+    mention the non-actionable target while there's a real update to apply
+    first — otherwise the dialog and Install would point at different
+    versions. Never even calls the client for this."""
+    entity = _make_entity(ITEM_HAS_UPDATE_AND_NEWER_VERSION)
+    entity.hass = MagicMock()
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "16.4-alpine" not in notes
+    entity.coordinator.client.async_get_version_notes.assert_not_awaited()
+
+
+async def test_release_notes_newer_version_reports_skipped_count():
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    # skipped = ["16.3-alpine", "16.4-alpine"] — target is the last entry,
+    # so 1 intermediate version was skipped.
+    assert "1 version(s) skipped" in notes
+
+
+async def test_release_notes_newer_version_fetch_called_with_skipped_versions():
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    await entity.async_release_notes()
+    entity.coordinator.client.async_get_version_notes.assert_awaited_once_with(
+        ENV_ID, CONTAINER_ID, ["16.3-alpine", "16.4-alpine"]
+    )
+
+
+async def test_release_notes_newer_version_falls_back_without_matching_note():
+    """The version-notes endpoint returned no note matching the target
+    tag (e.g. it predates the forge's recent-releases window) — the
+    section still shows the tag and the changelog link, just no body."""
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        return_value={
+            "changelogUrl": "https://github.com/nginxinc/docker-nginx/releases",
+            "source": "nginxinc/docker-nginx",
+            "rateLimited": False,
+            "notes": [],
+        }
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "16.4-alpine" in notes
+    assert "https://github.com/nginxinc/docker-nginx/releases" in notes
+
+
+async def test_release_notes_newer_version_fetch_failure_omits_section():
+    """Best-effort: a client error must never break the dialog."""
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        side_effect=Exception("boom")
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "nginx:latest" in notes
+    assert "16.4-alpine" not in notes
+
+
+async def test_release_notes_newer_version_truncates_long_body():
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    long_body = "x" * 5000
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        return_value={
+            **VERSION_NOTES_RESPONSE,
+            "notes": [{**VERSION_NOTES_RESPONSE["notes"][0], "body": long_body}],
+        }
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "(truncated)" in notes
+    assert len(notes) < len(long_body) + 2000
+
+
+# ---------------------------------------------------------------------------
+# async_release_notes — pending update with no newerVersion tag (bug #1 fix)
+# ---------------------------------------------------------------------------
+
+
+async def test_release_notes_no_changelog_section_when_nothing_pending():
+    """No hasUpdate, no Tier 1 pending flag, no newerVersion at all —
+    neither section applies."""
+    entity = _make_entity(ITEM_UP_TO_DATE)
+    entity.hass = MagicMock()
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    entity.coordinator.client.async_get_version_notes.assert_not_awaited()
+
+
+async def test_release_notes_changelog_link_for_pending_update_without_tag():
+    """The bug #1 fix: hasUpdate=True (via Tier 1's merge, no digest, no
+    newerVersion tag) — version-notes is still called, with an EMPTY
+    versions list, and a bare changelog link is shown if Dockhand
+    resolves one."""
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        return_value={
+            "changelogUrl": "https://github.com/nginxinc/docker-nginx/releases",
+            "source": "nginxinc/docker-nginx",
+            "rateLimited": False,
+            "notes": [],
+        }
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "https://github.com/nginxinc/docker-nginx/releases" in notes
+    entity.coordinator.client.async_get_version_notes.assert_awaited_once_with(
+        ENV_ID, CONTAINER_ID, []
+    )
+
+
+async def test_release_notes_changelog_link_via_tier1_pending_cache_no_tier1_detail():
+    """Same as above but the "pending" signal comes purely from Tier 1's
+    older pending_update_container_ids cache (e.g. Tier 2 has an explicit
+    'no update' row while Tier 1's cache still flags it — the same
+    divergent-Tier-2 scenario latest_version's own trailing pending-cache
+    fallback handles) rather than pending_update_details — has_pending
+    must still be true via _pending_via_dockhand_cache()."""
+    entity = _make_entity(ITEM_UP_TO_DATE, pending_ids={CONTAINER_ID})
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        return_value={
+            "changelogUrl": "https://github.com/nginxinc/docker-nginx/releases",
+            "notes": [],
+        }
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "https://github.com/nginxinc/docker-nginx/releases" in notes
+    entity.coordinator.client.async_get_version_notes.assert_awaited_once_with(
+        ENV_ID, CONTAINER_ID, []
+    )
+
+
+async def test_release_notes_no_changelog_section_when_dockhand_cant_resolve_one():
+    """Empty-versions call succeeds but Dockhand couldn't confidently
+    resolve a changelog URL for this image — no section is added, and the
+    dialog otherwise renders normally."""
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        return_value={"changelogUrl": None, "notes": []}
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "nginx:latest" in notes
+
+
+async def test_release_notes_changelog_section_fetch_failure_is_silent():
+    """Best-effort: a client error for the empty-versions call must never
+    break the dialog, same fail-open policy as the semver advisory path."""
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        side_effect=Exception("boom")
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+
+
+async def test_release_notes_no_changelog_call_without_hass_for_pending_update():
+    entity = _make_entity(
+        update_coordinator=None,
+        pending_update_details={
+            CONTAINER_ID: {"hasImageUpdate": True, "newerVersion": None}
+        },
+    )
+    assert entity.hass is None
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    entity.coordinator.client.async_get_version_notes.assert_not_awaited()
+
+
+async def test_release_notes_semver_section_still_preferred_over_changelog_only():
+    """When there's both a pending update signal via the newerVersion
+    branch's own gating (tag present, hasUpdate False) the semver
+    advisory section is used, not the bare-changelog one — unaffected by
+    this change."""
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY)
+    entity.hass = MagicMock()
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "16.4-alpine" in notes
+    entity.coordinator.client.async_get_version_notes.assert_awaited_once_with(
+        ENV_ID, CONTAINER_ID, ["16.3-alpine", "16.4-alpine"]
+    )
 
 
 # ---------------------------------------------------------------------------
