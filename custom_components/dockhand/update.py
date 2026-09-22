@@ -131,15 +131,15 @@ currently configured with. _update_supported_features() below withholds
 UpdateEntityFeature.INSTALL specifically for the case where newerVersion
 is the ONLY reason installed_version != latest_version (hasUpdate=False),
 since offering it there would look like a working button that silently
-does nothing. async_release_notes()'s semver advisory section is itself
-only shown when hasUpdate is False (see _newer_version_section() /
-_semver_advisory_section()) — the same gating as latest_version above,
-for the same reason — and states the advisory caveat plainly whenever it
-does appear.
+does nothing. async_release_notes()'s full semver advisory section is itself
+only shown when no actionable update is pending (see
+_newer_version_section() / _semver_advisory_section()) — the same gating
+as latest_version above, for the same reason — and states the advisory
+caveat plainly whenever it does appear. While an actionable update IS
+pending, the dialog only names the newer tag in a one-line notice.
 
-When there's a pending/actionable update but NO newerVersion suggestion
-to go with it (the common Tier-1-only case, or Tier 2 on but without a
-newerVersion for this container), _newer_version_section() instead calls
+Whenever there's a pending/actionable update (with or without a
+newerVersion suggestion alongside it), _newer_version_section() calls
 _pending_update_changelog_section(), which asks Dockhand's version-notes
 endpoint for a bare changelog link with an empty `versions` list — this
 is the fix for bug #1 (release notes/changelog links disappearing
@@ -550,19 +550,22 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             if raw_tag and raw_tag != installed:
                 return raw_tag
             return "update-pending"
-        newer_tag = (item.get("newerVersion") or {}).get("tag")
-        if newer_tag:
-            # No actionable digest update right now — safe to surface the
-            # semver suggestion. _update_supported_features() withholds
-            # Install for this case via _semver_advisory_only(). Once the
-            # container catches up to its pinned tag's latest content,
-            # hasUpdate flips to False and this naturally takes over.
-            return newer_tag
         if self._pending_via_dockhand_cache():
             # Deliberately not a real digest — see module docstring. This
             # is Tier 1's own signal, present whether or not Tier 2 (real
-            # digest data) is configured at all.
+            # digest data) is configured at all. Checked before newerVersion
+            # for the same reason hasUpdate is: it keeps Install enabled
+            # (see _semver_advisory_only()), so showing the semver target
+            # here would advertise a version Install can't deliver.
             return "update-pending"
+        newer_tag = (item.get("newerVersion") or {}).get("tag")
+        if newer_tag:
+            # No actionable update right now — safe to surface the semver
+            # suggestion. _update_supported_features() withholds Install
+            # for this case via _semver_advisory_only(). Once the container
+            # catches up to its pinned tag's latest content, this naturally
+            # takes over.
+            return newer_tag
         return self.installed_version
 
     def _scanner_enabled(self) -> bool:
@@ -577,50 +580,47 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         return None
 
     async def _newer_version_section(self, item: dict) -> str | None:
-        """Pick which "what's coming" section, if any, belongs in the
-        release notes dialog for this container's current merged
-        update-status item — two mutually exclusive cases:
+        """Pick which "what's coming" section, if any, belongs at the top
+        of the release notes dialog for this container's merged
+        update-status item. An actionable update (hasUpdate, or Tier 1's
+        own pending-updates cache in the divergent-Tier-2 case) always
+        takes precedence over a semver newerVersion suggestion — the same
+        precedence latest_version and _semver_advisory_only() apply — so
+        the dialog never describes a different target than Install
+        delivers:
 
-          1. A semver newerVersion suggestion (advisory only) is present
-             and there's no actionable update pending right now —
-             unchanged from before, delegated to
-             _semver_advisory_section(). Suppressed whenever an
-             actionable digest update IS pending (item.get("hasUpdate")),
-             same reasoning as latest_version's own precedence: showing
-             the semver target while Install is about to land on a
-             different one would mix two targets in the same place; this
-             reappears automatically once hasUpdate resolves to False.
+          1. Actionable update pending: a bare changelog link via
+             _pending_update_changelog_section(). If a newerVersion
+             suggestion is ALSO present, a one-line notice naming its tag
+             comes first, so the bigger (non-actionable) update isn't
+             invisible until this one is applied. Deliberately just the
+             tag — no release notes body or skipped count for a version
+             Install won't move to; the full advisory section takes over
+             once the actionable update resolves.
 
-          2. There IS a pending/actionable update right now (hasUpdate,
-             per the merged item — which by now already reflects Tier 1's
-             own hasImageUpdate whenever Tier 2 has no row for this
-             container — OR Tier 1's own pending-updates cache, in the
-             same divergent-Tier-2 case latest_version's own trailing
-             fallback handles), but Dockhand has no newerVersion
-             suggestion to go with it. This is the fix for bug #1: release
-             notes/changelog links used to disappear entirely for a plain
-             pending update whenever there was no semver target to attach
-             them to (most commonly with Tier 2 off, or Tier 2 on but not
-             yet reporting a newerVersion for this specific container).
-             Delegated to _pending_update_changelog_section(), which
-             calls Dockhand's version-notes endpoint with an empty
-             `versions` list — resolves a bare changelogUrl for a
-             "CONFIDENT" source with zero extra network calls, and
-             correctly yields nothing for an unconfident source (see
-             api.py's async_get_version_notes docstring).
+          2. Only a newerVersion suggestion: the full advisory section via
+             _semver_advisory_section().
 
-        Neither applies (returns None) when there's no pending update at
-        all and no newerVersion suggestion either — nothing to say here.
+        Returns None when neither applies.
         """
         newer = item.get("newerVersion") or {}
         tag = newer.get("tag")
 
-        if tag and not item.get("hasUpdate"):
-            return await self._semver_advisory_section(tag, newer)
+        if item.get("hasUpdate") or self._pending_via_dockhand_cache():
+            lines = []
+            if tag:
+                lines.append(
+                    f"A newer version tag is also available: **{tag}**."
+                    " Moving to it requires updating the tag in your compose"
+                    " file or container config."
+                )
+            changelog = await self._pending_update_changelog_section()
+            if changelog:
+                lines.append(changelog)
+            return "\n\n".join(lines) or None
 
-        has_pending = bool(item.get("hasUpdate")) or self._pending_via_dockhand_cache()
-        if not tag and has_pending:
-            return await self._pending_update_changelog_section()
+        if tag:
+            return await self._semver_advisory_section(tag, newer)
 
         return None
 
@@ -685,9 +685,10 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         return "\n\n".join(lines)
 
     async def _pending_update_changelog_section(self) -> str | None:
-        """Bare changelog-link section for a pending/actionable update
-        that has no semver newerVersion target to attach notes to — the
-        fix for bug #1 (see _newer_version_section's own docstring).
+        """Bare changelog-link section for a pending/actionable update —
+        there's no target version to fetch notes for, since Install just
+        re-pulls the current tag (see _newer_version_section's own
+        docstring).
 
         Calls Dockhand's version-notes endpoint with an empty `versions`
         list: no specific version to fetch notes for, but Dockhand still

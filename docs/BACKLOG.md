@@ -71,6 +71,21 @@ the reasoning first and only revisit if the stated condition has changed.
   worth revisiting unless Dockhand itself ships a "move to this tag"
   action we could call instead of reimplementing our own.
 
+- **Re-checking a container right after Install so a "newer version tag"
+  suggestion reappears immediately.** When a pinned image has both an
+  installable same-tag update and a `newerVersion` suggestion, applying the
+  update makes Dockhand delete that container's `pending_container_updates`
+  row (`removePendingContainerUpdate()` in `batch-update-stream`), taking the
+  suggestion with it. With `enable_precise_updates` on, our post-install Tier
+  2 refresh brings it back right away; with it off, the entity reads as up to
+  date until Dockhand's next scheduled check or a manual "Check for updates"
+  press. The only way to close that gap today is an environment-wide
+  `check-updates` POST after every Install — Dockhand has no single-container
+  check endpoint (confirmed against Dockhand's `src/routes/api/containers/`,
+  1.0.49-dev). Deferred by the maintainer during 1.10.1: a registry check of
+  every container in the environment on every single update is too much load
+  for the value. Revisit if Dockhand adds a per-container update check.
+
 - **Proper destination-level device grouping for `repo_prune`/`repo_check`/
   `repo_verify` schedule types.** Discovered during the 1.9.0 Schedules
   device-hierarchy work by reading Dockhand's actual `/api/schedules` source

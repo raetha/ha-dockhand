@@ -2,6 +2,29 @@
 
 ## [Unreleased]
 
+## [1.10.1] — 2026-09-22
+
+### Changed
+
+- **A container update entity with an update ready to install now also
+  mentions a newer version tag when one exists.** On a pinned-version image
+  where both a same-tag image update (installable) and a newer version tag
+  (which needs the pin changed) are available, the "What's new" dialog still
+  describes the installable update, but now opens with a one-line note naming
+  the newer tag and explaining that moving to it means updating the tag in
+  your compose file or container config. Once the installable update is
+  applied, the dialog switches to the newer tag's full details as before.
+
+### Fixed
+
+- **The "View release notes" link no longer disappears when an installable
+  update and a newer version tag are available at the same time.**
+- **An installable update now always takes precedence over a newer version
+  tag suggestion.** In some cases, when Dockhand's own pending-updates cache
+  flagged an update that the opt-in precise update check hadn't caught up
+  with yet, the entity showed the newer tag as its target version while
+  Install would actually re-pull the current tag.
+
 ## [1.10.0] — 2026-09-21
 
 ### Added
@@ -1100,7 +1123,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.10.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.10.1...HEAD
+[1.10.1]: https://github.com/raetha/ha-dockhand/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/raetha/ha-dockhand/compare/v1.9.4...v1.10.0
 [1.9.4]: https://github.com/raetha/ha-dockhand/compare/v1.9.3...v1.9.4
 [1.9.3]: https://github.com/raetha/ha-dockhand/compare/v1.9.2...v1.9.3

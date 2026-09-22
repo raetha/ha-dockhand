@@ -801,19 +801,69 @@ async def test_release_notes_include_newer_version_section_when_attached():
     assert "will not move it to this version" in notes
 
 
-async def test_release_notes_suppress_newer_version_while_actionable_update_pending():
+async def test_release_notes_actionable_update_names_newer_tag_only():
     """Same real-world scenario as latest_version's: pinned to "1.2", with
     both an actionable same-tag patch (hasUpdate=True) and a non-actionable
-    higher newerVersion suggestion available at once. The dialog must not
-    mention the non-actionable target while there's a real update to apply
-    first — otherwise the dialog and Install would point at different
-    versions. Never even calls the client for this."""
+    higher newerVersion suggestion available at once. The dialog names the
+    newer tag in a one-line notice, directly under the image line, but
+    shows none of that version's release notes, skipped count, or advisory
+    caveat — those belong to a version Install won't move to. The only
+    version-notes call is the empty-versions changelog lookup for the
+    actionable update itself."""
     entity = _make_entity(ITEM_HAS_UPDATE_AND_NEWER_VERSION)
     entity.hass = MagicMock()
     notes = await entity.async_release_notes()
     assert notes is not None
-    assert "16.4-alpine" not in notes
-    entity.coordinator.client.async_get_version_notes.assert_not_awaited()
+    parts = notes.split("\n\n")
+    assert parts[0] == "Image: nginx:latest"
+    assert parts[1] == (
+        "A newer version tag is also available: **16.4-alpine**. Moving to"
+        " it requires updating the tag in your compose file or container"
+        " config."
+    )
+    assert "https://github.com/nginxinc/docker-nginx/releases" in parts[2]
+    assert "Fixed a thing." not in notes
+    assert "skipped" not in notes
+    assert "advisory only" not in notes.lower()
+    entity.coordinator.client.async_get_version_notes.assert_awaited_once_with(
+        ENV_ID, CONTAINER_ID, []
+    )
+
+
+async def test_release_notes_newer_tag_notice_survives_changelog_failure():
+    """The notice needs no network call, so a failed changelog lookup (or
+    no hass at all) must not drop it."""
+    entity = _make_entity(ITEM_HAS_UPDATE_AND_NEWER_VERSION)
+    entity.hass = MagicMock()
+    entity.coordinator.client.async_get_version_notes = AsyncMock(
+        side_effect=Exception("boom")
+    )
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "also available: **16.4-alpine**" in notes
+
+    entity = _make_entity(ITEM_HAS_UPDATE_AND_NEWER_VERSION)
+    assert entity.hass is None
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "also available: **16.4-alpine**" in notes
+
+
+async def test_pending_cache_takes_precedence_over_newer_version():
+    """Divergent-Tier-2 case: Tier 2's row says no digest update, but Tier
+    1's pending cache flags one, alongside a newerVersion suggestion.
+    Install stays enabled via the pending cache, so latest_version and the
+    dialog must describe that actionable update, not the semver target."""
+    entity = _make_entity(ITEM_NEWER_VERSION_ONLY, pending_ids={CONTAINER_ID})
+    entity.hass = MagicMock()
+    assert entity.latest_version == "update-pending"
+    notes = await entity.async_release_notes()
+    assert notes is not None
+    assert "also available: **16.4-alpine**" in notes
+    assert "advisory only" not in notes.lower()
+    entity.coordinator.client.async_get_version_notes.assert_awaited_once_with(
+        ENV_ID, CONTAINER_ID, []
+    )
 
 
 async def test_release_notes_newer_version_reports_skipped_count():
