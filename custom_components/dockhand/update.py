@@ -186,6 +186,7 @@ from .helpers import (
     _all_envs,
     _container_installed_version,
     _coordinator_env,
+    _device_id_container,
     _find_container,
     _is_update_disabled_by_label,
     _short_digest,
@@ -340,7 +341,9 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
 
         self._attr_unique_id = f"{entry_id}_{env_id}_update_{container_name}"
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry_id}_container_{env_id}_{container_name}")},
+            identifiers={
+                (DOMAIN, _device_id_container(entry_id, env_id, container_name))
+            },
         )
 
         self._update_supported_features()

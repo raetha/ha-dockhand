@@ -157,8 +157,10 @@ async def test_setup_entry_creates_entities_only_for_stackless_containers(hass):
     add_entities.assert_called_once()
     created = add_entities.call_args.args[0]
     device_ids = {list(e._attr_device_info["identifiers"])[0][1] for e in created}
-    assert f"container_{ENV_ID}_{CONTAINER_NAME}" in device_ids
-    assert f"container_{ENV_ID}_compose-web" not in device_ids
+    # Entry-scoped, same as every other platform's container device — a
+    # bare identifier here recreated a stray device the 1.9.0 migration
+    # then collided with on the next reload (issue #40).
+    assert device_ids == {f"{ENTRY_ID}_container_{ENV_ID}_{CONTAINER_NAME}"}
     # 3 number entities per stack-less container (memory, cpu, pids)
     assert len(created) == 3
 

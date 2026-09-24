@@ -26,6 +26,7 @@ from .helpers import (
     _all_envs,
     _compose_project,
     _coordinator_env,
+    _device_id_container,
     _find_container,
     already_registered,
 )
@@ -121,7 +122,9 @@ class DockhandContainerRestartPolicySelect(
             f"{entry_id}_{env_id}_container_{container_name}_restart_policy"
         )
         self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, f"{entry_id}_container_{env_id}_{container_name}")},
+            identifiers={
+                (DOMAIN, _device_id_container(entry_id, env_id, container_name))
+            },
         )
 
     def _container(self) -> dict | None:

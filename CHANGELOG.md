@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-## [1.10.2] — 2026-09-23
+## [1.10.2] — 2026-09-24
 
 ### Added
 
@@ -13,6 +13,13 @@
 
 ### Fixed
 
+- **Reloading the integration no longer fails with "DeviceIdentifierCollisionError
+  ... already registered" when runtime controls are enabled** (#40). The memory,
+  CPU and process limit entities were still being attached to containers using the
+  device identifier format from before 1.9.1, which left a duplicate container
+  device behind after each setup and made the next reload fail. They now use the
+  current format, and any duplicate devices already left behind are merged back
+  into the real container device automatically, keeping their entities.
 - **An environment's pending update count now matches its update
   entities.** `pending_updates_total` on the Containers sensor now also
   counts containers whose only pending update is a newer version tag. Those

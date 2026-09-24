@@ -755,6 +755,35 @@ def test_1_9_0_renames_bare_env_group_device(hass: HomeAssistant):
     assert (DOMAIN, "env_1_Containers") not in idents
 
 
+def test_1_9_0_merges_stray_bare_device_into_existing_scoped_one(
+    hass: HomeAssistant,
+):
+    """Issue #40: the number platform recreated a bare-identifier container
+    device next to the already-migrated one. The migration must fold the stray
+    device's entities into the real device instead of raising
+    DeviceIdentifierCollisionError and failing setup."""
+    entry = _make_entry(hass)
+    real = _add_device(hass, entry, f"{ENTRY_ID}_container_2_watchtower")
+    stray = _add_device(hass, entry, "container_2_watchtower")
+    ent_reg = er.async_get(hass)
+    number = ent_reg.async_get_or_create(
+        "number",
+        "dockhand",
+        f"{ENTRY_ID}_2_memory_limit_watchtower",
+        config_entry=entry,
+        device_id=stray.id,
+    )
+
+    migrate_1_9_0_entry_scoped_device_identifiers(hass, ENTRY_ID)
+
+    dev_reg = dr.async_get(hass)
+    assert dev_reg.async_get(stray.id) is None
+    assert _get_device_identifiers(hass, real.id) == {
+        (DOMAIN, f"{ENTRY_ID}_container_2_watchtower")
+    }
+    assert ent_reg.async_get(number.entity_id).device_id == real.id
+
+
 def test_1_9_0_skips_already_prefixed_device(hass: HomeAssistant):
     """Idempotent: a device whose identifier already starts with the entry_id
     prefix is left unchanged."""

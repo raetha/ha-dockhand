@@ -460,6 +460,22 @@ def migrate_1_8_0_remove_consolidated_disk_sensors(
             )
 
 
+def _merge_stray_device(
+    hass: HomeAssistant,
+    dev_registry: dr.DeviceRegistry,
+    stray: dr.DeviceEntry,
+    target: dr.DeviceEntry,
+) -> None:
+    """Move every entity on `stray` onto `target`, then remove `stray`."""
+    ent_registry = er.async_get(hass)
+    for entity in er.async_entries_for_device(
+        ent_registry, stray.id, include_disabled_entities=True
+    ):
+        ent_registry.async_update_entity(entity.entity_id, device_id=target.id)
+    dev_registry.async_remove_device(stray.id)
+    _LOGGER.debug("Dockhand: merged stray device %s into %s", stray.id, target.id)
+
+
 def migrate_1_9_0_entry_scoped_device_identifiers(
     hass: HomeAssistant,
     entry_id: str,
@@ -516,6 +532,24 @@ def migrate_1_9_0_entry_scoped_device_identifiers(
                 new_identifiers.add((domain, identifier))
 
         if changed:
+            existing = next(
+                (
+                    d
+                    for ident in new_identifiers
+                    if (d := dev_registry.async_get_device(identifiers={ident}))
+                    and d.id != device.id
+                ),
+                None,
+            )
+            if existing is not None:
+                # 1.9.1–1.10.1's number platform kept registering its
+                # entities under the bare container identifier, recreating
+                # a stray device beside the already-migrated one after
+                # every migration. Renaming it would collide, so fold its
+                # entities into the real device and drop it instead.
+                _merge_stray_device(hass, dev_registry, device, existing)
+                migrated += 1
+                continue
             dev_registry.async_update_device(device.id, new_identifiers=new_identifiers)
             _LOGGER.debug(
                 "Dockhand: scoped device %s identifiers to entry %s",
