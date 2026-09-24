@@ -36,6 +36,7 @@ from .helpers import (
     _container_device,
     _container_has_healthcheck,
     _container_has_pending_update,
+    _container_has_version_suggestion_only,
     _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
@@ -837,7 +838,7 @@ class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         c = self._stats().get("containers") or {}
-        # Three related but distinct counts, kept structurally separate
+        # Four related but distinct counts, kept structurally separate
         # rather than one attribute trying to serve two different
         # purposes:
         #
@@ -859,8 +860,11 @@ class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
         #   entity), just never something this integration will ever
         #   offer to bulk-update, or silently fold into a count that
         #   might be mistaken for one.
-        # - pending_updates_total: the sum — "how many containers need
-        #   any attention at all," for pure display/counting purposes
+        # - pending_version_updates: containers whose only signal is a
+        #   semver "newer version tag" suggestion — their update entity is
+        #   on, but Install is withheld (the tag must be re-pinned).
+        # - pending_updates_total: the sum of all three — exactly the
+        #   number of update entities that are on, for display/counting
         #   (e.g. ha-dockhand-cards' Updates card, whose own per-
         #   container rows already include system containers, uses this
         #   one to decide whether it has anything to show).
@@ -900,10 +904,18 @@ class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
         actionable_ids = _actionable_pending_update_container_ids(
             env_containers, pending_ids, update_env_data
         )
-        total_pending = sum(
+        pending_with_update = sum(
             1
             for container in env_containers
             if _container_has_pending_update(container, pending_ids, update_env_data)
+        )
+        pending_details = env_data.get("pending_update_details") or {}
+        version_only = sum(
+            1
+            for container in env_containers
+            if _container_has_version_suggestion_only(
+                container, pending_ids, pending_details, update_env_data
+            )
         )
         return {
             "running": c.get("running"),
@@ -912,8 +924,9 @@ class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
             "restarting": c.get("restarting"),
             "unhealthy": c.get("unhealthy"),
             "pending_updates": len(actionable_ids),
-            "pending_system_updates": total_pending - len(actionable_ids),
-            "pending_updates_total": total_pending,
+            "pending_system_updates": pending_with_update - len(actionable_ids),
+            "pending_version_updates": version_only,
+            "pending_updates_total": pending_with_update + version_only,
         }
 
 

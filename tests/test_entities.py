@@ -538,6 +538,103 @@ def test_container_count_pending_updates_includes_tier_2_only_containers():
     assert sensor.extra_state_attributes["pending_updates"] == 1
 
 
+def test_container_count_counts_semver_only_suggestions():
+    """A container whose only signal is a newer version tag has its update
+    entity on, so pending_updates_total must include it (as
+    pending_version_updates) while pending_updates stays actionable-only."""
+    sc = _sensor_classes()
+    newer = {"tag": "18.6", "bump": "major", "skipped": ["18.6"]}
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [
+                CONTAINER,
+                {**CONTAINER, "id": "semver-1", "name": "postgres"},
+                {**CONTAINER, "id": "both-1", "name": "redis"},
+                {**CONTAINER, "id": "tier2-semver", "name": "mariadb"},
+            ],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": {CONTAINER["id"], "both-1"},
+            "pending_update_details": {
+                CONTAINER["id"]: {"hasImageUpdate": True, "newerVersion": None},
+                "semver-1": {"hasImageUpdate": False, "newerVersion": newer},
+                "both-1": {"hasImageUpdate": True, "newerVersion": newer},
+            },
+        }
+    )
+    update_coord = MagicMock()
+    update_coord.data = {
+        "environments": {
+            ENV_ID: {"tier2-semver": {"hasUpdate": False, "newerVersion": newer}}
+        }
+    }
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, update_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    attrs = sensor.extra_state_attributes
+    assert attrs["pending_updates"] == 2
+    assert attrs["pending_system_updates"] == 0
+    assert attrs["pending_version_updates"] == 2
+    assert attrs["pending_updates_total"] == 4
+
+
+def test_container_count_ignores_suggestion_matching_installed_version():
+    """A floating tag ("2026.8") already running the suggested version
+    ("2026.8.3", per its OCI label) has its update entity off, so it must not
+    be counted either."""
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [
+                {
+                    **CONTAINER,
+                    "image": "ghcr.io/goauthentik/server:2026.8",
+                    "labels": {"org.opencontainers.image.version": "2026.8.3"},
+                }
+            ],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": set(),
+            "pending_update_details": {
+                CONTAINER["id"]: {
+                    "hasImageUpdate": False,
+                    "newerVersion": {"tag": "2026.8.3", "bump": "patch"},
+                },
+            },
+        }
+    )
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    attrs = sensor.extra_state_attributes
+    assert attrs["pending_version_updates"] == 0
+    assert attrs["pending_updates_total"] == 0
+
+
+def test_container_count_ignores_newer_version_without_tag():
+    sc = _sensor_classes()
+    coord = _fast_coord(
+        env_data={
+            "stats": STATS,
+            "containers": [CONTAINER],
+            "stacks": [STACK],
+            "container_stats": {},
+            "pending_update_container_ids": set(),
+            "pending_update_details": {
+                CONTAINER["id"]: {"hasImageUpdate": False, "newerVersion": {}},
+            },
+        }
+    )
+    sensor = sc["DockhandEnvContainerCountSensor"](
+        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    attrs = sensor.extra_state_attributes
+    assert attrs["pending_version_updates"] == 0
+    assert attrs["pending_updates_total"] == 0
+
+
 def test_container_count_pending_updates_none_when_update_coordinator_absent():
     """update_coordinator is optional (Tier 2 is opt-in) — must not crash
     or misbehave when it's None, same as _container_has_pending_update's

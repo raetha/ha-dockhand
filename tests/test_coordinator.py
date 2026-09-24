@@ -452,6 +452,117 @@ async def test_merge_pending_updates_from_check_ignores_items_without_id(
     assert env_data["pending_update_details"] == {}
 
 
+SYSTEM_CONTAINER = {
+    "id": "sys1",
+    "name": "dockhand",
+    "state": "running",
+    "labels": {},
+    "systemContainer": "dockhand",
+}
+
+
+async def test_system_container_check_result_survives_next_poll(
+    hass: HomeAssistant,
+):
+    """Dockhand never writes a pending-updates row for a system container,
+    so an on-demand check's result for one must outlive the next poll."""
+    client = _make_client(
+        envs=[ENV1],
+        stats={**STATS1, "updateCheckEnabled": True},
+        containers=[CONTAINER1, SYSTEM_CONTAINER],
+    )
+    client.async_get_pending_updates = AsyncMock(
+        return_value=[{"containerId": "abc", "hasImageUpdate": True}]
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+
+    coord.async_merge_pending_updates_from_check(
+        1,
+        [
+            {"containerId": "abc", "hasUpdate": True},
+            {"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"},
+        ],
+    )
+    await coord.async_refresh()
+
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == {"abc", "sys1"}
+    assert env_data["pending_update_details"]["sys1"] == {
+        "hasImageUpdate": True,
+        "newerVersion": None,
+    }
+
+
+async def test_system_container_check_result_dropped_once_container_recreated(
+    hass: HomeAssistant,
+):
+    client = _make_client(
+        envs=[ENV1],
+        stats={**STATS1, "updateCheckEnabled": True},
+        containers=[CONTAINER1, SYSTEM_CONTAINER],
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    coord.async_merge_pending_updates_from_check(
+        1, [{"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"}]
+    )
+
+    client.async_get_containers = AsyncMock(
+        return_value=[CONTAINER1, {**SYSTEM_CONTAINER, "id": "sys2"}]
+    )
+    await coord.async_refresh()
+    env_data = coord.data["environments"][1]
+    assert env_data["pending_update_container_ids"] == set()
+    assert "sys1" not in env_data["pending_update_details"]
+
+    # Pruned for good, not just hidden while the id is absent.
+    client.async_get_containers = AsyncMock(return_value=[CONTAINER1, SYSTEM_CONTAINER])
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["pending_update_container_ids"] == set()
+
+
+async def test_system_container_check_result_kept_when_containers_fetch_fails(
+    hass: HomeAssistant,
+):
+    client = _make_client(
+        envs=[ENV1],
+        stats={**STATS1, "updateCheckEnabled": True},
+        containers=[CONTAINER1, SYSTEM_CONTAINER],
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    coord.async_merge_pending_updates_from_check(
+        1, [{"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"}]
+    )
+
+    client.async_get_containers = AsyncMock(side_effect=Exception("timeout"))
+    await coord.async_refresh()
+    client.async_get_containers = AsyncMock(return_value=[CONTAINER1, SYSTEM_CONTAINER])
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["pending_update_container_ids"] == {"sys1"}
+
+
+async def test_new_check_without_system_update_clears_stored_result(
+    hass: HomeAssistant,
+):
+    client = _make_client(
+        envs=[ENV1],
+        stats={**STATS1, "updateCheckEnabled": True},
+        containers=[CONTAINER1, SYSTEM_CONTAINER],
+    )
+    coord = _fast(hass, client, config={"poll_interval": 30})
+    await coord.async_refresh()
+    coord.async_merge_pending_updates_from_check(
+        1, [{"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"}]
+    )
+    coord.async_merge_pending_updates_from_check(
+        1, [{"containerId": "sys1", "hasUpdate": False, "systemContainer": "dockhand"}]
+    )
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["pending_update_container_ids"] == set()
+
+
 # ---------------------------------------------------------------------------
 # Fast coordinator — auth / error propagation
 # ---------------------------------------------------------------------------

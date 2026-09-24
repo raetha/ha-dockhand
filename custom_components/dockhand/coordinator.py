@@ -154,6 +154,15 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._enable_container_stats = bool(
             config.get(CONF_ENABLE_CONTAINER_STATS, DEFAULT_ENABLE_CONTAINER_STATS)
         )
+        # Dockhand never persists a pending-updates row for a system
+        # container (dockhand itself, Hawser) — both its scheduled check and
+        # POST check-updates skip them when writing that table — so the only
+        # update signal a system container ever gets is an on-demand
+        # check-updates response. Kept here per env_id → container_id so the
+        # next poll of pending-updates doesn't silently discard it. Keyed by
+        # container id: once the container is recreated (updated), its new id
+        # no longer matches and the stale result drops out on its own.
+        self._system_check_results: dict[int, dict[str, dict]] = {}
         super().__init__(
             hass,
             _LOGGER,
@@ -364,17 +373,26 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     }
                     if has_image_update:
                         pending_update_container_ids.add(container_id)
+
+            containers = _safe_list(
+                _unwrap(
+                    results["containers"],
+                    [],
+                    f"containers env={env_id}",
+                    failures,
+                    "containers",
+                )
+            )
+            self._apply_system_check_results(
+                env_id,
+                containers,
+                "containers" in failures,
+                pending_update_details,
+                pending_update_container_ids,
+            )
             return env_id, {
                 "stats": all_stats.get(env_id, {}),
-                "containers": _safe_list(
-                    _unwrap(
-                        results["containers"],
-                        [],
-                        f"containers env={env_id}",
-                        failures,
-                        "containers",
-                    )
-                ),
+                "containers": containers,
                 "stacks": _safe_list(
                     _unwrap(
                         results["stacks"],
@@ -410,6 +428,29 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # this coordinator has somewhere to put any future hub-level
         # (non-per-environment) data without another reshape.
         return {"environments": out}
+
+    def _apply_system_check_results(
+        self,
+        env_id: int,
+        containers: list[dict],
+        containers_failed: bool,
+        pending_update_details: dict[str, dict],
+        pending_update_container_ids: set[str],
+    ) -> None:
+        """Overlay the last on-demand check's system-container results onto
+        a freshly polled environment, pruning any whose container id no
+        longer exists (see self._system_check_results)."""
+        stored = self._system_check_results.get(env_id)
+        if not stored:
+            return
+        if not containers_failed:
+            live_ids = {c.get("id") for c in containers}
+            stored = {cid: d for cid, d in stored.items() if cid in live_ids}
+            self._system_check_results[env_id] = stored
+        for container_id, detail in stored.items():
+            pending_update_details[container_id] = dict(detail)
+            if detail.get("hasImageUpdate"):
+                pending_update_container_ids.add(container_id)
 
     def async_merge_pending_updates_from_check(
         self, env_id: int, items: list[dict]
@@ -460,6 +501,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         pending_update_details: dict[str, dict] = {}
         pending_update_container_ids: set[str] = set()
+        system_results: dict[str, dict] = {}
         for item in items:
             container_id = item.get("containerId")
             if not container_id:
@@ -471,6 +513,11 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
             if has_update:
                 pending_update_container_ids.add(container_id)
+            if item.get("systemContainer") and has_update:
+                system_results[container_id] = pending_update_details[container_id]
+        self._system_check_results[env_id] = {
+            cid: dict(d) for cid, d in system_results.items()
+        }
 
         new_env_data = dict(env_data)
         new_env_data["pending_update_container_ids"] = pending_update_container_ids

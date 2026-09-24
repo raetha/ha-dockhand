@@ -798,6 +798,33 @@ def _container_has_pending_update(
     return False
 
 
+def _container_has_version_suggestion_only(
+    container: dict,
+    pending_ids: set[str],
+    pending_details: dict[str, dict],
+    update_env_data: dict[str, dict] | None,
+) -> bool:
+    """True if this container's only update signal is a semver "newer version
+    tag" suggestion (advisory, not installable) — the case where its update
+    entity is on, showing the newer tag, but Install is withheld. Resolves
+    newerVersion with the same precedence as the update entity: Tier 2's own
+    newerVersion when it has one, otherwise Tier 1's pending_update_details.
+    """
+    container_id = container.get("id")
+    if not container_id or _container_has_pending_update(
+        container, pending_ids, update_env_data
+    ):
+        return False
+    tier2_item = (update_env_data or {}).get(container_id) or {}
+    newer = tier2_item.get("newerVersion") or (
+        pending_details.get(container_id) or {}
+    ).get("newerVersion")
+    tag = (newer or {}).get("tag")
+    # A suggested tag equal to what's already installed (a floating tag like
+    # "2026.8" currently resolving to "2026.8.3") leaves the entity off.
+    return bool(tag) and tag != _container_installed_version(container, tier2_item)
+
+
 def _container_is_bulk_update_eligible(container: dict) -> bool:
     """True unless this is a Dockhand system container (dockhand itself,
     or a Hawser agent) — same `!container.systemContainer` check
@@ -888,6 +915,39 @@ def _image_version_label(labels: dict | None) -> str | None:
         return None
     value = labels.get(_OCI_VERSION_LABEL)
     return value.strip() if value and value.strip() else None
+
+
+def _short_digest(digest: str) -> str:
+    """Return a short human-readable version string from a digest reference.
+
+    Handles both formats returned by the API:
+      currentDigest: "ghcr.io/finsys/hawser@sha256:53bb1e23fb302f..."
+      newDigest:     "sha256:79f926e8d8fe31c0dfe90858f90b69bfd4cfbb..."
+
+    Returns the first 12 hex chars of the sha256, e.g. "53bb1e23fb30".
+    Falls back to the raw digest string if parsing fails.
+    """
+    try:
+        sha_part = digest.split("sha256:")[-1]
+        return sha_part[:12] if sha_part else digest
+    except Exception:
+        return digest
+
+
+def _container_installed_version(
+    container: dict | None, update_item: dict | None
+) -> str | None:
+    """The version a container's update entity shows as installed: the image's
+    OCI version label (e.g. "v3.1.0") when set, else the short form of Tier 2's
+    currentDigest, else the raw image reference. Shared with the environment's
+    pending-update counts so they judge "already on that version" identically."""
+    version = _image_version_label((container or {}).get("labels"))
+    if version:
+        return version
+    digest = (update_item or {}).get("currentDigest", "")
+    if digest:
+        return _short_digest(digest)
+    return (container or {}).get("image") or None
 
 
 def _compose_project(container: dict | None) -> str | None:

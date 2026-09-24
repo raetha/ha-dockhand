@@ -184,10 +184,11 @@ from .const import CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES, 
 from .coordinator import DockhandFastCoordinator, DockhandUpdateCoordinator
 from .helpers import (
     _all_envs,
+    _container_installed_version,
     _coordinator_env,
     _find_container,
-    _image_version_label,
     _is_update_disabled_by_label,
+    _short_digest,
     already_registered,
 )
 
@@ -227,23 +228,6 @@ _STEP_PERCENTAGES = {
 # screenshots/large diffs. Same bound the more-info dialog's other content
 # implicitly respects; this is the one piece sourced from outside Dockhand.
 _RELEASE_NOTES_MAX_CHARS = 4000
-
-
-def _short_digest(digest: str) -> str:
-    """Return a short human-readable version string from a digest reference.
-
-    Handles both formats returned by the API:
-      currentDigest: "ghcr.io/finsys/hawser@sha256:53bb1e23fb302f..."
-      newDigest:     "sha256:79f926e8d8fe31c0dfe90858f90b69bfd4cfbb..."
-
-    Returns the first 12 hex chars of the sha256, e.g. "53bb1e23fb30".
-    Falls back to the raw digest string if parsing fails.
-    """
-    try:
-        sha_part = digest.split("sha256:")[-1]
-        return sha_part[:12] if sha_part else digest
-    except Exception:
-        return digest
 
 
 async def async_setup_entry(
@@ -486,20 +470,9 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
 
     @property
     def installed_version(self) -> str | None:
-        c = self._container()
-        version = _image_version_label((c or {}).get("labels"))
-        if version:
-            # A real application version (e.g. "v3.1.0") beats a digest or
-            # raw tag whenever the image author bothered to label it —
-            # available from Tier 1 data alone, no Tier 2 required.
-            return version
-        digest = self._check_updates_item().get("currentDigest", "")
-        if digest:
-            return _short_digest(digest)
-        # Final fallback: no label, no real digest available yet — show
-        # the image tag instead, still meaningful, just not a precise
-        # version.
-        return (c or {}).get("image") or None
+        return _container_installed_version(
+            self._container(), self._check_updates_item()
+        )
 
     def _pending_via_dockhand_cache(self) -> bool:
         """True if Dockhand's own (cheap, no-registry-query) pending-updates

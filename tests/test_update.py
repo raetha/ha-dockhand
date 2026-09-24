@@ -1647,3 +1647,75 @@ def test_translation_key():
     # for devices that have a single update entity (ESPHome, UniFi, etc.).
     entity = _make_entity()
     assert not hasattr(entity, "_attr_translation_key")
+
+
+# ---------------------------------------------------------------------------
+# Environment containers sensor agrees with the update entities
+# ---------------------------------------------------------------------------
+
+
+def test_pending_updates_total_matches_update_entities_that_are_on():
+    """pending_updates_total is what the cards show as the environment's
+    update count; it must equal the number of update entities that are on
+    (latest_version != installed_version), whatever mix of actionable,
+    system and semver-only signals is present."""
+    from custom_components.dockhand.sensor import DockhandEnvContainerCountSensor
+
+    containers = [
+        {**CONTAINER_NORMAL, "id": "actionable", "name": "a"},
+        {**CONTAINER_NORMAL, "id": "semver", "name": "b"},
+        {**CONTAINER_NORMAL, "id": "both", "name": "c"},
+        {**CONTAINER_NORMAL, "id": "current", "name": "d"},
+        {**CONTAINER_NORMAL, "id": "sys", "name": "e", "systemContainer": "dockhand"},
+        {**CONTAINER_NORMAL, "id": "tier2", "name": "f"},
+        {
+            **CONTAINER_NORMAL,
+            "id": "floating",
+            "name": "g",
+            "image": "ghcr.io/goauthentik/server:2026.8",
+            "labels": {"org.opencontainers.image.version": "2026.8.3"},
+        },
+    ]
+    fast = _make_fast_coord(
+        containers=containers,
+        pending_ids={"actionable", "both", "sys"},
+        pending_update_details={
+            "actionable": {"hasImageUpdate": True, "newerVersion": None},
+            "semver": {"hasImageUpdate": False, "newerVersion": NEWER_VERSION},
+            "both": {"hasImageUpdate": True, "newerVersion": NEWER_VERSION},
+            "sys": {"hasImageUpdate": True, "newerVersion": None},
+            "floating": {
+                "hasImageUpdate": False,
+                "newerVersion": {"tag": "2026.8.3", "bump": "patch"},
+            },
+        },
+    )
+    tier2 = MagicMock(spec=DockhandUpdateCoordinator)
+    tier2.data = {
+        "environments": {
+            ENV_ID: {"tier2": {**ITEM_UP_TO_DATE, "newerVersion": NEWER_VERSION}}
+        }
+    }
+
+    on = 0
+    for c in containers:
+        entity = ContainerUpdateEntity(
+            fast_coordinator=fast,
+            update_coordinator=tier2,
+            entry_id=ENTRY_ID,
+            env_id=ENV_ID,
+            env_name=ENV_NAME,
+            container_name=c["name"],
+        )
+        if entity.latest_version != entity.installed_version:
+            on += 1
+
+    sensor = DockhandEnvContainerCountSensor(
+        fast, tier2, ENTRY_ID, ENV_ID, ENV_NAME, "http://dockhand"
+    )
+    attrs = sensor.extra_state_attributes
+    assert on == 5
+    assert attrs["pending_updates_total"] == on
+    assert attrs["pending_updates"] == 2
+    assert attrs["pending_system_updates"] == 1
+    assert attrs["pending_version_updates"] == 2

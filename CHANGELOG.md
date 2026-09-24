@@ -2,6 +2,31 @@
 
 ## [Unreleased]
 
+## [1.10.2] — 2026-09-23
+
+### Added
+
+- **New `pending_version_updates` attribute on each environment's Containers
+  sensor** — the number of containers whose only pending update is a newer
+  version tag (one that needs the pinned tag changed, so it can't be
+  installed from Home Assistant).
+
+### Fixed
+
+- **An environment's pending update count now matches its update
+  entities.** `pending_updates_total` on the Containers sensor now also
+  counts containers whose only pending update is a newer version tag. Those
+  containers' update entities already showed as having an update, so the
+  count used by ha-dockhand-cards (and any dashboards or automations built
+  on it) came up short whenever a newer version tag was available.
+  `pending_updates` still counts only updates that can be installed in bulk.
+- **Updates for Dockhand itself and Hawser agents no longer disappear about
+  a minute after "Check for updates" finds them.** Dockhand's own scheduled
+  update check skips these system containers, so the result of a manual
+  check was being overwritten by the next regular poll. It's now kept until
+  the container is recreated or the next check runs. With **Enable precise
+  update versions** on, these updates were already kept.
+
 ## [1.10.1] — 2026-09-22
 
 ### Changed
@@ -1123,7 +1148,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.10.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.10.2...HEAD
+[1.10.2]: https://github.com/raetha/ha-dockhand/compare/v1.10.1...v1.10.2
 [1.10.1]: https://github.com/raetha/ha-dockhand/compare/v1.10.0...v1.10.1
 [1.10.0]: https://github.com/raetha/ha-dockhand/compare/v1.9.4...v1.10.0
 [1.9.4]: https://github.com/raetha/ha-dockhand/compare/v1.9.3...v1.9.4

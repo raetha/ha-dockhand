@@ -500,6 +500,17 @@ filter X out inline — give the exclusion its own named function so
 using the unsafe primitive directly, for an actionable purpose, is the
 thing that stands out as unusual in a review, not the normal path.
 
+**Dockhand's pending-updates table never contains system containers.**
+Both Dockhand's scheduled `env-update-check` job and `POST
+/api/containers/check-updates` skip `systemContainer` rows when writing
+`pending_container_updates`, even though check-updates' own response
+still reports `hasUpdate` for them. So a system container's update is
+only ever visible in an on-demand check response (or Tier 2, which keeps
+its own copy). `DockhandFastCoordinator` keeps those system-container
+rows in `_system_check_results` and re-applies them after every
+pending-updates poll, pruning by current container id; replacing Tier 1's
+data wholesale from pending-updates on each poll silently erased them.
+
 **Consult Tier 2 (or any coordinator that persists data keyed by an id
 that can change identity) by current id, never by name.** Real bug: an
 earlier version of `ContainerUpdateEntity`'s Tier 2 lookup scanned
