@@ -1079,8 +1079,8 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
 
 
 def test_removes_stale_update_entity(hass: HomeAssistant):
-    """Container confirmed gone from an online, updateCheckEnabled
-    environment — its Tier 1 update entity is stale and removed."""
+    """Container confirmed gone from an online environment — its Tier 1
+    update entity is stale and removed."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1102,9 +1102,8 @@ def test_removes_stale_update_entity(hass: HomeAssistant):
 
 
 def test_preserves_live_update_entity(hass: HomeAssistant):
-    """Tier 1 is entirely fast-data-derived — live whenever the
-    environment has updateCheckEnabled=True and the container is present,
-    regardless of whether update_coordinator (Tier 2) has any data at all."""
+    """Tier 1 is entirely fast-data-derived — live whenever the container
+    is present, regardless of whether update_coordinator (Tier 2) has any data at all."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1123,11 +1122,10 @@ def test_preserves_live_update_entity(hass: HomeAssistant):
     assert _entity_exists(hass, ent.entity_id)
 
 
-def test_removes_update_entity_when_update_check_disabled(hass: HomeAssistant):
-    """The whole point of the fix: turning off update-check for an
-    environment removes its Tier 1 update entities even though the
-    container itself (and its device) still exists — unlike every other
-    entity type in this integration, which only ever goes unavailable."""
+def test_preserves_update_entity_when_scheduled_check_disabled(hass: HomeAssistant):
+    """github.com/raetha/ha-dockhand/issues/42: Dockhand's scheduled update
+    check being off for an environment no longer removes its update
+    entities — only the integration's own update-entities option does."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1147,7 +1145,7 @@ def test_removes_update_entity_when_update_check_disabled(hass: HomeAssistant):
     )
     ent = _add_entity(hass, entry, f"{entry.entry_id}_1_update_nginx")
     _cleanup_stale_registry(hass, entry)
-    assert not _entity_exists(hass, ent.entity_id)
+    assert _entity_exists(hass, ent.entity_id)
 
 
 def test_preserves_update_entity_when_container_missing_but_env_offline(
@@ -1236,8 +1234,8 @@ def test_preserves_live_runtime_control_entity(hass: HomeAssistant):
 def test_removes_runtime_control_entity_when_feature_disabled(hass: HomeAssistant):
     """Turning off 'Enable runtime controls' removes the number/select
     entities even though the container (and its device) still exists —
-    same pattern as update entities disappearing when updateCheckEnabled
-    turns off."""
+    same pattern as update entities disappearing when the update-entities
+    option turns off."""
     entry = _make_entry(hass, options={"enable_runtime_controls": False})
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1861,8 +1859,7 @@ def test_removes_update_entity_when_update_entities_option_disabled(
     hass: HomeAssistant,
 ):
     """CONF_ENABLE_UPDATE_ENTITIES=False removes Tier 1 update entities
-    even though the environment's own updateCheckEnabled is True and the
-    container still exists — the new integration-level platform gate
+    even though the container still exists — the new integration-level platform gate
     added for github.com/raetha/ha-dockhand/issues/23."""
     entry = _make_entry(hass, options={"enable_update_entities": False})
     entry.runtime_data = _make_runtime_data(

@@ -190,7 +190,7 @@ Two-part design:
    - **Conditionally present despite a persistent device** — the entity's
      existence depends on something other than "does the container/stack
      still exist." This is the case that's easy to miss. Examples:
-     update entities (depend on the environment's `updateCheckEnabled`),
+     update entities (depend on the **Enable update entities** option),
      runtime controls (depend on a config toggle **and** the container
      being stack-less), git stack entities (depend on Dockhand still
      classifying that stack as git-tracked). In every one of these, the

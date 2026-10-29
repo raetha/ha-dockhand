@@ -1518,8 +1518,23 @@ async def test_setup_entry_creates_entity_for_qualifying_environment(hass):
     assert created[0]._container_name == CONTAINER_NAME
 
 
-async def test_setup_entry_skips_non_qualifying_environment(hass):
+async def test_setup_entry_creates_entity_when_scheduled_check_disabled(hass):
+    """github.com/raetha/ha-dockhand/issues/42: Dockhand's scheduled update
+    check being off doesn't stop update entities from being created."""
     fast_coord, entry, _ = _make_setup_env(update_check_enabled=False)
+    add_entities = MagicMock()
+    await async_setup_entry(hass, entry, add_entities)
+    add_entities.assert_called_once()
+    created = add_entities.call_args.args[0]
+    assert len(created) == 1
+
+
+async def test_setup_entry_skips_when_update_entities_disabled_and_scheduled_check_disabled(
+    hass,
+):
+    fast_coord, entry, _ = _make_setup_env(
+        update_check_enabled=False, options={CONF_ENABLE_UPDATE_ENTITIES: False}
+    )
     add_entities = MagicMock()
     await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_not_called()
@@ -1544,17 +1559,15 @@ async def test_setup_entry_creates_entities_when_update_entities_explicitly_enab
     add_entities.assert_called_once()
 
 
-async def test_setup_entry_creates_entity_when_update_check_enabled_later(hass):
-    """Turning on update-check for an environment (in Dockhand) creates
-    entities on the next poll, without needing a reload."""
-    fast_coord, entry, listeners = _make_setup_env(update_check_enabled=False)
+async def test_setup_entry_creates_entity_for_container_added_later(hass):
+    """A container appearing on a later poll gets its entity without a
+    reload."""
+    fast_coord, entry, listeners = _make_setup_env(containers=[])
     add_entities = MagicMock()
     await async_setup_entry(hass, entry, add_entities)
     add_entities.assert_not_called()
 
-    # Simulate the next fast-coordinator poll after update-check was
-    # turned on in Dockhand.
-    fast_coord.data["environments"][ENV_ID]["stats"]["updateCheckEnabled"] = True
+    fast_coord.data["environments"][ENV_ID]["containers"] = [CONTAINER_NORMAL]
     listeners[0]()
 
     add_entities.assert_called_once()
@@ -1735,7 +1748,7 @@ async def test_entity_not_double_scheduled_when_add_fires_twice_before_task_runs
     assert len(add_concurrent.call_args.args[0]) == 1
 
 
-# Note: removal when updateCheckEnabled turns off, or a container
+# Note: removal when update entities are disabled, or a container
 # disappears, is NOT tested here — that logic now lives entirely in
 # __init__.py's _cleanup_stale_registry/_build_live_sets, alongside every
 # other conditionally-present entity type. See test_init.py.

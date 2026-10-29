@@ -327,18 +327,33 @@ async def test_fast_empty_env_list_returns_empty_data(hass: HomeAssistant):
     assert coord.data == {"environments": {}}
 
 
-async def test_fast_pending_updates_not_fetched_when_update_check_disabled(
+async def test_fast_pending_updates_fetched_when_scheduled_check_disabled(
     hass: HomeAssistant,
 ):
-    """Gated per-environment on updateCheckEnabled (from dashboard stats,
-    Dockhand's own setting) — not a config option on our side at all."""
+    """github.com/raetha/ha-dockhand/issues/42: Dockhand's scheduled update
+    check being off doesn't mean there are no pending updates — a manual
+    check in Dockhand records them in the same table, and Dockhand's own
+    UI shows them."""
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": False})
+    client.async_get_pending_updates = AsyncMock(
+        return_value=[
+            {
+                "containerId": "abc",
+                "containerName": "web",
+                "hasImageUpdate": True,
+                "newerVersion": None,
+                "pinnedToDigest": False,
+                "releaseAgeRemainingHours": None,
+                "checkedAt": None,
+            }
+        ]
+    )
     coord = _fast(hass, client, config={"poll_interval_fast": 30})
     await coord.async_refresh()
-    client.async_get_pending_updates.assert_not_called()
+    client.async_get_pending_updates.assert_called_once_with(1)
     env_data = coord.data["environments"][1]
-    assert env_data["pending_update_container_ids"] == set()
-    assert env_data["pending_update_details"] == {}
+    assert env_data["pending_update_container_ids"] == {"abc"}
+    assert set(env_data["pending_update_details"]) == {"abc"}
 
 
 async def test_fast_pending_updates_fetched_when_update_check_enabled(

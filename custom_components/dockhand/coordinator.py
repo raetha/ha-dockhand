@@ -118,12 +118,11 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Polls 60s: dashboard stats, containers, stacks, container resource
     stats, pending update flags.
 
-    Pending update flags are fetched per-environment whenever that
-    environment has updateCheckEnabled=True (from its own dashboard
-    stats) — not gated by CONF_ENABLE_PRECISE_UPDATES. This is what backs the
-    update platform's baseline (digest-free) entities, which now exist
-    automatically for any environment where update-check is configured
-    in Dockhand itself. CONF_ENABLE_PRECISE_UPDATES only controls whether the
+    Pending update flags are fetched for every environment, whether or
+    not its scheduled update check (updateCheckEnabled) is on, and are
+    not gated by CONF_ENABLE_PRECISE_UPDATES. This is what backs the
+    update platform's baseline (digest-free) entities.
+    CONF_ENABLE_PRECISE_UPDATES only controls whether the
     separate, opt-in DockhandUpdateCoordinator also runs (real registry
     queries) to layer precise digest-based versions onto those same
     entities.
@@ -155,9 +154,10 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     pending_update_container_ids vs. pending_update_details: GET
     /api/containers/pending-updates?env=X (confirmed from Dockhand's own
     source, src/routes/api/containers/pending-updates/+server.ts) returns
-    one row per container Dockhand's scheduled update-check job persisted
-    a record for — and that job (env-update-check.ts,
-    runEnvUpdateCheckJob) persists a row for the UNION of (a) containers
+    one row per container an update check persisted a record for — the
+    scheduled job (env-update-check.ts, runEnvUpdateCheckJob) or a
+    manual POST /api/containers/check-updates — and the scheduled job
+    persists a row for the UNION of (a) containers
     with a real, actionable digest update (hasImageUpdate=True) and (b)
     containers with ONLY a semver "newer version tag" suggestion and no
     actionable digest update (hasImageUpdate=False, newerVersion still
@@ -312,25 +312,20 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
 
         async def _fetch_env(env_id: int) -> tuple[int, dict]:
-            update_check_enabled = bool(
-                all_stats.get(env_id, {}).get("updateCheckEnabled")
-            )
-
-            # Named tasks rather than a positionally-indexed list — two
-            # independent conditions (update_check_enabled,
-            # enable_resource_stats) now decide which calls happen, and
-            # position-tracking a list with two independent optional
-            # entries is exactly the kind of thing that's easy to get
-            # subtly wrong later when a third condition gets added.
+            # Named tasks rather than a positionally-indexed list, so an
+            # optional call can't shift the position of the ones after it.
+            # pending-updates is fetched whether or not the environment's
+            # scheduled update check is on: manual checks in Dockhand and
+            # this integration's own check-updates calls write the same
+            # rows, and Dockhand's UI shows them either way.
             tasks: dict[str, Any] = {
                 "containers": self.client.async_get_containers(env_id),
                 "stacks": self.client.async_get_stacks(env_id),
+                "pending_updates": self.client.async_get_pending_updates(env_id),
             }
             if self._enable_resource_stats:
                 tasks["container_stats"] = self.client.async_get_container_stats(env_id)
                 tasks["stack_stats"] = self.client.async_get_stack_stats(env_id)
-            if update_check_enabled:
-                tasks["pending_updates"] = self.client.async_get_pending_updates(env_id)
 
             results = dict(
                 zip(

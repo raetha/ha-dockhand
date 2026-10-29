@@ -23,16 +23,16 @@ CONF_ENABLE_UPDATE_ENTITIES to be on — Tier 2 alone, e.g. via a manual
 its data on):
 
   Tier 1 (no separate config option beyond the platform gate above):
-  update entities exist for every container in any environment where
-  Dockhand itself has update-check enabled
-  (env_data["stats"]["updateCheckEnabled"], from dashboard/stats,
-  already polled by the fast coordinator — no separate check needed).
+  update entities exist for every container in every environment,
+  whether or not Dockhand's scheduled update check is on for it — a
+  manual check in Dockhand (or this integration's own check-updates
+  calls) records pending updates just the same.
   installed_version shows the image tag (no digest available at this
   tier). latest_version flips to the "update-pending" sentinel — or, once
   bug #2 below shipped, the container's own raw image tag when that's
   distinguishable from installed_version — when the fast coordinator's
   cheap GET /api/containers/pending-updates poll (Dockhand's own cached
-  scheduled-check results, no registry query of its own) flags this
+  check results, no registry query of its own) flags this
   container. That same poll (DockhandFastCoordinator, see its own
   docstring) also carries hasImageUpdate/newerVersion per container —
   confirmed richer than originally assumed — so Tier 1 alone is now a
@@ -275,14 +275,12 @@ async def async_setup_entry(
 ) -> None:
     """Set up container update entities.
 
-    Tier 1 entities are created for every container in an environment
-    with updateCheckEnabled=True, sourced entirely from the fast
-    coordinator — independent of whether Tier 2 (update_coordinator) is
-    configured at all.
+    Tier 1 entities are created for every container, sourced entirely
+    from the fast coordinator — independent of whether Tier 2
+    (update_coordinator) is configured at all.
 
-    Removal (when updateCheckEnabled turns off for an environment, a
-    container disappears, or CONF_ENABLE_UPDATE_ENTITIES itself is
-    turned off) is centralized in __init__.py's
+    Removal (when a container disappears, or CONF_ENABLE_UPDATE_ENTITIES
+    itself is turned off) is centralized in __init__.py's
     _cleanup_stale_registry/_build_live_sets, alongside every other
     conditionally-present entity type (images, networks, volumes,
     runtime controls, git stack entities) — not handled here. That
@@ -308,8 +306,6 @@ async def async_setup_entry(
 
         for env_id, env_data in fast_data.items():
             stats = env_data.get("stats") or {}
-            if not stats.get("updateCheckEnabled"):
-                continue
             env_name = stats.get("name", f"Environment {env_id}")
 
             for container in env_data.get("containers") or []:
@@ -341,7 +337,7 @@ async def async_setup_entry(
     _add_new_entities()
 
     # Re-run on each fast-coordinator update to pick up new containers or
-    # environments that just had update-check turned on in Dockhand.
+    # environments.
     entry.async_on_unload(fast_coordinator.async_add_listener(_add_new_entities))
 
 
@@ -419,8 +415,8 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         """Return this container's merged update-status payload — Tier 2's
         (check-updates) item, if update_coordinator is configured and has
         data for it, MERGED with Tier 1's pending_update_details entry
-        (hasImageUpdate/newerVersion, always available whenever Dockhand's
-        own update-check is enabled — independent of Tier 2).
+        (hasImageUpdate/newerVersion, from Dockhand's cached check results —
+        independent of Tier 2).
 
         Precedence: Tier 2's own hasUpdate/digests are authoritative
         whenever Tier 2 has a row for this container at all (it's a live

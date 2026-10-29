@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [1.11.1] — 2026-10-29
+
+### Fixed
+
+- **Update entities missing when Dockhand's scheduled update check is off**
+  (#42) — container update entities were only created for environments
+  with Dockhand's scheduled update check turned on. With it off, updates
+  found by a manual check in Dockhand, the **Check for updates** button or
+  **Enable precise update versions** still showed in Dockhand and turned on
+  the stack's Updates available sensor, but no update entity appeared.
+  Update entities now exist for every container whenever **Enable update
+  entities** is on, and turning that option off still removes them all.
+
 ## [1.11.0] — 2026-10-19
 
 ### Added
@@ -1300,7 +1313,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...HEAD
+[1.11.1]: https://github.com/raetha/ha-dockhand/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/raetha/ha-dockhand/compare/v1.10.2...v1.11.0
 [1.10.2]: https://github.com/raetha/ha-dockhand/compare/v1.10.1...v1.10.2
 [1.10.1]: https://github.com/raetha/ha-dockhand/compare/v1.10.0...v1.10.1

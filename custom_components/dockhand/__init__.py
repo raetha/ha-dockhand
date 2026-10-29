@@ -567,9 +567,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         image_uids               set[str]   — live entity unique_ids
         network_uids             set[str]   — live entity unique_ids
         volume_uids               set[str]  — live entity unique_ids
-        update_uids              set[str]   — live entity unique_ids (Tier 1 — from
-                                              fast data's updateCheckEnabled, not the
-                                              optional Tier 2 update_coordinator)
+        update_uids              set[str]   — live entity unique_ids (Tier 1 — one
+                                              per container while update entities
+                                              are enabled, not the optional Tier 2
+                                              update_coordinator)
         bulk_update_uids         set[str]   — live entity unique_ids (env-level
                                               "Update all" button, only while at
                                               least one non-system-container
@@ -647,8 +648,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     container_stats_uids: set[str] = set()
     # Dockhand's own stack totals — same option, Dockhand 1.0.52+.
     stack_stats_uids: set[str] = set()
-    # Tier 1 update entities — live whenever CONF_ENABLE_UPDATE_ENTITIES is
-    # on (default True) and the environment has updateCheckEnabled=True.
+    # Tier 1 update entities — live for every container whenever
+    # CONF_ENABLE_UPDATE_ENTITIES is on (default True).
     # Entirely fast-data-derived; Tier 2/update coordinator is purely
     # additive and has no bearing on which update entities should exist —
     # see update.py's module docstring.
@@ -726,7 +727,6 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     for env_id, env_data in fast_data.items():
         has_freestanding = False
         stats = env_data.get("stats") or {}
-        update_check_enabled = bool(stats.get("updateCheckEnabled"))
         env_failures: set[str] = env_data.get("fetch_failures") or set()
         env_containers = env_data.get("containers") or []
         pending_updates = env_data.get("pending_update_container_ids") or set()
@@ -764,7 +764,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                 name = c.get("name", "")
                 if name:
                     containers.add(_device_id_container(entry.entry_id, env_id, name))
-                    if update_entities_enabled and update_check_enabled:
+                    if update_entities_enabled:
                         update_uids.add(f"{entry.entry_id}_{env_id}_update_{name}")
                     if not c.get("systemContainer"):
                         for suffix in _CONTAINER_ACTION_SUFFIXES:
@@ -1259,7 +1259,7 @@ def _cleanup_stale_registry(
     # for entities that need explicit tracking anyway: either standalone
     # (images/networks/volumes, no device of their own), or ones whose
     # existence is conditional even though their device persists — update
-    # (Tier 1 depends on updateCheckEnabled), runtime controls (depends on
+    # (depends on update entities being enabled), runtime controls (depends on
     # the feature being enabled), and git stack entities (depends on
     # Dockhand still classifying the stack as git-tracked).
     for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):

@@ -76,4 +76,5 @@ Rule pages: `https://developers.home-assistant.io/docs/core/integration-quality-
 
 | Date | Release | Outcome |
 |---|---|---|
+| 2026-10-29 | 1.11.1 | Bug-fix release; no new entities, actions or options. No rule or developer-blog changes since the 1.11.0 review, and core's `[mypy]` section and mypy pin unchanged. No `quality_scale.yaml` comments made stale. |
 | 2026-10-19 | 1.11.0 | Full re-audit against the rules as of Home Assistant 2026.10. Added the new Bronze rules **docs-triggers** and **docs-conditions** (exempt). Fixed **strict-typing**, which was marked done without mypy ever having run: added `mypy.ini` with core's settings and fixed what it found. **action-exceptions** corrected from exempt to done. Added `entity.py` (**common-modules**) and `async_remove_config_entry_device` (**stale-devices**). README gained Use cases, more examples, and Known limitations. Added the automated checks above. Tests brought to 100% line coverage (from about 96%), and the gate raised to match. |
