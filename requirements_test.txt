@@ -12,7 +12,7 @@
 #
 # CI runs on Python 3.14 (latest patch) via .github/workflows/ci.yml
 
-pytest-homeassistant-custom-component==0.13.373
+pytest-homeassistant-custom-component==0.13.375
 ruff
 # The mypy release Home Assistant core itself pins (its requirements_test.txt);
 # settings in mypy.ini. Keep both in step with core.
