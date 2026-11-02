@@ -17,7 +17,7 @@ the reasoning first and only revisit if the stated condition has changed.
   delete `_form()`, and import from `binary_sensor.const`. Likewise
   `number.py`'s `async_entity_id_changed` ignore once the minimum reaches
   2026.11 (where it becomes an ordinary `@override`). See
-  `docs/QUALITY_SCALE.md`.
+  `docs/quality-scale.md`.
 
 - **Inline release-notes body content (not just a link) for floating-tag
   images with no Dockhand `newerVersion` suggestion** — e.g. AudiobookShelf
@@ -158,7 +158,7 @@ the reasoning first and only revisit if the stated condition has changed.
 - **Runtime controls: Block I/O (`Blkio*`) fields.** Left out of the
   first pass — low value for home-lab use, and real complexity (per-device
   weight maps, not scalars like the other runtime controls). See
-  `docs/UPDATE_RUNTIME_DESIGN.md` for the full design rationale.
+  `docs/update-runtime-design.md` for the full design rationale.
 
 - **`/api/system?env=X` for richer host/Docker info.** Returns
   `docker{version,apiVersion,os,arch,kernelVersion,serverVersion,connection}`,
@@ -187,7 +187,7 @@ the reasoning first and only revisit if the stated condition has changed.
 - **Slow coordinator's per-environment gather** (`return_exceptions=True`,
   logs and omits that env's key from `environments` this cycle on
   failure) — checked against the fetch-failure principle in
-  `docs/ARCHITECTURE.md` §3 and not currently believed to be the same
+  `docs/architecture.md` §3 and not currently believed to be the same
   bug (a missing dict key reads as "no fresh data this cycle" to
   consumers going through `_coordinator_env`, not "confirmed
   empty"), but wasn't traced all the way through every
@@ -236,7 +236,7 @@ the reasoning first and only revisit if the stated condition has changed.
 
 - **Two-tier "gentle Deploy / forceful Update" buttons, symmetric across
   internal and git stacks.** Not achievable — see
-  `docs/ARCHITECTURE.md` §6 for why (no per-call pull override exists
+  `docs/architecture.md` §6 for why (no per-call pull override exists
   for git stacks at all). Went with one Deploy/Redeploy button per stack
   type instead, each mirroring Dockhand's own default UI behavior as
   closely as possible for that type.

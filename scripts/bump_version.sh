@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# bump_version.sh — set manifest.json's version, promote the Unreleased
-# CHANGELOG section to a dated release heading, and update the compare links.
+# bump_version.sh — prepare a release pull request: set manifest.json's version,
+# promote the Unreleased CHANGELOG section to a dated release heading, and update
+# the compare links. CI tags and publishes the release once the pull request is
+# merged into main (docs/development.md -> "Branches and releases").
 #
 # Usage: ./scripts/bump_version.sh <X.Y.Z> [YYYY-MM-DD]
 #   The date defaults to today; pass one when preparing a release ahead of
@@ -60,7 +62,7 @@ sed -E "s/^(  \"version\": )\"[^\"]*\"/\1\"$VERSION\"/" "$MANIFEST" > "$TMP_MANI
 # drafted there become this release's, and point the compare links at it.
 awk -v ver="$VERSION" -v date="$DATE" -v prev="$PREV_TAG" -v repo="$REPO_URL" '
   /^## \[Unreleased\]/ && !heading {
-    print; print ""; print "## [" ver "] — " date; heading = 1; next
+    print; print ""; print "## [" ver "] - " date; heading = 1; next
   }
   /^\[Unreleased\]: / && !links {
     print "[Unreleased]: " repo "/compare/v" ver "...HEAD"
@@ -71,7 +73,7 @@ awk -v ver="$VERSION" -v date="$DATE" -v prev="$PREV_TAG" -v repo="$REPO_URL" '
 ' "$CHANGELOG" > "$TMP_CHANGELOG"
 
 grep -qF "\"version\": \"$VERSION\"" "$TMP_MANIFEST" || fail "manifest.json version edit didn't apply"
-grep -qF "## [$VERSION] — $DATE" "$TMP_CHANGELOG" || fail "CHANGELOG heading edit didn't apply"
+grep -qF "## [$VERSION] - $DATE" "$TMP_CHANGELOG" || fail "CHANGELOG heading edit didn't apply"
 
 cat "$TMP_MANIFEST" > "$MANIFEST"
 cat "$TMP_CHANGELOG" > "$CHANGELOG"
@@ -84,11 +86,6 @@ cat "$TMP_CHANGELOG" > "$CHANGELOG"
     echo "  manual edits rather than 'git checkout'."
   fi
   echo ""
-  echo "  Review CHANGELOG.md, then commit and tag:"
-  echo "    git add -A"
-  echo "    git commit -m \"Release $VERSION\""
-  echo "    git tag -a v$VERSION -m \"Release $VERSION\""
-  echo "    git push && git push --tags"
-  echo ""
-  echo "  The GitHub Actions release workflow runs on the tag push."
+  echo "  Review CHANGELOG.md, commit, and open the release pull request (dev -> main)."
+  echo "  CI tags v$VERSION and publishes the release when it's merged; don't tag by hand."
 } || true

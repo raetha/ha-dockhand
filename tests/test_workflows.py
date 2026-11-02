@@ -9,6 +9,7 @@ Runs as part of the normal test suite so CI failures are caught before push.
 from __future__ import annotations
 
 import os
+import re
 
 import pytest
 
@@ -112,16 +113,29 @@ def test_all_workflows_have_triggers():
         assert trigger is not None, f"{fname} has no trigger defined"
 
 
-def test_checkout_actions_use_pinned_version():
-    """actions/checkout and actions/setup-python should use a pinned version, not @main."""
+def test_actions_are_pinned_to_commits():
+    """Every action is pinned to a full commit SHA (version in a comment), never a tag or branch."""
     unpinned = [
-        f"{fname}/{job_id}: {step.get('uses', '')}"
+        f"{fname}/{job_id}: {step['uses']}"
         for fname, job_id, job in _all_jobs()
         for step in (job.get("steps") or [])
-        if step.get("uses", "").startswith(("actions/checkout", "actions/setup-python"))
-        and (step["uses"].endswith("@main") or step["uses"].endswith("@master"))
+        if "uses" in step
+        and not step["uses"].startswith("./")
+        and not re.fullmatch(r"[^@]+@[0-9a-f]{40}", step["uses"])
     ]
-    assert unpinned == [], (
-        "Official actions should use a pinned version (e.g. @v6), not @main/@master:\n"
-        + "\n".join(f"  - {u}" for u in unpinned)
+    assert unpinned == [], "Actions must be pinned to a full commit SHA:\n" + "\n".join(
+        f"  - {u}" for u in unpinned
+    )
+
+
+def test_no_expressions_inside_run_scripts():
+    """${{ }} inside run: is a script-injection risk; pass values through env: instead."""
+    risky = [
+        f"{fname}/{job_id}: {step.get('name', step['run'][:40])}"
+        for fname, job_id, job in _all_jobs()
+        for step in (job.get("steps") or [])
+        if "run" in step and "${{" in step["run"]
+    ]
+    assert risky == [], "Expressions inside run: scripts:\n" + "\n".join(
+        f"  - {r}" for r in risky
     )

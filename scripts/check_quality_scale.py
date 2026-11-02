@@ -10,7 +10,7 @@ dev branch) and fails if quality_scale.yaml:
   - has a todo or exempt rule without a comment saying why
 
 It doesn't judge whether a rule marked done really is done — that's the
-audit in docs/QUALITY_SCALE.md.
+audit in docs/quality-scale.md.
 
 Usage:
   python3 scripts/check_quality_scale.py              # fetch from GitHub
@@ -90,7 +90,7 @@ def main() -> int:
     if problems:
         print("quality_scale.yaml is out of date with Home Assistant's rules:")
         print("\n".join(f"  - {p}" for p in problems))
-        print("See docs/QUALITY_SCALE.md for how to review a new or changed rule.")
+        print("See docs/quality-scale.md for how to review a new or changed rule.")
         return 1
     todo = [name for name, (status, _) in ours.items() if status == "todo"]
     print(f"quality_scale.yaml covers all {len(expected)} rules.")

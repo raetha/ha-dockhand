@@ -26,7 +26,7 @@ That's intended: it's the signal to review the new rule.
 
 ## Release review
 
-Part of every release's checklist (`CONTRIBUTING.md`). The automated checks
+Part of every release's checklist (`docs/development.md`). The automated checks
 don't judge whether a rule marked `done` is still really done, so:
 
 1. Run `bash scripts/run_tests.sh --full`. A rule-list failure means a rule
@@ -66,7 +66,7 @@ Rule pages: `https://developers.home-assistant.io/docs/core/integration-quality-
   to `binary_sensor.const`. The minimum supported version predates both, so
   `config_flow.py` keeps voluptuous behind `_form()`, and the
   `binary_sensor` import carries a `type: ignore`. Both go once the minimum
-  reaches 2026.10 (see `docs/BACKLOG.md`).
+  reaches 2026.10 (see `docs/backlog.md`).
 - **stale-devices** — automatic cleanup deliberately keeps what it can't
   confirm is gone, which is why `async_remove_config_entry_device` exists.
 - **discovery**, **discovery-update-info** — exempt: Dockhand advertises

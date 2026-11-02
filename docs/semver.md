@@ -1,12 +1,13 @@
 # Versioning policy
 
 This is the canonical semver policy for both `ha-dockhand` and `ha-dockhand-cards`. One document,
-referenced from both repos' `CONTRIBUTING.md`, rather than two copies that can drift apart — the
-two repos already share release mechanics (bump version, dated `CHANGELOG.md` section, tag), so
-the policy governing *which* bump applies should be shared too.
+referenced from both repos' development guides, rather than two copies that can drift apart — the
+two repos already share release mechanics (a release pull request sets the version and dates the
+`CHANGELOG.md` section; CI tags and publishes), so the policy governing *which* bump applies
+should be shared too.
 
 `ha-dockhand-cards` has its own small supplement for concerns that only make sense there —
-see `ha-dockhand-cards/docs/SEMVER.md`.
+see "Versioning" in [ha-dockhand-cards' development guide](https://github.com/raetha/ha-dockhand-cards/blob/main/docs/development.md#versioning).
 
 Standard [SemVer](https://semver.org/) (`MAJOR.MINOR.PATCH`), with the following made concrete
 for these two repos specifically, since "breaking" is otherwise a judgment call and that judgment
@@ -21,13 +22,13 @@ or that removes something they may depend on:
   - A config entry schema **major** bump (`SCHEMA_VERSION`), with or without a migration —
     downgrading across it stops working, and entries more than one schema major old can no
     longer be upgraded. It's the clean-up point for old rename code, so it only happens in a
-    major release; see `docs/ARCHITECTURE.md` §4.
+    major release; see `docs/architecture.md` §4.
   - Renaming or removing a stored setting *without* a migration (the user's choice is lost).
     With one — a `RenamedOption` plus a `SCHEMA_MINOR_VERSION` bump — it's minor: the setting
     carries over, and a downgrade to a release on the previous schema version keeps it too.
   - Renaming an existing entity `translation_key` — this is a cross-repo break, since
     `ha-dockhand-cards` resolves entities by `translation_key` (see that repo's
-    `docs/ARCHITECTURE.md` §1). Coordinate a release on both sides when this happens.
+    `docs/architecture.md` §1). Coordinate a release on both sides when this happens.
   - Removing an entity, service, or a previously-supported HA version from the compatibility
     floor.
 - **ha-dockhand-cards:**
