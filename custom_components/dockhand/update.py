@@ -399,10 +399,12 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             if newer.get("bump") in ("major", "minor", "patch"):
                 attrs["newer_version_bump"] = newer["bump"]
             skipped = newer.get("skipped")
-            # Dockhand's `skipped` includes the target tag itself.
-            attrs["newer_versions_count"] = (
-                len(skipped) if isinstance(skipped, list) and skipped else 1
-            )
+            # Dockhand's `skipped` includes the target tag itself. Its
+            # self-update check doesn't say how many releases there were.
+            if newer.get("source") != "self-update":
+                attrs["newer_versions_count"] = (
+                    len(skipped) if isinstance(skipped, list) and skipped else 1
+                )
         item = self._check_updates_item()
         if item.get("pinnedToDigest"):
             attrs["pinned_digest_moved"] = True

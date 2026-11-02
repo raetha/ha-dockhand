@@ -794,3 +794,19 @@ async def test_check_updates_a_moved_digest_on_a_pinned_image_is_not_an_update(
 async def test_check_updates_tolerates_an_unexpected_reply(client_with_mock_request):
     client_with_mock_request._request.return_value = {"results": "nope"}
     assert await client_with_mock_request.async_check_container_updates(2) == []
+
+
+async def test_check_self_update_url(client_with_mock_request):
+    client_with_mock_request._request.return_value = {"updateAvailable": False}
+    assert await client_with_mock_request.async_check_self_update() == {
+        "updateAvailable": False
+    }
+    assert client_with_mock_request._request.call_args.args == (
+        "GET",
+        "/api/self-update/check",
+    )
+
+
+async def test_check_self_update_non_dict_becomes_empty(client_with_mock_request):
+    client_with_mock_request._request.return_value = "Admin access required"
+    assert await client_with_mock_request.async_check_self_update() == {}

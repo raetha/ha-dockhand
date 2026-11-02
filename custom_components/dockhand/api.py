@@ -396,6 +396,20 @@ class DockhandClient:
             for item in results
         ]
 
+    async def async_check_self_update(self) -> dict[str, Any]:
+        """Ask Dockhand whether a newer release of Dockhand itself exists.
+
+        GET /api/self-update/check (admin only)
+
+        Fields used: updateAvailable, latestVersion (only for a version-tagged
+        image, and only when newer), currentImage, newImage, containerName.
+        Dockhand inspects its own container through its local Docker socket,
+        DOCKER_HOST, or a socket/direct environment that hosts it; without
+        one of those it answers updateAvailable false with an `error`.
+        """
+        result = await self._request("GET", "/api/self-update/check")
+        return result if isinstance(result, dict) else {}
+
     async def async_get_pending_updates(self, env_id: int) -> list[dict[str, Any]]:
         """Read Dockhand's own cached update-check results — no registry query.
 

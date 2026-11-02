@@ -210,7 +210,9 @@ the reasoning first and only revisit if the stated condition has changed.
   as up to date). For ordinary containers Tier 2 adds no new signal since
   1.10.0 — Tier 1 carries the same registry result from Dockhand's own
   scheduled check. Revisit only if Dockhand starts exposing system-container
-  update status through a stored, pollable endpoint.
+  update status through a stored, pollable endpoint. Precise updates also
+  drives the self-update check that reports a newer release for a
+  version-pinned Dockhand (#48).
 
 - **Running a command inside a container from HA** (Dockhand 1.0.49+'s
   `POST /api/containers/{id}/exec/run`, which runs a short command and

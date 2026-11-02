@@ -892,6 +892,19 @@ def test_newer_version_bump_and_count_tolerate_missing_fields():
     assert attrs["newer_versions_count"] == 1
 
 
+def test_self_update_newer_version_has_no_count():
+    """Dockhand's self-update check names the newest release but not how
+    many came before it, so no count is guessed."""
+    item = {
+        **ITEM_UP_TO_DATE,
+        "newerVersion": {"tag": "v1.0.56", "bump": "patch", "source": "self-update"},
+    }
+    attrs = _make_entity(item).extra_state_attributes
+    assert attrs["newer_version"] == "v1.0.56"
+    assert attrs["newer_version_bump"] == "patch"
+    assert "newer_versions_count" not in attrs
+
+
 def test_no_bump_or_count_without_newer_version():
     attrs = _make_entity(ITEM_HAS_UPDATE).extra_state_attributes
     assert "newer_version_bump" not in attrs

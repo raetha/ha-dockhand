@@ -94,8 +94,21 @@ def _make_entry_with_update_coordinator() -> MagicMock:
             1: {
                 "c1": {"containerId": "c1", "hasUpdate": True},
                 "c2": {"containerId": "c2", "hasUpdate": False},
+                "dh": {
+                    "containerId": "dh",
+                    "containerName": "dockhand",
+                    "imageName": "fnsys/dockhand:v1.0.53",
+                    "hasUpdate": False,
+                    "systemContainer": "dockhand",
+                    "newerVersion": {"tag": "v1.0.56", "source": "self-update"},
+                },
             }
         }
+    }
+    update.self_update = {
+        "env_id": 1,
+        "container_id": "dh",
+        "newerVersion": {"tag": "v1.0.56", "source": "self-update"},
     }
     update.last_update_success = True
     update.last_exception = None
@@ -162,5 +175,26 @@ async def test_update_summary_reflects_real_per_environment_data(
 
     summary = result["coordinator"]["update"]["summary"]
     assert "environments" not in summary
-    assert summary["1"]["container_count"] == 2
+    assert summary["1"]["container_count"] == 3
     assert summary["1"]["updates_available"] == 1
+
+
+async def test_update_summary_shows_system_containers_and_self_update(
+    hass: HomeAssistant,
+):
+    entry = _make_entry_with_update_coordinator()
+    result = await async_get_config_entry_diagnostics(hass, entry)
+
+    update = result["coordinator"]["update"]
+    assert update["summary"]["1"]["system_containers"] == [
+        {
+            "name": "dockhand",
+            "image": "fnsys/dockhand:v1.0.53",
+            "system_container": "dockhand",
+            "has_update": False,
+            "newer_version": "v1.0.56",
+            "update_disabled": False,
+            "error": None,
+        }
+    ]
+    assert update["self_update"]["newerVersion"]["tag"] == "v1.0.56"

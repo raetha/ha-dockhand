@@ -2,6 +2,38 @@
 
 ## [Unreleased]
 
+## [1.11.2] — 2026-11-02
+
+### Fixed
+
+- **No update shown for a version-pinned Dockhand** (#48) — Dockhand never
+  reports a newer version tag for its own container, so a Dockhand running a
+  pinned tag such as `v1.0.53` never showed an update in Home Assistant, even
+  while Dockhand's own "update available" notice did. With **Enable precise
+  update versions** on, the integration now also asks that same release
+  check, and the Update entity on Dockhand's container turns on with the
+  newest release as `latest_version` and `newer_version`, Install
+  unavailable. Needs an admin API token, and Dockhand able to inspect its own
+  container — its own Docker socket, or a socket or direct environment that
+  lists it; when it only reaches its hosts through Hawser, the check isn't
+  made. Re-checked by that environment's **Check for updates** button too.
+  Hawser has no equivalent check in Dockhand; the README now explains why
+  floating tags are the reliable way to get update notices for Dockhand and
+  Hawser.
+
+### Changed
+
+- **Diagnostics list system container update results** — the update
+  section now shows what Dockhand last reported for Dockhand's own container
+  and any Hawser agents (`system_containers`), and what its release check
+  found (`self_update`).
+
+### Internal
+
+- **Test dependencies** — pytest-homeassistant-custom-component 0.13.373 →
+  0.13.375 (tests now run against Home Assistant 2026.10.4) and mypy 2.4.0 →
+  2.4.1, matching Home Assistant core's own pin (Dependabot #49, #50).
+
 ## [1.11.1] — 2026-10-29
 
 ### Fixed
@@ -1313,7 +1345,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...HEAD
+[1.11.2]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/raetha/ha-dockhand/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/raetha/ha-dockhand/compare/v1.10.2...v1.11.0
 [1.10.2]: https://github.com/raetha/ha-dockhand/compare/v1.10.1...v1.10.2

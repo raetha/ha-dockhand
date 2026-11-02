@@ -519,6 +519,25 @@ rows in `_system_check_results` and re-applies them after every
 pending-updates poll, pruning by current container id; replacing Tier 1's
 data wholesale from pending-updates on each poll silently erased them.
 
+**A pinned system container never gets a newerVersion from check-updates.**
+Dockhand computes `newerVersion` only for non-system containers
+(`semverEnabled && !systemContainer`, Finsys/dockhand#1466), and a pinned
+tag's digest never moves, so `hasUpdate` stays false too. Floating tags are
+the only way check-updates reports a Dockhand or Hawser update (#48). For
+Dockhand itself, `DockhandUpdateCoordinator` fills the gap from
+`GET /api/self-update/check`, which compares a version tag against the
+newest release in Dockhand's changelog: a newer one becomes the Dockhand
+container row's `newerVersion`, marked `"source": "self-update"` so the
+next apply can replace or remove it, and never overriding a newerVersion
+check-updates reported itself. Its digest answer for a floating tag is
+ignored — check-updates already carries it. The call is only made when
+Dockhand's container is listed in a socket, direct or untyped environment
+(`_dockhand_host_candidates`), mirroring Dockhand's own
+`resolveOwnEnvId`: through Hawser alone it always fails with ENOENT. Every
+failure is silent (debug log only), since a non-admin token or a Dockhand
+without Docker access just means there is nothing to show. Hawser has no
+equivalent anywhere in Dockhand.
+
 **Consult Tier 2 (or any coordinator that persists data keyed by an id
 that can change identity) by current id, never by name.** Real bug: an
 earlier version of `ContainerUpdateEntity`'s Tier 2 lookup scanned
@@ -842,7 +861,9 @@ a bug in this integration.
 Dockhand capability.** Dockhand has no clean, non-admin API endpoint
 that returns its own app version for general querying (the only
 version-related endpoint, `/api/self-update/check`, is admin-only and
-tied to image-tag parsing for Dockhand's own self-update workflow).
+tied to image-tag parsing for Dockhand's own self-update workflow; it's
+used only to report a newer Dockhand release — see §3's system-container
+notes — never to gate a feature).
 Check whether the specific field/key you need is actually present in
 the response instead — e.g. the stack "Updates available" sensor checks
 `"updatesAvailable" in stack`, not a Dockhand version number. This works

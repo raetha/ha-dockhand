@@ -14,6 +14,7 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.dockhand import coordinator as coordinator_module
 from custom_components.dockhand.api import (
     DockhandAuthError,
     DockhandClient,
@@ -1456,3 +1457,278 @@ async def test_fast_pending_updates_keep_pinned_digests_and_held_updates(
     assert details["h"]["releaseAgeRemainingHours"] == 7
     assert details["b"]["releaseAgeRemainingHours"] is None
     assert env["pending_update_container_ids"] == set()
+
+
+# ---------------------------------------------------------------------------
+# Update coordinator — Dockhand's own release, via /api/self-update/check
+# ---------------------------------------------------------------------------
+
+DOCKHAND_CONTAINER = {
+    "id": "dh1",
+    "name": "dockhand",
+    "image": "fnsys/dockhand:v1.0.53",
+    "systemContainer": "dockhand",
+}
+DOCKHAND_ROW = {
+    "containerId": "dh1",
+    "containerName": "dockhand",
+    "hasUpdate": False,
+    "systemContainer": "dockhand",
+}
+SELF_UPDATE_NEWER = {
+    "updateAvailable": True,
+    "currentImage": "fnsys/dockhand:v1.0.53",
+    "newImage": "fnsys/dockhand:v1.0.56",
+    "latestVersion": "1.0.56",
+    "containerName": "dockhand",
+}
+
+
+def _fast_with_dockhand(connection_type: str | None = "socket", containers=None):
+    fast = MagicMock()
+    stats = {"name": "local"}
+    if connection_type is not None:
+        stats["connectionType"] = connection_type
+    fast.data = {
+        "environments": {
+            1: {
+                "stats": stats,
+                "containers": containers
+                if containers is not None
+                else [DOCKHAND_CONTAINER, CONTAINER1],
+            }
+        }
+    }
+    return fast
+
+
+def _self_update_client(self_update=None, rows=None):
+    client = _make_client()
+    client.async_check_container_updates = AsyncMock(
+        return_value=rows if rows is not None else [DOCKHAND_ROW]
+    )
+    client.async_check_self_update = AsyncMock(
+        return_value=self_update if self_update is not None else SELF_UPDATE_NEWER
+    )
+    return client
+
+
+async def test_self_update_adds_newer_version_to_dockhand_row(hass: HomeAssistant):
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+
+    newer = coord.data["environments"][1]["dh1"]["newerVersion"]
+    assert newer == {"tag": "v1.0.56", "source": "self-update", "bump": "patch"}
+    assert coord.self_update == {
+        "env_id": 1,
+        "container_id": "dh1",
+        "newerVersion": newer,
+    }
+
+
+async def test_self_update_cleared_once_up_to_date(hass: HomeAssistant):
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    client.async_check_self_update = AsyncMock(
+        return_value={
+            "updateAvailable": False,
+            "currentImage": "fnsys/dockhand:v1.0.56",
+        }
+    )
+    await coord.async_refresh()
+    assert not coord.data["environments"][1]["dh1"].get("newerVersion")
+    assert coord.self_update is None
+
+
+@pytest.mark.parametrize("connection_type", ["hawser-standard", "hawser-edge"])
+async def test_self_update_skipped_without_socket_or_direct_host(
+    hass: HomeAssistant, connection_type: str
+):
+    """Through Hawser, Dockhand can't inspect its own container, so the
+    check would only ever fail with ENOENT."""
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand(connection_type))
+    await coord.async_refresh()
+    client.async_check_self_update.assert_not_called()
+    assert coord.self_update is None
+
+
+async def test_self_update_skipped_when_dockhand_not_listed(hass: HomeAssistant):
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand(containers=[CONTAINER1]))
+    await coord.async_refresh()
+    client.async_check_self_update.assert_not_called()
+
+
+@pytest.mark.parametrize("connection_type", ["direct", None])
+async def test_self_update_runs_for_direct_or_untyped_env(
+    hass: HomeAssistant, connection_type: str | None
+):
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand(connection_type))
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["dh1"]["newerVersion"]["tag"] == "v1.0.56"
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        {"updateAvailable": False, "error": "Check failed: Error: connect ENOENT"},
+        # A floating tag: check-updates already reports this one itself.
+        {
+            "updateAvailable": True,
+            "currentImage": "fnsys/dockhand:latest",
+            "newImage": "fnsys/dockhand:latest",
+            "newDigest": "sha256:abc",
+        },
+    ],
+)
+async def test_self_update_without_newer_release_adds_nothing(
+    hass: HomeAssistant, response: dict
+):
+    client = _self_update_client(response)
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    assert not coord.data["environments"][1]["dh1"].get("newerVersion")
+    assert coord.self_update is None
+
+
+async def test_self_update_failure_is_silent_and_keeps_last_result(
+    hass: HomeAssistant,
+):
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    client.async_check_self_update = AsyncMock(side_effect=Exception("API error 403"))
+    await coord.async_refresh()
+    assert coord.last_update_success is True
+    assert coord.data["environments"][1]["dh1"]["newerVersion"]["tag"] == "v1.0.56"
+
+
+async def test_self_update_never_replaces_check_updates_newer_version(
+    hass: HomeAssistant,
+):
+    row = {**DOCKHAND_ROW, "newerVersion": {"tag": "v1.0.55", "bump": "patch"}}
+    client = _self_update_client(rows=[row])
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["dh1"]["newerVersion"]["tag"] == "v1.0.55"
+
+
+async def test_self_update_dropped_once_dockhand_recreated(hass: HomeAssistant):
+    client = _self_update_client()
+    fast = _fast_with_dockhand()
+    coord = _update_coord(hass, client, fast)
+    await coord.async_refresh()
+
+    recreated = {**DOCKHAND_CONTAINER, "id": "dh2"}
+    fast.data["environments"][1]["containers"] = [recreated]
+    client.async_check_container_updates = AsyncMock(
+        return_value=[{**DOCKHAND_ROW, "containerId": "dh2"}]
+    )
+    client.async_check_self_update = AsyncMock(
+        return_value={
+            "updateAvailable": False,
+            "currentImage": "fnsys/dockhand:v1.0.56",
+        }
+    )
+    await coord.async_refresh()
+    assert "dh1" not in coord.data["environments"][1]
+    assert not coord.data["environments"][1]["dh2"].get("newerVersion")
+
+
+async def test_self_update_survives_merged_check_results(hass: HomeAssistant):
+    """A "Check for updates" press replaces the environment's rows; the
+    self-update result must be carried onto the new ones."""
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    coord.async_merge_check_results(1, [dict(DOCKHAND_ROW)])
+    assert coord.data["environments"][1]["dh1"]["newerVersion"]["tag"] == "v1.0.56"
+
+
+async def test_refresh_self_update_only_for_dockhand_host_env(hass: HomeAssistant):
+    client = _self_update_client({"updateAvailable": False})
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    client.async_check_self_update.reset_mock()
+    client.async_check_self_update.return_value = SELF_UPDATE_NEWER
+
+    await coord.async_refresh_self_update(2)
+    client.async_check_self_update.assert_not_called()
+
+    await coord.async_refresh_self_update(1)
+    client.async_check_self_update.assert_awaited_once()
+    assert coord.data["environments"][1]["dh1"]["newerVersion"]["tag"] == "v1.0.56"
+
+
+async def test_self_update_picks_container_by_name_when_ambiguous(
+    hass: HomeAssistant,
+):
+    other = {**DOCKHAND_CONTAINER, "id": "dh-other", "name": "dockhand-test"}
+    client = _self_update_client(
+        rows=[DOCKHAND_ROW, {**DOCKHAND_ROW, "containerId": "dh-other"}]
+    )
+    coord = _update_coord(
+        hass, client, _fast_with_dockhand(containers=[DOCKHAND_CONTAINER, other])
+    )
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["dh1"]["newerVersion"]["tag"] == "v1.0.56"
+    assert not coord.data["environments"][1]["dh-other"].get("newerVersion")
+
+
+@pytest.mark.parametrize(
+    ("current", "new", "tag", "bump"),
+    [
+        ("fnsys/dockhand:v1.0.53", "fnsys/dockhand:v1.0.56", "v1.0.56", "patch"),
+        ("fnsys/dockhand:v1.0.53", "fnsys/dockhand:v1.1.0", "v1.1.0", "minor"),
+        (
+            "reg.local:5000/dockhand:v1.9.2-baseline",
+            "reg.local:5000/dockhand:v2.0.0-baseline",
+            "v2.0.0-baseline",
+            "major",
+        ),
+    ],
+)
+def test_self_update_newer_version_tag_and_bump(current, new, tag, bump):
+    newer = coordinator_module._self_update_newer_version(
+        {
+            "updateAvailable": True,
+            "currentImage": current,
+            "newImage": new,
+            "latestVersion": tag.lstrip("v"),
+        }
+    )
+    assert newer == {"tag": tag, "source": "self-update", "bump": bump}
+
+
+async def test_refresh_self_update_removes_result_once_up_to_date(
+    hass: HomeAssistant,
+):
+    client = _self_update_client()
+    coord = _update_coord(hass, client, _fast_with_dockhand())
+    await coord.async_refresh()
+    client.async_check_self_update.return_value = {"updateAvailable": False}
+    await coord.async_refresh_self_update(1)
+    assert not coord.data["environments"][1]["dh1"].get("newerVersion")
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        # No tag to name.
+        {"updateAvailable": True, "latestVersion": "1.0.56", "newImage": "dockhand"},
+    ],
+)
+def test_self_update_newer_version_needs_a_tag(response):
+    assert coordinator_module._self_update_newer_version(response) is None
+
+
+@pytest.mark.parametrize(
+    ("current", "new"),
+    [("nightly", "v1.0.56"), ("v1.0.56", "v1.0.56-baseline")],
+)
+def test_version_bump_unknown(current, new):
+    assert coordinator_module._version_bump(current, new) is None

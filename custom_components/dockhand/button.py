@@ -730,6 +730,7 @@ class DockhandCheckUpdatesButton(
 
         if self._update_coordinator is not None:
             self._update_coordinator.async_merge_check_results(self._env_id, items)
+            await self._update_coordinator.async_refresh_self_update(self._env_id)
 
         if self._update_entities_enabled:
             # Pass the full per-container response straight through — the

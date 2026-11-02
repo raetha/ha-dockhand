@@ -97,6 +97,21 @@ async def async_get_config_entry_diagnostics(
             "updates_available": sum(
                 1 for item in by_container.values() if item.get("hasUpdate")
             ),
+            # Dockhand and Hawser only ever report an update here, so the
+            # rows themselves are what a report about them needs.
+            "system_containers": [
+                {
+                    "name": item.get("containerName"),
+                    "image": item.get("imageName"),
+                    "system_container": item.get("systemContainer"),
+                    "has_update": bool(item.get("hasUpdate")),
+                    "newer_version": (item.get("newerVersion") or {}).get("tag"),
+                    "update_disabled": bool(item.get("updateDisabled")),
+                    "error": item.get("error"),
+                }
+                for item in by_container.values()
+                if isinstance(item, dict) and item.get("systemContainer")
+            ],
         }
 
     return {
@@ -128,6 +143,7 @@ async def async_get_config_entry_diagnostics(
                 if update is not None and update.last_exception
                 else None,
                 "summary": update_summary,
+                "self_update": update.self_update if update is not None else None,
             },
         },
     }

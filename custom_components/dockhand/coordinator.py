@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from datetime import timedelta
 from typing import Any, override
 
@@ -112,6 +113,75 @@ def _pending_detail(has_update: bool, row: dict[str, Any]) -> dict[str, Any]:
             else {}
         ),
     }
+
+
+# Dockhand's self-update check can only inspect its own container through
+# an environment of one of these types (or its own socket/DOCKER_HOST); a
+# Hawser environment never qualifies.
+_SELF_UPDATE_CONNECTION_TYPES = frozenset({"socket", "direct"})
+
+_SELF_UPDATE_SOURCE = "self-update"
+
+
+def _dockhand_host_candidates(
+    fast_data: dict[str, Any] | None,
+) -> list[tuple[int, dict]]:
+    """Dockhand's own container, in each environment through which Dockhand
+    can reach it for /api/self-update/check. Empty means the check can't
+    work (e.g. Dockhand only manages Hawser environments), so it's skipped."""
+    out: list[tuple[int, dict]] = []
+    for env_id, env in _all_envs(fast_data).items():
+        # Dockhand treats a missing connection type as a socket.
+        conn = (env.get("stats") or {}).get("connectionType")
+        if conn and conn not in _SELF_UPDATE_CONNECTION_TYPES:
+            continue
+        for c in env.get("containers") or []:
+            if (
+                isinstance(c, dict)
+                and c.get("id")
+                and c.get("systemContainer") == "dockhand"
+            ):
+                out.append((env_id, c))
+    return out
+
+
+def _image_tag(image: str) -> str | None:
+    name = image.split("@", 1)[0]
+    last = name.rsplit("/", 1)[-1]
+    return last.rsplit(":", 1)[1] if ":" in last else None
+
+
+_SEMVER_PREFIX = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)")
+
+
+def _version_bump(current_tag: str, new_tag: str) -> str | None:
+    cur = _SEMVER_PREFIX.match(current_tag)
+    new = _SEMVER_PREFIX.match(new_tag)
+    if not cur or not new:
+        return None
+    for part, bump in zip((1, 2, 3), ("major", "minor", "patch"), strict=True):
+        if int(new.group(part)) != int(cur.group(part)):
+            return bump
+    return None
+
+
+def _self_update_newer_version(result: dict[str, Any]) -> dict[str, Any] | None:
+    """A check-updates-style newerVersion for Dockhand's own container, from
+    a self-update check that found a newer release for a version-tagged
+    image. check-updates never reports one for a system container, so for
+    a pinned Dockhand this is the only source. Its digest-based answer for
+    a floating tag is ignored: check-updates already reports that one."""
+    if not result.get("updateAvailable") or not result.get("latestVersion"):
+        return None
+    tag = _image_tag(str(result.get("newImage") or ""))
+    if not tag:
+        return None
+    newer: dict[str, Any] = {"tag": tag, "source": _SELF_UPDATE_SOURCE}
+    current = _image_tag(str(result.get("currentImage") or ""))
+    bump = _version_bump(current, tag) if current else None
+    if bump:
+        newer["bump"] = bump
+    return newer
 
 
 class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -1067,6 +1137,13 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             }
         }
 
+    Dockhand's own container also gets a newerVersion (marked
+    "source": "self-update") from GET /api/self-update/check when Dockhand
+    runs a version tag with a newer release out, since check-updates never
+    reports one for a system container. That check is only made when
+    Dockhand's container is visible in a socket or direct environment
+    (_dockhand_host_candidates); through Hawser alone it always fails.
+
     Wrapped in "environments" to match the fast and slow coordinators'
     shape exactly — all three are now structurally identical, even though
     this one has no second, non-per-environment concern the way slow's
@@ -1085,6 +1162,10 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     ) -> None:
         self.client = client
         self._fast = fast_coordinator
+        # {"env_id", "container_id", "newerVersion"} from the last self-update
+        # check that found a newer release, else None. Keyed by container id,
+        # so it stops applying once Dockhand's container is recreated.
+        self._self_update: dict[str, Any] | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -1158,7 +1239,91 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             else:
                 env_id, data = result
                 out[env_id] = data
-        return {"environments": out}
+        await self._refresh_self_update()
+        return {"environments": self._with_self_update(out)}
+
+    @property
+    def self_update(self) -> dict[str, Any] | None:
+        """The newer Dockhand release found by the last self-update check,
+        with the environment and container it applies to, or None."""
+        return dict(self._self_update) if self._self_update else None
+
+    async def _refresh_self_update(self, env_id: int | None = None) -> bool:
+        """Re-run Dockhand's self-update check when it can work. With
+        `env_id`, only when Dockhand's container is in that environment.
+        Returns whether a check completed. Every failure (no Docker access,
+        a non-admin token, Dockhand unreachable) is silent: it only means
+        there's nothing to show."""
+        candidates = _dockhand_host_candidates(self._fast.data)
+        if env_id is not None and all(e != env_id for e, _ in candidates):
+            return False
+        if not candidates:
+            self._self_update = None
+            return False
+        try:
+            result = await self.client.async_check_self_update()
+        except Exception as err:
+            # Keep the last result: an unreachable Dockhand says nothing new.
+            _LOGGER.debug("Dockhand: self-update check raised: %s", err)
+            return False
+        if result.get("error"):
+            _LOGGER.debug("Dockhand: self-update check: %s", result["error"])
+
+        host: tuple[int, dict] | None = None
+        if len(candidates) == 1:
+            host = candidates[0]
+        else:
+            named = [
+                c for c in candidates if c[1].get("name") == result.get("containerName")
+            ]
+            host = named[0] if len(named) == 1 else None
+
+        newer = _self_update_newer_version(result)
+        self._self_update = (
+            {"env_id": host[0], "container_id": host[1]["id"], "newerVersion": newer}
+            if host and newer
+            else None
+        )
+        return True
+
+    def _with_self_update(self, environments: dict[int, dict]) -> dict[int, dict]:
+        """`environments` with the self-update result applied to Dockhand's
+        own container row, replacing any earlier one. Never overrides a
+        newerVersion that check-updates itself reported."""
+        out: dict[int, dict] = {}
+        for env_id, rows in environments.items():
+            stale = [
+                cid
+                for cid, row in rows.items()
+                if isinstance(row, dict)
+                and (row.get("newerVersion") or {}).get("source") == _SELF_UPDATE_SOURCE
+            ]
+            if stale:
+                rows = dict(rows)
+                for cid in stale:
+                    rows[cid] = {**rows[cid], "newerVersion": None}
+            out[env_id] = rows
+
+        su = self._self_update
+        if not su:
+            return out
+        rows = out.get(su["env_id"]) or {}
+        row = rows.get(su["container_id"])
+        if not isinstance(row, dict) or row.get("newerVersion"):
+            return out
+        out[su["env_id"]] = {
+            **rows,
+            su["container_id"]: {**row, "newerVersion": dict(su["newerVersion"])},
+        }
+        return out
+
+    async def async_refresh_self_update(self, env_id: int) -> None:
+        """Re-run the self-update check after an environment's "Check for
+        updates" press, when Dockhand's own container is in it."""
+        if await self._refresh_self_update(env_id):
+            self.async_set_updated_data(
+                {"environments": self._with_self_update(dict(_all_envs(self.data)))}
+            )
 
     def async_merge_check_results(self, env_id: int, items: list[dict]) -> None:
         """Merge already-fetched check-updates results for one environment
@@ -1180,7 +1345,9 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         }
         merged_environments = dict(_all_envs(self.data))
         merged_environments[env_id] = indexed
-        self.async_set_updated_data({"environments": merged_environments})
+        self.async_set_updated_data(
+            {"environments": self._with_self_update(merged_environments)}
+        )
 
     async def async_check_environment(self, env_id: int) -> None:
         """Check just one environment for updates — the real fix for a

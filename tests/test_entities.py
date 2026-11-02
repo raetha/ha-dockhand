@@ -3011,6 +3011,7 @@ async def test_check_updates_press_feeds_tier2_when_precise_updates_enabled():
     async_merge_check_results() -- not a second, redundant client call."""
     update_coord = MagicMock()
     update_coord.async_merge_check_results = MagicMock()
+    update_coord.async_refresh_self_update = AsyncMock()
     result = [{"containerId": "id-web", "containerName": "web", "hasUpdate": True}]
     button, fast_coord, client = _make_check_updates_button(
         update_coordinator=update_coord,
@@ -3019,6 +3020,7 @@ async def test_check_updates_press_feeds_tier2_when_precise_updates_enabled():
     )
     await button.async_press()
     update_coord.async_merge_check_results.assert_called_once_with(ENV_ID, result)
+    update_coord.async_refresh_self_update.assert_awaited_once_with(ENV_ID)
     client.async_check_container_updates.assert_called_once()
     fast_coord.async_merge_pending_updates_from_check.assert_not_called()
 
@@ -3050,6 +3052,7 @@ async def test_check_updates_press_feeds_tier1_when_update_entities_enabled():
 async def test_check_updates_press_feeds_both_tiers_when_both_enabled():
     update_coord = MagicMock()
     update_coord.async_merge_check_results = MagicMock()
+    update_coord.async_refresh_self_update = AsyncMock()
     result = [{"containerId": "id-web", "containerName": "web", "hasUpdate": True}]
     button, fast_coord, _ = _make_check_updates_button(
         update_coordinator=update_coord,
