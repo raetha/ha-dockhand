@@ -353,7 +353,7 @@ Releasing (the owner decides when):
    `[Unreleased]` above) and updates the compare links. Go through the release checklist below.
 2. Open the release pull request into `main`, titled "Dockhand X.Y.Z", with the new changelog
    section as its body (or open it from `dev` once the bump is merged there).
-3. Squash-merge it. CI tags `vX.Y.Z`, publishes the release with the changelog section as notes and
+3. Squash-merge it. CI tags `X.Y.Z` (no leading "v": HACS shows tag names; releases up to 1.11.3 are tagged `vX.Y.Z`), publishes the release with the changelog section as notes and
    `dockhand.zip` attached, deletes the test builds, and resets `dev` to `main`.
 
 HACS installs from that release asset, not the repository's files (`hacs.json`: `zip_release`
@@ -406,8 +406,8 @@ that doesn't push, and `CI passed` depending on every check job.
 ### Test builds
 
 Every push to `dev` publishes a GitHub pre-release tagged `v<expected next version>-dev.<run>`
-(for example `v1.12.0-dev.43` while `dev` holds 1.12.0; right after a release, before `dev` moves
-on, `v<next patch>-dev.<run>`), so it sorts above the installed release. Its notes are the
+(for example `1.12.0-dev.43` while `dev` holds 1.12.0; right after a release, before `dev` moves
+on, `<next patch>-dev.<run>`), so it sorts above the installed release. Its notes are the
 `[Unreleased]` section, and its `dockhand.zip` has that version stamped into `manifest.json`, so
 Home Assistant and diagnostics show a test build as one (for example `1.11.3-dev.42`). Older
 test builds are deleted, so there's only ever one.

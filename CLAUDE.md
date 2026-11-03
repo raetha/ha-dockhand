@@ -26,7 +26,7 @@ short version.
   release pull request unless the owner asks: that's `scripts/bump_version.sh X.Y.Z`, the release
   checklist (including the quality scale review in `docs/quality-scale.md`), then `dev` → `main`.
   CI tags, publishes the release, and resets `dev` to `main`.
-- Each push to `dev` publishes a test build (`v<version>-dev.<run>` pre-release) that the owner
+- Each push to `dev` publishes a test build (`<version>-dev.<run>` pre-release) that the owner
   installs through HACS's Pre-release switch to test on a real Home Assistant.
 - Before proposing anything, check `docs/backlog.md`. Before new work against Dockhand or Home
   Assistant changes, check `docs/development.md` → "Upstream compatibility" and update it after

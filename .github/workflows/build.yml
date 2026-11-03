@@ -4,11 +4,11 @@ name: Build
 # release is one squash-merged pull request from `dev` into `main`.
 # Every push and pull request: changelog check, ruff, mypy, the full test suite (100% line
 # coverage), the quality scale rule check, hassfest and HACS validation.
-# Push to main: if manifest.json's version has no `v<version>` tag yet, tag it and publish the
+# Push to main: if manifest.json's version has no `<version>` tag yet, tag it and publish the
 # GitHub release (the changelog section as notes, dockhand.zip attached: HACS installs from it,
 # per hacs.json's zip_release), delete the test builds, then reset `dev` to `main` when they
 # hold the same files.
-# Push to dev: publish a test build as a GitHub pre-release (`v<next patch>-dev.<run>`, with that
+# Push to dev: publish a test build as a GitHub pre-release (`<next patch>-dev.<run>`, with that
 # version stamped into its zip's manifest.json), which HACS offers once the repository's
 # Pre-release switch is on; older test builds are deleted.
 
@@ -148,14 +148,16 @@ jobs:
         run: |
           set -e
           version=$(python3 scripts/release.py version)
-          tag="v$version"
-          if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
-            echo "$tag already exists: nothing to release"
+          # no leading "v": HACS shows tag names (releases up to 1.11.3 are tagged v<version>)
+          tag="$version"
+          if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1 ||
+             gh api "repos/$GH_REPO/git/ref/tags/v$tag" >/dev/null 2>&1; then
+            echo "$version is already released: nothing to release"
             exit 0
           fi
           python3 scripts/release.py package release/dockhand.zip
           python3 scripts/release.py notes "$version" > notes.md
-          gh release create "$tag" --target "$GITHUB_SHA" --title "Dockhand $tag" \
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Dockhand $version" \
             --notes-file notes.md release/dockhand.zip
           echo "Released $tag"
 
@@ -163,7 +165,7 @@ jobs:
         run: |
           set -e
           gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |
-            { grep -E '^v[0-9.]+-dev\.[0-9]+$' || true; } | while read -r old; do
+            { grep -E '^v?[0-9.]+-dev\.[0-9]+$' || true; } | while read -r old; do
               gh release delete "$old" --yes --cleanup-tag
             done
 
@@ -207,15 +209,16 @@ jobs:
         run: |
           set -e
           version=$(python3 scripts/release.py version)
-          if gh api "repos/$GH_REPO/git/ref/tags/v$version" >/dev/null 2>&1; then tagged=true; else tagged=false; fi
+          if gh api "repos/$GH_REPO/git/ref/tags/$version" >/dev/null 2>&1 ||
+             gh api "repos/$GH_REPO/git/ref/tags/v$version" >/dev/null 2>&1; then tagged=true; else tagged=false; fi
           dev=$(python3 scripts/release.py dev-version "$GITHUB_RUN_NUMBER" "$tagged")
-          tag="v$dev"
+          tag="$dev"
           python3 scripts/release.py package release/dockhand.zip --version "$dev"
           python3 scripts/release.py notes Unreleased --test-build "$GITHUB_RUN_NUMBER" > notes.md
           gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
             --title "Dockhand $tag (test build)" --notes-file notes.md release/dockhand.zip
           gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |
-            { grep -E '^v[0-9.]+-dev\.[0-9]+$' | grep -vx "$tag" || true; } | while read -r old; do
+            { grep -E '^v?[0-9.]+-dev\.[0-9]+$' | grep -vx "$tag" || true; } | while read -r old; do
               gh release delete "$old" --yes --cleanup-tag
             done
           echo "Published test build $tag"

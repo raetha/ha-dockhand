@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Versions show without a leading "v"** — HACS shows release tags,
+  which from this release are plain version numbers (`1.11.4`, test builds
+  such as `1.11.5-dev.42`), like most other HACS repositories. Earlier
+  releases keep their `v` tags.
+
 ## [1.11.3] - 2026-11-03
 
 ### Added
