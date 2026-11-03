@@ -317,8 +317,12 @@ a development log. A few rules that keep it that way:
 ## Versioning
 
 Semantic versioning, as defined in [semver.md](semver.md). Config-schema changes and downgrade
-support follow [architecture.md](architecture.md) §4. Decide the bump before preparing the
-release pull request.
+support follow [architecture.md](architecture.md) §4.
+
+**`dev` holds the expected next version.** When the first change after a release lands on `dev`,
+`manifest.json`'s version moves to what that change calls for; a later change that calls for more
+raises it. Test builds carry it, and release reviews re-check it. The changelog stays
+`[Unreleased]` until the release pull request dates it.
 
 ## Branches and releases
 
@@ -333,13 +337,18 @@ Adopted `try/` work is squash-merged into `dev`; ideas dropped for good get a li
 
 Day to day:
 
-1. Branch from `dev`, add the `[Unreleased]` line(s), run `bash scripts/run_tests.sh --full`.
-2. Open a pull request into `dev`; squash-merge it once CI is green.
-3. Install the test build through HACS to try it on a real Home Assistant.
+1. Claude runs `dev`: small, safe changes are committed to it directly; anything else goes on a
+   `try/<topic>` branch with a pull request into `dev`, which Claude squash-merges once CI is
+   green. Either way the `[Unreleased]` line(s) come with the change and
+   `bash scripts/run_tests.sh --full` passes.
+2. The owner installs the test build through HACS to try it on a real Home Assistant.
+3. `dev` stays releasable: a change that needs the owner's decision first waits on its `try/`
+   branch (a draft pull request) until they've seen it.
 
 Releasing (the owner decides when):
 
-1. On a branch from `dev`, run `scripts/bump_version.sh X.Y.Z [YYYY-MM-DD]`: it sets
+1. On a branch from `dev`, run `scripts/bump_version.sh X.Y.Z [YYYY-MM-DD]` with the version
+   `dev` already holds (or a different one, if the release review says so): it sets
    `manifest.json`'s version, turns `[Unreleased]` into the dated section (with a fresh empty
    `[Unreleased]` above) and updates the compare links. Go through the release checklist below.
 2. Open the release pull request into `main`, titled "Dockhand X.Y.Z", with the new changelog
@@ -353,6 +362,9 @@ and `filename`), so every release and test build must carry `dockhand.zip`, buil
 `custom_components/dockhand/`). The asset's download count is the install count HACS shows.
 
 No tags are pushed by hand: a version is released exactly once, when its tag doesn't exist yet.
+CI refuses a pull request into `main` whose version has no dated changelog section, so an undated
+release can't merge (a merge into `main` that releases nothing needs `dev` back on the released
+version).
 
 ### Release checklist
 
@@ -372,8 +384,8 @@ Part of every release pull request (not needed for everyday pull requests):
 
 `.github/workflows/build.yml`, on every push and pull request:
 
-- `python3 scripts/release.py check`: `CHANGELOG.md` has `[Unreleased]` and a section for
-  `manifest.json`'s version.
+- `python3 scripts/release.py check`: `CHANGELOG.md` has `[Unreleased]`; for pull requests into
+  `main` and pushes to `main`, also a dated section for `manifest.json`'s version.
 - `ruff check` and `ruff format --check` on `custom_components/`, `tests/` and `scripts/` (ruff
   pinned in `requirements_test.txt`).
 - mypy (strict, Home Assistant core's settings in `mypy.ini`) and the full pytest suite on Python
@@ -381,15 +393,21 @@ Part of every release pull request (not needed for everyday pull requests):
 - `scripts/check_quality_scale.py` against Home Assistant's current rule list.
 - hassfest and HACS validation.
 
+- `CI passed`: a gate job that passes only when every check above did. It's the one status check
+  the `main` ruleset requires, so jobs can change without touching the ruleset.
+
 Then, on a push to `main`, the release and sync-dev jobs; on a push to `dev`, the test build.
+Every checkout uses `persist-credentials: false` except sync-dev's, the one job that pushes with
+git, so the workflow token isn't left on disk for dependencies' scripts or tests to read.
 `tests/test_workflows.py` checks the workflows themselves: permissions on every job, actions
-pinned to commit SHAs, no `${{ }}` inside `run:` scripts.
+pinned to commit SHAs, no `${{ }}` inside `run:` scripts, no checkout keeping credentials in a job
+that doesn't push, and `CI passed` depending on every check job.
 
 ### Test builds
 
-Every push to `dev` publishes a GitHub pre-release tagged `v<next patch>-dev.<run>` (for example
-`v1.11.3-dev.42` while 1.11.2 is the latest release, or `v1.12.0-dev.43` once a release pull
-request has set 1.12.0), so it sorts above the installed release. Its notes are the
+Every push to `dev` publishes a GitHub pre-release tagged `v<expected next version>-dev.<run>`
+(for example `v1.12.0-dev.43` while `dev` holds 1.12.0; right after a release, before `dev` moves
+on, `v<next patch>-dev.<run>`), so it sorts above the installed release. Its notes are the
 `[Unreleased]` section, and its `dockhand.zip` has that version stamped into `manifest.json`, so
 Home Assistant and diagnostics show a test build as one (for example `1.11.3-dev.42`). Older
 test builds are deleted, so there's only ever one.
@@ -405,7 +423,8 @@ The owner sets these (sessions can't read most of them):
 
 - **Settings → Rules → Rulesets:** one for `main` (target: the default branch), **enforcement
   Active**: restrict deletions, block force pushes, require a pull request before merging with
-  squash as the only allowed method. No required approvals.
+  squash as the only allowed method. No required approvals. **Require status checks:**
+  `CI passed`. **Require code scanning results:** CodeQL.
 - **Settings → General → Pull Requests:** squash merging only; **Automatically delete head
   branches** on.
 - **Settings → Branches:** a classic branch protection rule for `dev`: nothing required,

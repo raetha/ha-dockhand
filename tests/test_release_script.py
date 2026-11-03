@@ -44,9 +44,11 @@ def test_sections_read_both_date_separators_and_stop_at_link_references():
     assert found["1.0.0"] == "- First."
 
 
-def test_check_requires_unreleased_and_the_current_version():
+def test_check_requires_a_dated_section_only_for_a_release():
     assert release.check(CHANGELOG, "1.1.0") == []
-    assert len(release.check(CHANGELOG, "1.2.0")) == 1
+    assert release.check(CHANGELOG, "1.2.0") == []  # expected next version on dev
+    assert release.check(CHANGELOG, "1.1.0", release=True) == []
+    assert len(release.check(CHANGELOG, "1.2.0", release=True)) == 1
     assert len(release.check(CHANGELOG.replace("## [Unreleased]", ""), "1.1.0")) == 1
 
 

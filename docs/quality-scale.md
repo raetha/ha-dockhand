@@ -45,7 +45,9 @@ don't judge whether a rule marked `done` is still really done, so:
    **icon-translations**, **entity-category** and
    **entity-disabled-by-default**.
 4. Re-read each `quality_scale.yaml` comment the release made stale; they
-   describe how the rule is met, so they drift with the code.
+   describe how the rule is met, so they drift with the code. Name what's
+   covered rather than counting it (no numbers of tests, sensors, locales or
+   exception keys): counts go stale with every routine addition.
 5. When Home Assistant core changes its `mypy.ini` `[mypy]` section or the
    mypy version it pins, copy the change into `mypy.ini` and
    `requirements_test.txt`.

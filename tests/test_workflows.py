@@ -139,3 +139,30 @@ def test_no_expressions_inside_run_scripts():
     assert risky == [], "Expressions inside run: scripts:\n" + "\n".join(
         f"  - {r}" for r in risky
     )
+
+
+def test_checkouts_drop_credentials_unless_the_job_pushes():
+    """persist-credentials: false keeps the token out of .git/config for later steps."""
+    kept = [
+        f"{fname}/{job_id}"
+        for fname, job_id, job in _all_jobs()
+        for step in (job.get("steps") or [])
+        if step.get("uses", "").startswith("actions/checkout@")
+        and (step.get("with") or {}).get("persist-credentials") is not False
+        and not any("git push" in s.get("run", "") for s in job.get("steps") or [])
+    ]
+    assert kept == [], "Checkouts keeping credentials in jobs that never push:\n" + (
+        "\n".join(f"  - {k}" for k in kept)
+    )
+
+
+def test_ci_gate_needs_every_check_job():
+    """The ruleset requires only 'CI passed', so it must depend on every check job."""
+    jobs = _load_workflows()["build.yml"]["jobs"]
+    checks = {
+        job_id for job_id, job in jobs.items() if job_id != "ci" and "if" not in job
+    }
+    gate = jobs["ci"]
+    assert gate["name"] == "CI passed"
+    assert gate["if"] == "always()"
+    assert set(gate["needs"]) == checks
