@@ -317,8 +317,12 @@ a development log. A few rules that keep it that way:
 ## Versioning
 
 Semantic versioning, as defined in [semver.md](semver.md). Config-schema changes and downgrade
-support follow [architecture.md](architecture.md) §4. Decide the bump before preparing the
-release pull request.
+support follow [architecture.md](architecture.md) §4.
+
+**`dev` holds the expected next version.** When the first change after a release lands on `dev`,
+`manifest.json`'s version moves to what that change calls for; a later change that calls for more
+raises it. Test builds carry it, and release reviews re-check it. The changelog stays
+`[Unreleased]` until the release pull request dates it.
 
 ## Branches and releases
 
@@ -343,7 +347,8 @@ Day to day:
 
 Releasing (the owner decides when):
 
-1. On a branch from `dev`, run `scripts/bump_version.sh X.Y.Z [YYYY-MM-DD]`: it sets
+1. On a branch from `dev`, run `scripts/bump_version.sh X.Y.Z [YYYY-MM-DD]` with the version
+   `dev` already holds (or a different one, if the release review says so): it sets
    `manifest.json`'s version, turns `[Unreleased]` into the dated section (with a fresh empty
    `[Unreleased]` above) and updates the compare links. Go through the release checklist below.
 2. Open the release pull request into `main`, titled "Dockhand X.Y.Z", with the new changelog
@@ -357,6 +362,9 @@ and `filename`), so every release and test build must carry `dockhand.zip`, buil
 `custom_components/dockhand/`). The asset's download count is the install count HACS shows.
 
 No tags are pushed by hand: a version is released exactly once, when its tag doesn't exist yet.
+CI refuses a pull request into `main` whose version has no dated changelog section, so an undated
+release can't merge (a merge into `main` that releases nothing needs `dev` back on the released
+version).
 
 ### Release checklist
 
@@ -376,8 +384,8 @@ Part of every release pull request (not needed for everyday pull requests):
 
 `.github/workflows/build.yml`, on every push and pull request:
 
-- `python3 scripts/release.py check`: `CHANGELOG.md` has `[Unreleased]` and a section for
-  `manifest.json`'s version.
+- `python3 scripts/release.py check`: `CHANGELOG.md` has `[Unreleased]`; for pull requests into
+  `main` and pushes to `main`, also a dated section for `manifest.json`'s version.
 - `ruff check` and `ruff format --check` on `custom_components/`, `tests/` and `scripts/` (ruff
   pinned in `requirements_test.txt`).
 - mypy (strict, Home Assistant core's settings in `mypy.ini`) and the full pytest suite on Python
@@ -397,9 +405,9 @@ that doesn't push, and `CI passed` depending on every check job.
 
 ### Test builds
 
-Every push to `dev` publishes a GitHub pre-release tagged `v<next patch>-dev.<run>` (for example
-`v1.11.3-dev.42` while 1.11.2 is the latest release, or `v1.12.0-dev.43` once a release pull
-request has set 1.12.0), so it sorts above the installed release. Its notes are the
+Every push to `dev` publishes a GitHub pre-release tagged `v<expected next version>-dev.<run>`
+(for example `v1.12.0-dev.43` while `dev` holds 1.12.0; right after a release, before `dev` moves
+on, `v<next patch>-dev.<run>`), so it sorts above the installed release. Its notes are the
 `[Unreleased]` section, and its `dockhand.zip` has that version stamped into `manifest.json`, so
 Home Assistant and diagnostics show a test build as one (for example `1.11.3-dev.42`). Older
 test builds are deleted, so there's only ever one.

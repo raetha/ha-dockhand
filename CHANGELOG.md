@@ -22,6 +22,9 @@
 - **CI hardening** — a single `CI passed` check gates releases, and no job
   keeps the workflow token on disk unless it pushes with git
   (`persist-credentials: false`); `tests/test_workflows.py` checks both.
+- **Test builds are numbered as the release they lead to** — `dev` now
+  carries the expected next version, and CI only requires a dated
+  changelog section for pull requests into `main`.
 - **New development workflow** — work lands on a `dev` branch and each
   release is one pull request into `main`, after which CI tags and
   publishes the release itself (no more pushing tags by hand). Every push

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Release helpers for CI (.github/workflows/build.yml) and release pull requests.
 
-python3 scripts/release.py check
-    CHANGELOG.md has [Unreleased] and a section for manifest.json's version.
+python3 scripts/release.py check [--release]
+    CHANGELOG.md has [Unreleased]; with --release (pull requests into and pushes
+    to main), also a dated section for manifest.json's version.
 python3 scripts/release.py version
     manifest.json's version.
 python3 scripts/release.py dev-version <run> <tagged>
@@ -60,14 +61,23 @@ def sections(changelog: str) -> dict[str, str]:
     return out
 
 
-def check(changelog: str, version: str) -> list[str]:
-    """Return the problems that should fail CI."""
+def check(changelog: str, version: str, release: bool = False) -> list[str]:
+    """Return the problems that should fail CI.
+
+    On dev, manifest.json holds the expected next version, which has no section
+    until the release pull request dates it; `release` (pull requests into and
+    pushes to main) requires that dated section, so an undated release can't
+    merge.
+    """
     found = sections(changelog)
     problems = []
     if "Unreleased" not in found:
         problems.append('CHANGELOG.md has no "## [Unreleased]" section')
-    if version not in found:
-        problems.append(f"CHANGELOG.md has no section for version {version}")
+    if release and version not in found:
+        problems.append(
+            f"CHANGELOG.md has no dated section for version {version}: "
+            "date it in the release pull request"
+        )
     return problems
 
 
@@ -136,7 +146,8 @@ def package(
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
-    sub.add_parser("check")
+    chk = sub.add_parser("check")
+    chk.add_argument("--release", action="store_true")
     sub.add_parser("version")
     dev = sub.add_parser("dev-version")
     dev.add_argument("run", type=int)
@@ -152,7 +163,7 @@ def main(argv: list[str]) -> int:
     changelog = CHANGELOG.read_text(encoding="utf-8")
     version = json.loads(MANIFEST.read_text(encoding="utf-8"))["version"]
     if args.cmd == "check":
-        problems = check(changelog, version)
+        problems = check(changelog, version, args.release)
         for problem in problems:
             print(f"::error file=CHANGELOG.md::{problem}", file=sys.stderr)
         if problems:
