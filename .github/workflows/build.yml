@@ -61,8 +61,17 @@ jobs:
         with:
           python-version: "3.14"
 
+      # On dev the version is the expected next one, undated until the release pull request;
+      # into and on main it must have its dated section.
       - name: Check the changelog
-        run: python3 scripts/release.py check
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if [ "$BASE_REF" = main ] || [ "$GITHUB_REF" = refs/heads/main ]; then
+            python3 scripts/release.py check --release
+          else
+            python3 scripts/release.py check
+          fi
 
       - name: Install ruff (the version pinned in requirements_test.txt)
         run: pip install "$(grep -E '^ruff==' requirements_test.txt)"
