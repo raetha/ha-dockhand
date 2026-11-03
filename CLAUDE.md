@@ -13,9 +13,10 @@ short version.
 ## How we work
 
 - **Branches** (`docs/development.md` → "Branches and releases"): never push to `main`; it gets one
-  squash-merged pull request per release. Adopted work goes on `dev`; experiments that may be
-  dropped go on `try/<topic>` branches off `dev`. Push branches and open pull requests; no zip
-  packages.
+  squash-merged pull request per release, which the owner merges. Claude runs `dev`: small, safe
+  changes go straight to it, anything else through a `try/<topic>` branch and pull request that
+  Claude squash-merges once CI is green. `dev` must stay releasable; a change that needs the
+  owner's decision waits on its `try/` branch. No zip packages.
 - Every change adds a line under `## [Unreleased]` in `CHANGELOG.md`, written for people using the
   integration (`docs/development.md` → "Changelog"; non-user-facing changes under `### Internal`).
   Released sections are frozen.
