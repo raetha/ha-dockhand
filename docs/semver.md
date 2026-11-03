@@ -55,7 +55,9 @@ or that removes something they may depend on:
 
 ## Patch — no capability change
 
-- Bug fixes.
+- Bug fixes, including making behavior that was already meant to work actually work, even when
+  the fix needs a new Dockhand API call (1.11.2 shipped Dockhand's own release check for #48 as
+  a patch).
 - Cosmetic/visual fixes that don't change behavior.
 - Translation fill-ins for already-covered keys.
 - Documentation.
