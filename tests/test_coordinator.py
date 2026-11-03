@@ -1126,7 +1126,7 @@ async def test_update_coord_env_failure_preserves_previous_data(hass: HomeAssist
     environment — that would flip every container's update entity there
     to "up to date" when we simply don't know this cycle. Same
     last-known-good principle as the fast/slow coordinator fixes; see
-    ARCHITECTURE.md §3."""
+    architecture.md §3."""
     client = _make_client()
     client.async_check_container_updates = AsyncMock(
         return_value=[{"containerId": "abc", "hasUpdate": True}]

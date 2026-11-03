@@ -365,7 +365,7 @@ def test_global_schedule_has_no_env_group_and_stays_under_hub(hass: HomeAssistan
 def test_schedule_device_via_device_consistent_across_repeated_calls(
     hass: HomeAssistant,
 ):
-    """Regression test for the consolidation pattern in ARCHITECTURE.md §0:
+    """Regression test for the consolidation pattern in architecture.md §0:
     _ensure_hub_devices() must build schedule DeviceInfo via the same
     _sched_device() factory the entity's own device_info uses, not duplicate
     fields inline — otherwise a repeated call could silently revert an
@@ -564,7 +564,7 @@ def test_preserves_container_when_containers_fetch_specifically_failed(
     containers == [] with the environment still online looks identical to
     "every container was genuinely removed" unless fetch_failures says
     otherwise — see coordinator.py's DockhandFastCoordinator._fetch and
-    docs/ARCHITECTURE.md §9. Container/stack existence is the single
+    docs/architecture.md §9. Container/stack existence is the single
     most commonly-used data this integration has; a transient DNS/
     network failure fetching /api/containers used to be able to wipe
     every container device for an environment that was, in every other
@@ -953,7 +953,7 @@ def test_preserves_images_group_during_slow_poll_failure(hass: HomeAssistant):
 
 
 def test_removing_images_group_device_cascades_entity_removal(hass: HomeAssistant):
-    """Confirms the redundancy called out in ARCHITECTURE.md §2 is real and
+    """Confirms the redundancy called out in architecture.md §2 is real and
     safe: removing a group device (here, Images, because the toggle is off)
     cascades away entities living on it synchronously, so the entity-registry
     pass below never even sees them — not "attempts and no-ops", genuinely

@@ -68,7 +68,7 @@ if [[ ! -f "$VENV/bin/activate" ]]; then
         "${PYTHON:-python3}" -m venv "$VENV" \
             || { echo "ERROR: Could not create venv."; exit 1; }
         echo "[ setup ] Installing ruff..."
-        "$VENV/bin/pip" install ruff -q
+        "$VENV/bin/pip" install "$(grep -E "^ruff==" requirements_test.txt)" -q
     fi
     echo "[ setup ] Done."
     echo ""
@@ -93,12 +93,12 @@ echo ""
 FAILED=0
 
 # ── Step 1: ruff lint ─────────────────────────────────────────────────────────
-echo "[ 1/$STEPS ] ruff check custom_components/ tests/..."
-ruff check custom_components/ tests/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
+echo "[ 1/$STEPS ] ruff check custom_components/ tests/ scripts/..."
+ruff check custom_components/ tests/ scripts/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
 
 # ── Step 2: ruff format check ─────────────────────────────────────────────────
-echo "[ 2/$STEPS ] ruff format --check custom_components/ tests/..."
-ruff format --check custom_components/ tests/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
+echo "[ 2/$STEPS ] ruff format --check custom_components/ tests/ scripts/..."
+ruff format --check custom_components/ tests/ scripts/ && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
 
 # ── Step 3: AST syntax check ──────────────────────────────────────────────────
 echo "[ 3/$STEPS ] AST syntax check custom_components/..."
@@ -133,7 +133,7 @@ if [[ $FULL -eq 1 ]]; then
     "$PYTHON" -m mypy && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
 
     # Home Assistant's current quality scale rules vs quality_scale.yaml.
-    # Fetches core's rule list from GitHub. See docs/QUALITY_SCALE.md.
+    # Fetches core's rule list from GitHub. See docs/quality-scale.md.
     echo "[ 5/$STEPS ] quality scale rules (vs Home Assistant core dev)..."
     "$PYTHON" scripts/check_quality_scale.py && echo "        PASS" || { echo "        FAIL"; FAILED=1; }
 

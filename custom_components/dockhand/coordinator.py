@@ -71,7 +71,7 @@ def _unwrap(
     This was a real, reported bug: a transient schedules-fetch failure
     here used to just become `schedules: []`, with the coordinator update
     still reporting success, causing every schedule entity to be wrongly
-    treated as confirmed-deleted. See docs/ARCHITECTURE.md §9 for the
+    treated as confirmed-deleted. See docs/architecture.md §9 for the
     full mechanism and how `fetch_failures` closes it for every resource
     this coordinator fetches, not just schedules.
     """
@@ -406,7 +406,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
 
             # Same tracking, same reasoning, as the slow coordinator's own
-            # per-environment fetches (see docs/ARCHITECTURE.md §9) — the
+            # per-environment fetches (see docs/architecture.md §9) — the
             # difference here is that containers/stacks failing has the
             # highest stakes of any resource in this whole integration:
             # they're what directly determines container/stack device and
@@ -857,7 +857,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # level uses `or {}`, not a dict.get(key, {}) default — the
             # latter only substitutes for an *absent* key, not one Dockhand
             # sends with an explicit null (a real, reported bug: see
-            # docs/ARCHITECTURE.md §6 and github.com/raetha/ha-dockhand/issues/20).
+            # docs/architecture.md §6 and github.com/raetha/ha-dockhand/issues/20).
             env_stats = (
                 _coordinator_env(self._fast_coordinator.data, env_id).get("stats") or {}
             )
@@ -1043,7 +1043,7 @@ def _sync_fetch_issues(
     One issue for top-level failures (schedules/environments — not
     tied to any one environment; never fires for the fast coordinator,
     which has no top-level fetch of its own with this problem — see
-    docs/ARCHITECTURE.md §9 on why dashboard-stats already raises
+    docs/architecture.md §9 on why dashboard-stats already raises
     correctly instead of needing this), one per environment for the
     rest — not one issue per resource per environment, which would
     mean up to 9 issues per environment during a broad outage; a
@@ -1215,7 +1215,7 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 # to "up to date" when we simply don't know right now.
                 # Keep whatever we already had for this environment instead
                 # (same "last known good, not a false empty" principle as
-                # the fast/slow coordinators — see ARCHITECTURE.md §3). This
+                # the fast/slow coordinators — see architecture.md §3). This
                 # resilience is deliberately only here, in the background
                 # periodic-refresh path — async_check_environment() below
                 # (the explicit per-button user action) lets the same

@@ -144,7 +144,7 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             # poll_interval_precise_updates, which are both refinements of this
             # one — they have no effect at all when this is off. Was briefly
             # grouped via a HA section() (in an unreleased 1.8.1 dev build) to
-            # make that relationship obvious, but reverted (see docs/BACKLOG.md
+            # make that relationship obvious, but reverted (see docs/backlog.md
             # "Group update options via section()")
             # after two different translation-structure attempts both failed to
             # render field labels/help text correctly in a live instance and the

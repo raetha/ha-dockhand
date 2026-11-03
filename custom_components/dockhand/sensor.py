@@ -1671,7 +1671,7 @@ class BaseSlowEnvSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorEntity
     # entirely by cleanup — see __init__.py's _build_live_sets, not this)
     # depends on a resource fetch that can fail independently of the
     # overall slow poll succeeding — see coordinator.py's _unwrap and
-    # docs/ARCHITECTURE.md §9. None (the default) means "not gated on any
+    # docs/architecture.md §9. None (the default) means "not gated on any
     # single resource," which covers most subclasses; only host- and
     # vulnerabilities-derived ones need to set this.
     _fetch_failure_key: str | None = None

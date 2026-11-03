@@ -259,7 +259,7 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
                 translation_placeholders={"error": str(err)},
             ) from err
         # async_refresh(), not async_request_refresh() — see
-        # docs/ARCHITECTURE.md §3 for why (a real, non-hypothetical
+        # docs/architecture.md §3 for why (a real, non-hypothetical
         # debouncer-cooldown gotcha for explicit user actions). Same
         # reasoning applies to every async_refresh() call in this file.
         await self.coordinator.async_refresh()

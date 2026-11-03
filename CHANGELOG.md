@@ -2,7 +2,52 @@
 
 ## [Unreleased]
 
-## [1.11.2] — 2026-11-02
+### Added
+
+- **Test builds** — upcoming changes are now published as test builds
+  (pre-releases such as `v1.11.3-dev.42`) that HACS can install once
+  Dockhand's **Pre-release** switch is turned on; the README's new "Test
+  builds" section explains how, and how to go back. A test build shows its
+  own version in Home Assistant and in diagnostics.
+
+### Changed
+
+- **Manual installs use `dockhand.zip`'s contents directly** — the
+  release zip now holds the integration's files at its root (for every
+  release, old ones included), so extract it into
+  `custom_components/dockhand/`. HACS installs from this zip too.
+
+### Internal
+
+- **New development workflow** — work lands on a `dev` branch and each
+  release is one pull request into `main`, after which CI tags and
+  publishes the release itself (no more pushing tags by hand). Every push
+  to `dev` publishes a test build as a GitHub pre-release, which HACS
+  offers once the repository's Pre-release switch is on. One `build.yml`
+  replaces `ci.yml` and `release.yml`; every action is pinned to a commit,
+  ruff is pinned, and Dependabot proposes updates into `dev`.
+- **HACS installs from the release's `dockhand.zip`** instead of the
+  repository's files (`hacs.json`'s `zip_release`), so HACS can show how
+  often each release is downloaded. Every earlier release's zip was rebuilt
+  from its tag with the same files at the zip's root.
+- **Developer docs reorganised** — `docs/development.md` is the guide
+  (testing, upstream compatibility, code style, translations, changelog,
+  branches and releases), `CONTRIBUTING.md` is a short entry point for
+  contributors, `docs/` file names are lowercase (`docs/architecture.md`,
+  `docs/semver.md` and so on), and `CLAUDE.md` and `docs/audits.md` were
+  added. This file now follows Keep a Changelog throughout: version
+  headings use a hyphen before the date, and older sections' Tests,
+  Maintenance, Documentation and Migration headings were folded into its
+  standard ones, with no entry changed.
+
+## [1.11.2] - 2026-11-02
+
+### Changed
+
+- **Diagnostics list system container update results** — the update
+  section now shows what Dockhand last reported for Dockhand's own container
+  and any Hawser agents (`system_containers`), and what its release check
+  found (`self_update`).
 
 ### Fixed
 
@@ -21,20 +66,13 @@
   floating tags are the reliable way to get update notices for Dockhand and
   Hawser.
 
-### Changed
-
-- **Diagnostics list system container update results** — the update
-  section now shows what Dockhand last reported for Dockhand's own container
-  and any Hawser agents (`system_containers`), and what its release check
-  found (`self_update`).
-
 ### Internal
 
 - **Test dependencies** — pytest-homeassistant-custom-component 0.13.373 →
   0.13.375 (tests now run against Home Assistant 2026.10.4) and mypy 2.4.0 →
   2.4.1, matching Home Assistant core's own pin (Dependabot #49, #50).
 
-## [1.11.1] — 2026-10-29
+## [1.11.1] - 2026-10-29
 
 ### Fixed
 
@@ -47,7 +85,7 @@
   Update entities now exist for every container whenever **Enable update
   entities** is on, and turning that option off still removes them all.
 
-## [1.11.0] — 2026-10-19
+## [1.11.0] - 2026-10-19
 
 ### Added
 
@@ -192,7 +230,7 @@
   current rule list (`scripts/check_quality_scale.py`), so new rules and
   regressions show up without waiting for a manual review.
 
-## [1.10.2] — 2026-09-24
+## [1.10.2] - 2026-09-24
 
 ### Added
 
@@ -224,7 +262,7 @@
   the container is recreated or the next check runs. With **Enable precise
   update versions** on, these updates were already kept.
 
-## [1.10.1] — 2026-09-22
+## [1.10.1] - 2026-09-22
 
 ### Changed
 
@@ -247,7 +285,7 @@
   with yet, the entity showed the newer tag as its target version while
   Install would actually re-pull the current tag.
 
-## [1.10.0] — 2026-09-21
+## [1.10.0] - 2026-09-21
 
 ### Added
 
@@ -287,7 +325,7 @@
   button's eligibility, and entity cleanup gating all now agree on
   "pending" meaning an actual, actionable update.
 
-## [1.9.4] — 2026-09-08
+## [1.9.4] - 2026-09-08
 
 ### Fixed
 
@@ -310,7 +348,7 @@
   operation resumes. Environments that truly have no containers (stats confirms zero)
   are still cleaned up correctly.
 
-### Tests
+### Internal
 
 - Five new tests covering the issue #34 fix: the root-cause Hawser scenario
   (`stats.total > 0`, containers list empty), entity-level preservation, genuine empty
@@ -328,7 +366,7 @@
   - `mock_dr` fixture updated to mock `async_get_device` (single entry or None return)
     matching the signature used in production.
 
-## [1.9.3] — 2026-09-08
+## [1.9.3] - 2026-09-08
 
 ### Fixed
 
@@ -373,7 +411,7 @@
   `switch.py`, `button.py`, `binary_sensor.py`, `number.py`, `select.py`) pass the
   new set.
 
-## [1.9.2] — 2026-09-01
+## [1.9.2] - 2026-09-01
 
 ### Fixed
 
@@ -394,7 +432,7 @@
   returned 401 and what Dockhand said in the response body, rather than only "token
   invalid or revoked."
 
-## [1.9.1] — 2026-08-31
+## [1.9.1] - 2026-08-31
 
 **ha-dockhand-cards users:** the device identifier format change below requires
 ha-dockhand-cards 1.2.1 or later. Install it before (or immediately after)
@@ -419,7 +457,7 @@ upgrading ha-dockhand to restore card functionality.
   the registry is already in the correct state by the time `async_get_or_create`
   is called — no `DeviceIdentifierCollisionError` on first boot after upgrade.
 
-## [1.9.0] — 2026-07-30
+## [1.9.0] - 2026-07-30
 
 ### Added
 
@@ -543,7 +581,7 @@ upgrading ha-dockhand to restore card functionality.
   already made once before for the same reason. See `CONTRIBUTING.md`'s Code
   style section for the resulting guideline.
 
-## [1.8.2] — 2026-07-28
+## [1.8.2] - 2026-07-28
 
 ### Fixed
 
@@ -562,7 +600,7 @@ upgrading ha-dockhand to restore card functionality.
   stacks/containers with spaces or other special characters in their names, and adding defense in
   depth against a maliciously crafted identifier from a compromised Dockhand instance.
 
-## [1.8.1] — 2026-07-24
+## [1.8.1] - 2026-07-24
 
 ### Added
 
@@ -585,7 +623,7 @@ upgrading ha-dockhand to restore card functionality.
 - The very first setup screen (shown once, when adding the integration) had been out of date
   since before 1.8.0 — missing a couple of options that the later Configure screen already had.
 
-## [1.8.0] — 2026-07-21
+## [1.8.0] - 2026-07-21
 
 ### Added
 
@@ -801,7 +839,20 @@ upgrading ha-dockhand to restore card functionality.
   its Health sensor previously stuck around permanently showing stale
   data instead of being cleaned up.
 
-## [1.7.4] — 2026-07-06
+## [1.7.4] - 2026-07-06
+
+### Changed
+
+- **Poll intervals now enforce minimum values** — the options flow rejects
+  intervals below 10 s (fast), 30 s (slow), and 300 s (update checks).
+  Zero or negative values previously caused the coordinator to refresh in
+  a tight loop, hammering the Dockhand API. Existing stored values are
+  unaffected until the options form is next submitted.
+
+- **Diagnostics redact container and image labels** — Docker labels can
+  carry secrets (e.g. reverse-proxy basic-auth hashes), and diagnostics
+  are commonly attached to public bug reports. The compose-vs-freestanding
+  summary counts are unaffected.
 
 ### Fixed
 
@@ -816,19 +867,6 @@ upgrading ha-dockhand to restore card functionality.
   a Hawser agent during migration), they report identical network IDs.
   Network entities were previously only created for the first environment
   seen; each environment now gets its own set.
-
-### Changed
-
-- **Poll intervals now enforce minimum values** — the options flow rejects
-  intervals below 10 s (fast), 30 s (slow), and 300 s (update checks).
-  Zero or negative values previously caused the coordinator to refresh in
-  a tight loop, hammering the Dockhand API. Existing stored values are
-  unaffected until the options form is next submitted.
-
-- **Diagnostics redact container and image labels** — Docker labels can
-  carry secrets (e.g. reverse-proxy basic-auth hashes), and diagnostics
-  are commonly attached to public bug reports. The compose-vs-freestanding
-  summary counts are unaffected.
 
 ### Internal
 
@@ -845,7 +883,7 @@ upgrading ha-dockhand to restore card functionality.
   HA versions from `run_tests.sh` — CI and `requirements_test.txt` are
   authoritative.
 
-## [1.7.3] — 2026-06-23
+## [1.7.3] - 2026-06-23
 
 ### Fixed
 
@@ -870,7 +908,7 @@ upgrading ha-dockhand to restore card functionality.
   ID first and the environment ID before the object type for a consistent
   instance → environment → object hierarchy.
 
-## [1.7.2] — 2026-06-12
+## [1.7.2] - 2026-06-12
 
 ### Changed
 
@@ -891,6 +929,10 @@ upgrading ha-dockhand to restore card functionality.
   updates-disabled notice uses `info` style. The `release_summary` field is
   no longer populated (consistent with HACS).
 
+- Added guidance to the README on how to exclude containers from HA using
+  the existing `dockhand.hidden=true` Docker label, HA's device disable
+  feature, and bulk device selection for larger installs.
+
 ### Internal
 
 - **Migration functions extracted to `migration.py`** — the two one-time
@@ -905,13 +947,7 @@ upgrading ha-dockhand to restore card functionality.
   standard pytest functions and fixtures, consistent with the rest of the
   suite. Test count unchanged at 356.
 
-### Documentation
-
-- Added guidance to the README on how to exclude containers from HA using
-  the existing `dockhand.hidden=true` Docker label, HA's device disable
-  feature, and bulk device selection for larger installs.
-
-## [1.7.1] — 2026-06-05
+## [1.7.1] - 2026-06-05
 
 ### Fixed
 
@@ -947,7 +983,7 @@ upgrading ha-dockhand to restore card functionality.
   without needing to find the Configure button afterwards. Options are stored in
   `entry.options` from the start, consistent with the existing Configure flow.
 
-## [1.7.0] — 2026-06-01
+## [1.7.0] - 2026-06-01
 
 ### Added
 
@@ -976,7 +1012,7 @@ upgrading ha-dockhand to restore card functionality.
 
   Resolves https://github.com/raetha/ha-dockhand/issues/10
 
-### Maintenance
+### Internal
 
 - Migrate test suite from `ha_stubs.py` to `pytest-homeassistant-custom-component`
   (PHCC 0.13.333, pinned to HA 2026.5.4). Eliminates 700-line hand-rolled stub
@@ -986,7 +1022,7 @@ upgrading ha-dockhand to restore card functionality.
   3.14.2+ — run locally via `pytest tests/` in a PHCC venv (see
   `docs/development.md`), or rely on CI for authoritative results.
 
-## [1.6.0] — 2026-05-22
+## [1.6.0] - 2026-05-22
 
 > **Action recommended for all existing users:** After upgrading to 1.6.0,
 > go to **Settings → Entities**, filter by the Dockhand integration, select
@@ -1003,7 +1039,27 @@ upgrading ha-dockhand to restore card functionality.
 
 **Additional breaking changes** — see full notes below.
 
-### Migration
+### Changed
+
+- **Device registration consolidated.** All `async_get_or_create` calls
+  previously duplicated between `__init__.py` and `sensor.py` are now
+  exclusively in `helpers.py` via `_ensure_env_devices` and
+  `_ensure_hub_devices`. A side-effect of the duplication was the
+  environment hub device being registered without `entry_type=SERVICE` in one
+  path, causing it to appear as physical hardware in the HA device registry.
+- **Compose label check centralised.** The inline `com.docker.compose.project`
+  label extraction appeared in six places across five files. Replaced with a
+  single `_compose_project(container)` helper in `helpers.py`.
+- **Container health sensor** is now enabled by default. It is only ever created
+  when the container has a Docker healthcheck, so it is never
+  permanently unavailable.
+- **Containers group device** (`<Environment> – Containers`) is now removed when
+  all containers in an online environment are Compose-managed. Previously the
+  empty group device persisted indefinitely.
+- `docs/device_class_matrix.md` fully updated: correct model names, all entity
+  types, enabled/disabled defaults, three-coordinator architecture.
+
+#### Migration
 
 **Container image sensor removed.** If you had manually enabled the per-container
 `Image` sensor (disabled by default), it will disappear after upgrading. The same
@@ -1028,7 +1084,7 @@ Container restart buttons are now `button.<env>_containers_<name>_restart` and
 stack restart buttons are `button.<env>_stacks_<name>_restart`. See **Entity
 naming redesign** below for full details and migration instructions.
 
-### Entity naming redesign ([#8](https://github.com/raetha/ha-dockhand/issues/8))
+#### Entity naming redesign ([#8](https://github.com/raetha/ha-dockhand/issues/8))
 
 All container, stack, image, network, and volume entity_ids now include the
 object type as a segment, making them unambiguous without looking up which
@@ -1071,25 +1127,14 @@ entities, open the **⋮ menu**, and choose **"Recreate entity IDs of selected"*
 Update any automations or templates that reference old entity_ids after the
 refresh.
 
-### Changed
+### Removed
 
-- **Device registration consolidated.** All `async_get_or_create` calls
-  previously duplicated between `__init__.py` and `sensor.py` are now
-  exclusively in `helpers.py` via `_ensure_env_devices` and
-  `_ensure_hub_devices`. A side-effect of the duplication was the
-  environment hub device being registered without `entry_type=SERVICE` in one
-  path, causing it to appear as physical hardware in the HA device registry.
-- **Compose label check centralised.** The inline `com.docker.compose.project`
-  label extraction appeared in six places across five files. Replaced with a
-  single `_compose_project(container)` helper in `helpers.py`.
-- **Container health sensor** is now enabled by default. It is only ever created
-  when the container has a Docker healthcheck, so it is never
-  permanently unavailable.
-- **Containers group device** (`<Environment> – Containers`) is now removed when
-  all containers in an online environment are Compose-managed. Previously the
-  empty group device persisted indefinitely.
-- `docs/device_class_matrix.md` fully updated: correct model names, all entity
-  types, enabled/disabled defaults, three-coordinator architecture.
+- **Container image sensor** (`DockhandContainerImageSensor`). The image name
+  is already the `image` attribute on each container's `State` sensor.
+- Dead helpers `_container_group_device()` and `_stack_group_device()` from
+  `helpers.py` (defined but never called).
+- `image` translation key from `strings.json`, all translation files, and
+  `icons.json`.
 
 ### Fixed
 
@@ -1136,16 +1181,7 @@ refresh.
   stale credential wording removed; `dockhand.hidden=true` container note added;
   `Health` entity description updated.
 
-### Removed
-
-- **Container image sensor** (`DockhandContainerImageSensor`). The image name
-  is already the `image` attribute on each container's `State` sensor.
-- Dead helpers `_container_group_device()` and `_stack_group_device()` from
-  `helpers.py` (defined but never called).
-- `image` translation key from `strings.json`, all translation files, and
-  `icons.json`.
-
-### Tests
+### Internal
 
 - `test_entities.py` refactored: 8 classes → 15, 89 tests → 119. Logically
   unrelated tests moved out of `TestSlowSensors` into their own classes.
@@ -1154,7 +1190,7 @@ refresh.
   container state `image` attribute, stack status `container_count` attribute.
 - Test count: 222 → 254.
 
-## [1.5.1] — 2026-05-19
+## [1.5.1] - 2026-05-19
 
 ### Fixed
 
@@ -1174,7 +1210,7 @@ refresh.
 - Automatic migration of existing container device identifiers and entity
   unique_ids from all pre-1.5.1 formats. No manual action required.
 
-## [1.5.0] — 2026-05-15
+## [1.5.0] - 2026-05-15
 
 ### Added
 
@@ -1192,6 +1228,11 @@ refresh.
   now in `async_release_notes` (full Markdown, no length limit) with a brief
   one-liner kept in `release_summary`.
 
+### Changed
+
+- Removed legacy network and volume *device* cleanup code that handled
+  pre-1.2.0 installs.
+
 ### Fixed
 
 - Schedule devices and entities are no longer removed ~60 seconds after a
@@ -1207,12 +1248,13 @@ refresh.
 - The `schedules_hub` device is now removed when `enable_schedules` is
   disabled, closing a cleanup gap where it had no removal path.
 
-### Changed
+## [1.4.1] - 2026-05-08
 
-- Removed legacy network and volume *device* cleanup code that handled
-  pre-1.2.0 installs.
+### Added
 
-## [1.4.1] — 2026-05-08
+- Update entities display a warning when vulnerability scanning is enabled on
+  the environment. The `batch-update` API endpoint does not apply scanning —
+  that workflow is only available through the Dockhand UI.
 
 ### Fixed
 
@@ -1224,13 +1266,7 @@ refresh.
 - Update entity unique_ids are automatically migrated from the 1.4.0
   container-ID-based scheme on first load.
 
-### Added
-
-- Update entities display a warning when vulnerability scanning is enabled on
-  the environment. The `batch-update` API endpoint does not apply scanning —
-  that workflow is only available through the Dockhand UI.
-
-## [1.4.0] — 2026-05-06
+## [1.4.0] - 2026-05-06
 
 ### Added
 
@@ -1247,12 +1283,6 @@ refresh.
 - **"Check for image updates" button** on each environment device, for
   on-demand update checks without waiting for the scheduled poll.
 
-### Fixed
-
-- Entity names now correctly use translated strings in all supported languages.
-  26 entity classes had a hardcoded `_attr_name` overriding the translation
-  system, so non-English users always saw English names.
-
 ### Changed
 
 - Dashboard stats are now fetched in a single `GET /api/dashboard/stats` call
@@ -1264,7 +1294,13 @@ refresh.
 - The update coordinator reuses the fast coordinator's environment list
   instead of making a redundant `GET /api/environments` call.
 
-## [1.3.1] — 2026-05-03
+### Fixed
+
+- Entity names now correctly use translated strings in all supported languages.
+  26 entity classes had a hardcoded `_attr_name` overriding the translation
+  system, so non-English users always saw English names.
+
+## [1.3.1] - 2026-05-03
 
 ### Changed
 
@@ -1280,7 +1316,7 @@ refresh.
 - CPU usage sensor reported values up to 100× too high. `cpuPercent` from the
   API is already a percentage; the sensor was incorrectly multiplying by 100.
 
-## [1.3.0] — 2026-05-01
+## [1.3.0] - 2026-05-01
 
 ### Added
 
@@ -1290,21 +1326,12 @@ refresh.
 - `CONTRIBUTING.md` with guidance for correcting translations and submitting
   new languages.
 
-## [1.2.0] — 2026-04-28
+## [1.2.0] - 2026-04-28
 
 **Breaking change** — session-cookie authentication has been removed. The
 integration now uses Dockhand API tokens exclusively.
 
 Requires **Dockhand ≥ 1.0.26**.
-
-### Migration
-
-Existing installations will be flagged for re-authentication on the next HA
-restart. Go to **Settings → Devices & Services → Dockhand →
-Re-authenticate**, generate a token under **Profile → API tokens** in
-Dockhand, and paste it in.
-
-No-auth installations are unaffected.
 
 ### Changed
 
@@ -1315,7 +1342,16 @@ No-auth installations are unaffected.
   causing Dockhand to execute synchronously and return real results.
 - Minimum Python version raised to 3.14 (matching HA 2026.3).
 
-## [1.1.0] — 2026-03-19
+#### Migration
+
+Existing installations will be flagged for re-authentication on the next HA
+restart. Go to **Settings → Devices & Services → Dockhand →
+Re-authenticate**, generate a token under **Profile → API tokens** in
+Dockhand, and paste it in.
+
+No-auth installations are unaffected.
+
+## [1.1.0] - 2026-03-19
 
 ### Added
 
@@ -1328,7 +1364,7 @@ No-auth installations are unaffected.
 - Setup called `async_login()` even for no-auth installs, causing 400 errors.
 - MFA token submission failed after the config flow rewrite.
 
-## [1.0.1] — 2026-03-19
+## [1.0.1] - 2026-03-19
 
 ### Fixed
 
@@ -1341,7 +1377,7 @@ No-auth installations are unaffected.
 - `icons.json` entries never applied due to missing `entity` section in
   `strings.json` and missing `_attr_translation_key` on entities.
 
-## [1.0.0] — 2026-03-08
+## [1.0.0] - 2026-03-08
 
 Initial stable release.
 

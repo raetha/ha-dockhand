@@ -41,7 +41,7 @@ _LEGACY_CONF_SESSION_COOKIE = "session_cookie"
 
 # Config entry schema version, (major, minor). Bump the minor for any change
 # to stored settings; bump the major only in a major integration release (see
-# docs/ARCHITECTURE.md §4 for the full lifecycle this drives).
+# docs/architecture.md §4 for the full lifecycle this drives).
 SCHEMA_VERSION = 2
 SCHEMA_MINOR_VERSION = 2
 

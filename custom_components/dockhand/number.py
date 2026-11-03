@@ -1,7 +1,7 @@
 """Number platform for Dockhand in-place container runtime controls.
 
 Applies changes live via POST /api/containers/{id}/update-runtime, without
-recreating the container — see docs/UPDATE_RUNTIME_DESIGN.md. Entities are
+recreating the container — see docs/update-runtime-design.md. Entities are
 only created for stack-less (freestanding) containers: a Compose or git-stack
 redeploy would silently discard any in-place change made here, which would be
 a worse experience than not offering the control. This also applies to our
