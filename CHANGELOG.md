@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [1.11.3] - 2026-11-03
+
 ### Added
 
 - **Test builds** — upcoming changes are now published as test builds
@@ -12,6 +14,9 @@
 
 ### Changed
 
+- **The README's build badge works again** — HACS shows the README of the
+  latest release, whose badge pointed at a workflow that no longer exists
+  and so showed as failing.
 - **Manual installs use `dockhand.zip`'s contents directly** — the
   release zip now holds the integration's files at its root (for every
   release, old ones included), so extract it into
@@ -1387,7 +1392,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...HEAD
+[1.11.3]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...v1.11.3
 [1.11.2]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/raetha/ha-dockhand/compare/v1.11.0...v1.11.1
 [1.11.0]: https://github.com/raetha/ha-dockhand/compare/v1.10.2...v1.11.0

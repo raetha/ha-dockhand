@@ -13,6 +13,7 @@ compliance drifts unless it's checked. This page is how it's kept current.
 
 | Check | Where | Catches |
 |---|---|---|
+| 2026-11-03 | 1.11.3 | No integration code changes (comments only: renamed doc paths); the release brings the new README, test builds and `dockhand.zip` packaging to HACS. No rule changes since the 1.11.2 review; no `quality_scale.yaml` comments made stale. |
 | `scripts/check_quality_scale.py` | CI (`quality-scale` job), `scripts/run_tests.sh --full` | A rule Home Assistant added or retired that `quality_scale.yaml` doesn't match; an unknown status; a `todo`/`exempt` rule with no reason given |
 | `mypy` with `mypy.ini` (Home Assistant core's strict settings) | CI (`tests` job), `run_tests.sh --full` | **strict-typing** — including missing `@override` and use of deprecated Home Assistant APIs |
 | `pytest --cov-fail-under=100` | CI (`tests` job), `run_tests.sh --full` | Any line no test runs (**test-coverage** itself asks for 95%) |
