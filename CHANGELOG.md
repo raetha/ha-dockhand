@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Test builds** — upcoming changes are now published as test builds
+  (pre-releases such as `v1.11.3-dev.42`) that HACS can install once
+  Dockhand's **Pre-release** switch is turned on; the README's new "Test
+  builds" section explains how, and how to go back. A test build shows its
+  own version in Home Assistant and in diagnostics.
+
+### Changed
+
+- **Manual installs use `dockhand.zip`'s contents directly** — the
+  release zip now holds the integration's files at its root (for every
+  release, old ones included), so extract it into
+  `custom_components/dockhand/`. HACS installs from this zip too.
+
 ### Internal
 
 - **New development workflow** — work lands on a `dev` branch and each
@@ -12,9 +27,9 @@
   replaces `ci.yml` and `release.yml`; every action is pinned to a commit,
   ruff is pinned, and Dependabot proposes updates into `dev`.
 - **HACS installs from the release's `dockhand.zip`** instead of the
-  repository's files, so HACS can show how often each release is
-  downloaded, and a test build's own version appears in Home Assistant and
-  in diagnostics.
+  repository's files (`hacs.json`'s `zip_release`), so HACS can show how
+  often each release is downloaded. Every earlier release's zip was rebuilt
+  from its tag with the same files at the zip's root.
 - **Developer docs reorganised** — `docs/development.md` is the guide
   (testing, upstream compatibility, code style, translations, changelog,
   branches and releases), `CONTRIBUTING.md` is a short entry point for

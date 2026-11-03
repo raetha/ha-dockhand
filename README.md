@@ -37,6 +37,22 @@ This integration is available in the default HACS catalog.
    the integration's files directly)
 2. Restart Home Assistant
 
+### Test builds
+
+Upcoming changes are published as test builds (pre-releases such as `v1.11.3-dev.42`) before
+they're released, for anyone willing to try them early. To get them through HACS:
+
+1. Go to **Settings → Devices & services → Entities**, search for the Dockhand **Pre-release**
+   switch that HACS creates (it's disabled by default), and enable it
+2. Turn the switch on. HACS then offers the latest test build as an update; install it and restart
+   Home Assistant
+3. To go back to releases, turn the switch off, then in HACS open Dockhand, choose **⋮ →
+   Redownload** and pick the latest release
+
+Test builds show their own version (for example `1.11.3-dev.42`) in Home Assistant and in
+diagnostics, so include it when reporting a problem. The changes in a test build are listed in its
+[release notes](https://github.com/raetha/ha-dockhand/releases).
+
 ---
 
 ## Setup
