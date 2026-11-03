@@ -2615,7 +2615,7 @@ async def test_entity_recreated_within_the_same_session_if_removed(hass):
     container genuinely deleted, or incorrectly, if a bug like the one
     fetch_failures fixes ever recurs) must come back on the very next
     poll where its data is confirmed present again, not just on the next
-    reload/restart. Closes the gap noted in docs/BACKLOG.md when the
+    reload/restart. Closes the gap noted in docs/backlog.md when the
     session-scoped known_entity_ids fix first shipped: that fix alone
     only self-healed on reload, since nothing told known_entity_ids a
     mid-session removal had happened."""

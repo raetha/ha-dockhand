@@ -11,10 +11,11 @@ code for anything security- or data-loss-sensitive before relying on it).
 
 Usage:
     git clone --depth 1 https://github.com/Finsys/dockhand.git /tmp/dockhand-src
-    python3 generate_dockhand_api_docs.py /tmp/dockhand-src docs/DOCKHAND_API.md
+    python3 generate_dockhand_api_docs.py /tmp/dockhand-src docs/dockhand-api.md
 
-Re-run this after bumping DOCKHAND_LAST_REVIEWED (see CONTRIBUTING.md) so the
-reference tracks whatever Dockhand release we last reviewed.
+Re-run this after bumping DOCKHAND_LAST_REVIEWED (see docs/development.md,
+"Upstream compatibility") so the reference tracks whatever Dockhand release
+we last reviewed.
 """
 
 from __future__ import annotations

@@ -1,0 +1,200 @@
+name: Build
+
+# Branches (docs/development.md -> "Branches and releases"): work lands on `dev`, and each
+# release is one squash-merged pull request from `dev` into `main`.
+# Every push and pull request: changelog check, ruff, mypy, the full test suite (100% line
+# coverage), the quality scale rule check, hassfest and HACS validation.
+# Push to main: if manifest.json's version has no `v<version>` tag yet, tag it and publish the
+# GitHub release (the changelog section as notes, dockhand.zip attached: HACS installs from it,
+# per hacs.json's zip_release), delete the test builds, then reset `dev` to `main` when they
+# hold the same files.
+# Push to dev: publish a test build as a GitHub pre-release (`v<next patch>-dev.<run>`, with that
+# version stamped into its zip's manifest.json), which HACS offers once the repository's
+# Pre-release switch is on; older test builds are deleted.
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Actions are pinned to exact commits (version in the comment); Dependabot
+# (.github/dependabot.yml) proposes updates weekly.
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Hassfest and HACS validation
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: hassfest
+        uses: home-assistant/actions/hassfest@86d4564712fa02543c808e3a693dd04f9d3f8361 # master, 2026-10
+
+      - name: HACS validation
+        uses: hacs/action@d556e736723344f83838d08488c983a15381059a # 22.5.0
+        with:
+          category: integration
+
+  lint:
+    name: Changelog and lint
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Check the changelog
+        run: python3 scripts/release.py check
+
+      - name: Install ruff (the version pinned in requirements_test.txt)
+        run: pip install "$(grep -E '^ruff==' requirements_test.txt)"
+
+      - name: ruff check
+        run: ruff check custom_components/dockhand/ tests/ scripts/
+
+      - name: ruff format check
+        run: ruff format --check custom_components/dockhand/ tests/ scripts/
+
+  tests:
+    name: Tests (mypy, pytest + PHCC)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+          cache: pip
+          cache-dependency-path: requirements_test.txt
+
+      - name: Install test dependencies
+        run: pip install -r requirements_test.txt
+
+      - name: Strict typing (mypy, Home Assistant core settings)
+        run: mypy
+
+      # PHCC pins an exact Home Assistant release; see requirements_test.txt.
+      - name: Test suite (100% line coverage)
+        run: >
+          pytest tests/ -v --tb=short
+          --cov=custom_components/dockhand --cov-report=term-missing:skip-covered
+          --cov-fail-under=100
+
+  # hassfest only checks quality_scale.yaml for core integrations; this fails when Home
+  # Assistant adds or retires a rule our file doesn't cover (docs/quality-scale.md).
+  quality-scale:
+    name: Quality scale rules
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.14"
+
+      - name: Compare quality_scale.yaml with Home Assistant's rule list
+        run: python3 scripts/check_quality_scale.py
+
+  release:
+    needs: [validate, lint, tests, quality-scale]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Publish the release if this version has no tag yet
+        run: |
+          set -e
+          version=$(python3 scripts/release.py version)
+          tag="v$version"
+          if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag already exists: nothing to release"
+            exit 0
+          fi
+          python3 scripts/release.py package release/dockhand.zip
+          python3 scripts/release.py notes "$version" > notes.md
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Dockhand $tag" \
+            --notes-file notes.md release/dockhand.zip
+          echo "Released $tag"
+
+      - name: Delete test builds
+        run: |
+          set -e
+          gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |
+            { grep -E '^v[0-9.]+-dev\.[0-9]+$' || true; } | while read -r old; do
+              gh release delete "$old" --yes --cleanup-tag
+            done
+
+  sync-dev:
+    needs: release
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Reset dev to main if they match
+        run: |
+          set -e
+          git rev-parse -q --verify origin/dev >/dev/null || { echo "no dev branch"; exit 0; }
+          if git diff --quiet origin/main origin/dev; then
+            git push --force origin origin/main:refs/heads/dev
+            echo "dev reset to main"
+          else
+            echo "::warning::dev has changes that aren't on main: left as it is"
+          fi
+
+  test-build:
+    needs: [validate, lint, tests, quality-scale]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Publish the test build
+        run: |
+          set -e
+          version=$(python3 scripts/release.py version)
+          if gh api "repos/$GH_REPO/git/ref/tags/v$version" >/dev/null 2>&1; then tagged=true; else tagged=false; fi
+          dev=$(python3 scripts/release.py dev-version "$GITHUB_RUN_NUMBER" "$tagged")
+          tag="v$dev"
+          python3 scripts/release.py package release/dockhand.zip --version "$dev"
+          python3 scripts/release.py notes Unreleased --test-build "$GITHUB_RUN_NUMBER" > notes.md
+          gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
+            --title "Dockhand $tag (test build)" --notes-file notes.md release/dockhand.zip
+          gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |
+            { grep -E '^v[0-9.]+-dev\.[0-9]+$' | grep -vx "$tag" || true; } | while read -r old; do
+              gh release delete "$old" --yes --cleanup-tag
+            done
+          echo "Published test build $tag"

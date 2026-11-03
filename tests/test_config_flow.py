@@ -663,7 +663,7 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
 # via HA's section() helper (briefly, in an unreleased 1.8.1 dev cycle) kept
 # rendering the fields inside the section as raw config keys with no text no
 # matter how the translation JSON was structured, and was reverted — see
-# docs/BACKLOG.md. What these tests reliably do catch is a schema field with
+# docs/backlog.md. What these tests reliably do catch is a schema field with
 # no strings.json entry at all, or a locale silently missing/emptying one —
 # which is exactly what caught the second bug below.
 #
@@ -754,7 +754,7 @@ def test_options_schema_fields_have_non_empty_translations():
 
 def test_options_schema_fields_have_data_description():
     """Stricter than the label check above: this integration's own
-    convention (CONTRIBUTING.md) is that every option gets explanatory
+    convention (docs/development.md) is that every option gets explanatory
     help text, not just a label — so hold every field to that bar, not
     just the ones that happen to have one today."""
     strings = _load_strings()
@@ -827,7 +827,7 @@ def test_strings_json_has_no_empty_leaf_values():
 
 
 def test_translations_en_json_matches_strings_json_exactly():
-    """CONTRIBUTING.md: strings.json and translations/en.json must stay
+    """docs/development.md: strings.json and translations/en.json must stay
     byte-for-byte identical canonical sources."""
     base_dir = Path(__file__).parent.parent / "custom_components" / "dockhand"
     source = _load_strings()

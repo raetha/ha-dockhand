@@ -1329,7 +1329,7 @@ def _cleanup_stale_registry(
             # Tier 1 is entirely fast-data-derived, specifically from the
             # same containers fetch as `containers` itself — needs the
             # same containers_fetch_ok_env_ids gating as everything else
-            # derived from that fetch (see docs/ARCHITECTURE.md §9).
+            # derived from that fetch (see docs/architecture.md §9).
             # Remove if env deleted, or if env is online, its containers
             # fetch actually succeeded, and the update entity is gone.
             if env_id not in live["env_ids"] or (

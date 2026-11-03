@@ -379,7 +379,7 @@ per-environment gather (`return_exceptions=True`, log-and-omit-that-env-this-cyc
 too and is *not* the same bug — a genuinely missing dict key reads as "no fresh data this cycle,"
 not "confirmed empty," and downstream slow-coordinator consumers already handle a missing env
 gracefully rather than treating it as authoritative — but it's a narrower, more nuanced case
-worth a closer look someday; noted in `docs/BACKLOG.md` rather than changed blind.
+worth a closer look someday; noted in `docs/backlog.md` rather than changed blind.
 
 - `DockhandFastCoordinator` (60s): dashboard stats, containers, stacks,
   container resource stats, pending-update flags. This is also the sole
@@ -745,7 +745,7 @@ History: 1 -> 2.1 (1.8.0) renamed `enable_updates` → `enable_precise_updates`;
 1.7.1 saved in `entry.data` (their setup form stored them with the
 connection details). (A version 3 briefly existed in an unreleased 1.8.1 dev
 cycle for a `section()` grouping of the update options — reverted before
-release, see docs/BACKLOG.md; nothing ever shipped at version 3.) The 1.2.0
+release, see docs/backlog.md; nothing ever shipped at version 3.) The 1.2.0
 session-cookie removal used a different, force-reauth-inline approach in
 `async_setup_entry` because it genuinely required user interaction.
 
@@ -953,7 +953,7 @@ now used everywhere, replacing what used to be `_fast_env`/`_slow_env`
 (two near-identical functions) plus a parallel, inconsistently-applied
 pattern of unwrapping "environments" inline at a local variable's
 assignment point. This was deliberately deferred once (logged in
-`docs/BACKLOG.md`, since removed now that it's done) until the timing
+`docs/backlog.md`, since removed now that it's done) until the timing
 was right — pre-release, with the null-safety refactor in §7 already
 having routed every consumer through a named helper instead of a raw
 dict-access pattern, which made the actual change far more contained

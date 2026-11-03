@@ -8,7 +8,7 @@ the integration, so a migration for interim-build-only artifacts adds
 permanent maintenance cost for zero real benefit.
 
 How long each is kept follows the config schema rules (see RenamedOption
-in const.py and docs/ARCHITECTURE.md §4): REGISTRY_MIGRATIONS records the
+in const.py and docs/architecture.md §4): REGISTRY_MIGRATIONS records the
 config schema major of the releases each one upgrades *from*. An entry
 from more than one schema major back can't be set up at all
 (async_migrate_entry refuses it), and every newer entry already went

@@ -86,7 +86,7 @@ def already_registered(
 
     This is deliberately *not* the same mistake an earlier version of this
     function made, which checked the registry as the *primary* signal —
-    see docs/ARCHITECTURE.md §9 for the full incident: that answered "did
+    see docs/architecture.md §9 for the full incident: that answered "did
     this unique_id ever exist in *any* session," which persists across
     reloads and restarts by design, and made every entity in the
     integration look permanently registered after the first setup call.
@@ -201,7 +201,7 @@ STACK_STATS_SUFFIXES = tuple(
 # control entity of the same name (number.py) — disambiguated by entity
 # domain (number vs sensor) wherever both are in scope, not by suffix
 # alone. See __init__.py's entity-registry cleanup pass for the actual
-# disambiguation and ARCHITECTURE.md §2 for the full writeup.
+# disambiguation and architecture.md §2 for the full writeup.
 
 
 def _all_envs(data: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
@@ -698,7 +698,7 @@ def _sched_device(
     `schedules_hub` and the "Dockhand" prefix. The device's own
     `identifiers` stay content-addressed by schedule id/type regardless of
     environment, so both this and the via_device change are safe without a
-    migration (see ARCHITECTURE.md §0 — both call sites must use this
+    migration (see architecture.md §0 — both call sites must use this
     factory, never inline fields, or the two can silently drift apart on
     the next coordinator update).
     """

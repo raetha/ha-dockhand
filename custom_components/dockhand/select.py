@@ -1,6 +1,6 @@
 """Select platform for Dockhand's in-place restart-policy control.
 
-Same scope and rationale as number.py (see docs/UPDATE_RUNTIME_DESIGN.md and
+Same scope and rationale as number.py (see docs/update-runtime-design.md and
 number.py's module docstring): stack-less containers only, gated behind
 CONF_ENABLE_RUNTIME_CONTROLS, optimistic state update. Restart policy has no
 OOM-kill-style failure mode the way lowering Memory does, so there's no

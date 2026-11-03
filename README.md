@@ -1,6 +1,6 @@
 [![HACS Badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/default)
 [![Release](https://img.shields.io/github/v/release/raetha/ha-dockhand?style=for-the-badge)](https://github.com/raetha/ha-dockhand/releases)
-[![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/ci.yml?label=validation&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/ci.yml)
+[![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/build.yml?branch=main&label=build&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/build.yml)
 [![Installs](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=blue&label=installs&cacheSeconds=3600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.dockhand.total)](https://analytics.home-assistant.io/custom_integrations.json)
 
 <p align="center">
@@ -32,8 +32,26 @@ This integration is available in the default HACS catalog.
 
 ### Manual
 
-1. Copy the `custom_components/dockhand/` folder into `<HA config>/custom_components/dockhand/`
+1. Download `dockhand.zip` from the [latest release](https://github.com/raetha/ha-dockhand/releases/latest)
+   and extract it into `<HA config>/custom_components/dockhand/` (create the folder; the zip holds
+   the integration's files directly)
 2. Restart Home Assistant
+
+### Test builds
+
+Upcoming changes are published as test builds (pre-releases such as `v1.11.3-dev.42`) before
+they're released, for anyone willing to try them early. To get them through HACS:
+
+1. Go to **Settings → Devices & services → Entities**, search for the Dockhand **Pre-release**
+   switch that HACS creates (it's disabled by default), and enable it
+2. Turn the switch on. HACS then offers the latest test build as an update; install it and restart
+   Home Assistant
+3. To go back to releases, turn the switch off, then in HACS open Dockhand, choose **⋮ →
+   Redownload** and pick the latest release
+
+Test builds show their own version (for example `1.11.3-dev.42`) in Home Assistant and in
+diagnostics, so include it when reporting a problem. The changes in a test build are listed in its
+[release notes](https://github.com/raetha/ha-dockhand/releases).
 
 ---
 
@@ -437,7 +455,7 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 
 ## Translations
 
-The integration ships with machine-generated translations for German, Spanish, French, Italian, Norwegian, Dutch, Polish, Portuguese, Swedish, and Chinese (Simplified), alongside the primary English strings. Native speaker corrections and new language additions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+The integration ships with machine-generated translations for German, Spanish, French, Italian, Norwegian, Dutch, Polish, Portuguese, Swedish, and Chinese (Simplified), alongside the primary English strings. Native speaker corrections and new language additions are welcome — see "Translations" in [docs/development.md](docs/development.md) for how.
 
 ---
 
