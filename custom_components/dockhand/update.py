@@ -440,12 +440,8 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         container_id at fetch time; a container recreated since Tier 2
         last ran (the normal effect of an image update) gets a new id,
         so its stale entry — still sitting under the old id — simply
-        won't be found here. Previously this scanned by containerName
-        instead, which meant a resolved update kept showing as pending
-        for up to 24h (Tier 2's poll interval) after the container was
-        actually recreated with the update already applied, since the
-        name-matched stale entry doesn't know it's describing a
-        container that no longer exists. Real bug, reported by Raetha.
+        won't be found here. Matching by name would keep showing a
+        resolved update as pending until Tier 2's next run, up to 24 h.
         """
         c = self._container()
         if not c:

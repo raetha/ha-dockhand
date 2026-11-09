@@ -1245,13 +1245,9 @@ def _cleanup_stale_registry(
                 # Two removal cases: the feature is off entirely (poll-
                 # independent — remove unconditionally, same as schedules_hub
                 # above), or the feature is on, the slow coordinator has valid
-                # data, and this specific schedule is confirmed gone. Fixes a
-                # real gap: previously this branch only checked the second
-                # case, so disabling "Enable schedules" removed schedules_hub
-                # but left every individual schedule device un-parented (HA's
-                # device registry clears via_device_id on removal, it does
-                # not cascade-remove — confirmed against HA core's
-                # device_registry.py) and never actually removed.
+                # data, and this specific schedule is confirmed gone. The first
+                # is needed because removing schedules_hub doesn't cascade: HA
+                # only clears its children's via_device_id.
                 if not live["schedules_feature_enabled"] or (
                     live["schedules_enabled"] and identifier not in live["schedules"]
                 ):

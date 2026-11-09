@@ -491,17 +491,10 @@ class DockhandClient:
                                        update is held for the minimum image age
                                        (hasUpdate False meanwhile)
         """
-        # timeout_seconds well above the default 30s: this is a real
-        # registry check across every container in the environment, not
-        # a cheap read — it can legitimately take a minute or more.
-        # Previously used the 30s default, which meant the client gave up
-        # (and any UI awaiting this, like the card's "Check for updates"
-        # button, saw the promise settle) well before Dockhand's server
-        # actually finished — the check kept running server-side, its
-        # result never retrieved, since the synchronous-mode POST has no
-        # job ID to poll afterward. Confirmed via Raetha's own report: a
-        # spinner that cleared after only a few seconds while the check
-        # was still visibly running server-side for close to a minute.
+        # Well above the default 30 s: a real registry check across every
+        # container can take a minute or more, and this synchronous POST
+        # has no job id to poll, so giving up early loses the result while
+        # the check carries on in Dockhand.
         data = await self._request(
             "POST",
             f"/api/containers/check-updates?env={_q(env_id)}",

@@ -692,41 +692,20 @@ class DockhandCheckUpdatesButton(
         pending_update_container_ids AND pending_update_details for this
         environment immediately, via
         DockhandFastCoordinator.async_merge_pending_updates_from_check()
-        — this is new: previously Tier 1 had no way to reflect a forced
-        check at all until its own next 60s poll happened to line up
-        with whatever Dockhand's own cache ended up holding. Also new:
-        the full per-container response (hasUpdate, newerVersion,
-        digests) is now passed straight through to that merge, rather
-        than collapsed into a lossy set of "has an update" container
-        ids first — a manual "Check for updates" press used to throw
-        away newerVersion/digest data before it ever reached Tier 1,
-        which meant a press could confirm a real update or a semver
-        suggestion in Dockhand's own UI while ha-dockhand's own update
-        entity still showed nothing until the next periodic poll.
+        — so a forced check shows at once rather than at the next poll.
+        The full per-container response (hasUpdate, newerVersion,
+        digests) goes to that merge, not just the ids with an update, so
+        newer-version suggestions show at once too.
 
       - Neither on: the check still runs (Dockhand's cache still gets
         refreshed), but nothing local captures the response — there's
         nothing configured to show it.
 
-    Attached to the environment device, and genuinely scoped to just
-    that environment. This wasn't the original design: pressing this
-    button used to call async_refresh() on the whole
-    DockhandUpdateCoordinator, which always checks every environment in
-    one gather — so pressing environment 1's button silently also
-    re-checked environments 2 and 3. That seemed like a reasonable "be
-    smart about it" shortcut at the time (Dockhand's own API doesn't
-    expose a bulk endpoint, but the coordinator conveniently already
-    gathers everything), but it's a real mismatch between what the
-    button's device implies and what pressing it actually does — a
-    button on environment 1's device visibly changing environment 3's
-    update state is a legitimately confusing side effect, not a clever
-    optimization. Reverted to matching Dockhand's own UI exactly, which
-    has no global "check everything" action either — it's
-    environment-by-environment there too. The Updates card's own "Check
-    for updates" button presses every environment's button in scope, so
-    the same end result (everything gets checked) is still available
-    when that's what's wanted — it's just no longer a hidden side effect
-    of pressing just one.
+    Attached to the environment device and scoped to that environment
+    only, like Dockhand's own UI, which has no "check everything" action
+    either: a button on one environment's device shouldn't change
+    another's update state. The Updates card's "Check for updates"
+    presses every environment's button in scope when that's wanted.
 
     Raises on failure — this is an explicit user action, and a failed
     check should tell the user it failed rather than silently doing

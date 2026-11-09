@@ -17,7 +17,6 @@ option**, and work through its §5 checklist; ideas already evaluated and set as
 | `scripts/release.py` | Changelog check, release notes, test-build versions and the `dockhand.zip` HACS installs, used by CI |
 | `scripts/bump_version.sh` | Prepares a release pull request (version, dated changelog section, compare links) |
 | `scripts/check_quality_scale.py` | Compares `quality_scale.yaml` with Home Assistant's current rule list |
-| `scripts/generate_dockhand_api_docs.py` | Regenerates [dockhand-api.md](dockhand-api.md) from a Dockhand clone |
 | `docs/` | This guide, architecture, backlog, semver policy, quality scale, Dockhand API index, design notes, audits |
 | `.github/workflows/build.yml` | All of CI: checks, releases, test builds (see "What CI does"); `stale.yml` marks inactive issues |
 
@@ -146,19 +145,15 @@ than the versions listed here.
 | Project | Last reviewed | Where to check |
 |---|---|---|
 | Home Assistant Core | 2026.3 (minimum); tested against 2026.10.4 (PHCC 0.13.375); 2026.8–2026.10 developer blog and core platform/coordinator source reviewed directly (2026-10-14) — only change needed was the deprecated `async_get_device(identifiers=...)` lookup, now feature-detected (`helpers._device_by_identifier`). Also ready for 2026.11's in-place entity_id renames (`async_entity_id_changed`; guarded by `tests/test_entity_lifecycle.py`) | https://github.com/home-assistant/core/releases |
-| Dockhand | v1.0.54 (diffed v1.0.48→v1.0.54 source directly against every endpoint this integration calls, 2026-10-14 and 2026-10-19; `docs/dockhand-api.md` regenerated at v1.0.54 — Dockhand now ships `@openapi` doc comments on most routes. Relevant: batch-update-stream can now skip a container inside a finished job (handled — Install reports it), the minimum-image-age cooldown keeps held updates out of `hasImageUpdate` (shown via `update_held_hours`), `/api/auto-update` now requires `schedules:view` (already needed for `/api/schedules`), new `env_report` schedule type; 1.0.54: `check-updates` reports a moved digest behind a digest-pinned image as `hasUpdate` plus `pinnedToDigest`; the client clears `hasUpdate` since Install can't apply it, and the update entity shows it as advisory. The dashboard stats' new `pinnedDigest`/`newerVersion` counts aren't used: the Containers sensor's own counts cover both and also see the precise check) | https://github.com/Finsys/dockhand/releases |
+| Dockhand | v1.0.57 (reviewed v1.0.55–v1.0.57 release notes and the routes this integration calls, 2026-11-09. Relevant: 1.0.55 adds `container_start`/`container_stop` schedule types (they get Run now and Enabled entities like other schedules) and makes moved-digest reports configurable, so `pinnedToDigest` can be absent; 1.0.57's new CSRF origin check only applies to cookie-authenticated requests, so bearer-token calls are unaffected. Earlier: v1.0.54 `check-updates` reports a moved digest behind a digest-pinned image as `hasUpdate` plus `pinnedToDigest`; the client clears `hasUpdate` since Install can't apply it, and the update entity shows it as advisory) | https://github.com/Finsys/dockhand/releases |
 
-Update this table after each review session. When picking up new Dockhand
-API work, also regenerate [docs/dockhand-api.md](docs/dockhand-api.md) —
-a navigable index of Dockhand's REST routes — by running
-`scripts/generate_dockhand_api_docs.py` against a fresh Dockhand clone.
-Dockhand has no official OpenAPI spec ([Finsys/dockhand#814](https://github.com/Finsys/dockhand/issues/814),
-open, unimplemented), so this generated index — built from whatever
-leading doc comments exist on each route file — is the closest thing
-available. It's a starting point (only a fraction of routes have doc
-comments), not a substitute for reading the actual route source for
-exact request/response shapes, especially for anything security- or
-data-loss-sensitive.
+Update this table after each review session. For the API side of a
+Dockhand review, diff `static/openapi.json` between the two release tags
+(`git diff v1.0.56 v1.0.57 -- static/openapi.json` in a Dockhand clone):
+Dockhand generates it from the `@openapi` comments on its routes, and its
+API browser at `/api/docs/ui` on a running Dockhand shows the same. It doesn't describe every
+field, so read the route source for exact request and response shapes,
+especially for anything that changes or deletes data.
 
 ## Code style
 
