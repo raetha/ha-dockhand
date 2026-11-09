@@ -34,6 +34,8 @@ from .const import (
     SCHEMA,
     SCHEMA_MINOR_VERSION,
     SCHEMA_VERSION,
+    removed_to_drop,
+    removed_to_keep,
     renames_to_mirror,
     renames_to_translate,
 )
@@ -162,7 +164,10 @@ def _normalized_entry_config(
       2. Settings stored in entry.data by releases before 1.7.1, whose setup
          form saved them with the connection details, move to entry.options.
          A value already in options wins, as it always has for every read.
-      3. Each old name still mirrored (renames_to_mirror: renames made at
+      3. Removed settings (REMOVED_OPTIONS) are dropped from both once a
+         schema bump has passed their removal; until then their stored
+         value stays for the previous schema version's releases.
+      4. Each old name still mirrored (renames_to_mirror: renames made at
          this schema version) gets the current value again, so a downgrade
          to a release on the previous schema version keeps the setting.
          Once a rename stops being mirrored (the next schema bump), step 1
@@ -179,10 +184,16 @@ def _normalized_entry_config(
     for old, current in translate.items():
         if old in new_options:
             new_options[current] = new_options.pop(old)
+    stored = set(OPTION_KEYS) | removed_to_keep(schema)
+    dropped = removed_to_drop(schema)
     for key in list(new_data):
         current = translate.get(key, key)
-        if current in OPTION_KEYS:
+        if current in stored:
             new_options.setdefault(current, new_data.pop(key))
+        elif current in dropped:
+            del new_data[key]
+    for key in dropped:
+        new_options.pop(key, None)
     for old, current in renames_to_mirror(schema).items():
         if current in new_options:
             new_options[old] = new_options[current]
@@ -500,7 +511,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                                               is trusted as complete this cycle:
                                               the fetch didn't fail, and an empty
                                               list was confirmed by the
-                                              coordinator (unconfirmed_empty).
+                                              coordinator (unconfirmed).
                                               Gates every container-derived set
                                               above.
         stacks_fetch_ok_env_ids set[int]    — same as containers_fetch_ok_env_ids,
@@ -722,7 +733,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         pending_updates = env_data.get("pending_update_container_ids") or set()
         update_env_data = update_data.get(env_id)
         pending_details = env_data.get("pending_update_details") or {}
-        unconfirmed: set[str] = env_data.get("unconfirmed_empty") or set()
+        unconfirmed: set[str] = env_data.get("unconfirmed") or set()
         if "containers" not in env_failures:
             if "containers" not in unconfirmed:
                 containers_fetch_ok_env_ids.add(env_id)
@@ -870,7 +881,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             env_failures = env_data.get("fetch_failures") or set()
 
             if "images" not in env_failures:
-                if "images" not in (env_data.get("unconfirmed_empty") or set()):
+                if "images" not in (env_data.get("unconfirmed") or set()):
                     images_fetch_ok_env_ids.add(env_id)
                 for img in env_data.get("images") or []:
                     raw_id = img.get("id") or ""

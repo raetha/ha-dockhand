@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking: polling intervals can no longer be set.** Home Assistant
+  doesn't allow integrations to offer polling-interval settings, so the
+  Fast poll interval, Slow poll interval and Precise update check interval
+  options are gone, and any values you set are no longer used. Dockhand
+  now refreshes container and stack data every minute, images, volumes,
+  networks and schedules every 10 minutes, and precise update versions
+  once a day: the old defaults. If you'd raised or lowered an interval,
+  see "Controlling when data refreshes" in the README to turn polling off
+  and refresh from an automation on your own schedule instead.
+  Downgrading to 1.11.x still works and keeps the intervals you'd set.
+
 ### Changed
 
 - **Actions refresh only their own environment** — after a button, switch
@@ -18,9 +31,10 @@
 - **Stacks and images could disappear while Docker was briefly
   unreachable** — Dockhand reports an empty list rather than an error when
   it can't reach Docker, so a short outage could remove an environment's
-  stack or image devices along with their entity settings. An empty list
-  now has to show up on two polls in a row before anything is removed, and
-  containers get the same protection for an outage that starts mid-poll.
+  stack or image devices. Anything that disappears now has to still be
+  missing on the next refresh before its device is removed, which also
+  covers containers for an outage that starts mid-poll and a container
+  briefly missing while it's recreated.
 - **Reconfiguring to a new URL** — the entry now takes on the new URL as
   its identity, so the old URL can be added again, and a URL already used
   by another Dockhand entry is refused. The entry's name follows the URL

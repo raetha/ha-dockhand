@@ -24,9 +24,6 @@ from .const import (
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_UPDATE_ENTITIES,
     CONF_ENABLE_VOLUMES,
-    CONF_POLL_INTERVAL_FAST,
-    CONF_POLL_INTERVAL_PRECISE_UPDATES,
-    CONF_POLL_INTERVAL_SLOW,
     CONF_VERIFY_SSL,
     DEFAULT_ENABLE_IMAGES,
     DEFAULT_ENABLE_NETWORKS,
@@ -36,13 +33,7 @@ from .const import (
     DEFAULT_ENABLE_SCHEDULES,
     DEFAULT_ENABLE_UPDATE_ENTITIES,
     DEFAULT_ENABLE_VOLUMES,
-    DEFAULT_POLL_INTERVAL_FAST,
-    DEFAULT_POLL_INTERVAL_PRECISE_UPDATES,
-    DEFAULT_POLL_INTERVAL_SLOW,
     DOMAIN,
-    MIN_POLL_INTERVAL_FAST,
-    MIN_POLL_INTERVAL_PRECISE_UPDATES,
-    MIN_POLL_INTERVAL_SLOW,
     SCHEMA_MINOR_VERSION,
     SCHEMA_VERSION,
 )
@@ -111,14 +102,6 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     return vol.Schema(
         {
             vol.Optional(
-                CONF_POLL_INTERVAL_FAST,
-                default=d.get(CONF_POLL_INTERVAL_FAST, DEFAULT_POLL_INTERVAL_FAST),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_POLL_INTERVAL_FAST)),
-            vol.Optional(
-                CONF_POLL_INTERVAL_SLOW,
-                default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_POLL_INTERVAL_SLOW)),
-            vol.Optional(
                 CONF_ENABLE_SCHEDULES,
                 default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES),
             ): bool,
@@ -140,17 +123,8 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_ENABLE_RESOURCE_STATS, DEFAULT_ENABLE_RESOURCE_STATS
                 ),
             ): bool,
-            # Placed directly above enable_precise_updates and
-            # poll_interval_precise_updates, which are both refinements of this
-            # one — they have no effect at all when this is off. Was briefly
-            # grouped via a HA section() (in an unreleased 1.8.1 dev build) to
-            # make that relationship obvious, but reverted (see docs/backlog.md
-            # "Group update options via section()")
-            # after two different translation-structure attempts both failed to
-            # render field labels/help text correctly in a live instance and the
-            # actual cause couldn't be confirmed — not worth the schema-version
-            # churn for a grouping that doesn't work yet. The relationship is
-            # communicated via field order and description text only for now.
+            # Directly above enable_precise_updates, which refines it. Not
+            # grouped with section(): see docs/backlog.md.
             vol.Optional(
                 CONF_ENABLE_UPDATE_ENTITIES,
                 default=d.get(
@@ -163,20 +137,8 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_ENABLE_PRECISE_UPDATES, DEFAULT_ENABLE_PRECISE_UPDATES
                 ),
             ): bool,
-            vol.Optional(
-                CONF_POLL_INTERVAL_PRECISE_UPDATES,
-                default=d.get(
-                    CONF_POLL_INTERVAL_PRECISE_UPDATES,
-                    DEFAULT_POLL_INTERVAL_PRECISE_UPDATES,
-                ),
-            ): vol.All(
-                vol.Coerce(int), vol.Range(min=MIN_POLL_INTERVAL_PRECISE_UPDATES)
-            ),
-            # Deliberately last: a genuinely advanced setting (exposes
-            # write-capable number/select entities that change a
-            # container's actual runtime config), unlike everything above
-            # it, which is either a poll-interval tweak or a read-only
-            # visibility toggle for data most users want fairly often.
+            # Last: the only setting that adds controls which change a
+            # container's configuration.
             vol.Optional(
                 CONF_ENABLE_RUNTIME_CONTROLS,
                 default=d.get(
@@ -242,7 +204,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await client.async_probe()
                 # Probe succeeded with no token — auth is disabled.
-                # Proceed to options step to collect poll/feature preferences.
+                # Proceed to the options step to collect feature preferences.
                 self._confirmed_data = user_input
                 return await self.async_step_setup_options()
             except DockhandAuthError:
@@ -333,13 +295,13 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------ #
-    # Step 3: poll intervals and optional features (initial setup only)
+    # Step 3: optional features (initial setup only)
     # ------------------------------------------------------------------ #
 
     async def async_step_setup_options(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Collect poll intervals and feature flags during initial setup.
+        """Collect feature flags during initial setup.
 
         Stores them directly into entry.options so the Options flow can
         present and edit them without touching entry.data.
@@ -356,7 +318,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------ #
-    # Reconfigure (change URL, SSL, or token; behaviour/poll in Options)
+    # Reconfigure (change URL, SSL, or token; features in Options)
     # ------------------------------------------------------------------ #
 
     async def async_step_reconfigure(
@@ -368,7 +330,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         - Leave as-is or change it → probe with that token
         - Clear it → probe without auth; if server still requires auth, route
           to the token step so the user can re-enter one
-        Polling intervals and feature flags live in the Options flow.
+        Feature flags live in the Options flow.
         """
         errors: dict[str, str] = {}
         entry = self._get_reconfigure_entry()

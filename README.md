@@ -61,7 +61,7 @@ diagnostics, so include it when reporting a problem. The changes in a test build
 2. Search for **Dockhand**
 3. Enter the **API URL** (e.g. `http://dockhand.local:3000`) and SSL preference
 4. The integration probes the server. If authentication is enabled you'll be prompted for an **API token** — generate one in Dockhand under **Profile → API tokens**
-5. Set poll intervals and enable any optional features (schedules, images, volumes, networks, container updates). All of these can be changed later via **Configure**
+5. Enable any optional features (schedules, images, volumes, networks, container updates). All of these can be changed later via **Configure**
 
 To change the URL, SSL setting, or API token after setup, use **Reconfigure** (three-dot menu on the integration card)
 
@@ -79,19 +79,16 @@ To change the URL, SSL setting, or API token after setup, use **Reconfigure** (t
 
 ### Options (adjustable via Configure)
 
-The following can be changed at any time via the **Configure** button on the integration card, without removing the integration. Changes take effect on the next coordinator refresh.
+The following can be changed at any time via the **Configure** button on the integration card, without removing the integration. Saving reloads the integration, so changes take effect at once. How often data refreshes isn't a setting: see [Data Updates](#data-updates).
 
 | Field | Description | Default |
 |---|---|---|
-| **Fast poll interval** | How often (seconds) to refresh container states, stacks, and environment stats. Minimum: 10 | 60 |
-| **Slow poll interval** | How often (seconds) to refresh images, volumes, networks, and schedules. Minimum: 30 | 600 |
 | **Enable schedules** | Create entities for Dockhand scheduled tasks | off |
 | **Enable images** | Create entities for Docker images on each host | off |
 | **Enable volumes** | Create entities for Docker volumes on each host | off |
 | **Enable networks** | Create entities for Docker networks on each host | off |
 | **Enable update entities** | Create a Home Assistant `update` entity for every container, showing whether an image update is available. Turn this off if you manage updates another way and don't want Dockhand's containers appearing in HA's own update management (see [github.com/raetha/ha-dockhand/issues/23](https://github.com/raetha/ha-dockhand/issues/23)). Turning it off removes the env-level **Update all** button, since that would otherwise be a way to trigger real container updates from HA even with this off. **Check for updates** and **Enable precise update versions** below keep working regardless — checking for updates is read-only, and it still refreshes Dockhand's own cached values that other things (e.g. the stack "updates available" sensor) use either way | on |
-| **Enable precise update versions** | Update entities already exist for every container, showing an image tag and an `update-pending` status from Dockhand's own cached results — no extra API cost. This adds real registry queries on the interval below, upgrading those same entities to show precise version numbers (image digests) instead — but only while **Enable update entities** above is also on. It's also the only way updates to Dockhand itself and Hawser agents are found (see the notes at the end of [Stack](#stack-always-on-60-s)). The env-level **Check for updates** button doesn't depend on this at all (it always exists and always triggers a real check); this only controls whether *that check's result* also updates the precise-version display | off |
-| **Precise update check interval** | How often (seconds) the real registry queries above run. Each check queries the registry for every container — keep this infrequent (minimum: 300). Only relevant when **Enable precise update versions** is on | 86400 |
+| **Enable precise update versions** | Update entities already exist for every container, showing an image tag and an `update-pending` status from Dockhand's own cached results — no extra API cost. This adds real registry queries once a day, upgrading those same entities to show precise version numbers (image digests) instead — but only while **Enable update entities** above is also on. It's also the only way updates to Dockhand itself and Hawser agents are found (see the notes at the end of [Stack](#stack-always-on-60-s)). The env-level **Check for updates** button doesn't depend on this at all (it always exists and always triggers a real check); this only controls whether *that check's result* also updates the precise-version display | off |
 | **Enable runtime controls** | Create `number`/`select` entities to change a stack-less container's memory limit, CPU limit, process limit, and restart policy live, without recreating it. Not available for Compose-managed containers. Costs one extra API call per stack-less container per slow poll | off |
 | **Enable container and stack stats** | Create the per-container CPU, memory, network, and block I/O sensors, plus Dockhand's totals for each stack (Dockhand 1.0.52+) — not created at all until this is on, same as Images/Volumes/Networks below. Also gates the underlying stats API call itself, not just entity creation. Off since it's a lot of entities most people don't need | off |
 
@@ -375,27 +372,54 @@ automation:
 
 ## Data Updates
 
-Dockhand uses three polling coordinators with independent intervals:
+Dockhand uses three polling coordinators, each on a fixed schedule:
 
-**Fast coordinator** (default 60 s, configurable) fetches:
+**Fast coordinator** (every minute) fetches:
 - Environment dashboard stats for all environments in a single API call (CPU, memory, container/stack/image/volume/network counts, whether update-check is enabled)
 - Full container list with state, image, and label details
 - Full stack list with status and container counts
 - Container resource stats for all running containers per environment in a single bulk API call (`GET /api/containers/stats?env=N`) — one call per environment regardless of container count. Stopped, exited, or created containers are absent from this response; their stats sensors show unavailable until running again
 - A cheap, no-registry-query check of Dockhand's own cached pending-update flags, for every environment — this is what powers the `update-pending` status on update entities
 
-**Slow coordinator** (default 600 s, configurable) fetches:
+**Slow coordinator** (every 10 minutes) fetches:
 - Per-environment detailed data for optional features: Images, Networks, Volumes, runtime controls
 - Git stack sync status, host info (platform/arch/Docker version/uptime), and container auto-update settings — always fetched, no config option needed, since these are single cheap bulk calls per environment
 - Global schedule list
 - A handful of fields with no other source (image-prune enabled, Hawser agent identity, configured connection host/port)
 
-**Update coordinator** (default 86400 s / 24 h, configurable) — only active when **Enable precise update versions** is turned on. Update entities themselves exist for every container as long as **Enable update entities** is on (default on), and this coordinator is purely additive for them — it only upgrades their version display from an image tag to a precise digest, never gates whether they exist. It has nothing to do with the env-level **Check for updates** button's own existence — that button always exists and always calls Dockhand's real check-updates API directly, whether or not this coordinator is running; if this coordinator *is* running, the button's result also updates it:
+**Update coordinator** (once a day) — only active when **Enable precise update versions** is turned on. Update entities themselves exist for every container as long as **Enable update entities** is on (default on), and this coordinator is purely additive for them — it only upgrades their version display from an image tag to a precise digest, never gates whether they exist. It has nothing to do with the env-level **Check for updates** button's own existence — that button always exists and always calls Dockhand's real check-updates API directly, whether or not this coordinator is running; if this coordinator *is* running, the button's result also updates it:
 - Per-environment image update availability via `POST /api/containers/check-updates`, which performs real registry queries against each container's image source. Kept infrequent to avoid unnecessary load on the Docker host. The **Check for updates** button on every environment device (always present, regardless of any option) triggers an immediate check on demand — and, if **Enable update entities** is on, its result also refreshes the cheap Tier 1 status immediately rather than waiting for the next 60-second poll.
 
 Entities update automatically when their coordinator refreshes. If a whole poll fails (Dockhand unreachable, say), that coordinator's entities become unavailable until the next successful one; the failure is logged once, and so is the recovery. If only part of a poll fails — one environment, or one optional fetch — only the entities that depend on that part become unavailable, and devices are never removed because of a failed fetch. All three coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
 
-Nothing is pushed from Dockhand: a change (a container stopping, say) shows up on the next fast poll, so within 60 seconds by default. Every poll is a handful of requests per environment; lowering the intervals mainly adds load on Dockhand and the Docker hosts behind it, which is why the precise update check (real registry queries) has a 5-minute minimum and defaults to once a day.
+Nothing is pushed from Dockhand: a change (a container stopping, say) shows up on the next fast poll, so within a minute. An action taken from Home Assistant (a switch, a button, Install) refreshes that environment straight away.
+
+### Controlling when data refreshes
+
+Home Assistant doesn't let integrations offer a polling-interval setting; the intervals above are fixed. To refresh on your own schedule instead, turn polling off and call `homeassistant.update_entity` from an automation:
+
+1. **Settings → Devices & services → Dockhand**, then the three-dot menu → **System options**, and turn off **Enable polling for changes**. This stops all three coordinators' schedules; actions still refresh what they change.
+2. Call `homeassistant.update_entity` with an entity from the coordinator you want refreshed. One entity refreshes that coordinator for every environment, so one per coordinator is enough:
+
+| To refresh | Use any entity of this kind | For example |
+|---|---|---|
+| Fast coordinator | an environment's **Containers** sensor, or any container or stack entity | `sensor.local_containers` |
+| Slow coordinator | an environment's **Docker version** sensor, or any image, volume, network, schedule or git stack entity | `sensor.local_docker_version` |
+| Update coordinator | none: press an environment's **Check for updates** button (`button.press`), which checks that environment only | `button.local_check_for_updates` |
+
+```yaml
+automation:
+  - alias: "Refresh Dockhand every 5 minutes"
+    triggers:
+      - trigger: time_pattern
+        minutes: "/5"
+    actions:
+      - action: homeassistant.update_entity
+        target:
+          entity_id: sensor.local_containers
+```
+
+Entity IDs depend on your environment names; check yours under the environment's device. Refreshing more often than the defaults mainly adds load on Dockhand and the Docker hosts behind it, and the update check makes real registry queries for every container, so keep that one infrequent.
 
 ## Troubleshooting
 

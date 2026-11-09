@@ -9,15 +9,14 @@ rules:
   appropriate-polling:
     status: done
     comment: >
-      All three coordinators use DataUpdateCoordinator with user-configurable
-      intervals. Fast coordinator defaults to 60 s (stats, containers, stacks,
+      All three coordinators use DataUpdateCoordinator with fixed intervals
+      (not user-configurable). Fast coordinator every 60 s (stats, containers, stacks,
       container and stack resource stats, pending-update flags); slow coordinator
-      defaults to 600 s (images, volumes, networks, schedules, git stacks,
+      every 600 s (images, volumes, networks, schedules, git stacks,
       host info, container auto-update settings, runtime controls, and
       env_meta — the handful of fields only /api/environments has: image-prune
       enabled, Hawser agent identity, configured connection host/port);
-      update coordinator (Tier 2 only, optional) defaults to 86400 s /
-      24 h (registry update checks — deliberately infrequent to avoid
+      update coordinator (Tier 2 only, optional) every 24 h (registry update checks — deliberately infrequent to avoid
       unnecessary load on the Docker host). Dashboard stats are fetched in a
       single API call per fast poll cycle rather than one call per environment.
       Container resource stats are fetched via a single bulk API call per
@@ -44,14 +43,13 @@ rules:
     status: done
     comment: >
       Full UI config flow: async_step_user (URL and SSL), async_step_token
-      (shown only when the server returns 401), async_step_setup_options (poll
-      intervals and feature flags, so everything is set up front),
+      (shown only when the server returns 401), async_step_setup_options (feature
+      flags, so everything is set up front),
       async_step_reauth_confirm, async_step_reconfigure (URL, SSL, token), and
       an options flow. Every field has a data_description. entry.data holds
       only the connection details; everything the options flow sets lives in
       entry.options (settings older releases stored in entry.data are moved
-      by the schema migration). Poll interval fields enforce minimums, and the
-      token field uses a password TextSelector.
+      by the schema migration). The token field uses a password TextSelector.
 
   config-flow-test-coverage:
     status: done
@@ -183,10 +181,10 @@ rules:
     status: done
     comment: >
       README "Configuration parameters" documents every setup field (API URL,
-      SSL verification, API token) and every option (fast and slow poll
-      intervals, the schedules/images/volumes/networks switches, update
-      entities, precise update versions and their check interval, runtime
-      controls, container and stack stats), plus what Reconfigure changes.
+      SSL verification, API token) and every option (the
+      schedules/images/volumes/networks switches, update entities, precise
+      update versions, runtime controls, container and stack stats), plus what
+      Reconfigure changes.
 
   docs-installation-parameters:
     status: done
@@ -292,10 +290,10 @@ rules:
     status: done
     comment: >
       README "Data Updates" explains the three coordinators (what each fetches,
-      default and minimum intervals), that nothing is pushed so changes appear
-      on the next fast poll, the load lower intervals put on Dockhand and the
-      Docker hosts, what becomes unavailable when all or part of a poll fails,
-      and how token errors surface as re-authentication.
+      and their fixed intervals), how to refresh on your own schedule with
+      polling off and homeassistant.update_entity, what becomes unavailable
+      when all or part of a poll fails, and how token errors surface as
+      re-authentication.
 
   docs-examples:
     status: done
@@ -446,8 +444,8 @@ rules:
     status: done
     comment: >
       async_step_reconfigure implemented. Allows changing API URL, SSL setting,
-      and API token without removing the integration. Poll intervals and feature
-      flags are managed separately via the Options flow (Configure button).
+      and API token without removing the integration. Feature flags are managed
+      separately via the Options flow (Configure button).
 
   repair-issues:
     status: done

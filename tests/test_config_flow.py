@@ -37,15 +37,12 @@ BASE_CONNECTION = {
 
 # Minimal options submitted on the setup_options step (all defaults accepted).
 BASE_OPTIONS = {
-    "poll_interval_fast": 60,
-    "poll_interval_slow": 600,
     "enable_schedules": False,
     "enable_images": False,
     "enable_volumes": False,
     "enable_networks": False,
     "enable_update_entities": True,
     "enable_precise_updates": False,
-    "poll_interval_precise_updates": 86400,
 }
 
 # Legacy entry data shape (poll/enable keys stored in data by older versions).
@@ -53,8 +50,6 @@ BASE_OPTIONS = {
 LEGACY_ENTRY_DATA = {
     "api_url": "http://dh.test:3000",
     "verify_ssl": True,
-    "poll_interval_fast": 60,
-    "poll_interval_slow": 600,
     "enable_schedules": False,
     "enable_images": False,
     "enable_volumes": False,
@@ -131,7 +126,7 @@ async def test_step_user_no_auth_creates_entry(hass: HomeAssistant):
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert "api_token" not in result["data"]
-    assert result["options"]["poll_interval_fast"] == 60
+    assert result["options"]["enable_images"] is False
 
 
 async def test_step_user_strips_whitespace_from_api_url(hass: HomeAssistant):
@@ -234,7 +229,7 @@ async def test_step_token_success_creates_entry(hass: HomeAssistant):
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["api_token"] == MOCK_TOKEN
     assert result["data"]["api_url"] == "http://dh.test:3000"
-    assert result["options"]["poll_interval_fast"] == 60
+    assert result["options"]["enable_images"] is False
 
 
 async def test_step_token_invalid_token_shows_invalid_auth(hass: HomeAssistant):
@@ -613,10 +608,10 @@ async def test_options_flow_saves_options(hass: HomeAssistant):
     assert result["type"] == FlowResultType.FORM
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"poll_interval_fast": 120}
+        result["flow_id"], {"enable_images": True}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert entry.options["poll_interval_fast"] == 120
+    assert entry.options["enable_images"] is True
 
 
 async def test_options_flow_runtime_controls_defaults_off(hass: HomeAssistant):
@@ -634,9 +629,7 @@ async def test_options_flow_runtime_controls_defaults_off(hass: HomeAssistant):
         await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"poll_interval_fast": 60}
-    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options["enable_runtime_controls"] is False
 
@@ -661,30 +654,9 @@ async def test_options_flow_runtime_controls_can_be_enabled(hass: HomeAssistant)
     assert entry.options["enable_runtime_controls"] is True
 
 
-async def test_options_flow_rejects_interval_below_minimum(hass: HomeAssistant):
-    """Zero/negative poll intervals are rejected by the options schema.
-
-    Without validation a zero interval would make the coordinator refresh
-    in a tight loop and hammer the Dockhand API.
-    """
-    entry = MockConfigEntry(
-        domain="dockhand",
-        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
-        title="http://dh.test:3000",
-    )
-    entry.add_to_hass(hass)
-
-    with _patch_full_setup():
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] == FlowResultType.FORM
-
-    with pytest.raises(InvalidData):
-        await hass.config_entries.options.async_configure(
-            result["flow_id"], {"poll_interval_fast": 0}
-        )
+async def test_options_flow_has_no_polling_intervals(hass: HomeAssistant):
+    """Home Assistant doesn't let users set polling intervals."""
+    assert not any("interval" in str(key) for key in _options_schema().schema)
 
 
 async def test_options_flow_no_input_shows_form(hass: HomeAssistant):
@@ -728,7 +700,7 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
         ) as mock_reload:
             result = await hass.config_entries.options.async_init(entry.entry_id)
             await hass.config_entries.options.async_configure(
-                result["flow_id"], {"poll_interval_fast": 120}
+                result["flow_id"], {"enable_images": True}
             )
             await hass.async_block_till_done()
             mock_reload.assert_called_once_with(entry.entry_id)
@@ -741,7 +713,7 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
 # config key in the UI. These tests can only verify that strings.json has
 # non-empty values at the right JSON paths, not that HA's frontend actually
 # renders them correctly — that distinction mattered for real: an attempt
-# to group enable_update_entities/enable_precise_updates/poll_interval_updates
+# to group the update options
 # via HA's section() helper (briefly, in an unreleased 1.8.1 dev cycle) kept
 # rendering the fields inside the section as raw config keys with no text no
 # matter how the translation JSON was structured, and was reverted — see

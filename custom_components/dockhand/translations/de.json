@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Abfrage und Funktionen konfigurieren",
-        "description": "Lege fest, wie oft Dockhand abgefragt wird und welche optionalen Entitätsgruppen aktiviert werden sollen. All das kann später über Konfigurieren geändert werden.",
+        "title": "Funktionen auswählen",
+        "description": "Wähle, welche optionalen Entitätsgruppen erstellt werden. Alles kann später über Konfigurieren geändert werden.",
         "data": {
-          "poll_interval_fast": "Schnelles Abfrageintervall (Sekunden) – Stats, Container & Stacks",
-          "poll_interval_slow": "Langsames Abfrageintervall (Sekunden) – Images, Volumes, Netzwerke, Schedules",
           "enable_schedules": "Schedule-Sensoren aktivieren",
           "enable_images": "Image-Sensoren aktivieren",
           "enable_volumes": "Volume-Sensoren aktivieren",
           "enable_networks": "Netzwerk-Sensoren aktivieren",
           "enable_runtime_controls": "Laufzeitsteuerung aktivieren (erweitert)",
           "enable_resource_stats": "CPU-/Speicher-/Netzwerk-/Festplatten-E/A-Sensoren für Container und Stacks aktivieren",
-          "poll_interval_precise_updates": "Prüfintervall für präzise Updates (Sekunden)",
           "enable_update_entities": "Update-Entitäten aktivieren",
           "enable_precise_updates": "Präzise Update-Versionen aktivieren"
         },
         "data_description": {
-          "poll_interval_fast": "Wie oft Container-, Stack- und Umgebungsstatistiken aktualisiert werden. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Wie oft Images, Volumes, Netzwerke und Schedules aktualisiert werden. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiviert Sensoren für Dockhand-Wartungspläne.",
           "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
           "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
           "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
           "enable_runtime_controls": "Erstellt Number-/Select-Entitäten, um CPU-, Speicher- und Prozesslimits sowie die Neustart-Richtlinie eines Stack-losen Containers live zu ändern. Nicht verfügbar für Compose-verwaltete Container.",
           "enable_resource_stats": "Erstellt CPU-, Speicher-, Netzwerk- und Festplatten-I/O-Sensoren pro Container sowie Summen pro Stack. Standardmäßig deaktiviert, da es sich um viele Entitäten handelt, die die meisten Nutzer nicht benötigen; das Deaktivieren entfernt auch bereits erstellte Sensoren.",
-          "poll_interval_precise_updates": "Wie oft die obigen Registry-Abfragen ausgeführt werden (Sekunden). Standard: 86400 (24 Stunden). Minimum: 300.",
           "enable_update_entities": "Erstellt eine Home-Assistant-Update-Entität für jeden Container. Deaktivieren Sie dies, wenn Sie Updates auf andere Weise verwalten und Dockhands Container nicht in HAs eigener Update-Verwaltung sehen möchten. Blendet auch die Schaltfläche „Alle aktualisieren“ aus; „Nach Updates suchen“ funktioniert trotzdem weiter.",
           "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Außerdem die einzige Möglichkeit, den Update-Status von Dockhands eigenen geschützten Containern (es selbst und Hawser) zu sehen – Dockhand gibt deren Update-Status nie über die regulären zwischengespeicherten Update-Check-Daten preis. Erfordert „Update-Entitäten aktivieren“ oben."
         }
@@ -93,30 +87,24 @@
     "step": {
       "init": {
         "title": "Dockhand-Optionen",
-        "description": "Abfrageintervalle und optionale Datenquellen anpassen. Um URL, SSL oder API-Token zu ändern, verwende stattdessen Neu konfigurieren.",
+        "description": "Wähle, welche optionalen Entitätsgruppen erstellt werden. Um URL, SSL oder API-Token zu ändern, verwende stattdessen Neu konfigurieren.",
         "data": {
-          "poll_interval_fast": "Schnelles Abfrageintervall (Sekunden) – Stats, Container & Stacks",
-          "poll_interval_slow": "Langsames Abfrageintervall (Sekunden) – Images, Volumes, Netzwerke, Schedules",
           "enable_schedules": "Schedule-Sensoren aktivieren",
           "enable_images": "Image-Sensoren aktivieren",
           "enable_volumes": "Volume-Sensoren aktivieren",
           "enable_networks": "Netzwerk-Sensoren aktivieren",
           "enable_runtime_controls": "Laufzeitsteuerung aktivieren (erweitert)",
           "enable_resource_stats": "CPU-/Speicher-/Netzwerk-/Festplatten-E/A-Sensoren für Container und Stacks aktivieren",
-          "poll_interval_precise_updates": "Prüfintervall für präzise Updates (Sekunden)",
           "enable_update_entities": "Update-Entitäten aktivieren",
           "enable_precise_updates": "Präzise Update-Versionen aktivieren"
         },
         "data_description": {
-          "poll_interval_fast": "Wie oft Container-, Stack- und Umgebungsstatistiken aktualisiert werden. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Wie oft Images, Volumes, Netzwerke und Schedules aktualisiert werden. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiviert Sensoren für Dockhand-Wartungspläne.",
           "enable_images": "Aktiviert Sensoren für Docker-Images je Umgebung.",
           "enable_volumes": "Aktiviert Sensoren für Docker-Volumes je Umgebung.",
           "enable_networks": "Aktiviert Sensoren für Docker-Netzwerke je Umgebung.",
           "enable_runtime_controls": "Erstellt Number-/Select-Entitäten, um CPU-, Speicher- und Prozesslimits sowie die Neustart-Richtlinie eines Stack-losen Containers live zu ändern. Nicht verfügbar für Compose-verwaltete Container.",
           "enable_resource_stats": "Erstellt CPU-, Speicher-, Netzwerk- und Festplatten-I/O-Sensoren pro Container sowie Summen pro Stack. Standardmäßig deaktiviert, da es sich um viele Entitäten handelt, die die meisten Nutzer nicht benötigen; das Deaktivieren entfernt auch bereits erstellte Sensoren.",
-          "poll_interval_precise_updates": "Wie oft die obigen Registry-Abfragen ausgeführt werden (Sekunden). Standard: 86400 (24 Stunden). Minimum: 300.",
           "enable_update_entities": "Erstellt eine Home-Assistant-Update-Entität für jeden Container. Deaktivieren Sie dies, wenn Sie Updates auf andere Weise verwalten und Dockhands Container nicht in HAs eigener Update-Verwaltung sehen möchten. Blendet auch die Schaltfläche „Alle aktualisieren“ aus; „Nach Updates suchen“ funktioniert trotzdem weiter.",
           "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Außerdem die einzige Möglichkeit, den Update-Status von Dockhands eigenen geschützten Containern (es selbst und Hawser) zu sehen – Dockhand gibt deren Update-Status nie über die regulären zwischengespeicherten Update-Check-Daten preis. Erfordert „Update-Entitäten aktivieren“ oben."
         }

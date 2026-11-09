@@ -2717,21 +2717,19 @@ async def test_unload_calls_correct_platforms(hass: HomeAssistant):
 
 CONNECTION = {"api_url": "http://dh.test:3000", "api_token": "dh_test_token"}
 
-# Current name -> the old name it's also saved under, for releases that
-# still read the old one.
-MIRRORS = {
-    "enable_resource_stats": "enable_container_stats",
-    "poll_interval_fast": "poll_interval",
-    "poll_interval_precise_updates": "poll_interval_updates",
+# Every setting a release on schema 2.2 (1.11.x) saved: current names, the
+# old-name copies it kept for 1.10.x, and the polling intervals 2.0.0
+# removed.
+SAVED_BY_1_11 = {
+    "enable_resource_stats": True,
+    "enable_container_stats": True,
+    "poll_interval_fast": 45,
+    "poll_interval": 45,
+    "poll_interval_slow": 900,
+    "poll_interval_precise_updates": 3600,
+    "poll_interval_updates": 3600,
+    "enable_images": True,
 }
-
-
-def _with_mirrors(options):
-    """`options` plus the old-name copies normalization keeps alongside."""
-    return {
-        **options,
-        **{MIRRORS[k]: v for k, v in options.items() if k in MIRRORS},
-    }
 
 
 def _entry(hass, version, minor_version, data, options):
@@ -2762,16 +2760,14 @@ async def test_migrate_1_8_era_entry_renames_and_moves_everything(hass: HomeAssi
         {"enable_updates": True, "poll_interval_updates": 3600},
     )
     assert await async_migrate_entry(hass, entry) is True
-    assert (entry.version, entry.minor_version) == (2, 2)
+    assert (entry.version, entry.minor_version) == (2, 3)
     assert entry.data == {**CONNECTION, "verify_ssl": False}
-    assert entry.options == _with_mirrors(
-        {
-            "poll_interval_fast": 30,
-            "enable_images": True,
-            "enable_precise_updates": True,
-            "poll_interval_precise_updates": 3600,
-        }
-    )
+    assert entry.options == {
+        "poll_interval_fast": 30,
+        "enable_images": True,
+        "enable_precise_updates": True,
+        "poll_interval_precise_updates": 3600,
+    }
 
 
 @pytest.mark.parametrize("value", [True, False])
@@ -2791,14 +2787,30 @@ async def test_migrate_2_1_carries_renamed_values_over(
         },
     )
     assert await async_migrate_entry(hass, entry) is True
-    assert (entry.version, entry.minor_version) == (2, 2)
-    assert entry.options == _with_mirrors(
-        {
-            "enable_resource_stats": value,
-            "poll_interval_fast": 45,
-            "poll_interval_slow": 900,
-        }
-    )
+    assert (entry.version, entry.minor_version) == (2, 3)
+    assert entry.options == {
+        "enable_resource_stats": value,
+        "poll_interval_fast": 45,
+        "poll_interval_slow": 900,
+    }
+
+
+async def test_migrate_2_2_keeps_intervals_and_drops_old_name_copies(
+    hass: HomeAssistant,
+):
+    """The intervals aren't read any more, but a downgrade to 1.11.x still
+    reads them; the old-name copies were only for 1.10.x, which can't
+    reliably load a 2.3 entry anyway."""
+    entry = _entry(hass, 2, 2, dict(CONNECTION), dict(SAVED_BY_1_11))
+    assert await async_migrate_entry(hass, entry) is True
+    assert (entry.version, entry.minor_version) == (2, 3)
+    assert entry.options == {
+        "enable_resource_stats": True,
+        "poll_interval_fast": 45,
+        "poll_interval_slow": 900,
+        "poll_interval_precise_updates": 3600,
+        "enable_images": True,
+    }
 
 
 async def test_migrate_moves_settings_out_of_data_but_options_win(hass: HomeAssistant):
@@ -2828,26 +2840,26 @@ async def test_migrate_accepts_the_next_minor_version_unchanged(hass: HomeAssist
     """Downgrading from the release that bumped the schema to the next
     minor version: Home Assistant still calls this, and it must load the
     entry as-is (unknown settings just aren't read)."""
-    options = {"poll_interval_fast": 30, "some_future_option": True}
-    entry = _entry(hass, 2, 3, dict(CONNECTION), dict(options))
+    options = {"enable_images": True, "some_future_option": True}
+    entry = _entry(hass, 2, 4, dict(CONNECTION), dict(options))
     assert await async_migrate_entry(hass, entry) is True
-    assert (entry.version, entry.minor_version) == (2, 3)
+    assert (entry.version, entry.minor_version) == (2, 4)
     assert entry.options == options
 
 
 async def test_migrate_refuses_an_entry_two_minor_versions_newer(hass: HomeAssistant):
     """The release that wrote it no longer keeps the old names this one
     reads, so loading it would quietly reset those settings."""
-    options = {"poll_interval_fast": 30, "some_future_option": True}
-    entry = _entry(hass, 2, 4, dict(CONNECTION), dict(options))
+    options = {"enable_images": True, "some_future_option": True}
+    entry = _entry(hass, 2, 5, dict(CONNECTION), dict(options))
     assert await async_migrate_entry(hass, entry) is False
-    assert (entry.version, entry.minor_version) == (2, 4)
+    assert (entry.version, entry.minor_version) == (2, 5)
     assert entry.options == options
 
 
 async def test_migrate_current_entry_is_a_no_op(hass: HomeAssistant):
-    options = _with_mirrors({"poll_interval_fast": 30, "enable_resource_stats": True})
-    entry = _entry(hass, 2, 2, dict(CONNECTION), dict(options))
+    options = {"enable_resource_stats": True, "enable_images": True}
+    entry = _entry(hass, 2, 3, dict(CONNECTION), dict(options))
     assert await async_migrate_entry(hass, entry) is True
     assert entry.options == options
 
@@ -2861,33 +2873,39 @@ def test_normalize_prefers_an_old_name_written_after_a_downgrade():
         CONNECTION, {"enable_resource_stats": True, "enable_container_stats": False}
     )
     assert data == CONNECTION
-    assert options == _with_mirrors({"enable_resource_stats": False})
+    assert options == {"enable_resource_stats": False}
 
 
 def test_normalize_leaves_a_current_entry_untouched():
     from custom_components.dockhand import _normalized_entry_config
 
-    options = _with_mirrors({"poll_interval_fast": 30, "enable_images": True})
+    options = {"enable_resource_stats": True, "enable_images": True}
     assert _normalized_entry_config(CONNECTION, options) == (CONNECTION, options)
 
 
-def test_normalize_mirrors_current_values_under_old_names():
-    """So a downgrade to a release that reads the old names keeps them."""
+def test_normalize_moves_a_removed_setting_out_of_data_while_kept():
+    """Releases before 1.7.1 saved the polling interval with the connection
+    details."""
     from custom_components.dockhand import _normalized_entry_config
 
-    _, options = _normalized_entry_config(
-        CONNECTION,
-        {
-            "enable_resource_stats": True,
-            "poll_interval_fast": 25,
-            "poll_interval_precise_updates": 7200,
-            "enable_images": True,
-        },
+    data, options = _normalized_entry_config(
+        {**CONNECTION, "poll_interval": 20}, {"poll_interval_slow": 900}
     )
-    assert options["enable_container_stats"] is True
-    assert options["poll_interval"] == 25
-    assert options["poll_interval_updates"] == 7200
-    assert "enable_updates" not in options  # nothing that reads it can load v2
+    assert data == CONNECTION
+    assert options == {"poll_interval_fast": 20, "poll_interval_slow": 900}
+
+
+@pytest.mark.parametrize("schema", [(2, 4), (3, 1)])
+def test_the_next_schema_version_drops_removed_settings(schema):
+    from custom_components.dockhand import _normalized_entry_config
+
+    data, options = _normalized_entry_config(
+        {**CONNECTION, "poll_interval": 20},
+        {"poll_interval_slow": 900, "enable_images": True},
+        schema=schema,
+    )
+    assert data == CONNECTION
+    assert options == {"enable_images": True}
 
 
 def test_normalize_is_idempotent():
@@ -2903,8 +2921,27 @@ def test_normalize_is_idempotent():
 def test_renames_point_at_real_settings():
     from custom_components.dockhand.const import OPTION_KEYS, RENAMED_OPTIONS
 
-    assert {r.new for r in RENAMED_OPTIONS} <= set(OPTION_KEYS)
+    from custom_components.dockhand.const import REMOVED_OPTIONS
+
+    current = set(OPTION_KEYS) | {r.name for r in REMOVED_OPTIONS}
+    assert {r.new for r in RENAMED_OPTIONS} <= current
     assert not {r.old for r in RENAMED_OPTIONS} & set(OPTION_KEYS)
+
+
+def test_removed_settings_are_not_settings():
+    from custom_components.dockhand.const import (
+        OPTION_KEYS,
+        REMOVED_OPTIONS,
+        removed_to_drop,
+        removed_to_keep,
+    )
+
+    names = {r.name for r in REMOVED_OPTIONS}
+    assert not names & set(OPTION_KEYS)
+    assert removed_to_keep() == names
+    assert removed_to_drop() == frozenset()
+    assert removed_to_keep((2, 4)) == frozenset()
+    assert removed_to_drop((2, 4)) == names
 
 
 def test_no_retired_renames_left_in_the_code():
@@ -2918,6 +2955,8 @@ def test_no_retired_renames_left_in_the_code():
 
 
 def test_rename_lifecycle_today():
+    """1.11.0's rename is no longer mirrored: schema 2.2's own releases read
+    the new name, and 2.1's can't load a 2.3 entry."""
     from custom_components.dockhand.const import (
         renames_to_mirror,
         renames_to_translate,
@@ -2929,41 +2968,33 @@ def test_rename_lifecycle_today():
         "poll_interval": "poll_interval_fast",
         "poll_interval_updates": "poll_interval_precise_updates",
     }
-    # Not "enable_updates": it came with schema 2 itself, so no release in
-    # schema 2 reads the old name.
-    assert set(renames_to_mirror()) == {
-        "enable_container_stats",
-        "poll_interval",
-        "poll_interval_updates",
-    }
+    assert renames_to_mirror() == {}
 
 
 def test_rename_lifecycle_after_future_schema_versions():
-    """At the next schema version, minor or major, today's renames stop
-    being mirrored (only releases on that version's predecessor need them,
-    and 2.2's own releases read the new names), but are still translated
-    for entries upgrading from older releases until two majors later."""
+    """Renames are still translated for entries upgrading from older
+    releases until two majors later."""
     from custom_components.dockhand.const import (
         renames_to_mirror,
         renames_to_translate,
     )
 
-    assert renames_to_mirror((2, 3)) == {}
+    assert renames_to_mirror((2, 4)) == {}
     assert renames_to_mirror((3, 1)) == {}
-    assert "poll_interval" in renames_to_translate((2, 3))
-    assert "poll_interval" in renames_to_translate((3, 1))
+    assert "enable_container_stats" in renames_to_translate((2, 4))
+    assert "enable_container_stats" in renames_to_translate((3, 1))
     assert renames_to_translate((4, 1)) == {}
 
 
 def test_a_rename_is_mirrored_only_at_its_own_schema_version():
     from custom_components.dockhand import const
 
-    future = const.RenamedOption("poll_interval_slow", "poll_interval_x", 2, 3)
+    future = const.RenamedOption("enable_images", "enable_image_sensors", 2, 4)
     with patch.object(const, "RENAMED_OPTIONS", (*const.RENAMED_OPTIONS, future)):
-        assert const.renames_to_mirror((2, 3)) == {
-            "poll_interval_slow": "poll_interval_x"
+        assert const.renames_to_mirror((2, 4)) == {
+            "enable_images": "enable_image_sensors"
         }
-        assert const.renames_to_mirror((2, 4)) == {}
+        assert const.renames_to_mirror((2, 5)) == {}
         # A rename shipped with a new major's first minor is never mirrored:
         # no release of the previous major can load that entry.
         first = const.RenamedOption("a", "b", 3, 1)
@@ -2971,15 +3002,18 @@ def test_a_rename_is_mirrored_only_at_its_own_schema_version():
             assert const.renames_to_mirror((3, 1)) == {}
 
 
-@pytest.mark.parametrize("schema", [(2, 3), (3, 1)])
-def test_the_next_schema_version_cleans_up_the_old_name_copies(schema):
-    """What the next schema version's release does to an entry saved by
-    this one: the old-name copies are removed, values kept."""
-    from custom_components.dockhand import _normalized_entry_config
+def test_a_mirrored_rename_is_saved_under_both_names():
+    from custom_components.dockhand import _normalized_entry_config, const
 
-    saved_now = _with_mirrors({"poll_interval_fast": 25, "enable_resource_stats": True})
-    _, options = _normalized_entry_config(CONNECTION, saved_now, schema=schema)
-    assert options == {"poll_interval_fast": 25, "enable_resource_stats": True}
+    future = const.RenamedOption("enable_images", "enable_image_sensors", 2, 4)
+    with (
+        patch.object(const, "RENAMED_OPTIONS", (future,)),
+        patch.object(const, "OPTION_KEYS", (*const.OPTION_KEYS, future.new)),
+    ):
+        _, options = _normalized_entry_config(
+            CONNECTION, {"enable_images": True}, schema=(2, 4)
+        )
+    assert options == {"enable_image_sensors": True, "enable_images": True}
 
 
 async def test_migrate_refuses_an_entry_more_than_one_schema_major_old(
@@ -3000,17 +3034,22 @@ async def test_migrate_refuses_an_entry_more_than_one_schema_major_old(
 async def test_setup_normalizes_an_entry_left_behind_by_a_downgrade(
     hass: HomeAssistant,
 ):
-    """Downgrade to 1.10.x, change a setting there (it writes the old name),
-    upgrade again: the entry is already 2.2, so no migration step runs —
-    async_setup_entry's own normalization has to pick the change up."""
+    """Downgrade to 1.11.x, change a setting there (it writes the old name
+    too, and its intervals), upgrade again: the entry is already 2.3, so no
+    migration step runs — async_setup_entry's own normalization has to pick
+    the change up."""
     from custom_components.dockhand import async_setup_entry
 
     entry = _entry(
         hass,
         2,
-        2,
+        3,
         {**CONNECTION, "poll_interval": 20},
-        {"enable_container_stats": True, "enable_resource_stats": False},
+        {
+            "enable_container_stats": True,
+            "enable_resource_stats": False,
+            "poll_interval_fast": 30,
+        },
     )
     with patch(
         "custom_components.dockhand.DockhandFastCoordinator",
@@ -3019,16 +3058,14 @@ async def test_setup_normalizes_an_entry_left_behind_by_a_downgrade(
         with pytest.raises(RuntimeError, match="stop after normalizing"):
             await async_setup_entry(hass, entry)
     assert entry.data == CONNECTION
-    assert entry.options == _with_mirrors(
-        {"poll_interval_fast": 20, "enable_resource_stats": True}
-    )
+    assert entry.options == {"enable_resource_stats": True, "poll_interval_fast": 30}
 
 
 def test_config_flow_schema_version():
     """Schema changes bump the minor version only — see config_flow.py."""
     from custom_components.dockhand.config_flow import DockhandConfigFlow
 
-    assert (DockhandConfigFlow.VERSION, DockhandConfigFlow.MINOR_VERSION) == (2, 2)
+    assert (DockhandConfigFlow.VERSION, DockhandConfigFlow.MINOR_VERSION) == (2, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -3176,7 +3213,7 @@ def test_preserves_container_when_stats_total_nonzero_but_list_empty(
                         "running": 2,
                     },
                 },
-                "unconfirmed_empty": {"containers"},
+                "unconfirmed": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},
@@ -3205,7 +3242,7 @@ def test_preserves_container_entity_when_stats_total_nonzero_but_list_empty(
                     "updateCheckEnabled": True,
                     "containers": {"total": 3, "running": 2},
                 },
-                "unconfirmed_empty": {"containers"},
+                "unconfirmed": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},

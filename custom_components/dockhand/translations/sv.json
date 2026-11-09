@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Konfigurera avsökning och funktioner",
-        "description": "Ange hur ofta Dockhand ska avsökas och vilka valfria entitetsgrupper som ska aktiveras. Allt detta kan ändras senare via Konfigurera.",
+        "title": "Välj funktioner",
+        "description": "Välj vilka valfria entitetsgrupper som ska skapas. Allt kan ändras senare via Konfigurera.",
         "data": {
-          "poll_interval_fast": "Snabb avsökningsintervall (sekunder) — statistik, containrar och stacks",
-          "poll_interval_slow": "Långsam avsökningsintervall (sekunder) — images, volymer, nätverk, scheman",
           "enable_schedules": "Aktivera schemasensorer",
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
           "enable_networks": "Aktivera nätverkssensorer",
           "enable_runtime_controls": "Aktivera körtidskontroller (avancerat)",
           "enable_resource_stats": "Aktivera CPU-/minnes-/nätverks-/disk-I/O-sensorer per container och stack",
-          "poll_interval_precise_updates": "Intervall för exakt uppdateringskontroll (sekunder)",
           "enable_update_entities": "Aktivera uppdateringsentiteter",
           "enable_precise_updates": "Aktivera exakta uppdateringsversioner"
         },
         "data_description": {
-          "poll_interval_fast": "Hur ofta statistik uppdateras. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hur ofta images, volymer, nätverk och scheman uppdateras. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiverar sensorer för Dockhands underhållsscheman.",
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
           "enable_runtime_controls": "Skapar number/select-entiteter för att ändra CPU-, minnes- och processgränser samt omstartspolicy för en fristående container i realtid. Inte tillgängligt för containrar som hanteras av Compose.",
           "enable_resource_stats": "Skapar sensorer för CPU, minne, nätverk och disk-I/O för varje container, plus totaler för varje stack. Av som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar också bort redan skapade.",
-          "poll_interval_precise_updates": "Hur ofta registerfrågorna ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
           "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
         }
@@ -93,30 +87,24 @@
     "step": {
       "init": {
         "title": "Dockhand-alternativ",
-        "description": "Justera avsökningsintervall och valfria datakällor. För att ändra URL, SSL eller API-token, använd Konfigurera om istället.",
+        "description": "Välj vilka valfria entitetsgrupper som ska skapas. Använd Konfigurera om för att ändra URL, SSL eller API-token.",
         "data": {
-          "poll_interval_fast": "Snabb avsökningsintervall (sekunder) — statistik, containrar och stacks",
-          "poll_interval_slow": "Långsam avsökningsintervall (sekunder) — images, volymer, nätverk, scheman",
           "enable_schedules": "Aktivera schemasensorer",
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
           "enable_networks": "Aktivera nätverkssensorer",
           "enable_runtime_controls": "Aktivera körtidskontroller (avancerat)",
           "enable_resource_stats": "Aktivera CPU-/minnes-/nätverks-/disk-I/O-sensorer per container och stack",
-          "poll_interval_precise_updates": "Intervall för exakt uppdateringskontroll (sekunder)",
           "enable_update_entities": "Aktivera uppdateringsentiteter",
           "enable_precise_updates": "Aktivera exakta uppdateringsversioner"
         },
         "data_description": {
-          "poll_interval_fast": "Hur ofta statistik uppdateras. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hur ofta images, volymer, nätverk och scheman uppdateras. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiverar sensorer för Dockhands underhållsscheman.",
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
           "enable_runtime_controls": "Skapar number/select-entiteter för att ändra CPU-, minnes- och processgränser samt omstartspolicy för en fristående container i realtid. Inte tillgängligt för containrar som hanteras av Compose.",
           "enable_resource_stats": "Skapar sensorer för CPU, minne, nätverk och disk-I/O för varje container, plus totaler för varje stack. Av som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar också bort redan skapade.",
-          "poll_interval_precise_updates": "Hur ofta registerfrågorna ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
           "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
         }

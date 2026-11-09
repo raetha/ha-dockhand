@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Configurar sondeo y funciones",
-        "description": "Establece con qué frecuencia sondear Dockhand y qué grupos de entidades opcionales habilitar. Todo esto se puede cambiar más tarde mediante Configurar.",
+        "title": "Elegir funciones",
+        "description": "Elige qué grupos opcionales de entidades crear. Todo se puede cambiar más tarde en Configurar.",
         "data": {
-          "poll_interval_fast": "Intervalo de sondeo rápido (segundos) — estadísticas, contenedores y stacks",
-          "poll_interval_slow": "Intervalo de sondeo lento (segundos) — imágenes, volúmenes, redes, planificaciones",
           "enable_schedules": "Habilitar sensores de planificación",
           "enable_images": "Habilitar sensores de imágenes",
           "enable_volumes": "Habilitar sensores de volúmenes",
           "enable_networks": "Habilitar sensores de redes",
           "enable_runtime_controls": "Habilitar controles en tiempo de ejecución (avanzado)",
           "enable_resource_stats": "Habilitar sensores de CPU/memoria/red/E-S de disco por contenedor y stack",
-          "poll_interval_precise_updates": "Intervalo de comprobación de actualizaciones precisas (segundos)",
           "enable_update_entities": "Habilitar entidades de actualización",
           "enable_precise_updates": "Habilitar versiones de actualización precisas"
         },
         "data_description": {
-          "poll_interval_fast": "Con qué frecuencia actualizar estadísticas. Predeterminado: 60. Mínimo: 10.",
-          "poll_interval_slow": "Con qué frecuencia actualizar imágenes, volúmenes, redes y planificaciones. Predeterminado: 600. Mínimo: 30.",
           "enable_schedules": "Activa sensores para las planificaciones de mantenimiento de Dockhand.",
           "enable_images": "Activa sensores para imágenes Docker por entorno.",
           "enable_volumes": "Activa sensores para volúmenes Docker por entorno.",
           "enable_networks": "Activa sensores para redes Docker por entorno.",
           "enable_runtime_controls": "Crea entidades number/select para cambiar en vivo los límites de CPU, memoria y procesos, y la política de reinicio, de un contenedor sin stack. No disponible para contenedores gestionados por Compose.",
           "enable_resource_stats": "Crea sensores de CPU, memoria, red y E/S de disco para cada contenedor, además de los totales de cada stack. Desactivado de forma predeterminada porque son muchas entidades que la mayoría no necesita; al desactivarlo también se eliminan las ya creadas.",
-          "poll_interval_precise_updates": "Con qué frecuencia se ejecutan las consultas al registro anteriores (segundos). Por defecto: 86400 (24 horas). Mínimo: 300.",
           "enable_update_entities": "Crea una entidad de actualización de Home Assistant para cada contenedor. Desactive esta opción si gestiona las actualizaciones de otra manera y no desea que los contenedores de Dockhand aparezcan en la gestión de actualizaciones de HA. También oculta el botón \"Actualizar todo\"; \"Buscar actualizaciones\" sigue funcionando de todas formas.",
           "enable_precise_updates": "Mejora las entidades de actualización para mostrar números de versión precisos (digests de imagen) mediante consultas periódicas al registro, en lugar de solo una etiqueta de imagen. También es la única forma de ver el estado de actualización de los propios contenedores protegidos de Dockhand (él mismo y Hawser) — Dockhand nunca expone su estado de actualización a través de los datos habituales de verificación de actualización en caché. Requiere \"Habilitar entidades de actualización\" arriba."
         }
@@ -93,30 +87,24 @@
     "step": {
       "init": {
         "title": "Opciones de Dockhand",
-        "description": "Ajustar los intervalos de sondeo y las fuentes de datos opcionales. Para cambiar la URL, SSL o el token de API, usa Reconfigurar en su lugar.",
+        "description": "Elige qué grupos opcionales de entidades crear. Para cambiar la URL, SSL o el token de API, usa Reconfigurar.",
         "data": {
-          "poll_interval_fast": "Intervalo de sondeo rápido (segundos) — estadísticas, contenedores y stacks",
-          "poll_interval_slow": "Intervalo de sondeo lento (segundos) — imágenes, volúmenes, redes, planificaciones",
           "enable_schedules": "Habilitar sensores de planificación",
           "enable_images": "Habilitar sensores de imágenes",
           "enable_volumes": "Habilitar sensores de volúmenes",
           "enable_networks": "Habilitar sensores de redes",
           "enable_runtime_controls": "Habilitar controles en tiempo de ejecución (avanzado)",
           "enable_resource_stats": "Habilitar sensores de CPU/memoria/red/E-S de disco por contenedor y stack",
-          "poll_interval_precise_updates": "Intervalo de comprobación de actualizaciones precisas (segundos)",
           "enable_update_entities": "Habilitar entidades de actualización",
           "enable_precise_updates": "Habilitar versiones de actualización precisas"
         },
         "data_description": {
-          "poll_interval_fast": "Con qué frecuencia actualizar estadísticas. Predeterminado: 60. Mínimo: 10.",
-          "poll_interval_slow": "Con qué frecuencia actualizar imágenes, volúmenes, redes y planificaciones. Predeterminado: 600. Mínimo: 30.",
           "enable_schedules": "Activa sensores para las planificaciones de mantenimiento de Dockhand.",
           "enable_images": "Activa sensores para imágenes Docker por entorno.",
           "enable_volumes": "Activa sensores para volúmenes Docker por entorno.",
           "enable_networks": "Activa sensores para redes Docker por entorno.",
           "enable_runtime_controls": "Crea entidades number/select para cambiar en vivo los límites de CPU, memoria y procesos, y la política de reinicio, de un contenedor sin stack. No disponible para contenedores gestionados por Compose.",
           "enable_resource_stats": "Crea sensores de CPU, memoria, red y E/S de disco para cada contenedor, además de los totales de cada stack. Desactivado de forma predeterminada porque son muchas entidades que la mayoría no necesita; al desactivarlo también se eliminan las ya creadas.",
-          "poll_interval_precise_updates": "Con qué frecuencia se ejecutan las consultas al registro anteriores (segundos). Por defecto: 86400 (24 horas). Mínimo: 300.",
           "enable_update_entities": "Crea una entidad de actualización de Home Assistant para cada contenedor. Desactive esta opción si gestiona las actualizaciones de otra manera y no desea que los contenedores de Dockhand aparezcan en la gestión de actualizaciones de HA. También oculta el botón \"Actualizar todo\"; \"Buscar actualizaciones\" sigue funcionando de todas formas.",
           "enable_precise_updates": "Mejora las entidades de actualización para mostrar números de versión precisos (digests de imagen) mediante consultas periódicas al registro, en lugar de solo una etiqueta de imagen. También es la única forma de ver el estado de actualización de los propios contenedores protegidos de Dockhand (él mismo y Hawser) — Dockhand nunca expone su estado de actualización a través de los datos habituales de verificación de actualización en caché. Requiere \"Habilitar entidades de actualización\" arriba."
         }
