@@ -141,10 +141,24 @@
         "name": "活动事件"
       },
       "state": {
-        "name": "状态"
+        "name": "状态",
+        "state": {
+          "created": "已创建",
+          "running": "运行中",
+          "paused": "已暂停",
+          "restarting": "正在重启",
+          "removing": "正在移除",
+          "exited": "已退出",
+          "dead": "已失效"
+        }
       },
       "health": {
-        "name": "健康状况"
+        "name": "健康状况",
+        "state": {
+          "healthy": "健康",
+          "unhealthy": "不健康",
+          "starting": "启动中"
+        }
       },
       "status": {
         "name": "状态"
@@ -412,6 +426,14 @@
         "volumes": "未使用的卷",
         "networks": "未使用的网络"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "访问 Dockhand 服务器",
+      "environments": "环境",
+      "live_events": "实时事件",
+      "version": "Dockhand 版本"
     }
   }
 }

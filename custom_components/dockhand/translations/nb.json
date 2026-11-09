@@ -141,10 +141,24 @@
         "name": "Aktivitetshendelser"
       },
       "state": {
-        "name": "Tilstand"
+        "name": "Tilstand",
+        "state": {
+          "created": "Opprettet",
+          "running": "Kjører",
+          "paused": "Satt på pause",
+          "restarting": "Starter på nytt",
+          "removing": "Fjernes",
+          "exited": "Avsluttet",
+          "dead": "Død"
+        }
       },
       "health": {
-        "name": "Helse"
+        "name": "Helse",
+        "state": {
+          "healthy": "Frisk",
+          "unhealthy": "Usunn",
+          "starting": "Starter"
+        }
       },
       "status": {
         "name": "Status"
@@ -412,6 +426,14 @@
         "volumes": "Ubrukte volumer",
         "networks": "Ubrukte nettverk"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "Nå Dockhand-serveren",
+      "environments": "Miljøer",
+      "live_events": "Direktehendelser",
+      "version": "Dockhand-versjon"
     }
   }
 }

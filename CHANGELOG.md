@@ -27,6 +27,22 @@
 - **`dockhand.recreate_container` action** — recreates a container from
   its current settings, optionally pulling its image again first, like
   saving it in Dockhand's editor. Administrators only.
+- **Live updates** — while any environment has Dockhand collecting
+  activity or metrics (metrics are on by default), a container stopping,
+  starting, turning unhealthy or being recreated shows in Home Assistant
+  within seconds instead of at the next poll. Polling continues as before
+  and catches anything missed; the feed reconnects on its own after
+  Dockhand restarts or its host loses power. Needs the `activity: view`
+  permission on Dockhand Enterprise.
+- **Dockhand device** — a device for the Dockhand server itself, showing
+  its version (updated after an upgrade). Environments and the Schedules
+  hub now appear connected through it.
+- **Dockhand on the System information page** (Settings → System →
+  Repairs → ⋮ → System information): whether Dockhand answers, its
+  version and how many environments it has.
+- **Container `exit_code` and `image_version` attributes** on the State
+  sensor: the exit code while a container is stopped, and the version from
+  its image's `org.opencontainers.image.version` label.
 - **README: which Dockhand Enterprise permissions each feature needs**,
   and what a Docker socket proxy in front of Dockhand has to allow.
 
@@ -36,6 +52,16 @@
   or Install, only that environment's containers and stacks are re-read
   rather than every environment, so a script that restarts several
   containers finishes sooner and asks less of Dockhand.
+- **Container State and Health are translated** and offer their states
+  in automation editors and history, as Docker's fixed list (running,
+  exited, paused and so on). A state Docker might add later shows as
+  unknown rather than as untranslated text.
+- **Container `restart_count` attribute only while restarting** — Dockhand
+  only counts restarts for a container that's restarting, so the attribute
+  always read 0 otherwise; it's now empty then.
+- **Update all is always there while update entities are on** —
+  unavailable while nothing is pending, rather than appearing and
+  disappearing, so automations and dashboards can rely on its entity ID.
 - **Versions show without a leading "v"** — HACS shows release tags,
   which from this release are plain version numbers (`1.11.4`, test builds
   such as `1.11.5-dev.42`), like most other HACS repositories. Earlier
@@ -59,6 +85,14 @@
 - **Clear error when Dockhand denies an action** — with Dockhand
   Enterprise roles, an action the API token's user isn't allowed to do now
   says so, instead of showing a raw "API error 403".
+
+### Internal
+
+- The generated Dockhand API index (`docs/dockhand-api.md`) and its
+  generator are gone: Dockhand now publishes `static/openapi.json`, and
+  upstream reviews diff that between release tags.
+- Code comments trimmed to explain why, not how the code got here.
+
 
 ## [1.11.3] - 2026-11-03
 

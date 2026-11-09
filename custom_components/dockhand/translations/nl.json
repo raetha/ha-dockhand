@@ -141,10 +141,24 @@
         "name": "Activiteitsgebeurtenissen"
       },
       "state": {
-        "name": "Toestand"
+        "name": "Toestand",
+        "state": {
+          "created": "Aangemaakt",
+          "running": "Actief",
+          "paused": "Gepauzeerd",
+          "restarting": "Herstarten",
+          "removing": "Verwijderen",
+          "exited": "Gestopt",
+          "dead": "Dood"
+        }
       },
       "health": {
-        "name": "Gezondheid"
+        "name": "Gezondheid",
+        "state": {
+          "healthy": "Gezond",
+          "unhealthy": "Ongezond",
+          "starting": "Opstarten"
+        }
       },
       "status": {
         "name": "Status"
@@ -412,6 +426,14 @@
         "volumes": "Ongebruikte volumes",
         "networks": "Ongebruikte netwerken"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "Dockhand-server bereikbaar",
+      "environments": "Omgevingen",
+      "live_events": "Live-gebeurtenissen",
+      "version": "Dockhand-versie"
     }
   }
 }

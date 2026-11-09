@@ -2726,6 +2726,26 @@ def _make_bulk_update_button(pending=None, containers=None, update_data=None):
     )
 
 
+def test_bulk_update_unavailable_for_a_system_container_found_by_a_check():
+    """A system container Dockhand's containers list misses (its image
+    listed by id) but the precise check flags doesn't make Update all
+    available."""
+    container = {
+        "id": "c1",
+        "name": "dockhand",
+        "image": "sha256:53fdaafc3ea1",
+        "systemContainer": None,
+    }
+    button, _, _ = _make_bulk_update_button(
+        containers=[container],
+        update_data={"c1": {"hasUpdate": True, "systemContainer": "dockhand"}},
+    )
+    button.coordinator.last_update_success = True
+    assert button.available is False
+    button._update_coordinator.data["environments"][ENV_ID]["c1"] = {"hasUpdate": True}
+    assert button.available is True
+
+
 def test_bulk_update_updatable_ids_excludes_system_containers():
     button, _, _ = _make_bulk_update_button(
         pending={"id-web", "id-dockhand"},
@@ -2877,7 +2897,7 @@ async def test_setup_entry_creates_bulk_update_button_when_pending(hass):
     assert "DockhandEnvBulkUpdateButton" in names
 
 
-async def test_setup_entry_skips_bulk_update_button_when_nothing_pending(hass):
+async def test_setup_entry_creates_bulk_update_button_when_nothing_pending(hass):
     from custom_components.dockhand.button import async_setup_entry
 
     fast = MagicMock()
@@ -2911,8 +2931,9 @@ async def test_setup_entry_skips_bulk_update_button_when_nothing_pending(hass):
     created = []
     for call in add_entities.call_args_list:
         created.extend(call.args[0])
-    names = [type(e).__name__ for e in created]
-    assert "DockhandEnvBulkUpdateButton" not in names
+    bulk = [e for e in created if type(e).__name__ == "DockhandEnvBulkUpdateButton"]
+    assert len(bulk) == 1
+    assert bulk[0].available is False
 
 
 async def test_setup_entry_skips_bulk_update_button_when_update_entities_disabled(hass):

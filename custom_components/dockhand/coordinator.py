@@ -22,6 +22,7 @@ from .const import (
     FAST_POLL_INTERVAL,
     PRECISE_UPDATES_POLL_INTERVAL,
     SLOW_POLL_INTERVAL,
+    VERSION_POLL_INTERVAL,
 )
 from .helpers import (
     _all_envs,
@@ -64,12 +65,9 @@ def _unwrap(
     silently becomes indistinguishable from "genuinely empty," and
     downstream cleanup — which exists specifically to remove entities for
     things that are actually gone — has no way to tell the difference.
-    This was a real, reported bug: a transient schedules-fetch failure
-    here used to just become `schedules: []`, with the coordinator update
-    still reporting success, causing every schedule entity to be wrongly
-    treated as confirmed-deleted. See docs/architecture.md §9 for the
-    full mechanism and how `fetch_failures` closes it for every resource
-    this coordinator fetches, not just schedules.
+    A transient schedules-fetch failure would otherwise read as every
+    schedule deleted. See docs/architecture.md §9 for how `fetch_failures`
+    closes this for every resource this coordinator fetches.
     """
     if isinstance(val, Exception):
         _LOGGER.warning("Dockhand: error fetching %s: %s", label, val)
@@ -269,22 +267,14 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     with a real, actionable digest update (hasImageUpdate=True) and (b)
     containers with ONLY a semver "newer version tag" suggestion and no
     actionable digest update (hasImageUpdate=False, newerVersion still
-    populated). Case (b) is a real, previously-unnoticed bug source: this
-    coordinator used to add EVERY row's containerId to
-    pending_update_container_ids regardless of hasImageUpdate, which made
-    a pure semver-only suggestion (advisory-only — see update.py's module
-    docstring on why Install must never be offered for that case alone)
-    indistinguishable from a genuine actionable update everywhere that set
-    is consumed (the stack "pending updates" binary sensor, the bulk
-    "Update all" button's eligibility list, __init__.py's entity-cleanup
-    gating, and update.py's own Tier-1 "update-pending" sentinel).
-
-    Fixed by keeping both: pending_update_details holds every row
-    (actionable or semver-only alike) so update.py can still surface
+    populated). Case (b) is advisory only (see update.py's module
+    docstring on why Install must never be offered for it alone), so
+    pending_update_details holds every row, for update.py to show
     newerVersion/hasImageUpdate per container, while
-    pending_update_container_ids is rebuilt to include ONLY the ids where
-    hasImageUpdate is True — restoring "pending" to mean "actionable"
-    everywhere else in the integration that already assumed that.
+    pending_update_container_ids holds only the ids where hasImageUpdate
+    is True: "pending" means "actionable" everywhere that set is used
+    (the stack "pending updates" binary sensor, Update all's eligibility
+    list, entity-cleanup gating and the Tier-1 "update-pending" state).
     """
 
     def __init__(
@@ -381,29 +371,14 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return result
 
     async def _fetch(self) -> dict[str, Any]:
-        # Fetch stats for all environments in a single API call — this is
-        # also our only source of which environments exist. We used to
-        # call /api/environments separately just for the id list, but
-        # every env we need to iterate already has an "id" here, and this
-        # endpoint doesn't leak decrypted secrets (tlsKey/hawserToken) the
-        # way /api/environments does (see diagnostics.py's redaction
-        # comment).
+        # Stats for all environments in a single API call, which is also
+        # the list of environments: unlike /api/environments, it doesn't
+        # return decrypted secrets (tlsKey/hawserToken; see diagnostics.py).
         #
-        # A failure here must NOT be swallowed into an empty successful
-        # result (previously: catch, log a warning, continue with
-        # all_stats_list = []) — that fed "zero stacks/containers for
-        # every environment" through every downstream consumer that
-        # trusts non-empty coordinator data as authoritative, including
-        # _cleanup_stale_registry's "fast coordinator data must be
-        # non-empty" guard (an empty *all_stats* still produces a
-        # non-empty *fast_coordinator.data*, since _fetch_env still runs
-        # per known env_id with stats={} — the guard doesn't catch this).
-        # A DNS resolution failure to the Dockhand host is exactly this
-        # case: total, transient, and everything should stay put
-        # (entities go unavailable via last_update_success, nothing gets
-        # cleaned up) until it resolves — not look like every environment
-        # just lost all its stacks and containers. Auth failures still
-        # propagate immediately for _async_update_data's re-auth handling.
+        # A failure here must raise, never become an empty successful
+        # result: that would read as every environment losing all its
+        # stacks and containers (docs/architecture.md §3). Auth failures
+        # propagate for _async_update_data's re-auth handling.
         try:
             all_stats_list = _safe_list(
                 await self.client.async_get_all_dashboard_stats()
@@ -461,22 +436,11 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
         )
 
-        # Same tracking, same reasoning, as the slow coordinator's own
-        # per-environment fetches (see docs/architecture.md §9) — the
-        # difference here is that containers/stacks failing has the
-        # highest stakes of any resource in this whole integration:
-        # they're what directly determines container/stack device and
-        # entity existence via _cleanup_stale_registry, the single
-        # most commonly-used entities this integration creates. A
-        # swallowed containers or stacks fetch failure here used to
-        # be indistinguishable from "this environment genuinely has
-        # none anymore," which — for an environment that stayed
-        # online per its own dashboard-stats health check while just
-        # this one specific fetch failed — would wrongly remove every
-        # container and stack device for it. This is the exact same
-        # bug class the schedules incident that prompted this whole
-        # fix surfaced, just in the other coordinator, for the data
-        # that mattered most.
+        # Same tracking as the slow coordinator's per-environment fetches
+        # (docs/architecture.md §9), with the most at stake: a failed
+        # containers or stacks fetch must not read as "this environment has
+        # none", or cleanup would remove every container and stack device
+        # of an environment that's still online.
         failures: set[str] = set()
 
         # Index container stats by name for O(1) lookup from sensor entities.
@@ -664,9 +628,8 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         currentDigest, newDigest, systemContainer, updateDisabled,
         newerVersion?} — the same shape button.py already has in hand
         after firing the check itself, so it can hand it here directly
-        instead of building a lossy id-only set first (see button.py's
-        own docstring for that history: it used to throw away
-        newerVersion/digest data before calling this).
+        instead of building an id-only set that would lose newerVersion
+        and digests.
 
         Rebuilds both pending_update_container_ids and
         pending_update_details for this environment from `items`, mirroring
@@ -1444,3 +1407,34 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         items = await self.client.async_check_container_updates(env_id)
         self.async_merge_check_results(env_id, items)
+
+
+class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
+    """Dockhand's own version, for the instance device's software version
+    and system health.
+
+    Separate from the fast and slow coordinators because it changes only
+    when Dockhand is upgraded, while its source is a large response.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: DockhandClient,
+        entry: ConfigEntry | None = None,
+    ) -> None:
+        self.client = client
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_version",
+            update_interval=VERSION_POLL_INTERVAL,
+            config_entry=entry,
+        )
+
+    @override
+    async def _async_update_data(self) -> str | None:
+        try:
+            return await self.client.async_get_dockhand_version()
+        except Exception as err:
+            raise UpdateFailed(f"Version error: {err}") from err

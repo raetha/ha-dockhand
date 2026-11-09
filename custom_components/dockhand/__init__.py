@@ -45,22 +45,26 @@ from .coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
+    DockhandVersionCoordinator,
 )
+from .events import DockhandEventStream
 from .helpers import (
     CONTAINER_STATS_SUFFIXES,
     STACK_STATS_SUFFIXES,
-    _actionable_pending_update_container_ids,
     _all_envs,
     _compose_project,
     _container_has_healthcheck,
     _coordinator_env,
+    _device_by_identifier,
     _device_id_container,
     _device_id_env,
+    _device_id_instance,
     _device_id_schedule,
     _device_id_schedules_hub,
     _device_id_stack,
     _ensure_env_devices,
     _ensure_hub_devices,
+    _instance_device,
     _stack_has_system_container,
 )
 from .migration import async_run_migrations
@@ -125,6 +129,8 @@ class DockhandData:
     fast_coordinator: DockhandFastCoordinator
     slow_coordinator: DockhandSlowCoordinator
     update_coordinator: DockhandUpdateCoordinator | None
+    version_coordinator: DockhandVersionCoordinator
+    event_stream: DockhandEventStream
     # Which entities (domain-prefixed unique_ids) have been added to HA
     # during *this* setup's lifetime — reset fresh every time
     # async_setup_entry runs (fresh instance created below), which is
@@ -374,11 +380,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
                 err,
             )
 
+    # Never fatal: the version only labels the instance device.
+    version_coordinator = DockhandVersionCoordinator(hass, client, entry=entry)
+    await version_coordinator.async_refresh()
+
     entry.runtime_data = DockhandData(
         client=client,
         fast_coordinator=fast_coordinator,
         slow_coordinator=slow_coordinator,
         update_coordinator=update_coordinator,
+        version_coordinator=version_coordinator,
+        event_stream=DockhandEventStream(hass, entry),
     )
 
     # Run any pending one-time registry migrations BEFORE pre-registering
@@ -399,6 +411,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     # registry rather than creating duplicate new-format devices alongside
     # surviving old-format ones.
     base_url = entry.data.get(CONF_API_URL, "")
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **_instance_device(
+            entry.entry_id, entry.title, base_url, version_coordinator.data
+        ),
+    )
+    # No entity listens to this coordinator, so this listener is also what
+    # keeps it polling.
+    entry.async_on_unload(
+        version_coordinator.async_add_listener(
+            lambda: _update_instance_version(hass, entry)
+        )
+    )
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
 
     # Run cleanup immediately on setup so that stale registry entries from a
@@ -437,7 +462,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
+    entry.runtime_data.event_stream.async_setup()
+
     return True
+
+
+def _update_instance_version(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
+    """Show a Dockhand upgrade on the instance device."""
+    version = entry.runtime_data.version_coordinator.data
+    registry = dr.async_get(hass)
+    device = _device_by_identifier(
+        registry, (DOMAIN, _device_id_instance(entry.entry_id)), entry.entry_id
+    )
+    if version and device is not None and device.sw_version != version:
+        registry.async_update_device(device.id, sw_version=version)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
@@ -585,9 +623,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                                               are enabled, not the optional Tier 2
                                               update_coordinator)
         bulk_update_uids         set[str]   — live entity unique_ids (env-level
-                                              "Update all" button, only while at
-                                              least one non-system-container
-                                              pending update exists)
+                                              "Update all" button, while update
+                                              entities are on)
         runtime_control_uids     set[str]   — live entity unique_ids (memory/cpu/
                                               pids/restart-policy number/select)
         container_stats_uids     set[str]   — live entity unique_ids (the 8
@@ -694,29 +731,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # CONF_ENABLE_UPDATE_ENTITIES is on AND at least one non-system-
     # container pending update exists in the environment.
     #
-    # Considers both Tier 1 (pending_updates) and Tier 2 (update_coordinator,
-    # when configured) via the shared _container_has_pending_update()
-    # helper, matching button.py's creation gate exactly — this MUST stay
-    # in sync with that gate, since a mismatch here means the button
-    # either never gets removed once created (this set too permissive) or
-    # gets removed the instant it's created (this set too strict). Safe to
-    # include Tier 2 because that helper looks it up by each container's
-    # current id — a stale entry from a since-recreated container is
-    # keyed under an id nothing currently has, so it can't keep this uid
-    # alive past the point the update actually resolved.
+    # The Update all button exists in every environment while update
+    # entities are on; button.py makes it unavailable when nothing can be
+    # updated.
     bulk_update_uids: set[str] = set()
-    update_coordinator = entry.runtime_data.update_coordinator
-    update_data = _all_envs(update_coordinator.data if update_coordinator else None)
-    # Tier 1's own pending-updates fetch is intentionally NOT gated on this
-    # option (it's cheap, and other consumers — e.g. the stack
-    # updates-available binary sensor's pending_container_names attribute
-    # — legitimately want it regardless of whether update ENTITIES are
-    # shown) — so pending_update_container_ids can still be non-empty here
-    # even with the platform off. Both update_uids and bulk_update_uids
-    # below must check this explicitly rather than relying on Tier 1/Tier 2
-    # data being absent, or a user who disabled update entities entirely
-    # (github.com/raetha/ha-dockhand/issues/23) would still see the
-    # env-level "Update all" button reappear from Tier 1 data alone.
     update_entities_enabled = entry.options.get(
         CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES
     )
@@ -741,17 +759,12 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         has_freestanding = False
         env_failures: set[str] = env_data.get("fetch_failures") or set()
         env_containers = env_data.get("containers") or []
-        pending_updates = env_data.get("pending_update_container_ids") or set()
-        update_env_data = update_data.get(env_id)
-        pending_details = env_data.get("pending_update_details") or {}
         unconfirmed: set[str] = env_data.get("unconfirmed") or set()
         if "containers" not in env_failures:
             if "containers" not in unconfirmed:
                 containers_fetch_ok_env_ids.add(env_id)
-            if update_entities_enabled and _actionable_pending_update_container_ids(
-                env_containers, pending_updates, update_env_data, pending_details
-            ):
-                bulk_update_uids.add(f"{entry.entry_id}_{env_id}_bulk_update")
+        if update_entities_enabled:
+            bulk_update_uids.add(f"{entry.entry_id}_{env_id}_bulk_update")
             for c in env_containers:
                 name = c.get("name", "")
                 if name:
@@ -1232,13 +1245,9 @@ def _cleanup_stale_registry(
                 # Two removal cases: the feature is off entirely (poll-
                 # independent — remove unconditionally, same as schedules_hub
                 # above), or the feature is on, the slow coordinator has valid
-                # data, and this specific schedule is confirmed gone. Fixes a
-                # real gap: previously this branch only checked the second
-                # case, so disabling "Enable schedules" removed schedules_hub
-                # but left every individual schedule device un-parented (HA's
-                # device registry clears via_device_id on removal, it does
-                # not cascade-remove — confirmed against HA core's
-                # device_registry.py) and never actually removed.
+                # data, and this specific schedule is confirmed gone. The first
+                # is needed because removing schedules_hub doesn't cascade: HA
+                # only clears its children's via_device_id.
                 if not live["schedules_feature_enabled"] or (
                     live["schedules_enabled"] and identifier not in live["schedules"]
                 ):
@@ -1335,17 +1344,10 @@ def _cleanup_stale_registry(
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid_type == "bulk" and uid.endswith("_bulk_update"):
-            # Env-level "Update all" button. Conditionally present, not
-            # just conditionally enabled — mirrors Dockhand's own button
-            # disappearing entirely once there's nothing left to update,
-            # rather than going idle/disabled. Same containers-fetch
-            # reliability as the Tier 1 update entities above.
+            # Env-level "Update all" button: exists while update entities
+            # are on, unavailable while nothing can be updated.
             env_id = uid_env_id
-            if env_id not in live["env_ids"] or (
-                env_id in live["online_env_ids"]
-                and env_id in live["containers_fetch_ok_env_ids"]
-                and uid not in live["bulk_update_uids"]
-            ):
+            if env_id not in live["env_ids"] or uid not in live["bulk_update_uids"]:
                 _LOGGER.debug("Dockhand: removing stale bulk update entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
@@ -1557,6 +1559,7 @@ async def async_remove_config_entry_device(
     env_ids: set[int] = live_sets["env_ids"]
     env_prefixes = tuple(_device_id_env(entry.entry_id, env_id) for env_id in env_ids)
     live: set[str] = {
+        _device_id_instance(entry.entry_id),
         *live_sets["containers"],
         *live_sets["stacks"],
         *live_sets["schedules"],

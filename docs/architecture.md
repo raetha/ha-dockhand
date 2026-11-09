@@ -73,6 +73,14 @@ same input — matching how it's actually used in production — not just
 once; a single-call test won't catch a field that only drifts on a second
 call.
 
+**The instance device (`{entry_id}_instance`)** is the Dockhand server itself. It's registered
+in `async_setup_entry` before any other device and is never removed while the entry is loaded
+(`async_remove_config_entry_device` refuses it), so `_ensure_env_devices()` and
+`_ensure_hub_devices()` parent environments and the Schedules hub to it with `via_device_id`.
+Only registration sets that: entity `device_info` omits it, which leaves it unchanged. (HA
+2026.10 deprecates `via_device` in `DeviceInfo` in favor of `via_device_id`, which needs the
+registry id, hence the lookup.)
+
 ## 1. Unique ID conventions
 
 **Entity unique IDs:** `{entry_id}_{env_id}_{type}_{discriminator}`
@@ -607,6 +615,25 @@ client directly and hands the response to the new
 now also delegates to. Same env-scoping fix, same underlying mechanism,
 just split so the merge step can be reused with a response the caller
 already has in hand instead of always re-fetching.
+
+**The version coordinator (`DockhandVersionCoordinator`, 6 h).** Dockhand reports its own
+version only through its bundled changelog (`GET /api/changelog`, public, newest release first,
+about 100 KB), which only changes when Dockhand is upgraded and restarted. It feeds the instance
+device's `sw_version`, diagnostics and system health, never an entity, so `async_setup_entry`
+adds a listener of its own: that listener both keeps the coordinator polling and writes a new
+version to the device registry. A failure is never fatal; the device keeps its last version.
+
+**The live feed (`events.py`) is a latency shortcut, never a data source.** An `activity`
+event only schedules `async_refresh_environment()` for its environment, debounced 2 s because
+Docker sends bursts (kill, die, stop); `env_status` requests a full fast refresh, since online
+state comes from the dashboard totals. Nothing is patched from event payloads, so the polled data
+and the refreshed data can't disagree. The feed opens only while some environment can send events
+(`collectActivity`, `collectMetrics` or Hawser Edge: Dockhand's event worker skips the rest),
+re-evaluated on every fast poll, and only after HA has started. After a reconnect (not the first
+connect) the fast and version coordinators refresh, which covers events missed while down and a
+Dockhand upgrade. A 30 s read timeout against Dockhand's 5 s heartbeat detects a dead connection;
+retries back off 5 s → 5 min (reset only once a heartbeat arrives, since a user with no environments gets a silent stream), and 403/404 (no `activity: view`, or an older Dockhand) retry hourly.
+`iot_class` stays `local_polling`: polling remains the source of truth.
 
 ## 4. Config entry migrations
 

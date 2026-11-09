@@ -141,10 +141,24 @@
         "name": "Aktivitätsereignisse"
       },
       "state": {
-        "name": "Zustand"
+        "name": "Zustand",
+        "state": {
+          "created": "Erstellt",
+          "running": "Läuft",
+          "paused": "Pausiert",
+          "restarting": "Startet neu",
+          "removing": "Wird entfernt",
+          "exited": "Beendet",
+          "dead": "Tot"
+        }
       },
       "health": {
-        "name": "Gesundheit"
+        "name": "Gesundheit",
+        "state": {
+          "healthy": "Gesund",
+          "unhealthy": "Ungesund",
+          "starting": "Startet"
+        }
       },
       "status": {
         "name": "Status"
@@ -412,6 +426,14 @@
         "volumes": "Ungenutzte Volumes",
         "networks": "Ungenutzte Netzwerke"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "Dockhand-Server erreichbar",
+      "environments": "Umgebungen",
+      "live_events": "Live-Ereignisse",
+      "version": "Dockhand-Version"
     }
   }
 }

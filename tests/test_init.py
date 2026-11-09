@@ -1790,7 +1790,8 @@ def test_preserves_bulk_update_when_pending_updates_exist(hass: HomeAssistant):
     assert _entity_exists(hass, ent.entity_id)
 
 
-def test_removes_bulk_update_when_no_pending_updates(hass: HomeAssistant):
+def test_keeps_bulk_update_when_nothing_is_pending(hass: HomeAssistant):
+    """It stays, unavailable, rather than coming and going with updates."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1805,31 +1806,13 @@ def test_removes_bulk_update_when_no_pending_updates(hass: HomeAssistant):
     )
     ent = _add_entity(hass, entry, f"{entry.entry_id}_1_bulk_update")
     _cleanup_stale_registry(hass, entry)
-    assert not _entity_exists(hass, ent.entity_id)
+    assert _entity_exists(hass, ent.entity_id)
 
 
-def test_removes_bulk_update_when_only_system_containers_pending(
-    hass: HomeAssistant,
-):
-    """Matches Dockhand's own behavior: its "Update all" button doesn't
-    count system containers, so if the only pending update is Dockhand's
-    own container, there's effectively nothing to bulk-update."""
+def test_removes_bulk_update_with_its_environment(hass: HomeAssistant):
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
-        fast_data={
-            1: {
-                "containers": [
-                    {
-                        "name": "dockhand",
-                        "id": "id-dockhand",
-                        "systemContainer": "dockhand",
-                    }
-                ],
-                "stacks": [],
-                "stats": {"online": True},
-                "pending_update_container_ids": {"id-dockhand"},
-            }
-        },
+        fast_data={2: {"containers": [], "stacks": [], "stats": {"online": True}}},
         slow_data={"environments": {}, "schedules": []},
     )
     ent = _add_entity(hass, entry, f"{entry.entry_id}_1_bulk_update")
@@ -3548,44 +3531,3 @@ async def test_remove_config_entry_device_ignores_other_integrations_identifiers
     device.identifiers = {("other", "e1_env_1"), ("dockhand", "e1_container_1_gone")}
     with patch("custom_components.dockhand._build_live_sets", return_value=_LIVE):
         assert await async_remove_config_entry_device(hass, _removal_entry(), device)
-
-
-def test_bulk_update_not_kept_for_a_system_container_found_by_a_check(
-    hass: HomeAssistant,
-):
-    """The cleanup's live set uses the same test as the button's creation,
-    so a system container Dockhand's containers list misses (its image
-    listed by id) doesn't keep "Update all" alive."""
-    from custom_components.dockhand import _build_live_sets
-
-    container = {
-        "id": "c1",
-        "name": "dockhand",
-        "state": "running",
-        "image": "sha256:53fdaafc3ea1",
-        "systemContainer": None,
-    }
-    entry = _make_entry(hass, data={"enable_update_entities": True})
-    entry.runtime_data = _make_runtime_data(
-        fast_data={
-            1: {
-                "stats": ENV1_STATS,
-                "containers": [container],
-                "stacks": [],
-                "pending_update_container_ids": set(),
-            }
-        },
-        slow_data={"environments": {}, "schedules": []},
-        update_data={
-            "environments": {
-                1: {"c1": {"hasUpdate": True, "systemContainer": "dockhand"}}
-            }
-        },
-    )
-    assert _build_live_sets(entry)["bulk_update_uids"] == set()
-    entry.runtime_data.update_coordinator.data["environments"][1]["c1"] = {
-        "hasUpdate": True
-    }
-    assert _build_live_sets(entry)["bulk_update_uids"] == {
-        f"{entry.entry_id}_1_bulk_update"
-    }

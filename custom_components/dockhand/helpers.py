@@ -202,16 +202,8 @@ def already_registered(
 
 # Unique_id suffixes for the 8 container-stat sensors (CPU/memory/network/
 # block-I/O), matching how each builds self._attr_unique_id in sensor.py.
-# Consolidated here from three previously-separate copies (__init__.py,
-# migration.py, sensor.py) that had drifted subtly inconsistent — notably,
-# sensor.py's copy lacked the leading underscore migration.py's had, and
-# was passed straight to str.endswith() without adding one, which
-# happened to still work (a bare substring match rather than a real
-# suffix-boundary check) but wasn't doing what it looked like it was
-# doing. Each string here includes its own leading underscore so every
-# call site can use the plain, direct `uid.endswith(CONTAINER_STATS_SUFFIXES)`
-# form — str.endswith() natively accepts a tuple of alternatives — rather
-# than every caller needing to reconstruct the separator itself.
+# Each includes its leading underscore, so `uid.endswith(CONTAINER_STATS_SUFFIXES)`
+# matches a whole suffix rather than any trailing substring.
 CONTAINER_STATS_SUFFIXES = (
     "_cpu_percent",
     "_memory_usage",
@@ -259,18 +251,8 @@ def _coordinator_env(data: dict[str, Any] | None, env_id: int) -> dict[str, Any]
     Works identically for the fast, slow, and update coordinators — all
     three now share the same {"environments": {env_id: {...}}} top-level
     shape, so there's nothing coordinator-specific left for this function
-    to need to know. (Previously two near-identical functions, _fast_env
-    and _slow_env, kept separate on the reasoning that each name
-    documented which coordinator a call site expected. That reasoning
-    didn't hold up in practice: plenty of call sites had already stopped
-    calling either function and used a locally-unwrapped variable
-    instead, which undermined the "name as documentation" argument it was
-    kept for, while also being outright wrong in six of those places —
-    unwrapping "environments" a second time from something already
-    unwrapped, silently returning empty every time. One function that
-    isn't coordinator-specific removes the "which one do I call" question
-    entirely rather than relying on every call site getting a naming
-    convention right.)
+    to need to know. Use it rather than unwrapping "environments" by hand:
+    unwrapping twice silently returns nothing.
     """
     return _all_envs(data).get(env_id) or {}
 
@@ -404,6 +386,11 @@ def _schedules_url(base_url: str) -> str | None:
 # functions rather than building the strings inline.
 
 
+def _device_id_instance(entry_id: str) -> str:
+    """Identifier string for the Dockhand instance device."""
+    return f"{entry_id}_instance"
+
+
 def _device_id_env(entry_id: str, env_id: int) -> str:
     """Identifier string for an environment hub device."""
     return f"{entry_id}_env_{env_id}"
@@ -462,6 +449,37 @@ def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
 # --------------------------------------------------------------------------- #
 # Device info helpers
 # --------------------------------------------------------------------------- #
+
+
+def _instance_device(
+    entry_id: str, name: str, base_url: str, version: str | None
+) -> DeviceInfo:
+    """The Dockhand server itself, parent of its environments.
+
+    Registered in async_setup_entry before any other device and never
+    removed while the entry is loaded.
+    """
+    info: DeviceInfo = {
+        "identifiers": {(DOMAIN, _device_id_instance(entry_id))},
+        "name": name,
+        "manufacturer": "Dockhand",
+        "model": "Dockhand",
+        "entry_type": DeviceEntryType.SERVICE,
+    }
+    if base_url:
+        info["configuration_url"] = base_url
+    if version:
+        info["sw_version"] = version
+    return info
+
+
+def _under_instance(hass: Any, entry_id: str, info: DeviceInfo) -> DeviceInfo:
+    """`info` parented to the instance device. Only registration sets this:
+    an entity's device_info, which omits it, leaves it unchanged."""
+    parent_id = _device_entry_id(hass, entry_id, _device_id_instance(entry_id))
+    if parent_id is not None:
+        info["via_device_id"] = parent_id
+    return info
 
 
 def _env_device(
@@ -834,10 +852,7 @@ def _stack_has_system_container(stack: dict | None, all_containers: list) -> boo
     confirmed from Dockhand's own source (stacks.ts populates it via
     `Array.from(containerIds)`, where containerIds is a Set matched
     against `c.id`, not `c.name`). Matching against container_id here,
-    not container_name — this exact mismatch (comparing this list
-    against container names) was a real bug that shipped: stack-level
-    system-container detection silently never matched anything, for any
-    stack, ever.
+    not container_name: matching names would never find anything.
 
     Used to suppress destructive actions (restart, running switch) at the
     stack level for any stack that includes Dockhand's own infrastructure
@@ -871,10 +886,7 @@ def _container_has_pending_update(
 
     Shared by the update entity (update.py) and the env-level bulk
     "Update all" button (button.py, __init__.py's cleanup) so both agree
-    on the exact same definition of "needs an update" — previously each
-    re-derived this independently and drifted (the button was Tier-1-only
-    while the entity preferred Tier 2, and Tier 2's own name-based lookup
-    could resurrect a since-recreated container's stale data).
+    on the exact same definition of "needs an update".
 
     update_env_data must already be keyed by container_id (the shape
     DockhandUpdateCoordinator's data is fetched in) and, critically, this
@@ -1250,14 +1262,16 @@ def _ensure_hub_devices(
     /api/schedules — filtering to global-only happens here.
     """
     registry = dr.async_get(hass)
+    hub: DeviceInfo = {
+        "identifiers": {(DOMAIN, _device_id_schedules_hub(entry_id))},
+        "name": "Dockhand – Schedules",
+        "manufacturer": "Dockhand",
+        "model": "Service",
+        "configuration_url": _schedules_url(base_url),
+        "entry_type": DeviceEntryType.SERVICE,
+    }
     registry.async_get_or_create(
-        config_entry_id=entry_id,
-        identifiers={(DOMAIN, _device_id_schedules_hub(entry_id))},
-        name="Dockhand – Schedules",
-        manufacturer="Dockhand",
-        model="Service",
-        configuration_url=_schedules_url(base_url),
-        entry_type=DeviceEntryType.SERVICE,
+        config_entry_id=entry_id, **_under_instance(hass, entry_id, hub)
     )
     for sched in schedules:
         if sched.get("id") is None or sched.get("environmentId") is not None:
@@ -1323,11 +1337,8 @@ def _ensure_env_devices(
             _stack_device()/_stacks_group_device() factories entity device_info
             properties use — this function still runs on every coordinator
             update while entities' device_info only runs once at entity-add
-            time (see module docstring), but there is now only one place that
-            actually constructs the DeviceInfo fields, so the two call sites
-            can no longer drift out of sync the way they once did (a stack's
-            model briefly showing correctly after a reload, then reverting to
-            a stale hardcoded value on the next coordinator update).
+            time (see module docstring); sharing the factories keeps the two
+            from writing different values.
         networks / images / volumes: Slow coordinator resource lists. Each group
             device is only created when the corresponding enable_* flag is True
             AND the list is non-empty.
@@ -1347,7 +1358,9 @@ def _ensure_env_devices(
     # as a separator — a hyphen could appear in the resource name itself.
     registry.async_get_or_create(
         config_entry_id=entry_id,
-        **_env_device(entry_id, env_id, env_name, base_url),
+        **_under_instance(
+            hass, entry_id, _env_device(entry_id, env_id, env_name, base_url)
+        ),
     )
 
     # ── Containers group — only when freestanding containers exist ───────────

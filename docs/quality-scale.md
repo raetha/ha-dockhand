@@ -13,7 +13,6 @@ compliance drifts unless it's checked. This page is how it's kept current.
 
 | Check | Where | Catches |
 |---|---|---|
-| 2026-11-03 | 1.11.3 | No integration code changes (comments only: renamed doc paths); the release brings the new README, test builds and `dockhand.zip` packaging to HACS. No rule changes since the 1.11.2 review; no `quality_scale.yaml` comments made stale. |
 | `scripts/check_quality_scale.py` | CI (`quality-scale` job), `scripts/run_tests.sh --full` | A rule Home Assistant added or retired that `quality_scale.yaml` doesn't match; an unknown status; a `todo`/`exempt` rule with no reason given |
 | `mypy` with `mypy.ini` (Home Assistant core's strict settings) | CI (`tests` job), `run_tests.sh --full` | **strict-typing** — including missing `@override` and use of deprecated Home Assistant APIs |
 | `pytest --cov-fail-under=100` | CI (`tests` job), `run_tests.sh --full` | Any line no test runs (**test-coverage** itself asks for 95%) |
@@ -79,6 +78,7 @@ Rule pages: `https://developers.home-assistant.io/docs/core/integration-quality-
 
 | Date | Release | Outcome |
 |---|---|---|
+| 2026-11-03 | 1.11.3 | No integration code changes (comments only: renamed doc paths); the release brings the new README, test builds and `dockhand.zip` packaging to HACS. No rule changes since the 1.11.2 review; no `quality_scale.yaml` comments made stale. |
 | 2026-11-02 | 1.11.2 | Bug-fix release; no new entities, actions or options: Dockhand's own release check feeds the existing container update entity, and diagnostics gained system-container and self-update fields. No rule or developer-blog changes since the 1.11.1 review. Core dev now pins mypy 2.4.1 (taken); its `[mypy]` section is unchanged apart from the performance-only `native_parser`/`num_workers`, already left out. **diagnostics** comment refreshed to describe the update-check summary. |
 | 2026-10-29 | 1.11.1 | Bug-fix release; no new entities, actions or options. No rule or developer-blog changes since the 1.11.0 review, and core's `[mypy]` section and mypy pin unchanged. No `quality_scale.yaml` comments made stale. |
 | 2026-10-19 | 1.11.0 | Full re-audit against the rules as of Home Assistant 2026.10. Added the new Bronze rules **docs-triggers** and **docs-conditions** (exempt). Fixed **strict-typing**, which was marked done without mypy ever having run: added `mypy.ini` with core's settings and fixed what it found. **action-exceptions** corrected from exempt to done. Added `entity.py` (**common-modules**) and `async_remove_config_entry_device` (**stale-devices**). README gained Use cases, more examples, and Known limitations. Added the automated checks above. Tests brought to 100% line coverage (from about 96%), and the gate raised to match. |
