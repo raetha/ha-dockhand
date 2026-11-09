@@ -341,6 +341,32 @@
           "on-failure": "Bei Fehler"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker-Ereignis",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Beendet",
+              "health_status_healthy": "Integritätsprüfung bestanden",
+              "health_status_starting": "Integritätsprüfung startet",
+              "health_status_unhealthy": "Integritätsprüfung fehlgeschlagen",
+              "kill": "Abgebrochen",
+              "oom": "Kein Speicher mehr",
+              "pause": "Pausiert",
+              "restart": "Neu gestartet",
+              "start": "Gestartet",
+              "stop": "Gestoppt",
+              "unpause": "Fortgesetzt",
+              "update": "Aktualisiert"
+            }
+          },
+          "exit_code": {
+            "name": "Exit-Code"
+          }
+        }
+      }
     }
   },
   "exceptions": {

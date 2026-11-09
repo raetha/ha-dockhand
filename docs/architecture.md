@@ -583,6 +583,15 @@ full poll indefinitely), and a full poll that completes while it runs wins,
 since its data is newer. Actions whose effect spans environments, and the
 slow coordinator's own actions, still await `async_refresh()`.
 
+Concurrent calls share fetches without delaying anyone: per environment
+there's at most one refresh running and one queued, and every caller that
+arrives while one runs joins the queued one, which starts only after they
+all arrived, so each sees its own change. HA runs a service call's entities
+concurrently, so one `switch.turn_off` on ten containers costs two
+refreshes, not ten. The queued task is created with `eager_start=False`:
+started eagerly, it would begin fetching before being registered as queued,
+and a later caller could join a fetch that predates its action.
+
 The environment's "Check for updates" button is likewise scoped: it runs
 Dockhand's check for its own environment and merges the response
 (`async_merge_check_results()`, `async_merge_pending_updates_from_check()`),

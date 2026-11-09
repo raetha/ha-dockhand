@@ -227,6 +227,11 @@
       "container_restart_policy": {
         "default": "mdi:restart-alert"
       }
+    },
+    "event": {
+      "docker_event": {
+        "default": "mdi:docker"
+      }
     }
   },
   "services": {

@@ -14,10 +14,12 @@ from typing import TYPE_CHECKING, Any
 
 from aiohttp import ClientError
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.start import async_at_started
 
 from .api import DockhandAuthError, DockhandNotFoundError, DockhandPermissionError
+from .const import DOMAIN
 from .helpers import _all_envs
 
 if TYPE_CHECKING:
@@ -42,15 +44,23 @@ def events_expected(fast_data: dict[str, Any] | None) -> bool:
     Hawser Edge agent always sends its own. Otherwise the feed would only
     ever carry heartbeats.
     """
-    for env in _all_envs(fast_data).values():
-        stats = env.get("stats") or {}
-        if (
-            stats.get("collectActivity")
-            or stats.get("collectMetrics")
-            or stats.get("connectionType") == "hawser-edge"
-        ):
-            return True
-    return False
+    return any(env_sends_events(env) for env in _all_envs(fast_data).values())
+
+
+def env_sends_events(env: dict[str, Any]) -> bool:
+    """Whether Dockhand sends Docker events for this environment's slice of
+    the fast coordinator's data."""
+    stats = env.get("stats") or {}
+    return bool(
+        stats.get("collectActivity")
+        or stats.get("collectMetrics")
+        or stats.get("connectionType") == "hawser-edge"
+    )
+
+
+def container_event_signal(entry_id: str, env_id: int, name: str) -> str:
+    """Dispatcher signal for one container's Docker events."""
+    return f"{DOMAIN}_{entry_id}_{env_id}_{name}_docker_event"
 
 
 class DockhandEventStream:
@@ -170,6 +180,13 @@ class DockhandEventStream:
             env_id = data.get("environmentId")
             if not isinstance(env_id, int):
                 return
+            container = data.get("containerName")
+            if isinstance(container, str) and container:
+                async_dispatcher_send(
+                    self._hass,
+                    container_event_signal(self._entry.entry_id, env_id, container),
+                    data,
+                )
             self._last_event[env_id] = self._hass.loop.time()
             if env_id not in self._pending:
                 self._pending[env_id] = async_call_later(

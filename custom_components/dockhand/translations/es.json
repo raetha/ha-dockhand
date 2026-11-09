@@ -341,6 +341,32 @@
           "on-failure": "En caso de fallo"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Evento de Docker",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Terminado",
+              "health_status_healthy": "Comprobación de estado superada",
+              "health_status_starting": "Comprobación de estado iniciándose",
+              "health_status_unhealthy": "Comprobación de estado fallida",
+              "kill": "Forzado a terminar",
+              "oom": "Sin memoria",
+              "pause": "En pausa",
+              "restart": "Reiniciado",
+              "start": "Iniciado",
+              "stop": "Detenido",
+              "unpause": "Reanudado",
+              "update": "Actualizado"
+            }
+          },
+          "exit_code": {
+            "name": "Código de salida"
+          }
+        }
+      }
     }
   },
   "exceptions": {

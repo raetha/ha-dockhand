@@ -341,6 +341,32 @@
           "on-failure": "En cas d'échec"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Événement Docker",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Arrêté brutalement",
+              "health_status_healthy": "Contrôle de santé réussi",
+              "health_status_starting": "Contrôle de santé en cours de démarrage",
+              "health_status_unhealthy": "Contrôle de santé échoué",
+              "kill": "Tué",
+              "oom": "Mémoire épuisée",
+              "pause": "En pause",
+              "restart": "Redémarré",
+              "start": "Démarré",
+              "stop": "Arrêté",
+              "unpause": "Repris",
+              "update": "Mis à jour"
+            }
+          },
+          "exit_code": {
+            "name": "Code de sortie"
+          }
+        }
+      }
     }
   },
   "exceptions": {

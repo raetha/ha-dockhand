@@ -341,6 +341,32 @@
           "on-failure": "Przy błędzie"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Zdarzenie Dockera",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Zakończony",
+              "health_status_healthy": "Kontrola kondycji zaliczona",
+              "health_status_starting": "Kontrola kondycji uruchamiana",
+              "health_status_unhealthy": "Kontrola kondycji niezaliczona",
+              "kill": "Zabity",
+              "oom": "Brak pamięci",
+              "pause": "Wstrzymany",
+              "restart": "Uruchomiony ponownie",
+              "start": "Uruchomiony",
+              "stop": "Zatrzymany",
+              "unpause": "Wznowiony",
+              "update": "Zaktualizowany"
+            }
+          },
+          "exit_code": {
+            "name": "Kod wyjścia"
+          }
+        }
+      }
     }
   },
   "exceptions": {
