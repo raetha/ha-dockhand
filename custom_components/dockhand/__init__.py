@@ -97,24 +97,21 @@ _GIT_STACK_SUFFIXES = (
 _CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update", "pause", "resume")
 _STACK_ACTION_SUFFIXES = ("running", "restart")
 
-# Exact, full unique_id suffixes for standalone env-level entities that are
-# NOT conditionally-suppressed and rely purely on device-removal cascade
-# (i.e. they should never reach the type-dispatch below at all), but whose
-# own naming happens to start with a word that's ALSO one of the reserved
-# type tokens the dispatch below matches on (position-2 after splitting on
-# "_" — see the entity-registry pass). Position-2 matching alone can't tell
-# these apart from an actual tracked entity of that type, since it only
-# looks at the first word, not the full suffix — this is a real, shipped-
-# then-caught bug: {entry_id}_{env_id}_update_check_enabled and
-# {entry_id}_{env_id}_image_prune_enabled were both getting swept up by the
-# "update"/"image" branches (which check uid not in update_uids/image_uids)
-# and removed on every online poll, since neither ever appears in either
-# live set — they're not update entities or image entities at all, just
-# ordinary always-on binary sensors whose names happen to start the same
-# way. Checked as an exact full-suffix match (not a prefix), immediately
-# after computing uid_type, before any dispatch branch runs. If a future
-# entity's name happens to collide the same way, add its exact suffix here
-# rather than trying to make the position-2 dispatch itself smarter.
+# Exact, full unique_id suffixes for standalone env-level entities that are NOT
+# conditionally-suppressed and rely purely on device-removal cascade (i.e. they
+# should never reach the type-dispatch below at all), but whose own naming
+# happens to start with a word that's ALSO one of the reserved type tokens the
+# dispatch below matches on (position-2 after splitting on "_" — see the
+# entity-registry pass). Position-2 matching alone can't tell these apart from
+# an actual tracked entity of that type, since it only looks at the first word:
+# {entry_id}_{env_id}_update_check_enabled and
+# {entry_id}_{env_id}_image_prune_enabled would be swept up by the
+# "update"/"image" branches and removed on every online poll, though they're
+# ordinary always-on binary sensors. Checked as an exact full-suffix match (not
+# a prefix), immediately after computing uid_type, before any dispatch branch
+# runs. If a future entity's name happens to collide the same way, add its
+# exact suffix here rather than trying to make the position-2 dispatch itself
+# smarter.
 _TYPE_COLLISION_EXCLUDED_SUFFIXES = (
     "_update_check_enabled",
     "_image_prune_enabled",
@@ -850,7 +847,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # empty. Without checking this too, "schedules" ending up empty because
     # its own fetch failed looks identical to "genuinely zero schedules,"
     # and downstream cleanup would wrongly treat every existing schedule as
-    # confirmed-deleted — a real, reported incident this closes.
+    # confirmed-deleted.
     top_failures: set[str] = slow_data.get("fetch_failures") or set()
 
     # Only populate schedule live set when schedules are enabled AND their
@@ -1365,18 +1362,10 @@ def _cleanup_stale_registry(
             # cleans them up even though the container device itself
             # stays. Same fast-data reliability as containers/update.
             #
-            # Domain check added deliberately: "memory_limit" collides
-            # exactly with the container-stats sensor of the same name
-            # (sensor.py's DockhandContainerMemoryLimitSensor) — same
-            # class of bug as the update_check_enabled/image_prune_enabled
-            # collision noted in _TYPE_COLLISION_EXCLUDED_SUFFIXES above,
-            # caught the same way (a real, shipped entity disappearing
-            # right after creation). A domain check disambiguates these
-            # two suffix-identical but functionally distinct entities more
-            # precisely than adding to that exclusion list would, since
-            # this one does need its own (different) conditional removal —
-            # see the container_stats_uids branch below — not blanket
-            # exemption from cleanup altogether.
+            # The domain check matters: "memory_limit" is also the suffix
+            # of the container-stats sensor (DockhandContainerMemoryLimitSensor),
+            # which has its own conditional removal below, so the exclusion
+            # list above wouldn't fit.
             env_id = uid_env_id
             if env_id not in live["env_ids"] or (
                 env_id in live["online_env_ids"]
@@ -1392,11 +1381,8 @@ def _cleanup_stale_registry(
             # sensor.py's async_setup_entry), so — like runtime controls
             # above — need explicit tracking: turning the option off must
             # clean these up even though the container device itself
-            # stays. Without this branch, toggling the option off did
-            # nothing to entities already created while it was on (a
-            # real, shipped gap — the option only ever controlled future
-            # creation, cleanup had no way to know these were now
-            # supposed to be gone).
+            # stays, or turning the option off would leave the ones
+            # already created.
             env_id = uid_env_id
             if env_id not in live["env_ids"] or (
                 env_id in live["online_env_ids"]

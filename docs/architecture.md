@@ -565,14 +565,13 @@ not a human-readable label that survives recreation) to any future
 enrichment layer with its own independent poll cadence.
 
 **Explicit user actions (button presses, switch toggles, an update entity's
-install) must await their refresh, never call `async_request_refresh()`.**
-The latter goes through `DataUpdateCoordinator`'s built-in request-refresh
-debouncer (10s cooldown, `immediate=True`): if its cooldown is still armed
-from any recent refresh of that coordinator, it returns at once without
-refreshing and runs the refresh ~10s later, detached from the caller. A
-card's "in progress" state awaiting the action then clears before anything
-has happened (reported: the "Check for updates" spinner cleared after ~2s
-while the check ran for a minute).
+install) await a refresh of what they changed, never `async_request_refresh()`.**
+The latter goes through `DataUpdateCoordinator`'s request-refresh debouncer
+(10 s cooldown, `immediate=True`): while its cooldown is armed it returns at
+once and refreshes ~10 s later, detached from the caller, so a card's "in
+progress" state or a script's next step runs before anything has changed.
+It would save calls only for a burst of actions, and the scoped refresh below
+already makes each one cheap.
 
 Actions on containers and stacks await
 `DockhandFastCoordinator.async_refresh_environment(env_id)`: the same
@@ -584,37 +583,11 @@ full poll indefinitely), and a full poll that completes while it runs wins,
 since its data is newer. Actions whose effect spans environments, and the
 slow coordinator's own actions, still await `async_refresh()`.
 
-**That debounce fix was real and necessary, but not sufficient on its own
-for the "Check for updates" button specifically — a second, unrelated
-issue was hiding behind it.** `DockhandCheckUpdatesButton` is attached to
-each environment's device, but calling `async_refresh()` on
-`DockhandUpdateCoordinator` always re-checks *every* environment in one
-gather (that's genuinely the right behavior for the coordinator's own
-periodic background refresh). Pressing environment 1's button was
-therefore silently also re-checking environments 2 and 3 — confirmed with
-live timing logs during the same debugging session: 4 environments, 4
-buttons pressed via the card's "check all" action, and each press queued
-a fully redundant re-check of all 4 environments behind the same
-coordinator lock (~20 HTTP calls where ~4 would do, and climbing
-per-press latency as each queued behind the last). Fixed by giving the
-coordinator a genuinely-scoped `async_check_environment(env_id)` method
-(built on `async_set_updated_data()` — see its own docstring in
-coordinator.py) instead of routing the button through the coordinator's
-own all-environments refresh at all. The lesson: a debounce/timing fix
-that resolves the *symptom* (spinner clearing early) doesn't necessarily
-mean the *design* (what actually runs when this specific entity is
-pressed) was right to begin with — worth checking both.
-
-**Postscript (1.8.1):** `async_check_environment()` still exists and is
-still exactly this env-scoped fix, but `DockhandCheckUpdatesButton`
-itself no longer calls it — see the `CONF_ENABLE_UPDATE_ENTITIES`
-section above. The button now needs the raw check-updates response
-itself (to conditionally feed Tier 1 as well as Tier 2), so it calls the
-client directly and hands the response to the new
-`async_merge_check_results()`, which `async_check_environment()` itself
-now also delegates to. Same env-scoping fix, same underlying mechanism,
-just split so the merge step can be reused with a response the caller
-already has in hand instead of always re-fetching.
+The environment's "Check for updates" button is likewise scoped: it runs
+Dockhand's check for its own environment and merges the response
+(`async_merge_check_results()`, `async_merge_pending_updates_from_check()`),
+rather than refreshing the update coordinator, whose refresh checks every
+environment.
 
 **The version coordinator (`DockhandVersionCoordinator`, 6 h).** Dockhand reports its own
 version only through its bundled changelog (`GET /api/changelog`, public, newest release first,
@@ -625,7 +598,9 @@ version to the device registry. A failure is never fatal; the device keeps its l
 
 **The live feed (`events.py`) is a latency shortcut, never a data source.** An `activity`
 event only schedules `async_refresh_environment()` for its environment, debounced 2 s because
-Docker sends bursts (kill, die, stop); `env_status` requests a full fast refresh, since online
+Docker sends bursts (kill, die, stop), and skipped when the environment's data already comes
+from a fetch that started after the event (`fetched_since()`): an action's own refresh usually
+does; `env_status` requests a full fast refresh, since online
 state comes from the dashboard totals. Nothing is patched from event payloads, so the polled data
 and the refreshed data can't disagree. The feed opens only while some environment can send events
 (`collectActivity`, `collectMetrics` or Hawser Edge: Dockhand's event worker skips the rest),

@@ -381,8 +381,7 @@ def migrate_1_8_0_reenable_container_stats_entities(
     it can't distinguish "the user chose to disable this" from "this was
     only ever disabled because of the pre-1.8.0 default."
 
-    A genuine one-time migration, not a per-load reconciliation (an
-    earlier version of this fix ran on every setup instead) — within
+    A genuine one-time migration, not a per-load reconciliation: within
     1.8.0's own architecture, these entities are only ever created with
     enabled_default=True (gated entirely on the option itself; see
     sensor.py's creation loop), so there is no code path going forward

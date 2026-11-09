@@ -463,6 +463,20 @@ async def test_refresh_environment_loses_to_a_full_poll(hass: HomeAssistant):
     assert coord.data["environments"][1]["containers"] == [CONTAINER1]
 
 
+async def test_fetched_since_tracks_the_fetch_behind_the_data(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1, {"id": 2, "name": "remote"}])
+    coord = _fast(hass, client)
+    assert not coord.fetched_since(1, 0)
+    before_poll = hass.loop.time()
+    await coord.async_refresh()
+    after_poll = hass.loop.time()
+    assert coord.fetched_since(1, before_poll - 1)
+    assert not coord.fetched_since(1, after_poll)
+    await coord.async_refresh_environment(1)
+    assert coord.fetched_since(1, after_poll)
+    assert not coord.fetched_since(2, after_poll)
+
+
 async def test_fast_stats_failure_does_not_clear_environments(hass: HomeAssistant):
     """/api/dashboard/stats (no env param) is the fast coordinator's only
     source of which environments exist — no separate /api/environments

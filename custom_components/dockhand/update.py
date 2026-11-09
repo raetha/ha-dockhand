@@ -1,21 +1,18 @@
 """Update platform for Dockhand container image updates.
 
-Whole platform gated on CONF_ENABLE_UPDATE_ENTITIES (default True, for
-upgrade compatibility — Tier 1 was unconditional before this option
-existed). Off entirely disables both tiers' ENTITIES below, and the
-env-level bulk "Update all" button (button.py/__init__.py) since it has
-nothing to act on without them — that's the actual "backdoor to
-performing updates from HA" concern behind this option. It does NOT
-disable the update_coordinator (Tier 2) object itself or the env-level
-"Check for updates" button: that button is read-only (forces a real
-registry check, refreshing Dockhand's own cached values that other
-things — e.g. the stack binary sensor's pending-updates attributes —
-still consume regardless of whether update entities exist), so it keeps
-working whenever CONF_ENABLE_PRECISE_UPDATES is on, independent of this
-toggle. See __init__.py's update_coordinator construction for that
-split. Added in response to github.com/raetha/ha-dockhand/issues/23 —
-some users manage container updates outside HA entirely and don't want
-these entities cluttering HA's own update management.
+Whole platform gated on CONF_ENABLE_UPDATE_ENTITIES (default True). Off
+entirely disables both tiers' ENTITIES below, and the env-level bulk "Update
+all" button (button.py/__init__.py) since it has nothing to act on without them
+— that's the actual "backdoor to performing updates from HA" concern behind
+this option. It does NOT disable the update_coordinator (Tier 2) object itself
+or the env-level "Check for updates" button: that button is read-only (forces a
+real registry check, refreshing Dockhand's own cached values that other things
+— e.g. the stack binary sensor's pending-updates attributes — still consume
+regardless of whether update entities exist), so it keeps working whenever
+CONF_ENABLE_PRECISE_UPDATES is on, independent of this toggle. See
+__init__.py's update_coordinator construction for that split. Some users manage
+container updates outside HA entirely and don't want these entities in HA's own
+update management (github.com/raetha/ha-dockhand/issues/23).
 
 Two-tier design for entity DISPLAY (both tiers require
 CONF_ENABLE_UPDATE_ENTITIES to be on — Tier 2 alone, e.g. via a manual
@@ -28,16 +25,15 @@ its data on):
   manual check in Dockhand (or this integration's own check-updates
   calls) records pending updates just the same.
   installed_version shows the image tag (no digest available at this
-  tier). latest_version flips to the "update-pending" sentinel — or, once
-  bug #2 below shipped, the container's own raw image tag when that's
-  distinguishable from installed_version — when the fast coordinator's
+  tier). latest_version flips to the container's own raw image tag when
+  that's distinguishable from installed_version, else to the
+  "update-pending" sentinel, when the fast coordinator's
   cheap GET /api/containers/pending-updates poll (Dockhand's own cached
   check results, no registry query of its own) flags this
   container. That same poll (DockhandFastCoordinator, see its own
-  docstring) also carries hasImageUpdate/newerVersion per container —
-  confirmed richer than originally assumed — so Tier 1 alone is now a
-  full source of "is there an update" and "is there a semver suggestion",
-  not just a boolean flag. Install works fully at this tier —
+  docstring) also carries hasImageUpdate/newerVersion per container, so
+  Tier 1 alone answers both "is there an update" and "is there a semver
+  suggestion". Install works fully at this tier —
   POST /api/containers/batch-update-stream only needs a container ID,
   never a digest.
 
@@ -55,9 +51,7 @@ its data on):
   this container at all (Tier 2 disabled, or Tier 2 ran but excluded/
   hasn't reached this container). Tier 2's own newerVersion still wins
   when it has one; Tier 1's fills the gap only when Tier 2's doesn't
-  carry one. This used to return {} outright whenever Tier 2 was absent
-  or had no row, discarding Tier 1's data completely — the root cause of
-  both bugs below.
+  carry one.
 
 The "Install" button triggers a pull-and-recreate via
 POST /api/containers/batch-update-stream, which (unlike the older
@@ -90,11 +84,9 @@ Version string strategy:
                       string), or the "update-pending" sentinel only when
                       the raw tag would collide with installed_version
                       (no OCI label was found, so installed_version
-                      already IS just the tag). Falling all the way back
-                      to plain installed_version in this no-digest case
-                      used to make the entity read as falsely "up to
-                      date" (HA renders STATE_OFF whenever latest_version
-                      == installed_version) — see bug #2 this fixed.
+                      already IS just the tag). Never installed_version
+                      itself: HA shows the entity off whenever
+                      latest_version == installed_version.
                       Otherwise, Dockhand's own opt-in semver "newer
                       version tag" detection (1.0.43+, global setting),
                       when the merged item carries a newerVersion field
@@ -168,10 +160,9 @@ containers list shows them:
 Whenever there's a pending/actionable update (with or without a
 newerVersion suggestion alongside it), _newer_version_section() calls
 _pending_update_changelog_section(), which asks Dockhand's version-notes
-endpoint for a bare changelog link with an empty `versions` list — this
-is the fix for bug #1 (release notes/changelog links disappearing
-entirely whenever there was no specific semver target to attach them
-to). See api.py's async_get_version_notes docstring for exactly how
+endpoint for a bare changelog link with an empty `versions` list, so a
+pending update gets a changelog link even with no specific version to
+attach notes to. See api.py's async_get_version_notes docstring for exactly how
 Dockhand resolves this with no wanted versions.
 
 Release notes for a newerVersion suggestion, or a bare changelog link
@@ -182,8 +173,8 @@ Dockhand does the forge resolution (GitHub or self-hosted Gitea/Forgejo)
 and release-matching itself, including its own unauthenticated-GitHub
 rate-limit handling. Deliberately not reimplemented client-side here.
 
-systemContainer/updateDisabled (whether Install is offered at all) used
-to only be known via check-updates. systemContainer is Dockhand's own
+systemContainer/updateDisabled decide whether Install is offered at all,
+without needing check-updates. systemContainer is Dockhand's own
 precomputed field on the regular containers list already (GET
 /api/containers) — the same isSystemContainer(imageName) classification
 Dockhand's UI itself uses, image-name matching we don't need to
@@ -430,10 +421,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         excludes, or a container Tier 2 simply hasn't reached this poll)
         — the returned item is built entirely from Tier 1's detail
         instead, so hasUpdate/newerVersion still surface without ever
-        needing Tier 2. This used to return {} unconditionally whenever
-        Tier 2 was absent, discarding Tier 1's own hasImageUpdate/
-        newerVersion data entirely — see the module docstring's "Two-tier
-        design" section and bug #1/#2 it links to.
+        needing Tier 2 (see the module docstring's "Two-tier design").
 
         Looked up by the container's *current* id (from Tier 1's fresh
         container list), not by name. Tier 2's data is keyed by
@@ -539,11 +527,9 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             # the COMMON case, since Tier 1's own hasImageUpdate (which
             # never carries a digest at all) can flow through here on its
             # own via _check_updates_item()'s merge, whether or not Tier 2
-            # is configured. Falling back to installed_version here (the
-            # old behavior) made the entity look falsely "up to date" —
-            # HA renders STATE_OFF whenever latest_version ==
-            # installed_version — even though there genuinely IS a
-            # pending update. See module docstring, bug #2.
+            # is configured. Not installed_version: HA renders STATE_OFF
+            # whenever latest_version == installed_version, which would
+            # hide a genuinely pending update.
             #
             # Prefer the container's raw image tag instead: a real,
             # meaningful string, and distinguishable from

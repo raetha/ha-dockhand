@@ -502,11 +502,9 @@ class DockhandEnvBulkUpdateButton(
     found and can't keep this button alive, or its own container list,
     past the point an update actually resolved.
 
-    Named "Update all containers" — a static name via translation_key,
-    not a live count in the name. An earlier version showed "Update all
-    (N)" matching Dockhand's own wording, but a changing friendly_name on
-    a persistent (not recreated) entity reads as confusing entity churn
-    in HA's own UI/history, so this reverted to a plain static name.
+    Named "Update all containers", without Dockhand's live "(N)" count: a
+    changing friendly_name on a persistent entity reads as churn in HA's
+    UI and history.
     """
 
     _attr_has_entity_name = True
