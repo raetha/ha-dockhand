@@ -31,9 +31,10 @@
 - **Stacks and images could disappear while Docker was briefly
   unreachable** — Dockhand reports an empty list rather than an error when
   it can't reach Docker, so a short outage could remove an environment's
-  stack or image devices along with their entity settings. An empty list
-  now has to show up on two polls in a row before anything is removed, and
-  containers get the same protection for an outage that starts mid-poll.
+  stack or image devices. Anything that disappears now has to still be
+  missing on the next refresh before its device is removed, which also
+  covers containers for an outage that starts mid-poll and a container
+  briefly missing while it's recreated.
 - **Reconfiguring to a new URL** — the entry now takes on the new URL as
   its identity, so the old URL can be added again, and a URL already used
   by another Dockhand entry is refused. The entry's name follows the URL
