@@ -37,19 +37,12 @@ from .const import (
     SCHEMA_MINOR_VERSION,
     SCHEMA_VERSION,
 )
+from .helpers import ha_schema
 
 DEFAULT_VERIFY_SSL = True
 
 
-def _form(schema: vol.Schema) -> Any:
-    """A form schema in whatever type this Home Assistant's forms take.
-
-    From 2026.10 Home Assistant validates forms with probatio and makes
-    `import voluptuous` load probatio, so at runtime these schemas already
-    are probatio schemas; only the static types differ. Voluptuous stays
-    while the minimum Home Assistant version predates probatio.
-    """
-    return schema
+_form = ha_schema
 
 
 def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:

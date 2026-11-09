@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "Automatisk distribution"
+      },
+      "schedule_enabled": {
+        "name": "Aktiverad"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "Uppdatera alla containrar"
+      },
+      "pause": {
+        "name": "Pausa"
+      },
+      "resume": {
+        "name": "Återuppta"
+      },
+      "schedule_run": {
+        "name": "Kör nu"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "Container hittades inte — den kan ha tagits bort"
     },
+    "entry_not_loaded": {
+      "message": "Den Dockhand-instansen är inte inläst. Kontrollera den under Inställningar → Enheter och tjänster."
+    },
     "git_stack_not_found": {
       "message": "Git-stacken hittades inte — den kan ha tagits bort"
     },
+    "invalid_target": {
+      "message": "Den enheten är inte en Dockhand-miljö eller Dockhand-container som den här åtgärden kan använda."
+    },
     "permission_denied": {
       "message": "Dockhand nekade detta: API-tokenets användare saknar behörighet för det. Kontrollera användarens roll i Dockhand."
+    },
+    "system_container": {
+      "message": "Dockhands egen container och Hawser-agenter kan inte återskapas från Home Assistant."
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "Minnesgräns återställd automatiskt för {container}",
       "description": "Container \"{container}\" slutade köras strax efter att dess minnesgräns sänktes, vilket kan inträffa när den nya gränsen är lägre än containerns faktiska användning och kärnan tillämpar den omedelbart. Minnesgränsen har automatiskt återställts till sitt tidigare värde ({memory_bytes} bytes). Kontrollera containerns loggar och aktuella hälsostatus i Dockhand."
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "Rensa oanvända resurser",
+      "description": "Tar bort oanvända Docker-resurser i en Dockhand-miljö och rapporterar vad som togs bort.",
+      "fields": {
+        "device_id": {
+          "name": "Miljö",
+          "description": "Dockhand-miljön som ska rensas."
+        },
+        "resources": {
+          "name": "Resurser",
+          "description": "Vad som ska tas bort."
+        },
+        "all_images": {
+          "name": "Alla oanvända images",
+          "description": "Ta även bort taggade images som ingen container använder, inte bara hängande (otaggade)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Återskapa container",
+      "description": "Återskapar en container från dess nuvarande konfiguration, som när den sparas i Dockhands redigerare, och hämtar valfritt dess image först.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "Containern som ska återskapas."
+        },
+        "pull": {
+          "name": "Hämta image",
+          "description": "Hämta containerns image igen först, för att få en nyare image under samma tagg."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Stoppade containrar",
+        "images": "Images",
+        "volumes": "Oanvända volymer",
+        "networks": "Oanvända nätverk"
+      }
     }
   }
 }

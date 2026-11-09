@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "Automatische Bereitstellung"
+      },
+      "schedule_enabled": {
+        "name": "Aktiviert"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "Alle Container aktualisieren"
+      },
+      "pause": {
+        "name": "Pausieren"
+      },
+      "resume": {
+        "name": "Fortsetzen"
+      },
+      "schedule_run": {
+        "name": "Jetzt ausführen"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "Container nicht gefunden – er wurde möglicherweise entfernt"
     },
+    "entry_not_loaded": {
+      "message": "Diese Dockhand-Instanz ist nicht geladen. Prüfe sie unter Einstellungen → Geräte & Dienste."
+    },
     "git_stack_not_found": {
       "message": "Git-Stack nicht gefunden — er wurde möglicherweise entfernt"
     },
+    "invalid_target": {
+      "message": "Dieses Gerät ist keine Dockhand-Umgebung bzw. kein Dockhand-Container, den diese Aktion verwenden kann."
+    },
     "permission_denied": {
       "message": "Dockhand hat dies abgelehnt: Der Benutzer des API-Tokens hat keine Berechtigung dafür. Prüfe die Rolle des Benutzers in Dockhand."
+    },
+    "system_container": {
+      "message": "Dockhands eigener Container und Hawser-Agenten können nicht aus Home Assistant neu erstellt werden."
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "Speicherlimit für {container} automatisch zurückgesetzt",
       "description": "Container \"{container}\" wurde kurz nach der Absenkung seines Speicherlimits beendet, was auftreten kann, wenn das neue Limit unter der tatsächlichen Nutzung des Containers liegt und der Kernel es sofort durchsetzt. Das Speicherlimit wurde automatisch auf seinen vorherigen Wert ({memory_bytes} Bytes) zurückgesetzt. Überprüfen Sie die Protokolle und den aktuellen Zustand des Containers in Dockhand."
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "Ungenutzte Ressourcen bereinigen",
+      "description": "Löscht ungenutzte Docker-Ressourcen in einer Dockhand-Umgebung und meldet, was entfernt wurde.",
+      "fields": {
+        "device_id": {
+          "name": "Umgebung",
+          "description": "Die Dockhand-Umgebung, die bereinigt werden soll."
+        },
+        "resources": {
+          "name": "Ressourcen",
+          "description": "Was gelöscht werden soll."
+        },
+        "all_images": {
+          "name": "Alle ungenutzten Images",
+          "description": "Auch getaggte Images löschen, die kein Container verwendet, nicht nur hängende (ungetaggte)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Container neu erstellen",
+      "description": "Erstellt einen Container mit seiner aktuellen Konfiguration neu, wie beim Speichern im Dockhand-Editor, und lädt optional zuerst sein Image.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "Der Container, der neu erstellt werden soll."
+        },
+        "pull": {
+          "name": "Image laden",
+          "description": "Das Image des Containers zuerst erneut laden, um ein neueres Image unter demselben Tag zu übernehmen."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Gestoppte Container",
+        "images": "Images",
+        "volumes": "Ungenutzte Volumes",
+        "networks": "Ungenutzte Netzwerke"
+      }
     }
   }
 }

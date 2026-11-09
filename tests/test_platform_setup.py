@@ -80,6 +80,8 @@ SCHEDULE = {
     "lastExecution": {"status": "success"},
 }
 SCHEDULE_NO_ID = {**SCHEDULE, "id": None}
+PRUNE_SCHEDULE = {**SCHEDULE, "id": 8, "type": "image_prune", "enabled": True}
+REPORT_SCHEDULE = {**SCHEDULE, "id": 9, "type": "env_report", "enabled": True}
 
 FAST_DATA = {
     "environments": {
@@ -109,7 +111,7 @@ SLOW_DATA = {
             "fetch_failures": set(),
         }
     },
-    "schedules": [SCHEDULE, SCHEDULE_NO_ID],
+    "schedules": [SCHEDULE, SCHEDULE_NO_ID, PRUNE_SCHEDULE, REPORT_SCHEDULE],
     "fetch_failures": set(),
 }
 UPDATE_DATA = {"environments": {ENV_ID: {}}}
@@ -237,6 +239,14 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
     ]
     assert len(updates) == 3  # my-app, web, dockhand — not the unnamed one
     assert f"{loaded_entry.entry_id}_sched_7_system_next_run" in uids
+    sched = f"{loaded_entry.entry_id}_sched"
+    assert {f"{sched}_7_system_run", f"{sched}_8_image_prune_run"} <= uids
+    assert f"{sched}_8_image_prune_enabled" in uids
+    assert f"{sched}_7_system_enabled" not in uids  # can't be paused
+    assert f"{sched}_9_env_report_run" not in uids  # can't be run on demand
+    assert f"{sched}_None_system_run" not in uids
+    assert {f"{p}_container_my-app_pause", f"{p}_container_my-app_resume"} <= uids
+    assert f"{p}_container_dockhand_pause" not in uids
 
 
 async def test_listeners_add_nothing_twice(

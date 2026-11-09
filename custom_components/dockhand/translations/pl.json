@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "Automatyczne wdrażanie"
+      },
+      "schedule_enabled": {
+        "name": "Włączony"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "Zaktualizuj wszystkie kontenery"
+      },
+      "pause": {
+        "name": "Wstrzymaj"
+      },
+      "resume": {
+        "name": "Wznów"
+      },
+      "schedule_run": {
+        "name": "Uruchom teraz"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "Kontener nie znaleziony — mógł zostać usunięty"
     },
+    "entry_not_loaded": {
+      "message": "Ta instancja Dockhand nie jest załadowana. Sprawdź ją w Ustawienia → Urządzenia i usługi."
+    },
     "git_stack_not_found": {
       "message": "Nie znaleziono stosu git — mógł zostać usunięty"
     },
+    "invalid_target": {
+      "message": "To urządzenie nie jest środowiskiem ani kontenerem Dockhand, którego może użyć ta akcja."
+    },
     "permission_denied": {
       "message": "Dockhand odmówił: użytkownik tokenu API nie ma do tego uprawnień. Sprawdź rolę użytkownika w Dockhand."
+    },
+    "system_container": {
+      "message": "Własnego kontenera Dockhand i agentów Hawser nie można odtworzyć z poziomu Home Assistant."
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "Limit pamięci automatycznie przywrócony dla {container}",
       "description": "Kontener \"{container}\" przestał działać wkrótce po obniżeniu limitu pamięci, co może się zdarzyć, gdy nowy limit jest niższy niż rzeczywiste zużycie kontenera, a jądro systemu natychmiast go egzekwuje. Limit pamięci został automatycznie przywrócony do poprzedniej wartości ({memory_bytes} bajtów). Sprawdź dzienniki i bieżący stan kontenera w Dockhand."
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "Usuń nieużywane zasoby",
+      "description": "Usuwa nieużywane zasoby Dockera w jednym środowisku Dockhand i zgłasza, co zostało usunięte.",
+      "fields": {
+        "device_id": {
+          "name": "Środowisko",
+          "description": "Środowisko Dockhand do wyczyszczenia."
+        },
+        "resources": {
+          "name": "Zasoby",
+          "description": "Co usunąć."
+        },
+        "all_images": {
+          "name": "Wszystkie nieużywane obrazy",
+          "description": "Usuń także otagowane obrazy, których nie używa żaden kontener, a nie tylko wiszące (bez tagu)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Odtwórz kontener",
+      "description": "Odtwarza kontener z jego bieżącej konfiguracji, jak zapisanie w edytorze Dockhand, opcjonalnie najpierw pobierając jego obraz.",
+      "fields": {
+        "device_id": {
+          "name": "Kontener",
+          "description": "Kontener do odtworzenia."
+        },
+        "pull": {
+          "name": "Pobierz obraz",
+          "description": "Najpierw ponownie pobierz obraz kontenera, aby użyć nowszego obrazu pod tym samym tagiem."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Zatrzymane kontenery",
+        "images": "Obrazy",
+        "volumes": "Nieużywane wolumeny",
+        "networks": "Nieużywane sieci"
+      }
     }
   }
 }

@@ -304,6 +304,91 @@ class DockhandClient:
             "POST", f"/api/containers/{_q(container_id)}/restart?env={_q(env_id)}"
         )
 
+    async def async_pause_container(self, env_id: int, container_id: str) -> None:
+        """POST /api/containers/{id}/pause — freeze its processes."""
+        await self._request(
+            "POST", f"/api/containers/{_q(container_id)}/pause?env={_q(env_id)}"
+        )
+
+    async def async_unpause_container(self, env_id: int, container_id: str) -> None:
+        """POST /api/containers/{id}/unpause."""
+        await self._request(
+            "POST", f"/api/containers/{_q(container_id)}/unpause?env={_q(env_id)}"
+        )
+
+    async def async_recreate_container(
+        self,
+        env_id: int,
+        container_id: str,
+        *,
+        name: str,
+        image: str,
+        pull: bool,
+        start: bool,
+    ) -> dict[str, Any]:
+        """POST /api/containers/{id}/update with no changed options: Dockhand
+        recreates the container from its current configuration, pulling the
+        image first when `pull` is set (the image is only read for that)."""
+        result = await self._request(
+            "POST",
+            f"/api/containers/{_q(container_id)}/update?env={_q(env_id)}",
+            timeout_seconds=600,
+            json={
+                "name": name,
+                "image": image,
+                "repullImage": pull,
+                "startAfterUpdate": start,
+            },
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def async_prune(
+        self, env_id: int, resource: str, *, all_images: bool = False
+    ) -> dict[str, Any]:
+        """POST /api/prune/{resource} for one environment, where resource is
+        containers (stopped ones), images, volumes or networks. Returns
+        Docker's prune report. Images default to dangling ones only."""
+        query = f"env={_q(env_id)}"
+        if resource == "images":
+            query += f"&dangling={'false' if all_images else 'true'}"
+        result = await self._request(
+            "POST", f"/api/prune/{_q(resource)}?{query}", timeout_seconds=600
+        )
+        if not isinstance(result, dict):
+            raise DockhandError(f"Unexpected response pruning {resource}")
+        if not result.get("success", False):
+            error = result.get("error") or f"Pruning {resource} failed"
+            raise DockhandError(str(error))
+        report = result.get("result")
+        return report if isinstance(report, dict) else {}
+
+    async def async_run_schedule(self, sched_type: str, sched_id: int) -> None:
+        """POST /api/schedules/{type}/{id}/run — one run now, outside its
+        schedule."""
+        result = await self._request(
+            "POST",
+            f"/api/schedules/{_q(sched_type)}/{_q(sched_id)}/run",
+            timeout_seconds=300,
+        )
+        if isinstance(result, dict) and result.get("success") is False:
+            raise DockhandError(str(result.get("message") or "Schedule run failed"))
+
+    async def async_toggle_schedule(
+        self, sched_type: str, sched_id: int, *, system: bool = False
+    ) -> bool:
+        """Flip a schedule between enabled and paused; returns the new state.
+        Dockhand only offers a toggle, not a set."""
+        path = (
+            f"/api/schedules/system/{_q(sched_id)}/toggle"
+            if system
+            else f"/api/schedules/{_q(sched_type)}/{_q(sched_id)}/toggle"
+        )
+        result = await self._request("POST", path)
+        enabled = result.get("enabled") if isinstance(result, dict) else None
+        if not isinstance(enabled, bool):
+            raise DockhandError("Unexpected response toggling a schedule")
+        return enabled
+
     async def async_update_container_runtime(
         self, env_id: int, container_id: str, updates: dict[str, Any]
     ) -> dict[str, Any]:

@@ -2,9 +2,12 @@ rules:
   # ── Bronze ────────────────────────────────────────────────────────────────
 
   action-setup:
-    status: exempt
+    status: done
     comment: >
-      No custom service actions are registered.
+      dockhand.prune and dockhand.recreate_container are registered once in
+      async_setup (services.py), as admin-only actions, and resolve their
+      target device's config entry at call time, refusing one that isn't
+      loaded (entry_not_loaded).
 
   appropriate-polling:
     status: done
@@ -69,9 +72,11 @@ rules:
       async_get_clientsession.
 
   docs-actions:
-    status: exempt
+    status: done
     comment: >
-      No custom service actions registered.
+      README "Actions" documents both actions, their fields, the prune
+      response and an example automation; services.yaml and strings.json
+      describe every field.
 
   docs-conditions:
     status: exempt
@@ -162,14 +167,16 @@ rules:
   action-exceptions:
     status: done
     comment: >
-      The integration registers no service actions of its own, but the rule
-      also covers platform actions, and it has those: buttons (restart,
-      redeploy, git deploy, check for updates, update all), switches
-      (container and stack running, auto update, git auto deploy), numbers
-      and the select (runtime controls), and update install. Every one raises
-      HomeAssistantError with a translation key when the action fails
-      (action_failed, carrying Dockhand's error) or its container or git
-      stack is gone (container_not_found, git_stack_not_found).
+      The two service actions and every platform action (buttons: restart,
+      pause, resume, redeploy, git deploy, check for updates, update all,
+      schedule run; switches: container and stack running, auto update, git
+      auto deploy, schedule enabled; numbers and the select; update install)
+      go through helpers.async_dockhand_action, which raises
+      HomeAssistantError with a translation key: permission_denied for a 403,
+      action_failed (carrying Dockhand's error) otherwise. A missing
+      container or git stack raises container_not_found/git_stack_not_found,
+      and the service actions raise ServiceValidationError for a bad target
+      (invalid_target, entry_not_loaded, system_container).
 
   config-entry-unloading:
     status: done
@@ -422,9 +429,11 @@ rules:
       errors and re-raise as HomeAssistantError with translation_domain=
       "dockhand" and a translation_key referencing entries in strings.json.
       The defined exception keys are action_failed (wraps the API error
-      message via a {error} placeholder), container_not_found (raised
-      when the coordinator no longer has the container at action time), and
-      git_stack_not_found (the same case for git stack sync/deploy actions).
+      message via a {error} placeholder), permission_denied (a 403 from
+      Dockhand), container_not_found (raised when the coordinator no longer
+      has the container at action time), git_stack_not_found (the same case
+      for git stack sync/deploy actions), and invalid_target,
+      entry_not_loaded and system_container for the service actions.
       Config flow errors use translated error keys (cannot_connect,
       invalid_auth) via strings.json.
 

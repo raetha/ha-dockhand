@@ -178,6 +178,12 @@
       },
       "git_stack_auto_deploy": {
         "default": "mdi:source-branch-check"
+      },
+      "schedule_enabled": {
+        "default": "mdi:calendar-clock",
+        "state": {
+          "off": "mdi:calendar-remove"
+        }
       }
     },
     "button": {
@@ -195,6 +201,15 @@
       },
       "env_bulk_update": {
         "default": "mdi:package-up"
+      },
+      "pause": {
+        "default": "mdi:pause"
+      },
+      "resume": {
+        "default": "mdi:play"
+      },
+      "schedule_run": {
+        "default": "mdi:play-circle-outline"
       }
     },
     "number": {
@@ -212,6 +227,14 @@
       "container_restart_policy": {
         "default": "mdi:restart-alert"
       }
+    }
+  },
+  "services": {
+    "prune": {
+      "service": "mdi:broom"
+    },
+    "recreate_container": {
+      "service": "mdi:refresh"
     }
   }
 }

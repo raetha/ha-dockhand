@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "Implantação automática"
+      },
+      "schedule_enabled": {
+        "name": "Ativado"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "Atualizar todos os contêineres"
+      },
+      "pause": {
+        "name": "Pausar"
+      },
+      "resume": {
+        "name": "Retomar"
+      },
+      "schedule_run": {
+        "name": "Executar agora"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "Container não encontrado — pode ter sido removido"
     },
+    "entry_not_loaded": {
+      "message": "Essa instância do Dockhand não está carregada. Verifique-a em Definições → Dispositivos e serviços."
+    },
     "git_stack_not_found": {
       "message": "Stack git não encontrado — pode ter sido removido"
     },
+    "invalid_target": {
+      "message": "Esse dispositivo não é um ambiente nem um container do Dockhand que esta ação possa usar."
+    },
     "permission_denied": {
       "message": "O Dockhand recusou: o utilizador do token de API não tem permissão para isso. Verifique a função do utilizador no Dockhand."
+    },
+    "system_container": {
+      "message": "O container do próprio Dockhand e os agentes Hawser não podem ser recriados a partir do Home Assistant."
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "Limite de memória revertido automaticamente para {container}",
       "description": "O contêiner \"{container}\" parou de funcionar pouco depois de seu limite de memória ser reduzido, o que pode acontecer quando o novo limite é inferior ao uso real do contêiner e o kernel o aplica imediatamente. O limite de memória foi revertido automaticamente para o valor anterior ({memory_bytes} bytes). Verifique os registros e o estado de saúde atual do contêiner no Dockhand."
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "Limpar recursos não utilizados",
+      "description": "Elimina recursos Docker não utilizados num ambiente do Dockhand e indica o que foi removido.",
+      "fields": {
+        "device_id": {
+          "name": "Ambiente",
+          "description": "O ambiente do Dockhand a limpar."
+        },
+        "resources": {
+          "name": "Recursos",
+          "description": "O que eliminar."
+        },
+        "all_images": {
+          "name": "Todas as imagens não utilizadas",
+          "description": "Eliminar também imagens com etiqueta que nenhum container usa, e não apenas as órfãs (sem etiqueta)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Recriar container",
+      "description": "Recria um container a partir da configuração atual, como ao guardá-lo no editor do Dockhand, descarregando opcionalmente a imagem primeiro.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "O container a recriar."
+        },
+        "pull": {
+          "name": "Descarregar imagem",
+          "description": "Descarregar novamente a imagem do container primeiro, para obter uma imagem mais recente com a mesma etiqueta."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Containers parados",
+        "images": "Imagens",
+        "volumes": "Volumes não utilizados",
+        "networks": "Redes não utilizadas"
+      }
     }
   }
 }

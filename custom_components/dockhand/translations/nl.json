@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "Automatisch implementeren"
+      },
+      "schedule_enabled": {
+        "name": "Ingeschakeld"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "Alle containers bijwerken"
+      },
+      "pause": {
+        "name": "Pauzeren"
+      },
+      "resume": {
+        "name": "Hervatten"
+      },
+      "schedule_run": {
+        "name": "Nu uitvoeren"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "Container niet gevonden — het is mogelijk verwijderd"
     },
+    "entry_not_loaded": {
+      "message": "Die Dockhand-instantie is niet geladen. Controleer deze onder Instellingen → Apparaten en diensten."
+    },
     "git_stack_not_found": {
       "message": "Git-stack niet gevonden — deze is mogelijk verwijderd"
     },
+    "invalid_target": {
+      "message": "Dat apparaat is geen Dockhand-omgeving of -container die deze actie kan gebruiken."
+    },
     "permission_denied": {
       "message": "Dockhand heeft dit geweigerd: de gebruiker van het API-token heeft hier geen toestemming voor. Controleer de rol van de gebruiker in Dockhand."
+    },
+    "system_container": {
+      "message": "De eigen container van Dockhand en Hawser-agents kunnen niet vanuit Home Assistant opnieuw worden aangemaakt."
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "Geheugenlimiet automatisch teruggezet voor {container}",
       "description": "Container \"{container}\" stopte kort na het verlagen van de geheugenlimiet, wat kan gebeuren wanneer de nieuwe limiet lager is dan het werkelijke gebruik van de container en de kernel deze onmiddellijk afdwingt. De geheugenlimiet is automatisch teruggezet naar de vorige waarde ({memory_bytes} bytes). Controleer de logboeken en huidige status van de container in Dockhand."
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "Ongebruikte resources opruimen",
+      "description": "Verwijdert ongebruikte Docker-resources in één Dockhand-omgeving en meldt wat er is verwijderd.",
+      "fields": {
+        "device_id": {
+          "name": "Omgeving",
+          "description": "De Dockhand-omgeving die moet worden opgeruimd."
+        },
+        "resources": {
+          "name": "Resources",
+          "description": "Wat er moet worden verwijderd."
+        },
+        "all_images": {
+          "name": "Alle ongebruikte images",
+          "description": "Verwijder ook getagde images die door geen container worden gebruikt, niet alleen zwevende (ongetagde)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Container opnieuw aanmaken",
+      "description": "Maakt een container opnieuw aan vanuit de huidige configuratie, zoals opslaan in de editor van Dockhand, en haalt optioneel eerst de image op.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "De container die opnieuw moet worden aangemaakt."
+        },
+        "pull": {
+          "name": "Image ophalen",
+          "description": "Haal eerst de image van de container opnieuw op, zodat een nieuwere image met dezelfde tag wordt gebruikt."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Gestopte containers",
+        "images": "Images",
+        "volumes": "Ongebruikte volumes",
+        "networks": "Ongebruikte netwerken"
+      }
     }
   }
 }
