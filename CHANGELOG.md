@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+### Removed
+
+- **Breaking: polling intervals can no longer be set.** Home Assistant
+  doesn't allow integrations to offer polling-interval settings, so the
+  Fast poll interval, Slow poll interval and Precise update check interval
+  options are gone, and any values you set are no longer used. Dockhand
+  now refreshes container and stack data every minute, images, volumes,
+  networks and schedules every 10 minutes, and precise update versions
+  once a day: the old defaults. If you'd raised or lowered an interval,
+  see "Controlling when data refreshes" in the README to turn polling off
+  and refresh from an automation on your own schedule instead.
+  Downgrading to 1.11.x still works and keeps the intervals you'd set.
+
 ### Changed
 
 - **Actions refresh only their own environment** — after a button, switch

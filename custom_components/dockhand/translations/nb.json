@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Konfigurer polling og funksjoner",
-        "description": "Angi hvor ofte Dockhand skal polles og hvilke valgfrie entitetsgrupper som skal aktiveres. Alt dette kan endres senere via Konfigurer.",
+        "title": "Velg funksjoner",
+        "description": "Velg hvilke valgfrie entitetsgrupper som skal opprettes. Alt kan endres senere via Konfigurer.",
         "data": {
-          "poll_interval_fast": "Raskt pollingintervall (sekunder) — statistikk, beholdere og stacks",
-          "poll_interval_slow": "Langsomt pollingintervall (sekunder) — images, volumer, nettverk, tidsplaner",
           "enable_schedules": "Aktiver tidsplansensorer",
           "enable_images": "Aktiver imagesensorer",
           "enable_volumes": "Aktiver volumsensorer",
           "enable_networks": "Aktiver nettverkssensorer",
           "enable_runtime_controls": "Aktiver kjøretidskontroller (avansert)",
           "enable_resource_stats": "Aktiver CPU/minne/nettverk/disk-I/U-sensorer per container og stack",
-          "poll_interval_precise_updates": "Intervall for presis oppdateringssjekk (sekunder)",
           "enable_update_entities": "Aktiver oppdateringsenheter",
           "enable_precise_updates": "Aktiver presise oppdateringsversjoner"
         },
         "data_description": {
-          "poll_interval_fast": "Hvor ofte statistikk oppdateres. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hvor ofte images, volumer, nettverk og tidsplaner oppdateres. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiverer sensorer for Dockhands vedlikeholdsplaner.",
           "enable_images": "Aktiverer sensorer for Docker-images per miljø.",
           "enable_volumes": "Aktiverer sensorer for Docker-volumer per miljø.",
           "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø.",
           "enable_runtime_controls": "Oppretter number/select-enheter for å endre CPU-, minne- og prosessgrenser, samt omstartspolicy, for en frittstående container direkte. Ikke tilgjengelig for containere styrt av Compose.",
           "enable_resource_stats": "Oppretter sensorer for CPU, minne, nettverk og disk-I/O for hver container, pluss totaler for hver stack. Av som standard fordi det er mange entiteter de fleste ikke trenger; å slå det av fjerner også de som allerede er opprettet.",
-          "poll_interval_precise_updates": "Hvor ofte registerspørringene ovenfor kjøres (sekunder). Standard: 86400 (24 timer). Minimum: 300.",
           "enable_update_entities": "Oppretter en Home Assistant-oppdateringsenhet for hver container. Slå dette av hvis du håndterer oppdateringer på en annen måte og ikke vil at Dockhands containere skal vises i HAs egen oppdateringshåndtering. Skjuler også «Oppdater alle»-knappen; «Se etter oppdateringer» fungerer likevel fortsatt.",
           "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Dette er også den eneste måten å se oppdateringsstatus for Dockhands egne beskyttede containere (seg selv og Hawser) — Dockhand eksponerer aldri oppdateringsstatusen deres via de vanlige mellomlagrede oppdateringssjekk-dataene. Krever «Aktiver oppdateringsenheter» ovenfor."
         }
@@ -93,30 +87,24 @@
     "step": {
       "init": {
         "title": "Dockhand-alternativer",
-        "description": "Juster pollingintervaller og valgfrie datakilder. For å endre URL, SSL eller API-token, bruk Konfigurer på nytt i stedet.",
+        "description": "Velg hvilke valgfrie entitetsgrupper som skal opprettes. For å endre URL, SSL eller API-token, bruk Rekonfigurer i stedet.",
         "data": {
-          "poll_interval_fast": "Raskt pollingintervall (sekunder) — statistikk, beholdere og stacks",
-          "poll_interval_slow": "Langsomt pollingintervall (sekunder) — images, volumer, nettverk, tidsplaner",
           "enable_schedules": "Aktiver tidsplansensorer",
           "enable_images": "Aktiver imagesensorer",
           "enable_volumes": "Aktiver volumsensorer",
           "enable_networks": "Aktiver nettverkssensorer",
           "enable_runtime_controls": "Aktiver kjøretidskontroller (avansert)",
           "enable_resource_stats": "Aktiver CPU/minne/nettverk/disk-I/U-sensorer per container og stack",
-          "poll_interval_precise_updates": "Intervall for presis oppdateringssjekk (sekunder)",
           "enable_update_entities": "Aktiver oppdateringsenheter",
           "enable_precise_updates": "Aktiver presise oppdateringsversjoner"
         },
         "data_description": {
-          "poll_interval_fast": "Hvor ofte statistikk oppdateres. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hvor ofte images, volumer, nettverk og tidsplaner oppdateres. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiverer sensorer for Dockhands vedlikeholdsplaner.",
           "enable_images": "Aktiverer sensorer for Docker-images per miljø.",
           "enable_volumes": "Aktiverer sensorer for Docker-volumer per miljø.",
           "enable_networks": "Aktiverer sensorer for Docker-nettverk per miljø.",
           "enable_runtime_controls": "Oppretter number/select-enheter for å endre CPU-, minne- og prosessgrenser, samt omstartspolicy, for en frittstående container direkte. Ikke tilgjengelig for containere styrt av Compose.",
           "enable_resource_stats": "Oppretter sensorer for CPU, minne, nettverk og disk-I/O for hver container, pluss totaler for hver stack. Av som standard fordi det er mange entiteter de fleste ikke trenger; å slå det av fjerner også de som allerede er opprettet.",
-          "poll_interval_precise_updates": "Hvor ofte registerspørringene ovenfor kjøres (sekunder). Standard: 86400 (24 timer). Minimum: 300.",
           "enable_update_entities": "Oppretter en Home Assistant-oppdateringsenhet for hver container. Slå dette av hvis du håndterer oppdateringer på en annen måte og ikke vil at Dockhands containere skal vises i HAs egen oppdateringshåndtering. Skjuler også «Oppdater alle»-knappen; «Se etter oppdateringer» fungerer likevel fortsatt.",
           "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Dette er også den eneste måten å se oppdateringsstatus for Dockhands egne beskyttede containere (seg selv og Hawser) — Dockhand eksponerer aldri oppdateringsstatusen deres via de vanlige mellomlagrede oppdateringssjekk-dataene. Krever «Aktiver oppdateringsenheter» ovenfor."
         }

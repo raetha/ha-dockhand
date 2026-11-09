@@ -610,8 +610,8 @@ already has in hand instead of always re-fetching.
 
 ## 4. Config entry migrations
 
-The config entry schema is at **version 2.2** (`SCHEMA_VERSION` 2,
-`SCHEMA_MINOR_VERSION` 2 in `const.py`, which `DockhandConfigFlow.VERSION`/
+The config entry schema is at **version 2.3** (`SCHEMA_VERSION` 2,
+`SCHEMA_MINOR_VERSION` 3 in `const.py`, which `DockhandConfigFlow.VERSION`/
 `MINOR_VERSION` take). Before 1.11.0 the minor version was never set, and
 Home Assistant defaults it to 1 — so every entry from 1.8.0 to 1.10.x is 2.1.
 
@@ -721,9 +721,11 @@ never triggers a reload.
   name, a plain copy under the old name is wrong — give that rename a
   conversion, or leave it unmirrored so the older release uses its default.
   Renaming only a label in `strings.json`, or a Python constant, is free.
-- A setting removed: drop it from `OPTION_KEYS`, bump `SCHEMA_MINOR_VERSION`.
-  Nothing reads it any more; releases on the previous schema version still
-  can, so leave its stored value alone until the next schema bump.
+- A setting removed: drop it from `OPTION_KEYS`, add a `RemovedOption` with
+  the new schema version, bump `SCHEMA_MINOR_VERSION`. Nothing reads it any
+  more; releases on the previous schema version still can, so its stored
+  value stays (`removed_to_keep()`) until the next schema bump deletes it
+  (`removed_to_drop()`).
 - A major schema bump (major integration release only): bump
   `SCHEMA_VERSION`, set `SCHEMA_MINOR_VERSION` to 1, run the suite and
   delete whatever `test_no_retired_renames_left_in_the_code` and
@@ -738,7 +740,8 @@ History: 1 -> 2.1 (1.8.0) renamed `enable_updates` → `enable_precise_updates`;
 `poll_interval` → `poll_interval_fast` and `poll_interval_updates` →
 `poll_interval_precise_updates`, and moved the settings that releases before
 1.7.1 saved in `entry.data` (their setup form stored them with the
-connection details). (A version 3 briefly existed in an unreleased 1.8.1 dev
+connection details); 2.2 -> 2.3 (2.0.0) removed the three polling
+intervals, since Home Assistant doesn't let users set them. (A version 3 briefly existed in an unreleased 1.8.1 dev
 cycle for a `section()` grouping of the update options — reverted before
 release, see docs/backlog.md; nothing ever shipped at version 3.) The 1.2.0
 session-cookie removal used a different, force-reauth-inline approach in
@@ -1081,21 +1084,26 @@ gate the corresponding device- and entity-removal conditions the same way
 confirmed-empty; the fetch itself failed, this is the same as if the whole
 environment fetch had failed."
 
-**An empty list that Dockhand returned successfully isn't trusted either.**
+**A list Dockhand returned successfully isn't trusted on first sight either.**
 Dockhand's containers, stacks and images routes answer HTTP 200 with `[]`
-when Docker can't be reached (and `/api/containers/stats` does the same),
-so `fetch_failures` never sees those failures. `_EmptyListGuard` in
-`coordinator.py` covers them: an empty list counts only when Dockhand's own
-total for that resource in the dashboard stats isn't above zero *and* the
-previous poll (or single-environment refresh) of that environment was empty
-too. Until then the resource is listed in the environment's
-`unconfirmed_empty`, which `_build_live_sets()` treats like a failure for
-cleanup but which raises no repair issue: an environment with no stacks at
-all is unconfirmed for one poll after every start, and that's not a fault.
-The stats cross-check alone (issue #34) misses a Docker connection lost
-during the dashboard-stats call itself, where Dockhand's count reads 0 too.
-Volumes, networks and git stacks return HTTP 500 on a Docker error, so they
-don't need the guard.
+when Docker can't be reached (`/api/containers/stats` does the same), so
+`fetch_failures` never sees those failures; and a container being recreated
+(an update) briefly drops out of the list, which push events now make
+likely to be observed. `_RemovalGuard` in `coordinator.py` covers both:
+whatever disappeared from a list has to still be missing on the next poll
+or single-environment refresh, and an empty list also needs Dockhand's own
+total for that resource in the dashboard stats not to be above zero. Until
+then the resource is listed in the environment's `unconfirmed`, which
+`_build_live_sets()` treats like a failure for cleanup but which raises no
+repair issue: an environment with no stacks is unconfirmed for one poll
+after every start, and that's not a fault. Volumes, networks and git stacks
+return HTTP 500 on a Docker error and aren't recreated, so they don't need
+it.
+
+Removing and re-adding an entity or device would mostly be harmless anyway:
+Home Assistant's registries restore a re-added unique ID's entity ID,
+disabled state, area and name. The guard keeps entities from flickering
+through unavailable-and-back and automations from seeing it.
 
 **The update coordinator (Tier 2 precise versions) deliberately doesn't use
 `fetch_failures` at all — it never had this bug in the first place.**

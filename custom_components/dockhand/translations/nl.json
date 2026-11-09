@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Polling en functies configureren",
-        "description": "Stel in hoe vaak Dockhand gepolld wordt en welke optionele entiteitsgroepen ingeschakeld worden. Dit kan later worden gewijzigd via Configureren.",
+        "title": "Functies kiezen",
+        "description": "Kies welke optionele entiteitsgroepen worden aangemaakt. Alles kan later via Configureren worden gewijzigd.",
         "data": {
-          "poll_interval_fast": "Snel pollinginterval (seconden) — statistieken, containers en stacks",
-          "poll_interval_slow": "Langzaam pollinginterval (seconden) — images, volumes, netwerken, planningen",
           "enable_schedules": "Planningssensoren inschakelen",
           "enable_images": "Image-sensoren inschakelen",
           "enable_volumes": "Volume-sensoren inschakelen",
           "enable_networks": "Netwerksensoren inschakelen",
           "enable_runtime_controls": "Runtime-besturing inschakelen (geavanceerd)",
           "enable_resource_stats": "CPU-/geheugen-/netwerk-/schijf-I/O-sensoren voor containers en stacks inschakelen",
-          "poll_interval_precise_updates": "Controle-interval voor precieze updates (seconden)",
           "enable_update_entities": "Update-entiteiten inschakelen",
           "enable_precise_updates": "Precieze updateversies inschakelen"
         },
         "data_description": {
-          "poll_interval_fast": "Hoe vaak statistieken worden vernieuwd. Standaard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hoe vaak images, volumes, netwerken en planningen worden vernieuwd. Standaard: 600. Minimum: 30.",
           "enable_schedules": "Schakelt sensoren in voor Dockhand-onderhoudsplanningen.",
           "enable_images": "Schakelt sensoren in voor Docker-images per omgeving.",
           "enable_volumes": "Schakelt sensoren in voor Docker-volumes per omgeving.",
           "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving.",
           "enable_runtime_controls": "Maakt number/select-entiteiten aan om de CPU-, geheugen- en proceslimieten en het herstartbeleid van een stack-loze container live te wijzigen. Niet beschikbaar voor containers die door Compose worden beheerd.",
           "enable_resource_stats": "Maakt CPU-, geheugen-, netwerk- en schijf-I/O-sensoren per container, plus totalen per stack. Standaard uit, omdat het veel entiteiten zijn die de meeste mensen niet nodig hebben; uitschakelen verwijdert ook de al aangemaakte.",
-          "poll_interval_precise_updates": "Hoe vaak de bovenstaande registerquery's worden uitgevoerd (seconden). Standaard: 86400 (24 uur). Minimum: 300.",
           "enable_update_entities": "Maakt een Home Assistant-update-entiteit aan voor elke container. Schakel dit uit als je updates op een andere manier beheert en niet wilt dat Dockhands containers verschijnen in HA's eigen updatebeheer. Verbergt ook de knop \"Alles bijwerken\"; \"Controleren op updates\" blijft hoe dan ook werken.",
           "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Dit is ook de enige manier om de updatestatus te zien van Dockhands eigen beschermde containers (zichzelf en Hawser) — Dockhand toont hun updatestatus nooit via de normale gecachte update-controlegegevens. Vereist \"Update-entiteiten inschakelen\" hierboven."
         }
@@ -93,30 +87,24 @@
     "step": {
       "init": {
         "title": "Dockhand-opties",
-        "description": "Pas pollingintervallen en optionele gegevensbronnen aan. Om de URL, SSL of API-token te wijzigen, gebruik in plaats daarvan Opnieuw configureren.",
+        "description": "Kies welke optionele entiteitsgroepen worden aangemaakt. Gebruik Opnieuw configureren om de URL, SSL of het API-token te wijzigen.",
         "data": {
-          "poll_interval_fast": "Snel pollinginterval (seconden) — statistieken, containers en stacks",
-          "poll_interval_slow": "Langzaam pollinginterval (seconden) — images, volumes, netwerken, planningen",
           "enable_schedules": "Planningssensoren inschakelen",
           "enable_images": "Image-sensoren inschakelen",
           "enable_volumes": "Volume-sensoren inschakelen",
           "enable_networks": "Netwerksensoren inschakelen",
           "enable_runtime_controls": "Runtime-besturing inschakelen (geavanceerd)",
           "enable_resource_stats": "CPU-/geheugen-/netwerk-/schijf-I/O-sensoren voor containers en stacks inschakelen",
-          "poll_interval_precise_updates": "Controle-interval voor precieze updates (seconden)",
           "enable_update_entities": "Update-entiteiten inschakelen",
           "enable_precise_updates": "Precieze updateversies inschakelen"
         },
         "data_description": {
-          "poll_interval_fast": "Hoe vaak statistieken worden vernieuwd. Standaard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hoe vaak images, volumes, netwerken en planningen worden vernieuwd. Standaard: 600. Minimum: 30.",
           "enable_schedules": "Schakelt sensoren in voor Dockhand-onderhoudsplanningen.",
           "enable_images": "Schakelt sensoren in voor Docker-images per omgeving.",
           "enable_volumes": "Schakelt sensoren in voor Docker-volumes per omgeving.",
           "enable_networks": "Schakelt sensoren in voor Docker-netwerken per omgeving.",
           "enable_runtime_controls": "Maakt number/select-entiteiten aan om de CPU-, geheugen- en proceslimieten en het herstartbeleid van een stack-loze container live te wijzigen. Niet beschikbaar voor containers die door Compose worden beheerd.",
           "enable_resource_stats": "Maakt CPU-, geheugen-, netwerk- en schijf-I/O-sensoren per container, plus totalen per stack. Standaard uit, omdat het veel entiteiten zijn die de meeste mensen niet nodig hebben; uitschakelen verwijdert ook de al aangemaakte.",
-          "poll_interval_precise_updates": "Hoe vaak de bovenstaande registerquery's worden uitgevoerd (seconden). Standaard: 86400 (24 uur). Minimum: 300.",
           "enable_update_entities": "Maakt een Home Assistant-update-entiteit aan voor elke container. Schakel dit uit als je updates op een andere manier beheert en niet wilt dat Dockhands containers verschijnen in HA's eigen updatebeheer. Verbergt ook de knop \"Alles bijwerken\"; \"Controleren op updates\" blijft hoe dan ook werken.",
           "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Dit is ook de enige manier om de updatestatus te zien van Dockhands eigen beschermde containers (zichzelf en Hawser) — Dockhand toont hun updatestatus nooit via de normale gecachte update-controlegegevens. Vereist \"Update-entiteiten inschakelen\" hierboven."
         }

@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import re
-from datetime import timedelta
 from typing import Any, override
 
 from homeassistant.config_entries import ConfigEntry
@@ -18,14 +17,11 @@ from .const import (
     CONF_ENABLE_RUNTIME_CONTROLS,
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_VOLUMES,
-    CONF_POLL_INTERVAL_FAST,
-    CONF_POLL_INTERVAL_PRECISE_UPDATES,
-    CONF_POLL_INTERVAL_SLOW,
     DEFAULT_ENABLE_RESOURCE_STATS,
-    DEFAULT_POLL_INTERVAL_FAST,
-    DEFAULT_POLL_INTERVAL_PRECISE_UPDATES,
-    DEFAULT_POLL_INTERVAL_SLOW,
     DOMAIN,
+    FAST_POLL_INTERVAL,
+    PRECISE_UPDATES_POLL_INTERVAL,
+    SLOW_POLL_INTERVAL,
 )
 from .helpers import (
     _all_envs,
@@ -83,34 +79,42 @@ def _unwrap(
     return val
 
 
-class _EmptyListGuard:
-    """Decides when an empty list from Dockhand can be believed.
+class _RemovalGuard:
+    """Decides when a list from Dockhand is complete enough to remove things
+    on its evidence.
 
     Dockhand's containers, stacks and images routes answer HTTP 200 with
-    `[]` when Docker can't be reached, so an empty list is indistinguishable
-    from a fetch that failed. Removing every device in an environment on
-    that evidence is the costly mistake, so an empty list only counts once
-    Dockhand's own count (when there is one) agrees and the same resource
-    came back empty on the previous poll too.
+    `[]` when Docker can't be reached, and a container being recreated (an
+    update) briefly drops out of the list. Removing a device loses its
+    entities' history in between, so whatever went missing has to still be
+    missing on the next refresh, and an empty list also needs Dockhand's
+    own count (when there is one) to agree.
     """
 
     def __init__(self) -> None:
-        self._seen_empty: set[tuple[int, str]] = set()
+        self._known: dict[tuple[int, str], set[str]] = {}
+        self._missing: dict[tuple[int, str], set[str]] = {}
 
     def confirmed(
-        self, env_id: int, key: str, items: list, dockhand_total: Any
+        self, env_id: int, key: str, names: set[str], dockhand_total: Any
     ) -> bool:
-        """Whether `items` can be treated as the complete list."""
+        """Whether a list holding `names` can be treated as complete."""
         slot = (env_id, key)
-        if items:
-            self._seen_empty.discard(slot)
-            return True
-        if isinstance(dockhand_total, int) and dockhand_total > 0:
+        if not names and isinstance(dockhand_total, int) and dockhand_total > 0:
             return False
-        if slot in self._seen_empty:
-            return True
-        self._seen_empty.add(slot)
-        return False
+        known = self._known.get(slot)
+        # Nothing to compare against yet: an empty first list waits a poll.
+        missing = {""} if known is None and not names else (known or set()) - names
+        if missing and self._missing.get(slot) != missing:
+            self._missing[slot] = missing
+            return False
+        self._known[slot] = names
+        self._missing.pop(slot, None)
+        return True
+
+
+def _names(items: list, field: str) -> set[str]:
+    return {str(i[field]) for i in items if isinstance(i, dict) and i.get(field)}
 
 
 def _stats_total(stats: dict[str, Any], key: str) -> Any:
@@ -303,17 +307,13 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # container id: once the container is recreated (updated), its new id
         # no longer matches and the stale result drops out on its own.
         self._system_check_results: dict[int, dict[str, dict]] = {}
-        self._empty_guard = _EmptyListGuard()
+        self._removal_guard = _RemovalGuard()
         self._full_poll_generation = 0
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_fast",
-            update_interval=timedelta(
-                seconds=int(
-                    config.get(CONF_POLL_INTERVAL_FAST, DEFAULT_POLL_INTERVAL_FAST)
-                )
-            ),
+            update_interval=FAST_POLL_INTERVAL,
             config_entry=entry,
         )
 
@@ -579,8 +579,8 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             key
             for key, items in (("containers", containers), ("stacks", stacks))
             if key not in failures
-            and not self._empty_guard.confirmed(
-                env_id, key, items, _stats_total(stats, key)
+            and not self._removal_guard.confirmed(
+                env_id, key, _names(items, "name"), _stats_total(stats, key)
             )
         }
         self._apply_system_check_results(
@@ -602,7 +602,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # list counts as grounds for cleanup. Unconfirmed emptiness
             # isn't a failure, so it raises no repair issue.
             "fetch_failures": failures,
-            "unconfirmed_empty": unconfirmed,
+            "unconfirmed": unconfirmed,
         }
 
     async def async_refresh_environment(self, env_id: int) -> None:
@@ -783,16 +783,12 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._enable_runtime_controls = bool(
             config.get(CONF_ENABLE_RUNTIME_CONTROLS, False)
         )
-        self._empty_guard = _EmptyListGuard()
+        self._removal_guard = _RemovalGuard()
         super().__init__(
             hass,
             _LOGGER,
             name=f"{DOMAIN}_slow",
-            update_interval=timedelta(
-                seconds=int(
-                    config.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW)
-                )
-            ),
+            update_interval=SLOW_POLL_INTERVAL,
             config_entry=entry,
         )
 
@@ -1039,10 +1035,10 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             if (
                 "images" in results
                 and "images" not in failures
-                and not self._empty_guard.confirmed(
+                and not self._removal_guard.confirmed(
                     env_id,
                     "images",
-                    results["images"],
+                    _names(results["images"], "id"),
                     _stats_total(env_stats, "images"),
                 )
             ):
@@ -1061,7 +1057,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "env_meta": env_meta.get(env_id, {}),
                 # See the fast coordinator's matching keys.
                 "fetch_failures": failures,
-                "unconfirmed_empty": unconfirmed,
+                "unconfirmed": unconfirmed,
             }
 
         environments: dict[int, dict] = {}
@@ -1246,14 +1242,7 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             hass,
             _LOGGER,
             name=f"{DOMAIN}_updates",
-            update_interval=timedelta(
-                seconds=int(
-                    config.get(
-                        CONF_POLL_INTERVAL_PRECISE_UPDATES,
-                        DEFAULT_POLL_INTERVAL_PRECISE_UPDATES,
-                    )
-                )
-            ),
+            update_interval=PRECISE_UPDATES_POLL_INTERVAL,
             config_entry=entry,
         )
 

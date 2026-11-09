@@ -1,18 +1,16 @@
 from dataclasses import dataclass
+from datetime import timedelta
 
 DOMAIN = "dockhand"
 
 CONF_API_URL = "api_url"
 CONF_API_TOKEN = "api_token"
-CONF_POLL_INTERVAL_FAST = "poll_interval_fast"
-CONF_POLL_INTERVAL_SLOW = "poll_interval_slow"
 CONF_ENABLE_SCHEDULES = "enable_schedules"
 CONF_ENABLE_IMAGES = "enable_images"
 CONF_ENABLE_VOLUMES = "enable_volumes"
 CONF_ENABLE_NETWORKS = "enable_networks"
 CONF_ENABLE_UPDATE_ENTITIES = "enable_update_entities"
 CONF_ENABLE_PRECISE_UPDATES = "enable_precise_updates"
-CONF_POLL_INTERVAL_PRECISE_UPDATES = "poll_interval_precise_updates"
 CONF_ENABLE_RUNTIME_CONTROLS = "enable_runtime_controls"
 CONF_ENABLE_RESOURCE_STATS = "enable_resource_stats"
 CONF_VERIFY_SSL = "verify_ssl"
@@ -20,15 +18,12 @@ CONF_VERIFY_SSL = "verify_ssl"
 # Everything the Configure dialog sets. These live in entry.options; entry.data
 # holds only the connection details (URL, token, SSL verification).
 OPTION_KEYS = (
-    CONF_POLL_INTERVAL_FAST,
-    CONF_POLL_INTERVAL_SLOW,
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_IMAGES,
     CONF_ENABLE_VOLUMES,
     CONF_ENABLE_NETWORKS,
     CONF_ENABLE_UPDATE_ENTITIES,
     CONF_ENABLE_PRECISE_UPDATES,
-    CONF_POLL_INTERVAL_PRECISE_UPDATES,
     CONF_ENABLE_RUNTIME_CONTROLS,
     CONF_ENABLE_RESOURCE_STATS,
 )
@@ -43,7 +38,7 @@ _LEGACY_CONF_SESSION_COOKIE = "session_cookie"
 # to stored settings; bump the major only in a major integration release (see
 # docs/architecture.md §4 for the full lifecycle this drives).
 SCHEMA_VERSION = 2
-SCHEMA_MINOR_VERSION = 2
+SCHEMA_MINOR_VERSION = 3
 
 
 @dataclass(frozen=True)
@@ -87,12 +82,45 @@ RENAMED_OPTIONS: tuple[RenamedOption, ...] = (
 )
 
 
+@dataclass(frozen=True)
+class RemovedOption:
+    """A stored setting nothing reads any more, from schema (major, minor).
+
+    Its stored value is kept while (major, minor) is the current schema
+    version, since releases on the version before it still read it, and
+    dropped by the next schema bump, minor or major.
+    """
+
+    name: str
+    major: int
+    minor: int
+
+
+REMOVED_OPTIONS: tuple[RemovedOption, ...] = (
+    # 2.0.0: Home Assistant doesn't let users set polling intervals.
+    RemovedOption("poll_interval_fast", 2, 3),
+    RemovedOption("poll_interval_slow", 2, 3),
+    RemovedOption("poll_interval_precise_updates", 2, 3),
+)
+
+
 SCHEMA = (SCHEMA_VERSION, SCHEMA_MINOR_VERSION)
 
 
 def renames_to_translate(schema: tuple[int, int] = SCHEMA) -> dict[str, str]:
     """old -> new for every rename an upgrade still has to translate."""
     return {r.old: r.new for r in RENAMED_OPTIONS if r.major >= schema[0] - 1}
+
+
+def removed_to_keep(schema: tuple[int, int] = SCHEMA) -> frozenset[str]:
+    """Removed settings whose stored value is still kept for the previous
+    schema version's releases."""
+    return frozenset(r.name for r in REMOVED_OPTIONS if (r.major, r.minor) == schema)
+
+
+def removed_to_drop(schema: tuple[int, int] = SCHEMA) -> frozenset[str]:
+    """Removed settings to delete from stored entries."""
+    return frozenset(r.name for r in REMOVED_OPTIONS if (r.major, r.minor) < schema)
 
 
 def renames_to_mirror(schema: tuple[int, int] = SCHEMA) -> dict[str, str]:
@@ -106,17 +134,12 @@ def renames_to_mirror(schema: tuple[int, int] = SCHEMA) -> dict[str, str]:
     }
 
 
-DEFAULT_POLL_INTERVAL_FAST = 60
-DEFAULT_POLL_INTERVAL_SLOW = 600
-DEFAULT_POLL_INTERVAL_PRECISE_UPDATES = 86400  # 24 hours
-
-# Floors for the options-flow interval fields. These exist to reject zero and
-# negative values, which would make DataUpdateCoordinator refresh in a tight
-# loop and hammer the Dockhand API. The update floor is higher because each
-# check performs real registry queries for every container.
-MIN_POLL_INTERVAL_FAST = 10
-MIN_POLL_INTERVAL_SLOW = 30
-MIN_POLL_INTERVAL_PRECISE_UPDATES = 300
+# Container state, stats and update flags.
+FAST_POLL_INTERVAL = timedelta(minutes=1)
+# Images, volumes, networks, schedules, git stacks, host details.
+SLOW_POLL_INTERVAL = timedelta(minutes=10)
+# Precise update checks: real registry queries for every container.
+PRECISE_UPDATES_POLL_INTERVAL = timedelta(hours=24)
 DEFAULT_ENABLE_SCHEDULES = False
 DEFAULT_ENABLE_IMAGES = False
 DEFAULT_ENABLE_VOLUMES = False
