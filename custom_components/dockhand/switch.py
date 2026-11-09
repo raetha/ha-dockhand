@@ -22,6 +22,7 @@ from .helpers import (
     _stack_device,
     _stack_has_system_container,
     already_registered,
+    async_dockhand_action,
 )
 
 # Reads come from the coordinators. Actions aren't limited: each is one
@@ -250,19 +251,10 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            await self._client.async_start_container(self._env_id, c["id"])
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        # async_refresh(), not async_request_refresh() — see
-        # docs/architecture.md §3 for why (a real, non-hypothetical
-        # debouncer-cooldown gotcha for explicit user actions). Same
-        # reasoning applies to every async_refresh() call in this file.
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_start_container(self._env_id, c["id"])
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
@@ -272,15 +264,10 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            await self._client.async_stop_container(self._env_id, c["id"])
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_stop_container(self._env_id, c["id"])
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandStackRunningSwitch(_BaseFastStackSwitch):
@@ -316,27 +303,17 @@ class DockhandStackRunningSwitch(_BaseFastStackSwitch):
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:
-        try:
-            await self._client.async_start_stack(self._env_id, self._stack_name)
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_start_stack(self._env_id, self._stack_name)
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
     @override
     async def async_turn_off(self, **kwargs: Any) -> None:
-        try:
-            await self._client.async_stop_stack(self._env_id, self._stack_name)
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_stop_stack(self._env_id, self._stack_name)
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandContainerAutoUpdateSwitch(
@@ -421,16 +398,11 @@ class DockhandContainerAutoUpdateSwitch(
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            await self._client.async_set_container_auto_update(
+        await async_dockhand_action(
+            self._client.async_set_container_auto_update(
                 self._env_id, self._container_name, enabled
             )
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        )
         self._optimistic_value = enabled
         self.async_write_ha_state()
 
@@ -517,14 +489,9 @@ class DockhandGitStackAutoUpdateSwitch(
                 translation_domain="dockhand",
                 translation_key="git_stack_not_found",
             )
-        try:
-            await self._client.async_update_git_stack(gs["id"], {"autoUpdate": enabled})
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        await async_dockhand_action(
+            self._client.async_update_git_stack(gs["id"], {"autoUpdate": enabled})
+        )
         self._optimistic_value = enabled
         self.async_write_ha_state()
 

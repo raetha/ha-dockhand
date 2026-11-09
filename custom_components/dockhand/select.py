@@ -29,6 +29,7 @@ from .helpers import (
     _device_id_container,
     _find_container,
     already_registered,
+    async_dockhand_action,
 )
 
 PARALLEL_UPDATES = 0
@@ -166,18 +167,11 @@ class DockhandContainerRestartPolicySelect(
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            response = (
-                await self._fast_coordinator.client.async_update_container_runtime(
-                    self._env_id, c["id"], {"RestartPolicy": {"Name": option}}
-                )
+        response = await async_dockhand_action(
+            self._fast_coordinator.client.async_update_container_runtime(
+                self._env_id, c["id"], {"RestartPolicy": {"Name": option}}
             )
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        )
 
         warnings = response.get("warnings") or []
         if warnings:

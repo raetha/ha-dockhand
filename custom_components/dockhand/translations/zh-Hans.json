@@ -80,7 +80,8 @@
     },
     "error": {
       "cannot_connect": "无法连接到 Dockhand。请检查 API URL 和网络连接。",
-      "invalid_auth": "无效的 API 令牌。请确保复制了以 dh_ 开头的完整令牌。"
+      "invalid_auth": "无效的 API 令牌。请确保复制了以 dh_ 开头的完整令牌。",
+      "already_configured": "此 Dockhand 实例已配置。"
     },
     "abort": {
       "already_configured": "此 Dockhand 实例已配置。",
@@ -337,6 +338,9 @@
     },
     "git_stack_not_found": {
       "message": "未找到 Git 堆栈 — 可能已被移除"
+    },
+    "permission_denied": {
+      "message": "Dockhand 拒绝了此操作：API 令牌对应的用户没有相应权限。请在 Dockhand 中检查该用户的角色。"
     }
   },
   "issues": {

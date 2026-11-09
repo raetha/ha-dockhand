@@ -187,6 +187,10 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     )
 
 
+def _unique_id(api_url: str) -> str:
+    return api_url.rstrip("/").lower()
+
+
 class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     # Set in const.py, where the rename rules that depend on them live.
     VERSION = SCHEMA_VERSION
@@ -229,8 +233,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # this integration ever sets, silently breaking every
             # "open in Dockhand" link without any visible error anywhere.
             user_input[CONF_API_URL] = user_input[CONF_API_URL].strip()
-            unique_id = user_input[CONF_API_URL].rstrip("/").lower()
-            await self.async_set_unique_id(unique_id)
+            await self.async_set_unique_id(_unique_id(user_input[CONF_API_URL]))
             self._abort_if_unique_id_configured()
 
             verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
@@ -278,12 +281,8 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._confirmed_data = merged
                     return await self.async_step_setup_options()
 
-                # Reconfigure, the only other way here: update its entry.
-                # __init__.py's update listener reloads it.
-                self.hass.config_entries.async_update_entry(
-                    self._get_reconfigure_entry(), data=merged
-                )
-                return self.async_abort(reason="reconfigure_successful")
+                # Reconfigure, the only other way here.
+                return self._finish_reconfigure(merged)
 
             except DockhandAuthError:
                 errors["base"] = "invalid_auth"
@@ -372,45 +371,64 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         Polling intervals and feature flags live in the Options flow.
         """
         errors: dict[str, str] = {}
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        if user_input is not None and entry:
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
             user_input[CONF_API_URL] = user_input[CONF_API_URL].strip()
             submitted_token = (user_input.get(CONF_API_TOKEN) or "").strip()
-
             probe_data = {
                 CONF_API_URL: user_input[CONF_API_URL],
                 CONF_VERIFY_SSL: user_input.get(CONF_VERIFY_SSL, True),
                 **({CONF_API_TOKEN: submitted_token} if submitted_token else {}),
             }
-            verify_ssl = probe_data.get(CONF_VERIFY_SSL, True)
-            session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
-            client = DockhandClient(session, probe_data)
-            try:
-                await client.async_probe()
-                # Probe succeeded — save exactly what was submitted.
-                # If token was cleared and probe passed, auth is disabled; strip it.
-                updated = {**entry.data, **probe_data}
-                if not submitted_token:
-                    updated.pop(CONF_API_TOKEN, None)
-                # async_update_entry() alone triggers a reload via
-                # __init__.py's update listener now — an explicit reload
-                # here would be redundant.
-                self.hass.config_entries.async_update_entry(entry, data=updated)
-                return self.async_abort(reason="reconfigure_successful")
-            except DockhandAuthError:
-                # Auth still required — prompt for token.
-                self._connection_data = probe_data
-                self._flow_origin = "reconfigure"
-                return await self.async_step_token()
-            except Exception:
-                errors["base"] = "cannot_connect"
+            if self._url_used_elsewhere(user_input[CONF_API_URL]):
+                errors["base"] = "already_configured"
+            else:
+                session = async_get_clientsession(
+                    self.hass, verify_ssl=probe_data[CONF_VERIFY_SSL]
+                )
+                try:
+                    await DockhandClient(session, probe_data).async_probe()
+                except DockhandAuthError:
+                    self._connection_data = probe_data
+                    self._flow_origin = "reconfigure"
+                    return await self.async_step_token()
+                except Exception:
+                    errors["base"] = "cannot_connect"
+                else:
+                    # A cleared token that still probes fine means auth is off.
+                    updated = {**entry.data, **probe_data}
+                    if not submitted_token:
+                        updated.pop(CONF_API_TOKEN, None)
+                    return self._finish_reconfigure(updated)
 
-        defaults = entry.data if entry else {}
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_form(_reconfigure_schema(defaults)),
+            data_schema=_form(_reconfigure_schema(user_input or dict(entry.data))),
             errors=errors,
         )
+
+    def _url_used_elsewhere(self, api_url: str) -> bool:
+        """Whether another Dockhand entry already uses this URL."""
+        own = self._get_reconfigure_entry().entry_id
+        return any(
+            other.entry_id != own and other.unique_id == _unique_id(api_url)
+            for other in self._async_current_entries(include_ignore=False)
+        )
+
+    def _finish_reconfigure(
+        self, data: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Save new connection settings. The unique ID follows the URL so the
+        old URL can be added again; the title does too, unless the user has
+        renamed the entry. __init__.py's update listener reloads it."""
+        entry = self._get_reconfigure_entry()
+        title = entry.title
+        if title == entry.data.get(CONF_API_URL):
+            title = data[CONF_API_URL]
+        self.hass.config_entries.async_update_entry(
+            entry, data=data, unique_id=_unique_id(data[CONF_API_URL]), title=title
+        )
+        return self.async_abort(reason="reconfigure_successful")
 
 
 class DockhandOptionsFlow(config_entries.OptionsFlow):

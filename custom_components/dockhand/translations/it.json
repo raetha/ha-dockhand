@@ -80,7 +80,8 @@
     },
     "error": {
       "cannot_connect": "Impossibile connettersi a Dockhand. Controlla l'URL API e la connettività di rete.",
-      "invalid_auth": "Token API non valido. Assicurati di aver copiato il token completo che inizia con dh_."
+      "invalid_auth": "Token API non valido. Assicurati di aver copiato il token completo che inizia con dh_.",
+      "already_configured": "Questa istanza Dockhand è già configurata."
     },
     "abort": {
       "already_configured": "Questa istanza Dockhand è già configurata.",
@@ -337,6 +338,9 @@
     },
     "git_stack_not_found": {
       "message": "Stack git non trovato — potrebbe essere stato rimosso"
+    },
+    "permission_denied": {
+      "message": "Dockhand ha rifiutato: l'utente del token API non ha il permesso necessario. Controlla il ruolo dell'utente in Dockhand."
     }
   },
   "issues": {

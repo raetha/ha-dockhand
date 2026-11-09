@@ -28,6 +28,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.api import DockhandAuthError
 from custom_components.dockhand.config_flow import _options_schema
+from custom_components.dockhand.const import SCHEMA_MINOR_VERSION, SCHEMA_VERSION
 
 BASE_CONNECTION = {
     "api_url": "http://dh.test:3000",
@@ -390,6 +391,87 @@ async def test_step_reconfigure_no_auth_strips_token(hass: HomeAssistant):
     assert result["type"] == FlowResultType.ABORT
     assert result["reason"] == "reconfigure_successful"
     assert "api_token" not in entry.data
+
+
+def _entry_for(hass: HomeAssistant, url: str, title: str | None = None):
+    entry = MockConfigEntry(
+        domain="dockhand",
+        title=title or url,
+        unique_id=url.rstrip("/").lower(),
+        data={"api_url": url, "verify_ssl": True},
+        version=SCHEMA_VERSION,
+        minor_version=SCHEMA_MINOR_VERSION,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_step_reconfigure_new_url_moves_unique_id_and_title(
+    hass: HomeAssistant,
+):
+    entry = _entry_for(hass, "http://old:3000")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with (
+        _patch_client(),
+        patch("custom_components.dockhand.async_setup_entry", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://New:3000/", "verify_ssl": True}
+        )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == "http://new:3000"
+    assert entry.title == "http://New:3000/"
+
+
+async def test_step_reconfigure_keeps_a_renamed_title(hass: HomeAssistant):
+    entry = _entry_for(hass, "http://old:3000", title="Home lab")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with (
+        _patch_client(),
+        patch("custom_components.dockhand.async_setup_entry", return_value=True),
+    ):
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://new:3000", "verify_ssl": True}
+        )
+    assert entry.title == "Home lab"
+    assert entry.unique_id == "http://new:3000"
+
+
+async def test_step_reconfigure_refuses_another_entrys_url(hass: HomeAssistant):
+    entry = _entry_for(hass, "http://one:3000")
+    other = _entry_for(hass, "http://two:3000")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with _patch_client() as client_cls:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://TWO:3000/", "verify_ssl": True}
+        )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "already_configured"}
+    assert entry.data["api_url"] == "http://one:3000"
+    assert other.unique_id == "http://two:3000"
+    client_cls.assert_not_called()
+
+
+async def test_step_reconfigure_same_url_is_not_a_conflict(hass: HomeAssistant):
+    entry = _entry_for(hass, "http://one:3000")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with (
+        _patch_client(),
+        patch("custom_components.dockhand.async_setup_entry", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://one:3000", "verify_ssl": False}
+        )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data["verify_ssl"] is False
 
 
 async def test_step_reconfigure_clearing_token_disables_auth(hass: HomeAssistant):

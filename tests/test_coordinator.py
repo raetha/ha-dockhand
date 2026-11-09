@@ -282,6 +282,156 @@ async def test_fast_containers_failure_returns_empty(hass: HomeAssistant):
     assert coord.data["environments"][1]["containers"] == []
 
 
+@pytest.mark.parametrize("key", ["containers", "stacks"])
+async def test_fast_empty_list_needs_two_polls(hass: HomeAssistant, key: str):
+    """Dockhand answers HTTP 200 [] when Docker can't be reached, so an
+    empty list only counts once a second poll agrees."""
+    client = _make_client(
+        containers=[CONTAINER1], stacks=[{"name": "web"}], stats=STATS1
+    )
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == set()
+
+    getattr(client, f"async_get_{key}").return_value = []
+    client.async_get_all_dashboard_stats.return_value = [
+        {**STATS1, "id": 1, key: {"total": 0}}
+    ]
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert env["unconfirmed_empty"] == {key}
+    assert key not in env["fetch_failures"]
+
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == set()
+
+
+async def test_fast_empty_list_never_confirmed_while_dockhand_counts_some(
+    hass: HomeAssistant,
+):
+    client = _make_client(containers=[], stats={**STATS1, "containers": {"total": 3}})
+    coord = _fast(hass, client)
+    for _ in range(3):
+        await coord.async_refresh()
+        assert "containers" in coord.data["environments"][1]["unconfirmed_empty"]
+
+
+async def test_fast_empty_list_unconfirmed_on_first_poll(hass: HomeAssistant):
+    """Nothing to compare against at startup, so even an environment that
+    really has no stacks waits one poll before its stacks count as empty."""
+    client = _make_client(stacks=[])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == {"stacks"}
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == set()
+
+
+async def test_fast_empty_list_guard_resets_when_items_return(hass: HomeAssistant):
+    client = _make_client(stacks=[])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    client.async_get_stacks.return_value = [{"name": "web"}]
+    await coord.async_refresh()
+    client.async_get_stacks.return_value = []
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == {"stacks"}
+
+
+async def test_fast_failed_fetch_is_not_also_unconfirmed(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_stacks = AsyncMock(side_effect=Exception("timeout"))
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert "stacks" in env["fetch_failures"]
+    assert "stacks" not in env["unconfirmed_empty"]
+
+
+async def test_slow_empty_images_need_two_polls(hass: HomeAssistant):
+    client = _make_client()
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == set()
+    client.async_get_images.return_value = []
+    client.async_get_images.side_effect = None
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == {"images"}
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == set()
+
+
+async def test_slow_empty_images_unconfirmed_while_dockhand_counts_some(
+    hass: HomeAssistant,
+):
+    fast = MagicMock()
+    fast.data = {
+        "environments": {1: {"stats": {"name": "local", "images": {"total": 4}}}}
+    }
+    client = _make_client()
+    client.async_get_images = AsyncMock(return_value=[])
+    coord = _slow(hass, client, fast_coordinator=fast)
+    await coord.async_refresh()
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed_empty"] == {"images"}
+
+
+async def test_refresh_environment_updates_only_that_environment(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1, {"id": 2, "name": "remote"}])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    before_other = coord.data["environments"][2]
+    stats_before = coord.data["environments"][1]["stats"]
+    listener = MagicMock()
+    coord.async_add_listener(listener)
+    client.async_get_all_dashboard_stats.reset_mock()
+
+    stopped = {**CONTAINER1, "state": "exited"}
+    client.async_get_containers = AsyncMock(return_value=[stopped])
+    await coord.async_refresh_environment(1)
+
+    assert coord.data["environments"][1]["containers"] == [stopped]
+    assert coord.data["environments"][1]["stats"] is stats_before
+    assert coord.data["environments"][2] is before_other
+    client.async_get_containers.assert_awaited_once_with(1)
+    client.async_get_all_dashboard_stats.assert_not_called()
+    listener.assert_called()
+
+
+async def test_refresh_environment_without_data_is_a_no_op(hass: HomeAssistant):
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh_environment(1)
+    client.async_get_containers.assert_not_called()
+
+
+async def test_refresh_environment_loses_to_a_full_poll(hass: HomeAssistant):
+    """A full poll that completes while a single-environment refresh is in
+    flight has newer data, so the older single-environment result is
+    dropped."""
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+
+    release = asyncio.Event()
+    stale = {**CONTAINER1, "state": "exited"}
+
+    async def slow_containers(env_id: int) -> list[dict]:
+        await release.wait()
+        return [stale]
+
+    client.async_get_containers = AsyncMock(side_effect=slow_containers)
+    task = hass.async_create_task(coord.async_refresh_environment(1))
+    await asyncio.sleep(0)
+    client.async_get_containers = AsyncMock(return_value=[CONTAINER1])
+    await coord.async_refresh()
+    release.set()
+    await task
+    assert coord.data["environments"][1]["containers"] == [CONTAINER1]
+
+
 async def test_fast_stats_failure_does_not_clear_environments(hass: HomeAssistant):
     """/api/dashboard/stats (no env param) is the fast coordinator's only
     source of which environments exist — no separate /api/environments
