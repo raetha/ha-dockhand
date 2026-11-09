@@ -86,6 +86,14 @@
   Enterprise roles, an action the API token's user isn't allowed to do now
   says so, instead of showing a raw "API error 403".
 
+### Internal
+
+- The generated Dockhand API index (`docs/dockhand-api.md`) and its
+  generator are gone: Dockhand now publishes `static/openapi.json`, and
+  upstream reviews diff that between release tags.
+- Code comments trimmed to explain why, not how the code got here.
+
+
 ## [1.11.3] - 2026-11-03
 
 ### Added
