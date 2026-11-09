@@ -92,6 +92,8 @@
   generator are gone: Dockhand now publishes `static/openapi.json`, and
   upstream reviews diff that between release tags.
 - Code comments trimmed to explain why, not how the code got here.
+- The live feed skips its refresh when an action's refresh or a poll that
+  started after the event already shows it, saving an API round per action.
 
 
 ## [1.11.3] - 2026-11-03

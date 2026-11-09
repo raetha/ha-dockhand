@@ -3,9 +3,9 @@
 Each function is named after the release whose registry format it updates
 from. They're only for changes between released versions (e.g. 1.7.3 ->
 1.8.0) — never for churn within an unreleased dev cycle (an entity added
-and removed before ever shipping): Raetha's own testing reloads or re-adds
+and removed before ever shipping): testers of a dev build reload or re-add
 the integration, so a migration for interim-build-only artifacts adds
-permanent maintenance cost for zero real benefit.
+permanent maintenance cost for no benefit.
 
 How long each is kept follows the config schema rules (see RenamedOption
 in const.py and docs/architecture.md §4): REGISTRY_MIGRATIONS records the

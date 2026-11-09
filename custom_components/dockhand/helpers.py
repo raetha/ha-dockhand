@@ -218,10 +218,8 @@ def _all_envs(data: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
     Null-safe against Dockhand sending an explicit `null` rather than
     omitting a key — `(data or {}).get("environments") or {}`, not
     `data.get("environments", {})`, so an explicit null doesn't crash the
-    next `.items()`/`.keys()`/`.values()` call. Real, reported bug
-    (github.com/raetha/ha-dockhand/issues/20) that turned out broader
-    than the original report suspected — it hit an environment-level
-    sensor too, not just per-container ones.
+    next `.items()`/`.keys()`/`.values()` call
+    (github.com/raetha/ha-dockhand/issues/20).
     """
     return (data or {}).get("environments") or {}
 
@@ -247,17 +245,8 @@ def _find_container(
     data — name-based since Docker enforces unique container names per
     host, stable across container recreation (image updates).
 
-    Was seven near-identical copies of this exact loop across
-    button.py/number.py/select.py/sensor.py/switch.py (×2)/update.py —
-    six equivalent, one (update.py's) already drifted to bypass
-    _coordinator_env() above and reimplement its equivalent manually via
-    _all_envs(...).get(env_id), found on a review specifically looking
-    for this pattern after a bug slipped through because two copies of a
-    different repeated pattern (this file's own already_registered()) had
-    drifted to different local variable names. Same lesson _coordinator_env's
-    own docstring already documents from _fast_env/_slow_env's history:
-    consolidating removes the "did every copy of this stay in sync"
-    question entirely, rather than relying on it.
+    Every platform looks containers up through this, so the lookup can't
+    differ between them.
     """
     for c in _coordinator_env(coordinator_data, env_id).get("containers") or []:
         if isinstance(c, dict) and c.get("name") == container_name:

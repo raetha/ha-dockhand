@@ -580,21 +580,16 @@ class DockhandClient:
         hasImageUpdate. See coordinator.py's DockhandFastCoordinator
         docstring for how this integration derives its own
         pending_update_container_ids (actionable subset only) vs.
-        pending_update_details (every row) from this response, and why
-        that split exists (a real over-inclusion bug this integration had
-        before hasImageUpdate/newerVersion were known to exist on this
-        endpoint).
+        pending_update_details (every row) from this response, and why.
 
-        CORRECTED NOTE (was backwards in an earlier revision of this
-        docstring — corrected once hasImageUpdate/newerVersion were
-        actually verified from Dockhand's source): pending-updates is the
-        RICHER of the two related endpoints, not a thinner duplicate at
-        risk of deprecation. GET /api/containers/check-updates (colocated
-        on the same route file as Tier 2's own POST) is a separate, much
-        thinner cached read — {containerId, containerName, currentImage,
-        checkedAt} only, no hasImageUpdate/newerVersion at all — confirmed
-        from src/routes/api/containers/check-updates/+server.ts. Do not
-        confuse the two, and do not switch this method to that route.
+        Pending-updates is the RICHER of the two related endpoints, not a
+        thinner duplicate at risk of deprecation.
+        GET /api/containers/check-updates (on the same route file as Tier
+        2's own POST) is a separate, much thinner cached read —
+        {containerId, containerName, currentImage, checkedAt} only, no
+        hasImageUpdate/newerVersion at all — confirmed from
+        src/routes/api/containers/check-updates/+server.ts. Do not confuse
+        the two, and do not switch this method to that route.
         """
         data = await self._request(
             "GET", f"/api/containers/pending-updates?env={_q(env_id)}"

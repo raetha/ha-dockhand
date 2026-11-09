@@ -893,8 +893,8 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # rather than repeating the same lookup chain twice. Every
             # level uses `or {}`, not a dict.get(key, {}) default — the
             # latter only substitutes for an *absent* key, not one Dockhand
-            # sends with an explicit null (a real, reported bug: see
-            # docs/architecture.md §6 and github.com/raetha/ha-dockhand/issues/20).
+            # sends with an explicit null (docs/architecture.md §6,
+            # github.com/raetha/ha-dockhand/issues/20).
             env_stats = (
                 _coordinator_env(self._fast_coordinator.data, env_id).get("stats") or {}
             )

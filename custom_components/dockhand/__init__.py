@@ -133,10 +133,9 @@ class DockhandData:
     # async_setup_entry runs (fresh instance created below), which is
     # exactly the point: this must NOT survive a reload or restart, unlike
     # the entity registry, which does. See helpers.py's already_registered()
-    # for why checking the registry itself was wrong — it answers "did
-    # this unique_id ever exist," not "is a live object backing it right
-    # now," and after any reload the answer to the second question is
-    # "no" for everything, regardless of what the registry remembers.
+    # for why the registry can't answer this: it says "did this unique_id
+    # ever exist," not "is a live object backing it right now," and after
+    # a reload the second answer is "no" for everything.
     known_entity_ids: set[str] = field(default_factory=set)
     # Tracks entities whose re-add has been scheduled via async_add_entities
     # but whose asyncio task has not yet completed (i.e. the entity is not

@@ -394,21 +394,13 @@ class DockhandStackUpdatesAvailableBinarySensor(
     or compare any specific version number, and adapts automatically if
     Dockhand changes this again later.
 
-    Deliberately no device_class. BinarySensorDeviceClass.PROBLEM was
-    tried first and made this look like something was wrong even when a
-    routine update is simply available — a real, reported issue, not a
-    style preference. BinarySensorDeviceClass.UPDATE was considered as
-    the semantically obvious alternative (it exists specifically for
-    this: "on means update available, off means up-to-date"), but HA's
-    own developer docs explicitly discourage it: "The use of this device
-    class should be avoided, please consider using the update entity
-    instead." A full update-domain entity at the stack level (matching
-    ha-dockhand's own per-container update.py entities) would be the
-    idiomatic fix HA's docs point toward, but is a materially bigger
-    change than this — a real install-action-capable entity, not a
-    read-only summary — so left as a plain, device-class-less binary
-    sensor for now (renders as generic On/Off), which at least stops
-    misrepresenting a routine update as a problem.
+    Deliberately no device_class. BinarySensorDeviceClass.PROBLEM makes a
+    routine available update look like something is wrong.
+    BinarySensorDeviceClass.UPDATE is the semantically obvious one, but
+    HA's developer docs discourage it in favor of an update entity. A
+    stack-level update entity would be a materially bigger entity (one that
+    installs, not a read-only summary), so this stays a plain binary sensor
+    that renders as generic On/Off.
     """
 
     _attr_has_entity_name = True

@@ -2021,9 +2021,8 @@ class DockhandEnvPlatformSensor(BaseSlowEnvHostSensor):
         # reasoning as cpu_count on the CPU usage sensor: one more static
         # fact about the same underlying host doesn't need its own entity.
         # Unlike architecture, Docker version and host uptime stay as
-        # their own sensors — Raetha's call: version data is commonly
-        # exposed as its own entity elsewhere, useful directly on a
-        # dashboard without a template helper or markdown card.
+        # their own sensors: version data is commonly its own entity
+        # elsewhere, and usable on a dashboard without a template.
         arch = self._host().get("arch")
         return {"architecture": arch} if arch is not None else {}
 
