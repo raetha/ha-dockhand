@@ -632,7 +632,7 @@ and the refreshed data can't disagree. The feed opens only while some environmen
 re-evaluated on every fast poll, and only after HA has started. After a reconnect (not the first
 connect) the fast and version coordinators refresh, which covers events missed while down and a
 Dockhand upgrade. A 30 s read timeout against Dockhand's 5 s heartbeat detects a dead connection;
-retries back off 5 s → 5 min, and 403/404 (no `activity: view`, or an older Dockhand) retry hourly.
+retries back off 5 s → 5 min (reset only once a heartbeat arrives, since a user with no environments gets a silent stream), and 403/404 (no `activity: view`, or an older Dockhand) retry hourly.
 `iot_class` stays `local_polling`: polling remains the source of truth.
 
 ## 4. Config entry migrations
