@@ -30,6 +30,7 @@ from .helpers import (
     _stack_device,
     _stack_has_system_container,
     already_registered,
+    async_dockhand_action,
 )
 
 # Reads come from the coordinators. Actions aren't limited: each is one
@@ -323,15 +324,10 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            await self._client.async_restart_container(self._env_id, c["id"])
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_restart_container(self._env_id, c["id"])
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandStackRestartButton(_BaseFastStackButton):
@@ -359,15 +355,10 @@ class DockhandStackRestartButton(_BaseFastStackButton):
 
     @override
     async def async_press(self) -> None:
-        try:
-            await self._client.async_restart_stack(self._env_id, self._stack_name)
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_restart_stack(self._env_id, self._stack_name)
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandStackDeployButton(_BaseFastStackButton):
@@ -405,16 +396,9 @@ class DockhandStackDeployButton(_BaseFastStackButton):
                 translation_key="action_failed",
                 translation_placeholders={"error": "Stack not found"},
             )
-        try:
-            result = await self._client.async_deploy_stack(
-                self._env_id, self._stack_name
-            )
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        result = await async_dockhand_action(
+            self._client.async_deploy_stack(self._env_id, self._stack_name)
+        )
         # Dockhand returns HTTP 200 with {"success": false, "error": "..."}
         # for an expected failure mode (e.g. compose file location not
         # configured) rather than an HTTP error — _request() wouldn't
@@ -427,7 +411,7 @@ class DockhandStackDeployButton(_BaseFastStackButton):
                     "error": result.get("error", "Stack deploy failed")
                 },
             )
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandEnvBulkUpdateButton(
@@ -548,8 +532,10 @@ class DockhandEnvBulkUpdateButton(
             )
         try:
             criteria = await self._vulnerability_criteria()
-            job_id = await self._client.async_start_batch_update_stream(
-                self._env_id, container_ids, vulnerability_criteria=criteria
+            job_id = await async_dockhand_action(
+                self._client.async_start_batch_update_stream(
+                    self._env_id, container_ids, vulnerability_criteria=criteria
+                )
             )
             await self._poll_job(job_id)
         except HomeAssistantError:
@@ -560,7 +546,7 @@ class DockhandEnvBulkUpdateButton(
                 translation_key="action_failed",
                 translation_placeholders={"error": str(err)},
             ) from err
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_refresh_environment(self._env_id)
 
     async def _poll_job(self, job_id: str) -> None:
         """Poll GET /api/jobs/{id} until the whole batch finishes.
@@ -719,14 +705,9 @@ class DockhandCheckUpdatesButton(
 
     @override
     async def async_press(self) -> None:
-        try:
-            items = await self._client.async_check_container_updates(self._env_id)
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        items = await async_dockhand_action(
+            self._client.async_check_container_updates(self._env_id)
+        )
 
         if self._update_coordinator is not None:
             self._update_coordinator.async_merge_check_results(self._env_id, items)
@@ -844,12 +825,5 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
                 translation_domain="dockhand",
                 translation_key="git_stack_not_found",
             )
-        try:
-            await self._client.async_deploy_git_stack(gs["id"])
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        await async_dockhand_action(self._client.async_deploy_git_stack(gs["id"]))
         await self.coordinator.async_refresh()

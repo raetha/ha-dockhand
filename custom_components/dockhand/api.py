@@ -35,6 +35,12 @@ class DockhandNotFoundError(DockhandError):
     feature-detect endpoints an older Dockhand doesn't have yet."""
 
 
+class DockhandPermissionError(DockhandError):
+    """403 — the token's Dockhand user lacks a permission the route needs.
+    Only Dockhand Enterprise roles can cause this; in the free edition every
+    authenticated user may do everything."""
+
+
 class DockhandAuthError(DockhandError):
     """Authentication failed — 401 received.
 
@@ -92,6 +98,8 @@ class DockhandClient:
                 text = await resp.text()
                 if resp.status == 404:
                     raise DockhandNotFoundError(f"API error 404: {text[:300]}")
+                if resp.status == 403:
+                    raise DockhandPermissionError(f"API error 403: {text[:300]}")
                 raise DockhandError(f"API error {resp.status}: {text}")
             try:
                 return await resp.json(content_type=None)

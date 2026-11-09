@@ -228,6 +228,7 @@ from .helpers import (
     _short_digest,
     _update_held_hours,
     already_registered,
+    async_dockhand_action,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -841,8 +842,10 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
 
         try:
             criteria = await self._vulnerability_criteria()
-            job_id = await self.coordinator.client.async_start_batch_update_stream(
-                self._env_id, [container_id], vulnerability_criteria=criteria
+            job_id = await async_dockhand_action(
+                self.coordinator.client.async_start_batch_update_stream(
+                    self._env_id, [container_id], vulnerability_criteria=criteria
+                )
             )
             skipped = await self._poll_job(job_id, container_id)
         except HomeAssistantError:
@@ -865,16 +868,15 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             self._attr_in_progress = False
             self._attr_update_percentage = None
             self.async_write_ha_state()
-        # Request a refresh so the entity state reflects the result. Also
-        # nudge Tier 2 if configured, so a precise digest shows up sooner
-        # than its own (up to 24h) schedule would otherwise provide.
-        # Deliberately async_refresh(), not async_request_refresh() — see
-        # DockhandCheckUpdatesButton's docstring in button.py for why the
-        # latter can silently no-op here (a live, non-obvious debouncer
-        # cooldown gotcha, not a hypothetical).
-        await self.coordinator.async_refresh()
+        # Awaited, not async_request_refresh(): see docs/architecture.md §3.
+        # Tier 2 is re-checked for this environment only, so a precise
+        # digest shows up without waiting for its daily run.
+        await self.coordinator.async_refresh_environment(self._env_id)
         if self._update_coordinator is not None:
-            await self._update_coordinator.async_refresh()
+            try:
+                await self._update_coordinator.async_check_environment(self._env_id)
+            except Exception as err:  # the install itself worked
+                _LOGGER.debug("Dockhand: post-install update check failed: %s", err)
         if skipped is not None:
             # Dockhand reports a skip as a successful job, but nothing was
             # updated, so it must not look like Install worked.

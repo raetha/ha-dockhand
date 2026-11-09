@@ -3176,7 +3176,7 @@ def test_preserves_container_when_stats_total_nonzero_but_list_empty(
                         "running": 2,
                     },
                 },
-                # No "containers" in fetch_failures — _unwrap saw HTTP 200, not an exception
+                "unconfirmed_empty": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},
@@ -3205,6 +3205,7 @@ def test_preserves_container_entity_when_stats_total_nonzero_but_list_empty(
                     "updateCheckEnabled": True,
                     "containers": {"total": 3, "running": 2},
                 },
+                "unconfirmed_empty": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},

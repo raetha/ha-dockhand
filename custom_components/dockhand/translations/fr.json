@@ -80,7 +80,8 @@
     },
     "error": {
       "cannot_connect": "Impossible de se connecter à Dockhand. Vérifiez l'URL de l'API et la connectivité réseau.",
-      "invalid_auth": "Jeton API invalide. Assurez-vous d'avoir copié le jeton complet commençant par dh_."
+      "invalid_auth": "Jeton API invalide. Assurez-vous d'avoir copié le jeton complet commençant par dh_.",
+      "already_configured": "Cette instance Dockhand est déjà configurée."
     },
     "abort": {
       "already_configured": "Cette instance Dockhand est déjà configurée.",
@@ -337,6 +338,9 @@
     },
     "git_stack_not_found": {
       "message": "Stack git introuvable — il a peut-être été supprimé"
+    },
+    "permission_denied": {
+      "message": "Dockhand a refusé : l'utilisateur du jeton API n'a pas l'autorisation nécessaire. Vérifiez le rôle de l'utilisateur dans Dockhand."
     }
   },
   "issues": {

@@ -162,6 +162,7 @@ def _make_fast_coord(
     }
     coord.last_update_success = True
     coord.async_refresh = AsyncMock()
+    coord.async_refresh_environment = AsyncMock()
     coord.async_add_listener = MagicMock(return_value=lambda: None)
     coord.client = MagicMock()
     coord.client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
@@ -1245,7 +1246,7 @@ async def test_async_install_raises_when_dockhand_skips_the_container():
     with pytest.raises(HomeAssistantError) as exc_info:
         await _install(entity)
     assert exc_info.value.translation_placeholders == {"error": message}
-    entity.coordinator.async_refresh.assert_awaited()
+    entity.coordinator.async_refresh_environment.assert_awaited()
     assert entity._attr_in_progress is False
 
 
@@ -1388,14 +1389,27 @@ async def test_async_install_percentage_ignores_events_without_known_step():
 async def test_async_install_requests_refresh_after_update():
     entity = _make_entity(ITEM_HAS_UPDATE)
     await _install(entity)
-    entity.coordinator.async_refresh.assert_called_once()
+    entity.coordinator.async_refresh_environment.assert_awaited_once_with(
+        entity._env_id
+    )
+    entity.coordinator.async_refresh.assert_not_called()
 
 
-async def test_async_install_also_refreshes_tier2_when_present():
+async def test_async_install_also_rechecks_tier2_for_its_environment():
     entity = _make_entity(ITEM_HAS_UPDATE)
     update_coord = entity._update_coordinator
     await _install(entity)
-    update_coord.async_refresh.assert_called_once()
+    update_coord.async_check_environment.assert_awaited_once_with(entity._env_id)
+    update_coord.async_refresh.assert_not_called()
+
+
+async def test_async_install_succeeds_when_tier2_recheck_fails():
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    entity._update_coordinator.async_check_environment = AsyncMock(
+        side_effect=Exception("registry down")
+    )
+    await _install(entity)
+    entity.coordinator.async_refresh_environment.assert_awaited()
 
 
 async def test_async_install_skips_tier2_refresh_when_disabled():
@@ -1418,6 +1432,20 @@ async def test_async_install_raises_action_failed_on_api_error():
     with pytest.raises(HomeAssistantError) as exc_info:
         await _install(entity)
     assert exc_info.value.translation_key == "action_failed"
+    assert entity._attr_in_progress is False
+
+
+async def test_async_install_raises_action_failed_when_following_the_job_fails():
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    entity.coordinator.client.async_start_batch_update_stream = AsyncMock(
+        return_value="job-1"
+    )
+    entity.coordinator.client.async_get_job = AsyncMock(
+        side_effect=Exception("connection reset")
+    )
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await _install(entity)
+    assert exc_info.value.translation_placeholders == {"error": "connection reset"}
     assert entity._attr_in_progress is False
 
 

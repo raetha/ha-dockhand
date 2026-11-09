@@ -20,7 +20,11 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock
 
+from homeassistant.exceptions import HomeAssistantError
+
+from custom_components.dockhand.api import DockhandError, DockhandPermissionError
 from custom_components.dockhand.helpers import (
+    async_dockhand_action,
     _actionable_pending_update_container_ids,
     _device_by_identifier,
     _all_envs,
@@ -1328,3 +1332,30 @@ def test_already_registered_without_a_unique_id_is_never_registered(hass):
     known: set[str] = set()
     assert already_registered(hass, known, "sensor", None) is False
     assert known == set()
+
+
+async def test_dockhand_action_returns_the_result():
+    async def ok() -> str:
+        return "done"
+
+    assert await async_dockhand_action(ok()) == "done"
+
+
+@pytest.mark.parametrize(
+    ("error", "translation_key"),
+    [
+        (DockhandPermissionError("403"), "permission_denied"),
+        (DockhandError("API error 500: boom"), "action_failed"),
+        (TimeoutError(), "action_failed"),
+    ],
+)
+async def test_dockhand_action_turns_failures_into_user_errors(
+    error: Exception, translation_key: str
+):
+    async def fail() -> None:
+        raise error
+
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await async_dockhand_action(fail())
+    assert exc_info.value.translation_key == translation_key
+    assert exc_info.value.__cause__ is error

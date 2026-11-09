@@ -7,16 +7,37 @@ must never be imported by __init__.py or by each other.
 """
 
 import math
+from collections.abc import Awaitable
 from datetime import datetime
 from typing import Any
 
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.util import dt as dt_util
 
+from .api import DockhandPermissionError
 from .const import DOMAIN
+
+
+async def async_dockhand_action[T](action: Awaitable[T]) -> T:
+    """Await a Dockhand call made for a user action, turning any failure
+    into an error Home Assistant shows to whoever triggered it."""
+    try:
+        return await action
+    except DockhandPermissionError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="permission_denied",
+        ) from err
+    except Exception as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="action_failed",
+            translation_placeholders={"error": str(err)},
+        ) from err
 
 
 def _device_entry_id(hass: Any, entry_id: str, identifier: str) -> str | None:

@@ -83,6 +83,40 @@ def _unwrap(
     return val
 
 
+class _EmptyListGuard:
+    """Decides when an empty list from Dockhand can be believed.
+
+    Dockhand's containers, stacks and images routes answer HTTP 200 with
+    `[]` when Docker can't be reached, so an empty list is indistinguishable
+    from a fetch that failed. Removing every device in an environment on
+    that evidence is the costly mistake, so an empty list only counts once
+    Dockhand's own count (when there is one) agrees and the same resource
+    came back empty on the previous poll too.
+    """
+
+    def __init__(self) -> None:
+        self._seen_empty: set[tuple[int, str]] = set()
+
+    def confirmed(
+        self, env_id: int, key: str, items: list, dockhand_total: Any
+    ) -> bool:
+        """Whether `items` can be treated as the complete list."""
+        slot = (env_id, key)
+        if items:
+            self._seen_empty.discard(slot)
+            return True
+        if isinstance(dockhand_total, int) and dockhand_total > 0:
+            return False
+        if slot in self._seen_empty:
+            return True
+        self._seen_empty.add(slot)
+        return False
+
+
+def _stats_total(stats: dict[str, Any], key: str) -> Any:
+    return (stats.get(key) or {}).get("total")
+
+
 def _pending_detail(has_update: bool, row: dict[str, Any]) -> dict[str, Any]:
     """One container's pending_update_details entry, from a pending-updates
     row or a check-updates result.
@@ -269,6 +303,8 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # container id: once the container is recreated (updated), its new id
         # no longer matches and the stale result drops out on its own.
         self._system_check_results: dict[int, dict[str, dict]] = {}
+        self._empty_guard = _EmptyListGuard()
+        self._full_poll_generation = 0
         super().__init__(
             hass,
             _LOGGER,
@@ -340,6 +376,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # environment names, the fast coordinator's own data already has
         # them.
         assert result is not None  # loop always breaks or raises above
+        self._full_poll_generation += 1
         _sync_fetch_issues(self.hass, self.config_entry, "fast", result, result)
         return result
 
@@ -381,171 +418,10 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             s["id"]: s for s in all_stats_list if isinstance(s, dict) and "id" in s
         }
 
-        async def _fetch_env(env_id: int) -> tuple[int, dict]:
-            # Named tasks rather than a positionally-indexed list, so an
-            # optional call can't shift the position of the ones after it.
-            # pending-updates is fetched whether or not the environment's
-            # scheduled update check is on: manual checks in Dockhand and
-            # this integration's own check-updates calls write the same
-            # rows, and Dockhand's UI shows them either way.
-            tasks: dict[str, Any] = {
-                "containers": self.client.async_get_containers(env_id),
-                "stacks": self.client.async_get_stacks(env_id),
-                "pending_updates": self.client.async_get_pending_updates(env_id),
-            }
-            if self._enable_resource_stats:
-                tasks["container_stats"] = self.client.async_get_container_stats(env_id)
-                tasks["stack_stats"] = self.client.async_get_stack_stats(env_id)
-
-            results = dict(
-                zip(
-                    tasks.keys(),
-                    await asyncio.gather(*tasks.values(), return_exceptions=True),
-                    strict=True,
-                )
-            )
-
-            # Same tracking, same reasoning, as the slow coordinator's own
-            # per-environment fetches (see docs/architecture.md §9) — the
-            # difference here is that containers/stacks failing has the
-            # highest stakes of any resource in this whole integration:
-            # they're what directly determines container/stack device and
-            # entity existence via _cleanup_stale_registry, the single
-            # most commonly-used entities this integration creates. A
-            # swallowed containers or stacks fetch failure here used to
-            # be indistinguishable from "this environment genuinely has
-            # none anymore," which — for an environment that stayed
-            # online per its own dashboard-stats health check while just
-            # this one specific fetch failed — would wrongly remove every
-            # container and stack device for it. This is the exact same
-            # bug class the schedules incident that prompted this whole
-            # fix surfaced, just in the other coordinator, for the data
-            # that mattered most.
-            failures: set[str] = set()
-
-            # Index container stats by name for O(1) lookup from sensor entities.
-            # Stopped/exited containers are absent from the stats response — their
-            # sensors will return None (unavailable) until the container is running.
-            # Empty (not fetched at all) whenever "Enable container and stack
-            # stats" is off — nothing consumes it in that case, so there's no
-            # reason to pay for the API call every 60s just to throw it away.
-            container_stats: dict[str, dict] = {}
-            if "container_stats" in results:
-                raw_stats = _safe_list(
-                    _unwrap(
-                        results["container_stats"],
-                        [],
-                        f"container_stats env={env_id}",
-                        failures,
-                        "container_stats",
-                    )
-                )
-                container_stats = {
-                    s["name"]: s
-                    for s in raw_stats
-                    if isinstance(s, dict) and "name" in s
-                }
-
-            # Dockhand's own per-stack totals (1.0.52+). None means "no stack
-            # stats here": not fetched (container stats off), or a Dockhand
-            # too old to have the endpoint (404 — checked every poll, so an
-            # upgrade is picked up without a reload, at the cost of one
-            # cheap 404). A real failure is recorded in `failures` instead,
-            # so cleanup can tell it apart from the endpoint not existing.
-            stack_stats: dict[str, dict] | None = None
-            if "stack_stats" in results:
-                raw = results["stack_stats"]
-                if isinstance(raw, DockhandNotFoundError):
-                    _LOGGER.debug(
-                        "Dockhand: no stack stats for env=%s (needs Dockhand 1.0.52+)",
-                        env_id,
-                    )
-                else:
-                    raw_list = _unwrap(
-                        raw, None, f"stack_stats env={env_id}", failures, "stack_stats"
-                    )
-                    if raw_list is not None:
-                        stack_stats = {
-                            s["name"]: s
-                            for s in _safe_list(raw_list)
-                            if isinstance(s, dict) and "name" in s
-                        }
-
-            # pending_update_details keeps EVERY row from pending-updates —
-            # both actionable (hasImageUpdate=True) and semver-advisory-only
-            # (hasImageUpdate=False, newerVersion populated) — since
-            # update.py's Tier-1 merge needs newerVersion even when there's
-            # no actionable update to go with it. pending_update_container_ids
-            # is then rebuilt from only the actionable subset — see this
-            # coordinator's own docstring above ("pending_update_container_ids
-            # vs. pending_update_details") for why the two must not be the
-            # same set.
-            pending_update_details: dict[str, dict] = {}
-            pending_update_container_ids: set[str] = set()
-            if "pending_updates" in results:
-                pending = _safe_list(
-                    _unwrap(
-                        results["pending_updates"],
-                        [],
-                        f"pending_updates env={env_id}",
-                        failures,
-                        "pending_updates",
-                    )
-                )
-                for p in pending:
-                    if not isinstance(p, dict) or not p.get("containerId"):
-                        continue
-                    container_id = p["containerId"]
-                    has_image_update = bool(p.get("hasImageUpdate"))
-                    pending_update_details[container_id] = _pending_detail(
-                        has_image_update, p
-                    )
-                    if has_image_update:
-                        pending_update_container_ids.add(container_id)
-
-            containers = _safe_list(
-                _unwrap(
-                    results["containers"],
-                    [],
-                    f"containers env={env_id}",
-                    failures,
-                    "containers",
-                )
-            )
-            self._apply_system_check_results(
-                env_id,
-                containers,
-                "containers" in failures,
-                pending_update_details,
-                pending_update_container_ids,
-            )
-            return env_id, {
-                "stats": all_stats.get(env_id, {}),
-                "containers": containers,
-                "stacks": _safe_list(
-                    _unwrap(
-                        results["stacks"],
-                        [],
-                        f"stacks env={env_id}",
-                        failures,
-                        "stacks",
-                    )
-                ),
-                "container_stats": container_stats,
-                "stack_stats": stack_stats,
-                "pending_update_container_ids": pending_update_container_ids,
-                "pending_update_details": pending_update_details,
-                # Which of the above failed to fetch this cycle, rather
-                # than genuinely being empty — see _unwrap's own doc
-                # comment. Checked by __init__.py's _build_live_sets
-                # before trusting an empty containers/stacks list as
-                # grounds for device/entity cleanup.
-                "fetch_failures": failures,
-            }
-
         out: dict[int, dict] = {}
         for result in await asyncio.gather(
-            *[_fetch_env(env_id) for env_id in all_stats], return_exceptions=True
+            *[self._fetch_env(env_id, stats) for env_id, stats in all_stats.items()],
+            return_exceptions=True,
         ):
             if isinstance(result, BaseException):
                 if not isinstance(result, Exception):
@@ -560,6 +436,195 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # this coordinator has somewhere to put any future hub-level
         # (non-per-environment) data without another reshape.
         return {"environments": out}
+
+    async def _fetch_env(self, env_id: int, stats: dict[str, Any]) -> tuple[int, dict]:
+        # Named tasks rather than a positionally-indexed list, so an
+        # optional call can't shift the position of the ones after it.
+        # pending-updates is fetched whether or not the environment's
+        # scheduled update check is on: manual checks in Dockhand and
+        # this integration's own check-updates calls write the same
+        # rows, and Dockhand's UI shows them either way.
+        tasks: dict[str, Any] = {
+            "containers": self.client.async_get_containers(env_id),
+            "stacks": self.client.async_get_stacks(env_id),
+            "pending_updates": self.client.async_get_pending_updates(env_id),
+        }
+        if self._enable_resource_stats:
+            tasks["container_stats"] = self.client.async_get_container_stats(env_id)
+            tasks["stack_stats"] = self.client.async_get_stack_stats(env_id)
+
+        results = dict(
+            zip(
+                tasks.keys(),
+                await asyncio.gather(*tasks.values(), return_exceptions=True),
+                strict=True,
+            )
+        )
+
+        # Same tracking, same reasoning, as the slow coordinator's own
+        # per-environment fetches (see docs/architecture.md §9) — the
+        # difference here is that containers/stacks failing has the
+        # highest stakes of any resource in this whole integration:
+        # they're what directly determines container/stack device and
+        # entity existence via _cleanup_stale_registry, the single
+        # most commonly-used entities this integration creates. A
+        # swallowed containers or stacks fetch failure here used to
+        # be indistinguishable from "this environment genuinely has
+        # none anymore," which — for an environment that stayed
+        # online per its own dashboard-stats health check while just
+        # this one specific fetch failed — would wrongly remove every
+        # container and stack device for it. This is the exact same
+        # bug class the schedules incident that prompted this whole
+        # fix surfaced, just in the other coordinator, for the data
+        # that mattered most.
+        failures: set[str] = set()
+
+        # Index container stats by name for O(1) lookup from sensor entities.
+        # Stopped/exited containers are absent from the stats response — their
+        # sensors will return None (unavailable) until the container is running.
+        # Empty (not fetched at all) whenever "Enable container and stack
+        # stats" is off — nothing consumes it in that case, so there's no
+        # reason to pay for the API call every 60s just to throw it away.
+        container_stats: dict[str, dict] = {}
+        if "container_stats" in results:
+            raw_stats = _safe_list(
+                _unwrap(
+                    results["container_stats"],
+                    [],
+                    f"container_stats env={env_id}",
+                    failures,
+                    "container_stats",
+                )
+            )
+            container_stats = {
+                s["name"]: s for s in raw_stats if isinstance(s, dict) and "name" in s
+            }
+
+        # Dockhand's own per-stack totals (1.0.52+). None means "no stack
+        # stats here": not fetched (container stats off), or a Dockhand
+        # too old to have the endpoint (404 — checked every poll, so an
+        # upgrade is picked up without a reload, at the cost of one
+        # cheap 404). A real failure is recorded in `failures` instead,
+        # so cleanup can tell it apart from the endpoint not existing.
+        stack_stats: dict[str, dict] | None = None
+        if "stack_stats" in results:
+            raw = results["stack_stats"]
+            if isinstance(raw, DockhandNotFoundError):
+                _LOGGER.debug(
+                    "Dockhand: no stack stats for env=%s (needs Dockhand 1.0.52+)",
+                    env_id,
+                )
+            else:
+                raw_list = _unwrap(
+                    raw, None, f"stack_stats env={env_id}", failures, "stack_stats"
+                )
+                if raw_list is not None:
+                    stack_stats = {
+                        s["name"]: s
+                        for s in _safe_list(raw_list)
+                        if isinstance(s, dict) and "name" in s
+                    }
+
+        # pending_update_details keeps EVERY row from pending-updates —
+        # both actionable (hasImageUpdate=True) and semver-advisory-only
+        # (hasImageUpdate=False, newerVersion populated) — since
+        # update.py's Tier-1 merge needs newerVersion even when there's
+        # no actionable update to go with it. pending_update_container_ids
+        # is then rebuilt from only the actionable subset — see this
+        # coordinator's own docstring above ("pending_update_container_ids
+        # vs. pending_update_details") for why the two must not be the
+        # same set.
+        pending_update_details: dict[str, dict] = {}
+        pending_update_container_ids: set[str] = set()
+        if "pending_updates" in results:
+            pending = _safe_list(
+                _unwrap(
+                    results["pending_updates"],
+                    [],
+                    f"pending_updates env={env_id}",
+                    failures,
+                    "pending_updates",
+                )
+            )
+            for p in pending:
+                if not isinstance(p, dict) or not p.get("containerId"):
+                    continue
+                container_id = p["containerId"]
+                has_image_update = bool(p.get("hasImageUpdate"))
+                pending_update_details[container_id] = _pending_detail(
+                    has_image_update, p
+                )
+                if has_image_update:
+                    pending_update_container_ids.add(container_id)
+
+        containers = _safe_list(
+            _unwrap(
+                results["containers"],
+                [],
+                f"containers env={env_id}",
+                failures,
+                "containers",
+            )
+        )
+        stacks = _safe_list(
+            _unwrap(
+                results["stacks"],
+                [],
+                f"stacks env={env_id}",
+                failures,
+                "stacks",
+            )
+        )
+        unconfirmed: set[str] = {
+            key
+            for key, items in (("containers", containers), ("stacks", stacks))
+            if key not in failures
+            and not self._empty_guard.confirmed(
+                env_id, key, items, _stats_total(stats, key)
+            )
+        }
+        self._apply_system_check_results(
+            env_id,
+            containers,
+            "containers" in failures or "containers" in unconfirmed,
+            pending_update_details,
+            pending_update_container_ids,
+        )
+        return env_id, {
+            "stats": stats,
+            "containers": containers,
+            "stacks": stacks,
+            "container_stats": container_stats,
+            "stack_stats": stack_stats,
+            "pending_update_container_ids": pending_update_container_ids,
+            "pending_update_details": pending_update_details,
+            # Checked by __init__.py's _build_live_sets before an empty
+            # list counts as grounds for cleanup. Unconfirmed emptiness
+            # isn't a failure, so it raises no repair issue.
+            "fetch_failures": failures,
+            "unconfirmed_empty": unconfirmed,
+        }
+
+    async def async_refresh_environment(self, env_id: int) -> None:
+        """Re-fetch one environment's containers, stacks and update flags,
+        for an action or a Dockhand event that only touched that one.
+
+        Dockhand's per-environment totals stay as the last full poll left
+        them. The scheduled poll isn't pushed back (async_set_updated_data
+        would do that), so a busy environment can't starve the full poll.
+        A full poll that finishes while this runs wins.
+        """
+        current = _coordinator_env(self.data, env_id)
+        if not current:
+            return
+        generation = self._full_poll_generation
+        _, env_data = await self._fetch_env(env_id, current.get("stats") or {})
+        if generation != self._full_poll_generation:
+            return
+        environments = dict(_all_envs(self.data))
+        environments[env_id] = env_data
+        self.data = {**self.data, "environments": environments}
+        self.async_update_listeners()
 
     def _apply_system_check_results(
         self,
@@ -718,6 +783,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._enable_runtime_controls = bool(
             config.get(CONF_ENABLE_RUNTIME_CONTROLS, False)
         )
+        self._empty_guard = _EmptyListGuard()
         super().__init__(
             hass,
             _LOGGER,
@@ -969,6 +1035,19 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             _unwrap(val, [], f"{key} env={env_id}", failures, key)
                         )
 
+            unconfirmed: set[str] = set()
+            if (
+                "images" in results
+                and "images" not in failures
+                and not self._empty_guard.confirmed(
+                    env_id,
+                    "images",
+                    results["images"],
+                    _stats_total(env_stats, "images"),
+                )
+            ):
+                unconfirmed.add("images")
+
             return env_id, {
                 "host": results.get("host", {}),
                 "images": results.get("images", []),
@@ -980,12 +1059,9 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "recent_events": results.get("recent_events", []),
                 "vulnerabilities": results.get("vulnerabilities", {}),
                 "env_meta": env_meta.get(env_id, {}),
-                # Which of the above (if any) failed to fetch this cycle,
-                # rather than genuinely being empty — see _unwrap's own
-                # doc comment for why this matters. Checked by
-                # __init__.py's _build_live_sets before trusting an empty
-                # result here as grounds for entity/device cleanup.
+                # See the fast coordinator's matching keys.
                 "fetch_failures": failures,
+                "unconfirmed_empty": unconfirmed,
             }
 
         environments: dict[int, dict] = {}

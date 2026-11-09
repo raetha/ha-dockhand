@@ -557,29 +557,24 @@ not a human-readable label that survives recreation) to any future
 enrichment layer with its own independent poll cadence.
 
 **Explicit user actions (button presses, switch toggles, an update entity's
-install) must call `coordinator.async_refresh()`, never
-`async_request_refresh()`.** The latter goes through
-`DataUpdateCoordinator`'s built-in request-refresh debouncer (10s cooldown,
-`immediate=True`), which has a real, non-obvious failure mode for anything
-awaiting its result: if the debouncer's cooldown timer is still armed from
-*any* prior refresh of that coordinator — another button press, or the
-coordinator's own scheduled poll landing within the last 10s, both common
-in practice (e.g. right after HA startup/reload) — calling
-`async_request_refresh()` again returns almost immediately **without
-running the refresh at all**. It just re-arms a background timer to run it
-~10s later, fully detached from the caller. From the caller's perspective
-(and a card's own "in progress" UI state awaiting the service call) that
-looks exactly like something that ran and finished in under a second, when
-nothing has actually happened yet. Found via a real user report: the
-"Check for updates" button's card-side spinner clearing after ~2s while
-the actual check kept running server-side for close to a minute.
-`async_refresh()` skips the debouncer entirely — straight to the
-coordinator's own lock, always genuinely runs — which is the correct
-semantics for "the user pressed something now, actually do the thing and
-tell me when it's done." Reserve `async_request_refresh()` for genuine
-automatic/internal refresh requests (e.g. many entities' state-changed
-listeners firing in quick succession, where coalescing is the whole
-point) — this integration doesn't currently have one of those.
+install) must await their refresh, never call `async_request_refresh()`.**
+The latter goes through `DataUpdateCoordinator`'s built-in request-refresh
+debouncer (10s cooldown, `immediate=True`): if its cooldown is still armed
+from any recent refresh of that coordinator, it returns at once without
+refreshing and runs the refresh ~10s later, detached from the caller. A
+card's "in progress" state awaiting the action then clears before anything
+has happened (reported: the "Check for updates" spinner cleared after ~2s
+while the check ran for a minute).
+
+Actions on containers and stacks await
+`DockhandFastCoordinator.async_refresh_environment(env_id)`: the same
+fetches as a full poll's per-environment step (containers, stacks, update
+flags, resource stats), for that one environment, keeping its dashboard
+stats from the last full poll. It doesn't reset the scheduled poll
+(`async_set_updated_data()` would, so a busy environment could postpone the
+full poll indefinitely), and a full poll that completes while it runs wins,
+since its data is newer. Actions whose effect spans environments, and the
+slow coordinator's own actions, still await `async_refresh()`.
 
 **That debounce fix was real and necessary, but not sufficient on its own
 for the "Check for updates" button specifically — a second, unrelated
@@ -1085,6 +1080,22 @@ gate the corresponding device- and entity-removal conditions the same way
 "don't trust this environment's absence from `images_group_env_ids` as
 confirmed-empty; the fetch itself failed, this is the same as if the whole
 environment fetch had failed."
+
+**An empty list that Dockhand returned successfully isn't trusted either.**
+Dockhand's containers, stacks and images routes answer HTTP 200 with `[]`
+when Docker can't be reached (and `/api/containers/stats` does the same),
+so `fetch_failures` never sees those failures. `_EmptyListGuard` in
+`coordinator.py` covers them: an empty list counts only when Dockhand's own
+total for that resource in the dashboard stats isn't above zero *and* the
+previous poll (or single-environment refresh) of that environment was empty
+too. Until then the resource is listed in the environment's
+`unconfirmed_empty`, which `_build_live_sets()` treats like a failure for
+cleanup but which raises no repair issue: an environment with no stacks at
+all is unconfirmed for one poll after every start, and that's not a fault.
+The stats cross-check alone (issue #34) misses a Docker connection lost
+during the dashboard-stats call itself, where Dockhand's count reads 0 too.
+Volumes, networks and git stacks return HTTP 500 on a Docker error, so they
+don't need the guard.
 
 **The update coordinator (Tier 2 precise versions) deliberately doesn't use
 `fetch_failures` at all — it never had this bug in the first place.**

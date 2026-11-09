@@ -4,10 +4,30 @@
 
 ### Changed
 
+- **Actions refresh only their own environment** — after a button, switch
+  or Install, only that environment's containers and stacks are re-read
+  rather than every environment, so a script that restarts several
+  containers finishes sooner and asks less of Dockhand.
 - **Versions show without a leading "v"** — HACS shows release tags,
   which from this release are plain version numbers (`1.11.4`, test builds
   such as `1.11.5-dev.42`), like most other HACS repositories. Earlier
   releases keep their `v` tags.
+
+### Fixed
+
+- **Stacks and images could disappear while Docker was briefly
+  unreachable** — Dockhand reports an empty list rather than an error when
+  it can't reach Docker, so a short outage could remove an environment's
+  stack or image devices along with their entity settings. An empty list
+  now has to show up on two polls in a row before anything is removed, and
+  containers get the same protection for an outage that starts mid-poll.
+- **Reconfiguring to a new URL** — the entry now takes on the new URL as
+  its identity, so the old URL can be added again, and a URL already used
+  by another Dockhand entry is refused. The entry's name follows the URL
+  unless you've renamed it.
+- **Clear error when Dockhand denies an action** — with Dockhand
+  Enterprise roles, an action the API token's user isn't allowed to do now
+  says so, instead of showing a raw "API error 403".
 
 ## [1.11.3] - 2026-11-03
 

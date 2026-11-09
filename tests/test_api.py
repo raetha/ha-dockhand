@@ -19,6 +19,7 @@ from custom_components.dockhand.api import (
     DockhandClient,
     DockhandError,
     DockhandNotFoundError,
+    DockhandPermissionError,
 )
 
 
@@ -66,6 +67,19 @@ async def test_request_401_raises_auth_error():
 async def test_request_4xx_raises_dockhand_error():
     with pytest.raises(DockhandError, match="404"):
         await _client(_session(_resp(404, text="nf")))._request("GET", "/api/x")
+
+
+async def test_request_5xx_raises_dockhand_error():
+    with pytest.raises(DockhandError, match="API error 500: boom") as exc_info:
+        await _client(_session(_resp(500, text="boom")))._request("GET", "/api/x")
+    assert type(exc_info.value) is DockhandError
+
+
+async def test_request_403_raises_permission_error():
+    with pytest.raises(DockhandPermissionError, match="403"):
+        await _client(_session(_resp(403, text="Permission denied")))._request(
+            "GET", "/api/x"
+        )
 
 
 async def test_request_404_raises_not_found_error():

@@ -65,6 +65,7 @@ from .helpers import (
     _device_id_container,
     _find_container,
     already_registered,
+    async_dockhand_action,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -231,17 +232,11 @@ class _BaseRuntimeControlNumber(
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            client = self._fast_coordinator.client
-            response = await client.async_update_container_runtime(
+        response = await async_dockhand_action(
+            self._fast_coordinator.client.async_update_container_runtime(
                 self._env_id, c["id"], {field: api_value}
             )
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        )
 
         warnings = response.get("warnings") or []
         if warnings:

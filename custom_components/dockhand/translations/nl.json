@@ -80,7 +80,8 @@
     },
     "error": {
       "cannot_connect": "Kan geen verbinding maken met Dockhand. Controleer de API-URL en netwerkverbinding.",
-      "invalid_auth": "Ongeldig API-token. Zorg ervoor dat je het volledige token hebt gekopieerd dat begint met dh_."
+      "invalid_auth": "Ongeldig API-token. Zorg ervoor dat je het volledige token hebt gekopieerd dat begint met dh_.",
+      "already_configured": "Deze Dockhand-instantie is al geconfigureerd."
     },
     "abort": {
       "already_configured": "Deze Dockhand-instantie is al geconfigureerd.",
@@ -337,6 +338,9 @@
     },
     "git_stack_not_found": {
       "message": "Git-stack niet gevonden — deze is mogelijk verwijderd"
+    },
+    "permission_denied": {
+      "message": "Dockhand heeft dit geweigerd: de gebruiker van het API-token heeft hier geen toestemming voor. Controleer de rol van de gebruiker in Dockhand."
     }
   },
   "issues": {

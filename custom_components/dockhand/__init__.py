@@ -496,22 +496,13 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         stacks_group_env_ids     set[int]   — env_ids with ≥1 stack; the
                                               Stacks group device is only
                                               valid for these
-        containers_fetch_ok_env_ids set[int] — env_ids whose containers fetch
-                                              succeeded this cycle AND whose
-                                              result is trusted as ground truth.
-                                              An env is excluded when the fetch
-                                              raised an exception (fetch_failures)
-                                              OR when stats.containers.total > 0
-                                              but the API returned an empty list
-                                              (Hawser-online / Docker-daemon-down
-                                              scenario — see issue #34). Gates
-                                              every container-derived set above
-                                              (containers, update_uids,
-                                              bulk_update_uids, runtime_control_uids,
-                                              container_stats_uids,
-                                              container_action_uids, health_uids)
-                                              — see images_fetch_ok_env_ids below
-                                              for the general pattern this follows.
+        containers_fetch_ok_env_ids set[int] — env_ids whose containers list
+                                              is trusted as complete this cycle:
+                                              the fetch didn't fail, and an empty
+                                              list was confirmed by the
+                                              coordinator (unconfirmed_empty).
+                                              Gates every container-derived set
+                                              above.
         stacks_fetch_ok_env_ids set[int]    — same as containers_fetch_ok_env_ids,
                                               for stacks (stacks, stack_action_uids,
                                               stack_deploy_uids,
@@ -726,36 +717,15 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     for env_id, env_data in fast_data.items():
         has_freestanding = False
-        stats = env_data.get("stats") or {}
         env_failures: set[str] = env_data.get("fetch_failures") or set()
         env_containers = env_data.get("containers") or []
         pending_updates = env_data.get("pending_update_container_ids") or set()
         update_env_data = update_data.get(env_id)
         pending_details = env_data.get("pending_update_details") or {}
+        unconfirmed: set[str] = env_data.get("unconfirmed_empty") or set()
         if "containers" not in env_failures:
-            # Cross-validate: stats.containers.total > 0 but list empty (HTTP
-            # 200, no exception) is the fingerprint of the Hawser-online /
-            # Docker-daemon-temporarily-unreachable scenario — Hawser proxies
-            # Docker's empty response with a 200 and no error, so _unwrap()
-            # sees a "success" that is actually incomplete data. Trusting that
-            # as "confirmed zero containers" would cause _cleanup_stale_registry
-            # to remove all container devices for this env, then re-add them
-            # ~60 s later when Docker recovers, producing "unique ID already
-            # registered" duplicates (github.com/raetha/ha-dockhand/issues/34).
-            # Only mark the fetch as OK when either: containers were returned
-            # (non-empty list is ground truth) OR stats also confirm zero (env
-            # with genuinely no running containers).
-            stats_containers_total = (stats.get("containers") or {}).get("total", 0)
-            if env_containers or not stats_containers_total:
+            if "containers" not in unconfirmed:
                 containers_fetch_ok_env_ids.add(env_id)
-            else:
-                _LOGGER.debug(
-                    "Skipping container cleanup for env %d: API returned empty "
-                    "but stats.containers.total=%d — Docker daemon may be "
-                    "temporarily unreachable via Hawser",
-                    env_id,
-                    stats_containers_total,
-                )
             if update_entities_enabled and _actionable_pending_update_container_ids(
                 env_containers, pending_updates, update_env_data, pending_details
             ):
@@ -798,7 +768,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             stack_stats_fetch_ok_env_ids.add(env_id)
         stack_stats_supported = env_data.get("stack_stats") is not None
         if "stacks" not in env_failures:
-            stacks_fetch_ok_env_ids.add(env_id)
+            if "stacks" not in unconfirmed:
+                stacks_fetch_ok_env_ids.add(env_id)
             for s in env_data.get("stacks") or []:
                 stack_name = s["name"]
                 stacks.add(_device_id_stack(entry.entry_id, env_id, stack_name))
@@ -899,7 +870,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             env_failures = env_data.get("fetch_failures") or set()
 
             if "images" not in env_failures:
-                images_fetch_ok_env_ids.add(env_id)
+                if "images" not in (env_data.get("unconfirmed_empty") or set()):
+                    images_fetch_ok_env_ids.add(env_id)
                 for img in env_data.get("images") or []:
                     raw_id = img.get("id") or ""
                     short_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id

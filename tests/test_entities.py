@@ -16,6 +16,8 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
+from custom_components.dockhand.api import DockhandPermissionError
+
 DOMAIN = "dockhand"
 
 # ---------------------------------------------------------------------------
@@ -168,6 +170,7 @@ def _fast_coord(env_data=None):
     }
     coord.last_update_success = True
     coord.async_refresh = AsyncMock()
+    coord.async_refresh_environment = AsyncMock()
     return coord
 
 
@@ -187,6 +190,7 @@ def _slow_coord(env_data=None, schedules=None):
     }
     coord.last_update_success = True
     coord.async_refresh = AsyncMock()
+    coord.async_refresh_environment = AsyncMock()
     return coord
 
 
@@ -1139,6 +1143,7 @@ def _stats_coord(stats=None, running=True):
     }
     coord.last_update_success = True
     coord.async_refresh = AsyncMock()
+    coord.async_refresh_environment = AsyncMock()
     return coord
 
 
@@ -2245,9 +2250,11 @@ class TestButtons:
         b._client = MagicMock()
         b._client.async_deploy_stack = AsyncMock(return_value={"success": True})
         b.coordinator.async_refresh = AsyncMock()
+        b.coordinator.async_refresh_environment = AsyncMock()
         await b.async_press()
         b._client.async_deploy_stack.assert_called_once_with(ENV_ID, STACK["name"])
-        b.coordinator.async_refresh.assert_called_once()
+        b.coordinator.async_refresh_environment.assert_awaited_once_with(ENV_ID)
+        b.coordinator.async_refresh.assert_not_called()
 
     async def test_stack_deploy_raises_not_found_when_stack_missing(self):
         coord = _fast_coord({"stats": STATS, "containers": [], "stacks": []})
@@ -2703,6 +2710,7 @@ def _make_bulk_update_button(pending=None, containers=None, update_data=None):
         }
     }
     coord.async_refresh = AsyncMock()
+    coord.async_refresh_environment = AsyncMock()
     update_coord = None
     if update_data is not None:
         update_coord = MagicMock()
@@ -2772,7 +2780,7 @@ async def test_bulk_update_press_success():
     client.async_start_batch_update_stream.assert_called_once_with(
         ENV_ID, ["id-web"], vulnerability_criteria=None
     )
-    coord.async_refresh.assert_called_once()
+    coord.async_refresh_environment.assert_awaited_once_with(ENV_ID)
 
 
 async def test_bulk_update_press_raises_on_job_error():
@@ -3372,6 +3380,31 @@ async def test_bulk_update_press_wraps_an_api_error():
     with pytest.raises(HomeAssistantError) as err:
         await button.async_press()
     assert err.value.translation_key == "action_failed"
+
+
+async def test_bulk_update_press_wraps_a_failure_while_following_the_job():
+    button, _, client = _make_bulk_update_button(
+        pending={"id-web"},
+        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+    )
+    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
+    client.async_get_job = AsyncMock(side_effect=Exception("connection reset"))
+    with pytest.raises(HomeAssistantError) as err:
+        await button.async_press()
+    assert err.value.translation_placeholders == {"error": "connection reset"}
+
+
+async def test_bulk_update_press_reports_a_permission_refusal():
+    button, _, client = _make_bulk_update_button(
+        pending={"id-web"},
+        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+    )
+    client.async_start_batch_update_stream = AsyncMock(
+        side_effect=DockhandPermissionError("403")
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        await button.async_press()
+    assert err.value.translation_key == "permission_denied"
 
 
 async def test_bulk_update_press_times_out_on_a_job_that_never_finishes():
