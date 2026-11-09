@@ -256,13 +256,37 @@ async def test_environment_status_refreshes_everything(hass: HomeAssistant):
 async def test_reconnecting_catches_up(hass: HomeAssistant):
     entry = _entry(hass, _fast_data(collectActivity=True))
     stream = DockhandEventStream(hass, entry)
-    _feed(entry, CONNECTED, ClientError("reset"), CONNECTED)
+    heartbeat = ["event: heartbeat\n", "data: {}\n", "\n"]
+    _feed(
+        entry, [*CONNECTED, *heartbeat], ClientError("reset"), [*CONNECTED, *heartbeat]
+    )
     assert await _run(stream, 3) == [RETRY_MIN, RETRY_MIN * 2, RETRY_MIN]
     await hass.async_block_till_done()
     data = entry.runtime_data
     data.fast_coordinator.async_request_refresh.assert_awaited_once()
     data.version_coordinator.async_request_refresh.assert_awaited_once()
     assert stream.connected is False
+
+
+async def test_a_silent_stream_keeps_backing_off(hass: HomeAssistant):
+    """Connected but nothing after it, as for a user with no environments."""
+    entry = _entry(hass, _fast_data(collectActivity=True))
+    stream = DockhandEventStream(hass, entry)
+    _feed(entry, CONNECTED, CONNECTED, CONNECTED)
+    assert await _run(stream, 3) == [RETRY_MIN, RETRY_MIN * 2, RETRY_MIN * 4]
+
+
+async def test_a_failed_event_refresh_waits_for_the_poll(hass: HomeAssistant):
+    entry = _entry(hass, _fast_data(collectActivity=True))
+    entry.runtime_data.fast_coordinator.async_refresh_environment = AsyncMock(
+        side_effect=OSError("down")
+    )
+    stream = DockhandEventStream(hass, entry)
+    _feed(entry, [*CONNECTED, *_activity(1)])
+    await _run(stream, 1)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done()
+    entry.runtime_data.fast_coordinator.async_refresh_environment.assert_awaited_once()
 
 
 async def test_retries_back_off(hass: HomeAssistant):

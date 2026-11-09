@@ -117,11 +117,14 @@ class DockhandEventStream:
                     async for name, data in _sse_events(resp.content):
                         if name == "connected":
                             self.connected = True
-                            delay = wait = RETRY_MIN
                             if not first:
                                 self._async_catch_up()
                             first = False
                         else:
+                            # Only once Dockhand streams (a heartbeat comes
+                            # every 5 s): a user with no environments gets a
+                            # stream that stays silent, then times out.
+                            delay = wait = RETRY_MIN
                             self._async_handle(name, data)
                 _LOGGER.debug("Dockhand: activity feed closed")
             except (DockhandNotFoundError, DockhandPermissionError) as err:
@@ -174,13 +177,19 @@ class DockhandEventStream:
             self._pending.pop(env_id, None)
             self._entry.async_create_background_task(
                 self._hass,
-                self._entry.runtime_data.fast_coordinator.async_refresh_environment(
-                    env_id
-                ),
+                self._async_refresh(env_id),
                 f"dockhand refresh environment {env_id}",
             )
 
         return _refresh
+
+    async def _async_refresh(self, env_id: int) -> None:
+        try:
+            await self._entry.runtime_data.fast_coordinator.async_refresh_environment(
+                env_id
+            )
+        except Exception as err:  # the next poll retries
+            _LOGGER.debug("Dockhand: refresh of environment %s failed: %s", env_id, err)
 
 
 async def _sse_events(
