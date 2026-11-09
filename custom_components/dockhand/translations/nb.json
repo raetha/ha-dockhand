@@ -432,6 +432,7 @@
     "info": {
       "can_reach_server": "Nå Dockhand-serveren",
       "environments": "Miljøer",
+      "live_events": "Direktehendelser",
       "version": "Dockhand-versjon"
     }
   }

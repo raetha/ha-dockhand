@@ -623,6 +623,18 @@ device's `sw_version`, diagnostics and system health, never an entity, so `async
 adds a listener of its own: that listener both keeps the coordinator polling and writes a new
 version to the device registry. A failure is never fatal; the device keeps its last version.
 
+**The live feed (`events.py`) is a latency shortcut, never a data source.** An `activity`
+event only schedules `async_refresh_environment()` for its environment, debounced 2 s because
+Docker sends bursts (kill, die, stop); `env_status` requests a full fast refresh, since online
+state comes from the dashboard totals. Nothing is patched from event payloads, so the polled data
+and the refreshed data can't disagree. The feed opens only while some environment can send events
+(`collectActivity`, `collectMetrics` or Hawser Edge: Dockhand's event worker skips the rest),
+re-evaluated on every fast poll, and only after HA has started. After a reconnect (not the first
+connect) the fast and version coordinators refresh, which covers events missed while down and a
+Dockhand upgrade. A 30 s read timeout against Dockhand's 5 s heartbeat detects a dead connection;
+retries back off 5 s → 5 min, and 403/404 (no `activity: view`, or an older Dockhand) retry hourly.
+`iot_class` stays `local_polling`: polling remains the source of truth.
+
 ## 4. Config entry migrations
 
 The config entry schema is at **version 2.3** (`SCHEMA_VERSION` 2,

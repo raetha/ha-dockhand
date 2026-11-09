@@ -27,6 +27,13 @@
 - **`dockhand.recreate_container` action** — recreates a container from
   its current settings, optionally pulling its image again first, like
   saving it in Dockhand's editor. Administrators only.
+- **Live updates** — while any environment has Dockhand collecting
+  activity or metrics (metrics are on by default), a container stopping,
+  starting, turning unhealthy or being recreated shows in Home Assistant
+  within seconds instead of at the next poll. Polling continues as before
+  and catches anything missed; the feed reconnects on its own after
+  Dockhand restarts or its host loses power. Needs the `activity: view`
+  permission on Dockhand Enterprise.
 - **Dockhand device** — a device for the Dockhand server itself, showing
   its version (updated after an upgrade). Environments and the Schedules
   hub now appear connected through it.

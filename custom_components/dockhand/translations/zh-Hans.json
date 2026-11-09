@@ -432,6 +432,7 @@
     "info": {
       "can_reach_server": "访问 Dockhand 服务器",
       "environments": "环境",
+      "live_events": "实时事件",
       "version": "Dockhand 版本"
     }
   }

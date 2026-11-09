@@ -432,6 +432,7 @@
     "info": {
       "can_reach_server": "Acceso al servidor de Dockhand",
       "environments": "Entornos",
+      "live_events": "Eventos en directo",
       "version": "Versión de Dockhand"
     }
   }

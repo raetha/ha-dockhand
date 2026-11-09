@@ -1,10 +1,11 @@
 import logging
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from typing import Any
 from urllib.parse import quote
 
-from aiohttp import ClientSession, ClientTimeout
+from aiohttp import ClientResponse, ClientSession, ClientTimeout
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -66,45 +67,69 @@ class DockhandClient:
     # Internal helper
     # ------------------------------------------------------------------ #
 
+    def _headers(self, accept: str) -> dict[str, str]:
+        headers = {"Accept": accept}
+        if self._api_token:
+            headers["Authorization"] = f"Bearer {self._api_token}"
+        return headers
+
+    @staticmethod
+    async def _raise_for_status(resp: ClientResponse, method: str, path: str) -> None:
+        if resp.status == 401:
+            body_text = ""
+            try:
+                body_text = await resp.text()
+            except Exception:
+                pass
+            _LOGGER.warning(
+                "Dockhand: 401 Unauthorized on %s %s%s",
+                method,
+                path,
+                f" — response body: {body_text[:300]}" if body_text else "",
+            )
+            raise DockhandAuthError("Unauthorized — token invalid or revoked")
+        if resp.status >= 400:
+            text = await resp.text()
+            if resp.status == 404:
+                raise DockhandNotFoundError(f"API error 404: {text[:300]}")
+            if resp.status == 403:
+                raise DockhandPermissionError(f"API error 403: {text[:300]}")
+            raise DockhandError(f"API error {resp.status}: {text}")
+
     async def _request(
         self, method: str, path: str, timeout_seconds: int = 30, **kwargs: Any
     ) -> Any:
         url = f"{self._api_url}{path}"
-        headers = kwargs.pop("headers", {})
-
-        if self._api_token:
-            headers["Authorization"] = f"Bearer {self._api_token}"
-
-        headers.setdefault("Accept", "application/json")
-
+        headers = {**self._headers("application/json"), **kwargs.pop("headers", {})}
         timeout = ClientTimeout(total=timeout_seconds)
         async with self._session.request(
             method, url, headers=headers, timeout=timeout, **kwargs
         ) as resp:
-            if resp.status == 401:
-                body_text = ""
-                try:
-                    body_text = await resp.text()
-                except Exception:
-                    pass
-                _LOGGER.warning(
-                    "Dockhand: 401 Unauthorized on %s %s%s",
-                    method,
-                    path,
-                    f" — response body: {body_text[:300]}" if body_text else "",
-                )
-                raise DockhandAuthError("Unauthorized — token invalid or revoked")
-            if resp.status >= 400:
-                text = await resp.text()
-                if resp.status == 404:
-                    raise DockhandNotFoundError(f"API error 404: {text[:300]}")
-                if resp.status == 403:
-                    raise DockhandPermissionError(f"API error 403: {text[:300]}")
-                raise DockhandError(f"API error {resp.status}: {text}")
+            await self._raise_for_status(resp, method, path)
             try:
                 return await resp.json(content_type=None)
             except Exception:
                 return await resp.text()
+
+    @asynccontextmanager
+    async def async_open_activity_stream(self) -> AsyncIterator[ClientResponse]:
+        """Dockhand's live activity feed (Server-Sent Events): container
+        events and environment online/offline changes, with a heartbeat
+        every 5 seconds. Needs the `activity: view` permission.
+
+        No overall timeout, since the stream stays open; a 30-second read
+        timeout notices a connection that died without closing, such as
+        Dockhand's host losing power.
+        """
+        path = "/api/activity/events"
+        timeout = ClientTimeout(total=None, sock_connect=10, sock_read=30)
+        async with self._session.get(
+            f"{self._api_url}{path}",
+            headers=self._headers("text/event-stream"),
+            timeout=timeout,
+        ) as resp:
+            await self._raise_for_status(resp, "GET", path)
+            yield resp
 
     async def _get_list(self, path: str) -> list[dict[str, Any]]:
         """GET an endpoint whose response is a JSON array."""

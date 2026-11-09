@@ -432,6 +432,7 @@
     "info": {
       "can_reach_server": "Dockhand-Server erreichbar",
       "environments": "Umgebungen",
+      "live_events": "Live-Ereignisse",
       "version": "Dockhand-Version"
     }
   }

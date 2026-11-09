@@ -198,3 +198,23 @@ async def test_unloading_stops_the_version_poll(
     assert await hass.config_entries.async_unload(loaded_entry.entry_id)
     assert loaded_entry.state is ConfigEntryState.NOT_LOADED
     assert not version._listeners
+
+
+@pytest.mark.parametrize(
+    ("connected", "expected"),
+    [(True, "ok"), (False, {"type": "failed", "error": "disconnected"})],
+)
+async def test_system_health_shows_the_live_feed(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry, connected, expected
+):
+    stream = loaded_entry.runtime_data.event_stream
+    stream._task = MagicMock()
+    stream.connected = connected
+    assert await async_setup_component(hass, "system_health", {})
+    await hass.async_block_till_done()
+    info = await get_system_health_info(hass, DOMAIN)
+    await info["can_reach_server"]
+    assert info["live_events"] == expected
+    diagnostics = await async_get_config_entry_diagnostics(hass, loaded_entry)
+    assert diagnostics["live_events"] == {"running": True, "connected": connected}
+    stream._task = None

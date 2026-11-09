@@ -47,6 +47,7 @@ from .coordinator import (
     DockhandUpdateCoordinator,
     DockhandVersionCoordinator,
 )
+from .events import DockhandEventStream
 from .helpers import (
     CONTAINER_STATS_SUFFIXES,
     STACK_STATS_SUFFIXES,
@@ -129,6 +130,7 @@ class DockhandData:
     slow_coordinator: DockhandSlowCoordinator
     update_coordinator: DockhandUpdateCoordinator | None
     version_coordinator: DockhandVersionCoordinator
+    event_stream: DockhandEventStream
     # Which entities (domain-prefixed unique_ids) have been added to HA
     # during *this* setup's lifetime — reset fresh every time
     # async_setup_entry runs (fresh instance created below), which is
@@ -388,6 +390,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         slow_coordinator=slow_coordinator,
         update_coordinator=update_coordinator,
         version_coordinator=version_coordinator,
+        event_stream=DockhandEventStream(hass, entry),
     )
 
     # Run any pending one-time registry migrations BEFORE pre-registering
@@ -458,6 +461,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    entry.runtime_data.event_stream.async_setup()
 
     return True
 

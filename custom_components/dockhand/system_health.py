@@ -47,6 +47,14 @@ async def system_health_info(hass: HomeAssistant) -> dict[str, Any]:
     info: dict[str, Any] = {"can_reach_server": _can_reach(hass)}
     if versions:
         info["version"] = ", ".join(versions)
+    streams = [entry.runtime_data.event_stream for entry in entries]
+    running = [stream for stream in streams if stream.running]
+    if running:
+        info["live_events"] = (
+            "ok"
+            if all(stream.connected for stream in running)
+            else {"type": "failed", "error": "disconnected"}
+        )
     info["environments"] = sum(
         len(entry.runtime_data.fast_coordinator.data.get("environments") or {})
         for entry in entries
