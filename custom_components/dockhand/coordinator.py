@@ -57,17 +57,16 @@ def _unwrap(
     """Unwrap a asyncio.gather(..., return_exceptions=True) result,
     returning `default` and logging a warning if it's an Exception.
 
-    `failures`/`key` are optional so this can still be called the old way
-    for genuinely inconsequential fetches — but every call site that
-    feeds into anything cleanup logic could act on (see __init__.py's
-    _build_live_sets) MUST pass both. Without them, a real fetch failure
-    (DNS resolution failure, timeout, connection reset, a 5xx — anything)
-    silently becomes indistinguishable from "genuinely empty," and
+    `failures`/`key` are optional for genuinely inconsequential fetches — but
+    every call site that feeds into anything cleanup logic could act on (see
+    __init__.py's _build_live_sets) MUST pass both. Without them, a real fetch
+    failure (DNS resolution failure, timeout, connection reset, a 5xx —
+    anything) silently becomes indistinguishable from "genuinely empty," and
     downstream cleanup — which exists specifically to remove entities for
-    things that are actually gone — has no way to tell the difference.
-    A transient schedules-fetch failure would otherwise read as every
-    schedule deleted. See docs/architecture.md §9 for how `fetch_failures`
-    closes this for every resource this coordinator fetches.
+    things that are actually gone — has no way to tell the difference. A
+    transient schedules-fetch failure would otherwise read as every schedule
+    deleted. See docs/architecture.md §9 for how `fetch_failures` closes this
+    for every resource this coordinator fetches.
     """
     if isinstance(val, Exception):
         _LOGGER.warning("Dockhand: error fetching %s: %s", label, val)
@@ -299,6 +298,10 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._system_check_results: dict[int, dict[str, dict]] = {}
         self._removal_guard = _RemovalGuard()
         self._full_poll_generation = 0
+        # Per environment, when the fetch behind its current data started
+        # (event-loop time), so a live event can tell whether that data
+        # already reflects it.
+        self._as_of: dict[int, float] = {}
         super().__init__(
             hass,
             _LOGGER,
@@ -319,6 +322,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # immediately as UpdateFailed — no retry needed there, they don't trigger
         # re-auth anyway.
         _total_attempts = len(_AUTH_RETRY_DELAYS) + 1
+        started = self.hass.loop.time()
         last_auth_err: DockhandAuthError | None = None
         result: dict[str, Any] | None = None
 
@@ -367,6 +371,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # them.
         assert result is not None  # loop always breaks or raises above
         self._full_poll_generation += 1
+        self._as_of = dict.fromkeys(_all_envs(result), started)
         _sync_fetch_issues(self.hass, self.config_entry, "fast", result, result)
         return result
 
@@ -582,13 +587,20 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         if not current:
             return
         generation = self._full_poll_generation
+        started = self.hass.loop.time()
         _, env_data = await self._fetch_env(env_id, current.get("stats") or {})
         if generation != self._full_poll_generation:
             return
+        self._as_of[env_id] = started
         environments = dict(_all_envs(self.data))
         environments[env_id] = env_data
         self.data = {**self.data, "environments": environments}
         self.async_update_listeners()
+
+    def fetched_since(self, env_id: int, when: float) -> bool:
+        """Whether an environment's current data comes from a fetch that
+        started after `when` (event-loop time)."""
+        return self._as_of.get(env_id, float("-inf")) > when
 
     def _apply_system_check_results(
         self,
@@ -881,8 +893,8 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # rather than repeating the same lookup chain twice. Every
             # level uses `or {}`, not a dict.get(key, {}) default — the
             # latter only substitutes for an *absent* key, not one Dockhand
-            # sends with an explicit null (a real, reported bug: see
-            # docs/architecture.md §6 and github.com/raetha/ha-dockhand/issues/20).
+            # sends with an explicit null (docs/architecture.md §6,
+            # github.com/raetha/ha-dockhand/issues/20).
             env_stats = (
                 _coordinator_env(self._fast_coordinator.data, env_id).get("stats") or {}
             )
@@ -1398,12 +1410,9 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         silently falling back to stale data, which would make a failed
         check look like nothing happened.
 
-        A standalone convenience wrapping a client fetch + merge in one
-        call — DockhandCheckUpdatesButton itself no longer calls this
-        directly (it needs the raw items for Tier 1 too, so it fetches
-        once itself and calls async_merge_check_results() above instead),
-        but this remains available for anything else that just wants
-        "refresh this one environment's Tier 2 data" in a single call.
+        DockhandCheckUpdatesButton doesn't use this: it needs the raw
+        items for Tier 1 too, so it fetches once and calls
+        async_merge_check_results() itself.
         """
         items = await self.client.async_check_container_updates(env_id)
         self.async_merge_check_results(env_id, items)

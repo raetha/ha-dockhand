@@ -145,6 +145,7 @@ def _entry(hass: HomeAssistant, fast_data: dict) -> MagicMock:
     data.fast_coordinator.async_add_listener = MagicMock(return_value=lambda: None)
     data.fast_coordinator.async_request_refresh = AsyncMock()
     data.fast_coordinator.async_refresh_environment = AsyncMock()
+    data.fast_coordinator.fetched_since = MagicMock(return_value=False)
     data.version_coordinator.async_request_refresh = AsyncMock()
     return entry
 
@@ -242,6 +243,22 @@ async def test_activity_refreshes_its_environment_once_events_settle(
     ]
     # Not a reconnect, so no catch-up refresh.
     fast.async_request_refresh.assert_not_called()
+
+
+async def test_no_event_refresh_when_newer_data_already_shows_it(
+    hass: HomeAssistant,
+):
+    """An action's own refresh, started after the event, already covers it."""
+    entry = _entry(hass, _fast_data(collectActivity=True))
+    fast = entry.runtime_data.fast_coordinator
+    fast.fetched_since = MagicMock(return_value=True)
+    stream = DockhandEventStream(hass, entry)
+    _feed(entry, [*CONNECTED, *_activity(1)])
+    await _run(stream, 1)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done()
+    fast.async_refresh_environment.assert_not_called()
+    assert fast.fetched_since.call_args.args[0] == 1
 
 
 async def test_environment_status_refreshes_everything(hass: HomeAssistant):

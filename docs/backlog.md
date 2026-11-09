@@ -7,6 +7,21 @@ the reasoning first and only revisit if the stated condition has changed.
 
 ## Deferred
 
+- **An event entity per container** (Portainer has one): fires `start`,
+  `stop`, `die`, `oom`, `health_status` and so on from the live feed
+  (`events.py`), so an automation can trigger on a container being
+  OOM-killed or going unhealthy without polling. Evaluated in the 2026-11
+  Portainer audit; deferred because nobody has asked for it and the State
+  and Health sensors already cover state changes (an automation on State
+  changing to `exited` misses only events that leave no state behind, such
+  as an OOM kill followed by a restart). Worth building if someone asks to
+  automate on those. Notes for then: disabled by default; only for
+  environments that send events (`events_expected()`); event types from
+  Dockhand's `CONTAINER_ACTIONS` (`health_status` arrives as
+  `health_status: healthy`, split it); the feed is lossy while
+  disconnected, which the entity's description should say; a new
+  `translation_key` is free for the cards.
+
 - **Drop the pre-2026.10 typing workarounds once the minimum Home Assistant
   version reaches 2026.10.** That release switched form schemas to probatio
   (aliasing `import voluptuous` to it at runtime) and moved

@@ -205,14 +205,9 @@ async def async_setup_entry(
                 # option off lets the existing central cleanup system
                 # remove any that already exist, the same way it already
                 # does for those other toggles. Checked via its own
-                # representative entity, independent of state_sensor above
-                # — nesting this inside that check (as an earlier version
-                # of this code did) meant turning "Enable container and stack stats"
-                # on for a container that already existed before that
-                # point would never create its stats sensors until an HA
-                # restart, the exact same class of staleness the
-                # known_health_keys comment above already called out for
-                # health sensors specifically, just not caught here too.
+                # representative entity, independent of state_sensor above:
+                # nested inside that check, turning the option on for an
+                # existing container would create nothing until a restart.
                 if enable_resource_stats:
                     cpu_sensor = DockhandContainerCpuSensor(
                         fast,
@@ -2026,9 +2021,8 @@ class DockhandEnvPlatformSensor(BaseSlowEnvHostSensor):
         # reasoning as cpu_count on the CPU usage sensor: one more static
         # fact about the same underlying host doesn't need its own entity.
         # Unlike architecture, Docker version and host uptime stay as
-        # their own sensors — Raetha's call: version data is commonly
-        # exposed as its own entity elsewhere, useful directly on a
-        # dashboard without a template helper or markdown card.
+        # their own sensors: version data is commonly its own entity
+        # elsewhere, and usable on a dashboard without a template.
         arch = self._host().get("arch")
         return {"architecture": arch} if arch is not None else {}
 
@@ -2113,8 +2107,7 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     extra_state_attributes.
 
     name is a live @property, not a value fixed at construction — see its
-    docstring for why (a container upgrade producing a same-name-but-new-
-    entity collision on this being static, once shipped, once caught).
+    docstring for why.
 
     API shape (confirmed from /api/images): camelCase fields, created is a
     Unix timestamp integer, containers is always an int (0 = unused).
@@ -2486,9 +2479,8 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
     for a schedule device: it carries the identity attributes (name,
     description, is_system) alongside the scheduling ones already on
     Next run (cron_expression, enabled, environment, schedule_type) —
-    duplicated rather than moved, since those shipped on Next run in an
-    earlier release and removing them could break an existing automation
-    or template depending on them; duplication here is safe (both read
+    duplicated rather than moved, since automations and templates may
+    read them from Next run; duplication here is safe (both read
     fresh from the same coordinator dict every update, unlike DeviceInfo
     fields, which is why that duplication was a bug and this one isn't).
     """

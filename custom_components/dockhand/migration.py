@@ -3,9 +3,9 @@
 Each function is named after the release whose registry format it updates
 from. They're only for changes between released versions (e.g. 1.7.3 ->
 1.8.0) — never for churn within an unreleased dev cycle (an entity added
-and removed before ever shipping): Raetha's own testing reloads or re-adds
+and removed before ever shipping): testers of a dev build reload or re-add
 the integration, so a migration for interim-build-only artifacts adds
-permanent maintenance cost for zero real benefit.
+permanent maintenance cost for no benefit.
 
 How long each is kept follows the config schema rules (see RenamedOption
 in const.py and docs/architecture.md §4): REGISTRY_MIGRATIONS records the
@@ -381,8 +381,7 @@ def migrate_1_8_0_reenable_container_stats_entities(
     it can't distinguish "the user chose to disable this" from "this was
     only ever disabled because of the pre-1.8.0 default."
 
-    A genuine one-time migration, not a per-load reconciliation (an
-    earlier version of this fix ran on every setup instead) — within
+    A genuine one-time migration, not a per-load reconciliation: within
     1.8.0's own architecture, these entities are only ever created with
     enabled_default=True (gated entirely on the option itself; see
     sensor.py's creation loop), so there is no code path going forward

@@ -61,6 +61,8 @@ class DockhandEventStream:
         self._entry = entry
         self._task: asyncio.Task[None] | None = None
         self._pending: dict[int, CALLBACK_TYPE] = {}
+        # Per environment, when its latest event arrived (event-loop time).
+        self._last_event: dict[int, float] = {}
         self._started = False
         self.connected = False
 
@@ -166,7 +168,10 @@ class DockhandEventStream:
             )
         elif name == "activity":
             env_id = data.get("environmentId")
-            if isinstance(env_id, int) and env_id not in self._pending:
+            if not isinstance(env_id, int):
+                return
+            self._last_event[env_id] = self._hass.loop.time()
+            if env_id not in self._pending:
                 self._pending[env_id] = async_call_later(
                     self._hass, REFRESH_DELAY, self._refresher(env_id)
                 )
@@ -175,6 +180,11 @@ class DockhandEventStream:
         @callback
         def _refresh(_now: Any) -> None:
             self._pending.pop(env_id, None)
+            # An action's own refresh, or a poll, that started after the
+            # last event already shows it.
+            fast = self._entry.runtime_data.fast_coordinator
+            if fast.fetched_since(env_id, self._last_event[env_id]):
+                return
             self._entry.async_create_background_task(
                 self._hass,
                 self._async_refresh(env_id),

@@ -98,13 +98,8 @@ def already_registered(
     `known_ids`, expected to be `entry.runtime_data.known_entity_ids`,
     a plain in-memory set created fresh every time async_setup_entry
     runs. That freshness is the whole point: it must reset on every
-    reload and restart, the same way local `known_*_ids` variables inside
-    each platform's own async_setup_entry always did before this existed
-    (sensor.py alone had ten separate copies; binary_sensor.py, button.py,
-    number.py, select.py, and switch.py each had their own too) — this
-    just consolidates that instead of duplicating it, exactly as
-    `_coordinator_env()` already did once before for a different
-    duplicated pattern (see that function's own docstring).
+    reload and restart, since every platform's entities are created afresh
+    then.
 
     On a cache *hit* (this session already added it), also confirms the
     entity is still actually in the real registry before trusting that —
@@ -112,24 +107,13 @@ def already_registered(
     for a container genuinely deleted, or incorrectly, if a bug like the
     one `fetch_failures` fixes ever recurs) without `known_ids` finding
     out, so a bare cache hit alone can't be trusted to still be true. On a
-    miss, no registry lookup happens at all — nothing to confirm for
-    something we're about to create anyway, and the common case (genuinely
-    new entity) stays exactly as cheap as it was.
+    miss, no registry lookup happens at all: the common case (a genuinely
+    new entity) stays cheap.
 
-    This is deliberately *not* the same mistake an earlier version of this
-    function made, which checked the registry as the *primary* signal —
-    see docs/architecture.md §9 for the full incident: that answered "did
-    this unique_id ever exist in *any* session," which persists across
-    reloads and restarts by design, and made every entity in the
-    integration look permanently registered after the first setup call.
-    Checking the registry here only ever confirms something *this specific
-    session* already added to `known_ids` itself — never used to decide
-    whether something is new, only to catch when something we already
-    consider live has stopped being live since we last checked. That
-    keeps `known_ids` self-correcting within a session (closing the
-    narrower gap the registry-based rewrite was originally trying to
-    solve) without reintroducing the cross-session mistake that rewrite
-    actually caused.
+    The registry is never the primary signal: it answers "did this
+    unique_id ever exist", which survives reloads and restarts, so every
+    entity would look already added after the first setup
+    (docs/architecture.md §9).
 
     Re-add deduplication (`pending_readd_ids`)
     ------------------------------------------
@@ -162,9 +146,8 @@ def already_registered(
     normally.
 
     Callers that cannot supply pending_readd_ids (pass None or omit it)
-    get the same behaviour as before this parameter was added: the
-    registry check still returns False on a miss, triggering a re-add.
-    They just don't get the duplicate-suppression guard for the narrow
+    still get False on a registry miss, triggering a re-add; they just
+    don't get the duplicate-suppression guard for the narrow
     window between "re-add scheduled" and "re-add landed." All platform
     call sites in this integration pass the real set.
     """
@@ -235,10 +218,8 @@ def _all_envs(data: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
     Null-safe against Dockhand sending an explicit `null` rather than
     omitting a key — `(data or {}).get("environments") or {}`, not
     `data.get("environments", {})`, so an explicit null doesn't crash the
-    next `.items()`/`.keys()`/`.values()` call. Real, reported bug
-    (github.com/raetha/ha-dockhand/issues/20) that turned out broader
-    than the original report suspected — it hit an environment-level
-    sensor too, not just per-container ones.
+    next `.items()`/`.keys()`/`.values()` call
+    (github.com/raetha/ha-dockhand/issues/20).
     """
     return (data or {}).get("environments") or {}
 
@@ -264,17 +245,8 @@ def _find_container(
     data — name-based since Docker enforces unique container names per
     host, stable across container recreation (image updates).
 
-    Was seven near-identical copies of this exact loop across
-    button.py/number.py/select.py/sensor.py/switch.py (×2)/update.py —
-    six equivalent, one (update.py's) already drifted to bypass
-    _coordinator_env() above and reimplement its equivalent manually via
-    _all_envs(...).get(env_id), found on a review specifically looking
-    for this pattern after a bug slipped through because two copies of a
-    different repeated pattern (this file's own already_registered()) had
-    drifted to different local variable names. Same lesson _coordinator_env's
-    own docstring already documents from _fast_env/_slow_env's history:
-    consolidating removes the "did every copy of this stay in sync"
-    question entirely, rather than relying on it.
+    Every platform looks containers up through this, so the lookup can't
+    differ between them.
     """
     for c in _coordinator_env(coordinator_data, env_id).get("containers") or []:
         if isinstance(c, dict) and c.get("name") == container_name:
@@ -758,15 +730,8 @@ def _sched_device(
     env-scoped ones — matching `_schedule_group_device`'s own naming
     ("{env_name} – Schedules") rather than leaving every schedule device
     misleadingly prefixed "Dockhand" regardless of which environment (if
-    any) it actually belongs to. This was a real, shipped bug in the
-    initial 1.9.0 device-hierarchy work: `via_device` was made conditional
-    on `environment_id`, but `name` was never updated to match — every
-    env-scoped schedule kept showing "Dockhand – Schedules – …" even
-    though it was correctly parented under its own environment's group.
-    Caught after release via real device names in a live instance, not
-    caught by tests (none asserted on the name string, only identifiers/
-    via_device — see test_helpers.py for the regression coverage added
-    alongside this fix).
+    any) it actually belongs to. The name and the parent must change
+    together; test_helpers.py asserts both.
 
     `environment_id`/`environment_name` (from the schedule's own
     `environmentId`/`environmentName` fields, confirmed from Dockhand's
@@ -777,8 +742,7 @@ def _sched_device(
     name as their own prefix; global ones keep parenting to the flat
     `schedules_hub` and the "Dockhand" prefix. The device's own
     `identifiers` stay content-addressed by schedule id/type regardless of
-    environment, so both this and the via_device change are safe without a
-    migration (see architecture.md §0 — both call sites must use this
+    environment (see architecture.md §0 — both call sites must use this
     factory, never inline fields, or the two can silently drift apart on
     the next coordinator update).
     """
@@ -1073,17 +1037,14 @@ def _container_is_bulk_update_eligible(
     update_env_data: dict[str, dict] | None = None,
 ) -> bool:
     """True unless this is a Dockhand system container (dockhand itself,
-    or a Hawser agent) — same `!container.systemContainer` check
-    Dockhand's own frontend applies before offering its "Update all"
-    button, and the same reasoning ha-dockhand's bulk-update button
-    already applied inline in two separate places before this was
-    pulled out as its own named check: bulk-updating infrastructure
-    containers like the update-checker itself is genuinely unsafe, not
-    just untidy. This function's only job is to answer that one
-    question — it deliberately says nothing about whether the container
-    has a pending update at all, so it composes with
-    _actionable_pending_update_container_ids() below rather than
-    duplicating that check.
+    or a Hawser agent) — same `!container.systemContainer` check Dockhand's own
+    frontend applies before offering its "Update all" button: bulk-updating
+    infrastructure containers like the update-checker itself is genuinely
+    unsafe, not just untidy. This function's only job is to answer that one
+    question — it deliberately says nothing about whether the container has a
+    pending update at all, so it composes with
+    _actionable_pending_update_container_ids() below rather than duplicating
+    that check.
 
     A single named predicate here, rather than each caller building its
     own `{c.get("id") for c in containers if c.get("systemContainer")}`
