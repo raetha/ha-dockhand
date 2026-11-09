@@ -302,6 +302,10 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # (event-loop time), so a live event can tell whether that data
         # already reflects it.
         self._as_of: dict[int, float] = {}
+        # Per environment: the refresh waiting to start, which any caller
+        # arriving before it starts can share, and a lock so only one runs.
+        self._queued_env_refresh: dict[int, asyncio.Task[None]] = {}
+        self._env_refresh_locks: dict[int, asyncio.Lock] = {}
         super().__init__(
             hass,
             _LOGGER,
@@ -582,7 +586,35 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         them. The scheduled poll isn't pushed back (async_set_updated_data
         would do that), so a busy environment can't starve the full poll.
         A full poll that finishes while this runs wins.
+
+        Concurrent callers share fetches: while one refresh runs, every
+        caller that arrives joins the single refresh queued behind it,
+        which starts after all of them, so each still sees its own change.
+        One service call on ten containers (HA runs them concurrently)
+        costs two refreshes instead of ten.
         """
+        task = self._queued_env_refresh.get(env_id)
+        if task is None:
+            # Not eager: the task must stay queued until this caller has
+            # registered it, or a later caller could join a refresh that
+            # started before its action finished.
+            task = self.hass.async_create_task(
+                self._async_run_queued_refresh(env_id),
+                f"dockhand refresh environment {env_id}",
+                eager_start=False,
+            )
+            self._queued_env_refresh[env_id] = task
+        await asyncio.shield(task)
+
+    async def _async_run_queued_refresh(self, env_id: int) -> None:
+        lock = self._env_refresh_locks.setdefault(env_id, asyncio.Lock())
+        async with lock:
+            # From here the fetch is under way, so later callers queue
+            # another.
+            self._queued_env_refresh.pop(env_id, None)
+            await self._async_refresh_environment_now(env_id)
+
+    async def _async_refresh_environment_now(self, env_id: int) -> None:
         current = _coordinator_env(self.data, env_id)
         if not current:
             return

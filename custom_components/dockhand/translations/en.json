@@ -341,6 +341,32 @@
           "on-failure": "On failure"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker event",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Died",
+              "health_status_healthy": "Health check passed",
+              "health_status_starting": "Health check starting",
+              "health_status_unhealthy": "Health check failed",
+              "kill": "Killed",
+              "oom": "Out of memory",
+              "pause": "Paused",
+              "restart": "Restarted",
+              "start": "Started",
+              "stop": "Stopped",
+              "unpause": "Unpaused",
+              "update": "Updated"
+            }
+          },
+          "exit_code": {
+            "name": "Exit code"
+          }
+        }
+      }
     }
   },
   "exceptions": {

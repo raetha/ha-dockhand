@@ -341,6 +341,32 @@
           "on-failure": "失败时"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker 事件",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "已退出",
+              "health_status_healthy": "健康检查通过",
+              "health_status_starting": "健康检查启动中",
+              "health_status_unhealthy": "健康检查失败",
+              "kill": "已强制终止",
+              "oom": "内存不足",
+              "pause": "已暂停",
+              "restart": "已重启",
+              "start": "已启动",
+              "stop": "已停止",
+              "unpause": "已恢复",
+              "update": "已更新"
+            }
+          },
+          "exit_code": {
+            "name": "退出代码"
+          }
+        }
+      }
     }
   },
   "exceptions": {

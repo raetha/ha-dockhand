@@ -244,6 +244,7 @@ Also disabled by default, each sourced from its own gated API call — only fetc
 |---|---|---|
 | State | sensor | One of Docker's states: `created`, `running`, `paused`, `restarting`, `removing`, `exited` or `dead` (shown translated; anything else Docker might add later shows as unknown). Attributes include `exit_code` while the container is exited, `restart_count` while it's restarting (Dockhand only counts restarts then), and `image_version` from the image's `org.opencontainers.image.version` label |
 | Health | sensor | `healthy`, `unhealthy` or `starting`. Only created for containers with a Docker healthcheck configured — enabled by default |
+| Docker event | event | Fires when Docker reports the container starting, stopping, dying (with its `exit_code`), being killed, running out of memory, restarting, pausing, resuming, being updated, or its health check passing, failing or starting — for automations, like the Portainer integration's. Comes from the live feed (see [Data Updates](#data-updates)), so it's unavailable for environments Dockhand doesn't send events for, and misses events while the feed is disconnected. Disabled by default |
 | Container | switch | turn on = start (or resume, if paused), turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
 | Restart | button | restarts the container, or starts it if stopped. **Not created for system containers** — see note below |
 | Pause, Resume | button | freeze a running container's processes, and let a paused one run again; each is unavailable outside the state it applies to. Disabled by default in the entity registry. **Not created for system containers** — see note below |
@@ -452,7 +453,7 @@ Entities update automatically when their coordinator refreshes. If a whole poll 
 
 **Live updates.** Dockhand watches Docker's events for every environment that collects activity or metrics (both are environment settings in Dockhand; metrics are on by default), and Hawser Edge agents always send theirs. While at least one environment does, the integration keeps Dockhand's activity feed open, and a change there (a container stopping, starting, turning unhealthy, being recreated) refreshes that environment's containers and stacks within a couple of seconds, instead of at the next poll. An environment going offline or coming back triggers a full refresh. The feed only speeds things up: polling carries on as before and catches anything missed. If the connection drops (Dockhand restarting, its host losing power), it's retried after 5 seconds, backing off to 5 minutes, and everything is refreshed once it's back. Without the `activity: view` permission, or with environments that collect neither, there's no feed and changes show on the next poll, so within a minute. **Settings → System → Repairs → ⋮ → System information** shows whether the feed is connected.
 
-An action taken from Home Assistant (a switch, a button, Install) refreshes that environment straight away.
+An action taken from Home Assistant (a switch, a button, Install) refreshes that environment straight away. Actions on many containers at once (one `switch.turn_off` on ten containers, say) share those refreshes rather than making one each.
 
 ### Controlling when data refreshes
 

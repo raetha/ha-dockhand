@@ -341,6 +341,32 @@
           "on-failure": "Em caso de falha"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Evento do Docker",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Terminado",
+              "health_status_healthy": "Verificação de integridade aprovada",
+              "health_status_starting": "Verificação de integridade a iniciar",
+              "health_status_unhealthy": "Verificação de integridade falhada",
+              "kill": "Forçado a terminar",
+              "oom": "Sem memória",
+              "pause": "Em pausa",
+              "restart": "Reiniciado",
+              "start": "Iniciado",
+              "stop": "Parado",
+              "unpause": "Retomado",
+              "update": "Atualizado"
+            }
+          },
+          "exit_code": {
+            "name": "Código de saída"
+          }
+        }
+      }
     }
   },
   "exceptions": {

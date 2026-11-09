@@ -341,6 +341,32 @@
           "on-failure": "Bij fout"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker-gebeurtenis",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Beëindigd",
+              "health_status_healthy": "Statuscontrole geslaagd",
+              "health_status_starting": "Statuscontrole start",
+              "health_status_unhealthy": "Statuscontrole mislukt",
+              "kill": "Geforceerd gestopt",
+              "oom": "Geen geheugen meer",
+              "pause": "Gepauzeerd",
+              "restart": "Opnieuw gestart",
+              "start": "Gestart",
+              "stop": "Gestopt",
+              "unpause": "Hervat",
+              "update": "Bijgewerkt"
+            }
+          },
+          "exit_code": {
+            "name": "Afsluitcode"
+          }
+        }
+      }
     }
   },
   "exceptions": {

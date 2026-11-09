@@ -34,6 +34,12 @@
   and catches anything missed; the feed reconnects on its own after
   Dockhand restarts or its host loses power. Needs the `activity: view`
   permission on Dockhand Enterprise.
+- **Docker event entity per container**, like Home Assistant's Portainer
+  integration: fires when a container starts, stops, dies (with its exit
+  code), is killed, runs out of memory, restarts, pauses, resumes, is
+  updated, or its health check passes, fails or starts, for automations.
+  It comes from the live feed, so it's only available for environments
+  Dockhand sends events for. Disabled by default.
 - **Dockhand device** — a device for the Dockhand server itself, showing
   its version (updated after an upgrade). Environments and the Schedules
   hub now appear connected through it.
@@ -59,6 +65,8 @@
 - **Container `restart_count` attribute only while restarting** — Dockhand
   only counts restarts for a container that's restarting, so the attribute
   always read 0 otherwise; it's now empty then.
+- **Actions on many containers at once share refreshes** — one action on
+  ten containers refreshes their environment twice rather than ten times.
 - **Update all is always there while update entities are on** —
   unavailable while nothing is pending, rather than appearing and
   disappearing, so automations and dashboards can rely on its entity ID.

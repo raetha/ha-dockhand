@@ -463,6 +463,55 @@ async def test_refresh_environment_loses_to_a_full_poll(hass: HomeAssistant):
     assert coord.data["environments"][1]["containers"] == [CONTAINER1]
 
 
+async def test_concurrent_environment_refreshes_share_fetches(hass: HomeAssistant):
+    """Callers arriving while a refresh runs all join one refresh queued
+    behind it, which starts only after they arrived."""
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+
+    release = asyncio.Event()
+    calls: list[int] = []
+
+    async def slow_containers(env_id: int) -> list[dict]:
+        calls.append(env_id)
+        await release.wait()
+        return [CONTAINER1]
+
+    client.async_get_containers = AsyncMock(side_effect=slow_containers)
+    first = hass.async_create_task(coord.async_refresh_environment(1))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert calls == [1]  # the first refresh is under way
+    later = [
+        hass.async_create_task(coord.async_refresh_environment(1)) for _ in range(5)
+    ]
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert calls == [1]  # the rest wait for it
+    release.set()
+    await asyncio.gather(first, *later)
+    assert calls == [1, 1]
+    # Nothing left queued: the next caller starts a fresh refresh.
+    await coord.async_refresh_environment(1)
+    assert calls == [1, 1, 1]
+
+
+async def test_a_failed_shared_refresh_reaches_every_caller(hass: HomeAssistant):
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    with patch.object(
+        coord, "_async_refresh_environment_now", AsyncMock(side_effect=OSError("down"))
+    ):
+        results = await asyncio.gather(
+            coord.async_refresh_environment(1),
+            coord.async_refresh_environment(1),
+            return_exceptions=True,
+        )
+    assert [type(r) for r in results] == [OSError, OSError]
+
+
 async def test_fetched_since_tracks_the_fetch_behind_the_data(hass: HomeAssistant):
     client = _make_client(envs=[ENV1, {"id": 2, "name": "remote"}])
     coord = _fast(hass, client)

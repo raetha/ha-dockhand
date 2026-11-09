@@ -341,6 +341,32 @@
           "on-failure": "Ved feil"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker-hendelse",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Avsluttet",
+              "health_status_healthy": "Helsesjekk bestått",
+              "health_status_starting": "Helsesjekk starter",
+              "health_status_unhealthy": "Helsesjekk mislyktes",
+              "kill": "Drept",
+              "oom": "Tom for minne",
+              "pause": "Satt på pause",
+              "restart": "Startet på nytt",
+              "start": "Startet",
+              "stop": "Stoppet",
+              "unpause": "Gjenopptatt",
+              "update": "Oppdatert"
+            }
+          },
+          "exit_code": {
+            "name": "Avslutningskode"
+          }
+        }
+      }
     }
   },
   "exceptions": {

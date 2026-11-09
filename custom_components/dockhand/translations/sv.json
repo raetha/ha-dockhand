@@ -341,6 +341,32 @@
           "on-failure": "Vid fel"
         }
       }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker-händelse",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Avslutad",
+              "health_status_healthy": "Hälsokontroll godkänd",
+              "health_status_starting": "Hälsokontroll startar",
+              "health_status_unhealthy": "Hälsokontroll misslyckades",
+              "kill": "Dödad",
+              "oom": "Slut på minne",
+              "pause": "Pausad",
+              "restart": "Omstartad",
+              "start": "Startad",
+              "stop": "Stoppad",
+              "unpause": "Återupptagen",
+              "update": "Uppdaterad"
+            }
+          },
+          "exit_code": {
+            "name": "Slutkod"
+          }
+        }
+      }
     }
   },
   "exceptions": {

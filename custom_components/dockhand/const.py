@@ -172,4 +172,23 @@ PLATFORMS = [
     "update",
     "number",
     "select",
+    "event",
+]
+
+# Docker container events the per-container event entity fires, matching
+# Home Assistant's Portainer integration. Docker sends a health check
+# result as "health_status: <status>".
+CONTAINER_EVENT_TYPES = [
+    "die",
+    "health_status_healthy",
+    "health_status_starting",
+    "health_status_unhealthy",
+    "kill",
+    "oom",
+    "pause",
+    "restart",
+    "start",
+    "stop",
+    "unpause",
+    "update",
 ]
