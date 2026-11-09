@@ -404,6 +404,11 @@ def _schedules_url(base_url: str) -> str | None:
 # functions rather than building the strings inline.
 
 
+def _device_id_instance(entry_id: str) -> str:
+    """Identifier string for the Dockhand instance device."""
+    return f"{entry_id}_instance"
+
+
 def _device_id_env(entry_id: str, env_id: int) -> str:
     """Identifier string for an environment hub device."""
     return f"{entry_id}_env_{env_id}"
@@ -462,6 +467,37 @@ def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
 # --------------------------------------------------------------------------- #
 # Device info helpers
 # --------------------------------------------------------------------------- #
+
+
+def _instance_device(
+    entry_id: str, name: str, base_url: str, version: str | None
+) -> DeviceInfo:
+    """The Dockhand server itself, parent of its environments.
+
+    Registered in async_setup_entry before any other device and never
+    removed while the entry is loaded.
+    """
+    info: DeviceInfo = {
+        "identifiers": {(DOMAIN, _device_id_instance(entry_id))},
+        "name": name,
+        "manufacturer": "Dockhand",
+        "model": "Dockhand",
+        "entry_type": DeviceEntryType.SERVICE,
+    }
+    if base_url:
+        info["configuration_url"] = base_url
+    if version:
+        info["sw_version"] = version
+    return info
+
+
+def _under_instance(hass: Any, entry_id: str, info: DeviceInfo) -> DeviceInfo:
+    """`info` parented to the instance device. Only registration sets this:
+    an entity's device_info, which omits it, leaves it unchanged."""
+    parent_id = _device_entry_id(hass, entry_id, _device_id_instance(entry_id))
+    if parent_id is not None:
+        info["via_device_id"] = parent_id
+    return info
 
 
 def _env_device(
@@ -1250,14 +1286,16 @@ def _ensure_hub_devices(
     /api/schedules — filtering to global-only happens here.
     """
     registry = dr.async_get(hass)
+    hub: DeviceInfo = {
+        "identifiers": {(DOMAIN, _device_id_schedules_hub(entry_id))},
+        "name": "Dockhand – Schedules",
+        "manufacturer": "Dockhand",
+        "model": "Service",
+        "configuration_url": _schedules_url(base_url),
+        "entry_type": DeviceEntryType.SERVICE,
+    }
     registry.async_get_or_create(
-        config_entry_id=entry_id,
-        identifiers={(DOMAIN, _device_id_schedules_hub(entry_id))},
-        name="Dockhand – Schedules",
-        manufacturer="Dockhand",
-        model="Service",
-        configuration_url=_schedules_url(base_url),
-        entry_type=DeviceEntryType.SERVICE,
+        config_entry_id=entry_id, **_under_instance(hass, entry_id, hub)
     )
     for sched in schedules:
         if sched.get("id") is None or sched.get("environmentId") is not None:
@@ -1347,7 +1385,9 @@ def _ensure_env_devices(
     # as a separator — a hyphen could appear in the resource name itself.
     registry.async_get_or_create(
         config_entry_id=entry_id,
-        **_env_device(entry_id, env_id, env_name, base_url),
+        **_under_instance(
+            hass, entry_id, _env_device(entry_id, env_id, env_name, base_url)
+        ),
     )
 
     # ── Containers group — only when freestanding containers exist ───────────

@@ -148,6 +148,9 @@ Anything the token can't read shows as unavailable (with a repair issue saying w
 The integration uses a **grouped device hierarchy** that keeps the device list manageable regardless of how many containers and stacks you have.
 
 ```
+Dockhand                                    ← Dockhand device: the server itself, showing its version;
+                                              environments and the Schedules hub connect through it
+
 myenv                                       ← Environment device
 ├── myenv – Containers                      ← Group device (freestanding containers only)
 │   └── myenv – Containers – mycontainer   ← Container device
@@ -181,7 +184,7 @@ myenv                                       ← Environment device
 sensor.CPU usage, sensor.Memory usage, sensor.Containers  ← on env device
 binary_sensor.Online
 button.Check for updates
-button.Update all containers               ← if update entities enabled and something's pending
+button.Update all containers               ← if update entities enabled (unavailable while nothing's pending)
 
 Dockhand – Schedules  (if enabled)         ← Global hub device (not env-specific)
 └── Dockhand – Schedules – nightly-backup ← per-schedule device
@@ -212,7 +215,7 @@ If you're also running the Portainer integration, note that this integration use
 | Containers running | sensor | with total/stopped/unhealthy attributes, and update counts: `pending_updates` (installable, excluding system containers), `pending_system_updates`, `pending_version_updates` (newer version tag only), `pending_pinned_digest_updates` (moved digest on a pinned image only), `pending_held_updates` (held for the minimum image age only) and `pending_updates_total` (every container whose update entity is on) |
 | Images | sensor | count of Docker images on the environment |
 | Image pruning | binary_sensor | whether automatic image pruning is enabled for this environment. Disabled by default |
-| Update all | button | Updates every container in the environment with a pending update in one batch (pull, scan if configured, recreate) — matches Dockhand's own "Update all" button exactly. Named "Update all containers" (a static name; Dockhand's own button shows a live "(N)" count, but a changing friendly name on a persistent entity reads as confusing churn in HA's own history, so ours doesn't). "Pending update" considers both the cheap cached check and, if enabled, the precise digest check — a container flagged by either counts. System containers are excluded from the count and from the update, same as Dockhand's own button. **Only exists while Enable update entities is on and there's at least one pending update** — this is the one thing that toggle actually gates besides entity display, since leaving it available with update entities disabled would be a backdoor to triggering real updates from HA |
+| Update all | button | Updates every container in the environment with a pending update in one batch (pull, scan if configured, recreate) — matches Dockhand's own "Update all" button exactly. Named "Update all containers" (a static name; Dockhand's own button shows a live "(N)" count, but a changing friendly name on a persistent entity reads as confusing churn in HA's own history, so ours doesn't). "Pending update" considers both the cheap cached check and, if enabled, the precise digest check — a container flagged by either counts. System containers are excluded from the count and from the update, same as Dockhand's own button. **Only exists while Enable update entities is on**, and is unavailable while nothing is pending, so automations and dashboards can rely on its entity ID — this is the one thing that toggle actually gates besides entity display, since leaving it available with update entities disabled would be a backdoor to triggering real updates from HA |
 
 The following are sourced from `GET /api/host` (already polled every slow cycle for the Hawser version sensor — no extra API call) but are **disabled by default**, since they're niche/diagnostic. Enable the ones you want in **Settings → Entities**.
 
@@ -239,8 +242,8 @@ Also disabled by default, each sourced from its own gated API call — only fetc
 ### Container (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| State | sensor | running / exited / paused / etc. |
-| Health | sensor | healthy / unhealthy / starting. Only created for containers with a Docker healthcheck configured — enabled by default |
+| State | sensor | One of Docker's states: `created`, `running`, `paused`, `restarting`, `removing`, `exited` or `dead` (shown translated; anything else Docker might add later shows as unknown). Attributes include `exit_code` while the container is exited, `restart_count` while it's restarting (Dockhand only counts restarts then), and `image_version` from the image's `org.opencontainers.image.version` label |
+| Health | sensor | `healthy`, `unhealthy` or `starting`. Only created for containers with a Docker healthcheck configured — enabled by default |
 | Container | switch | turn on = start (or resume, if paused), turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
 | Restart | button | restarts the container, or starts it if stopped. **Not created for system containers** — see note below |
 | Pause, Resume | button | freeze a running container's processes, and let a paused one run again; each is unavailable outside the state it applies to. Disabled by default in the entity registry. **Not created for system containers** — see note below |
@@ -477,7 +480,7 @@ Entity IDs depend on your environment names; check yours under the environment's
 ## Troubleshooting
 
 **Cannot connect**
-Check the API URL is reachable from the HA host. If authentication is enabled, confirm your API token starts with `dh_` and was copied in full.
+Check the API URL is reachable from the HA host. If authentication is enabled, confirm your API token starts with `dh_` and was copied in full. **Settings → System → Repairs → ⋮ → System information** has a Dockhand section showing whether each Dockhand answers, and its version.
 
 **Entity IDs have a `_2` or `_3` suffix after a container or image update**
 Image sensors specifically now avoid this in the common case: when a container update causes two images to briefly claim the same tag (the newly-pulled one, and the old one not yet marked untagged), the integration waits for that to settle — usually resolved within a poll cycle or two — rather than creating a colliding entity. If you still see a suffix (a device or entity type not covered by that handling, or an unusually long-lived ambiguity), it means HA created a new entity while an old one with the same natural ID still technically existed at that moment. Once the old object is gone and the integration has reloaded or polled, go to **Settings → Devices & Services → ⋮ → Recreate entity IDs** on the Dockhand integration card to reclaim the clean ID — HA will rename any suffixed entity whose "natural" ID is now free. Any automations or dashboard cards referencing the suffixed ID will need to be updated after the rename.
@@ -491,8 +494,8 @@ Devices are removed automatically once Dockhand confirms the container, stack or
 **No update shown for Dockhand or a Hawser agent**
 Check the image tag those containers run. With a pinned version tag, Dockhand itself never reports a newer one for them through its containers API; see the note on updates for Dockhand and Hawser under [Stack](#stack-always-on-60-s). Moving them to a floating tag such as `latest` is the reliable fix. The integration's diagnostics download lists what Dockhand last reported for each system container (`system_containers`) and what Dockhand's own release check found (`self_update`).
 
-**Schedules show but no "run" button**
-Intentional — the Dockhand API has no run-now endpoint for schedules. The per-schedule device structure is preserved for when this is added.
+**A schedule has no Run now button or Enabled switch**
+Both follow what Dockhand's own Schedules page offers. Environment reports and stack deploys can't be run on demand. Container update and Git stack sync schedules are turned on and off with the container's **Auto update** and the stack's **Auto deploy** switches instead, and Dockhand's backup-repository jobs and its deploy-log housekeeping can't be paused.
 
 ---
 

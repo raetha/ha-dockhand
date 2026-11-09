@@ -114,7 +114,9 @@ async def async_get_config_entry_diagnostics(
             ],
         }
 
+    version = entry.runtime_data.version_coordinator
     return {
+        "dockhand_version": version.data,
         "config_entry": async_redact_data(dict(entry.data), TO_REDACT),
         "options": async_redact_data(dict(entry.options), TO_REDACT),
         "environment_summary": env_summaries,

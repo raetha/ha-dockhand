@@ -141,10 +141,24 @@
         "name": "Eventos de actividad"
       },
       "state": {
-        "name": "Estado"
+        "name": "Estado",
+        "state": {
+          "created": "Creado",
+          "running": "En ejecución",
+          "paused": "En pausa",
+          "restarting": "Reiniciando",
+          "removing": "Eliminando",
+          "exited": "Detenido",
+          "dead": "Muerto"
+        }
       },
       "health": {
-        "name": "Salud"
+        "name": "Salud",
+        "state": {
+          "healthy": "Saludable",
+          "unhealthy": "No saludable",
+          "starting": "Iniciando"
+        }
       },
       "status": {
         "name": "Estado"
@@ -412,6 +426,13 @@
         "volumes": "Volúmenes sin usar",
         "networks": "Redes sin usar"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "Acceso al servidor de Dockhand",
+      "environments": "Entornos",
+      "version": "Versión de Dockhand"
     }
   }
 }

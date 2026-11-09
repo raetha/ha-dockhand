@@ -140,6 +140,9 @@ FAST_POLL_INTERVAL = timedelta(minutes=1)
 SLOW_POLL_INTERVAL = timedelta(minutes=10)
 # Precise update checks: real registry queries for every container.
 PRECISE_UPDATES_POLL_INTERVAL = timedelta(hours=24)
+# Dockhand's own version: it only changes when Dockhand is upgraded, which
+# restarts it, and the response is about 100 KB.
+VERSION_POLL_INTERVAL = timedelta(hours=6)
 DEFAULT_ENABLE_SCHEDULES = False
 DEFAULT_ENABLE_IMAGES = False
 DEFAULT_ENABLE_VOLUMES = False

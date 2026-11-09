@@ -141,10 +141,24 @@
         "name": "Activity events"
       },
       "state": {
-        "name": "State"
+        "name": "State",
+        "state": {
+          "created": "Created",
+          "running": "Running",
+          "paused": "Paused",
+          "restarting": "Restarting",
+          "removing": "Removing",
+          "exited": "Exited",
+          "dead": "Dead"
+        }
       },
       "health": {
-        "name": "Health"
+        "name": "Health",
+        "state": {
+          "healthy": "Healthy",
+          "unhealthy": "Unhealthy",
+          "starting": "Starting"
+        }
       },
       "status": {
         "name": "Status"
@@ -412,6 +426,13 @@
         "volumes": "Unused volumes",
         "networks": "Unused networks"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "Reach Dockhand server",
+      "environments": "Environments",
+      "version": "Dockhand version"
     }
   }
 }

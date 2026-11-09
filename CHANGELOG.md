@@ -27,6 +27,15 @@
 - **`dockhand.recreate_container` action** — recreates a container from
   its current settings, optionally pulling its image again first, like
   saving it in Dockhand's editor. Administrators only.
+- **Dockhand device** — a device for the Dockhand server itself, showing
+  its version (updated after an upgrade). Environments and the Schedules
+  hub now appear connected through it.
+- **Dockhand on the System information page** (Settings → System →
+  Repairs → ⋮ → System information): whether Dockhand answers, its
+  version and how many environments it has.
+- **Container `exit_code` and `image_version` attributes** on the State
+  sensor: the exit code while a container is stopped, and the version from
+  its image's `org.opencontainers.image.version` label.
 - **README: which Dockhand Enterprise permissions each feature needs**,
   and what a Docker socket proxy in front of Dockhand has to allow.
 
@@ -36,6 +45,16 @@
   or Install, only that environment's containers and stacks are re-read
   rather than every environment, so a script that restarts several
   containers finishes sooner and asks less of Dockhand.
+- **Container State and Health are translated** and offer their states
+  in automation editors and history, as Docker's fixed list (running,
+  exited, paused and so on). A state Docker might add later shows as
+  unknown rather than as untranslated text.
+- **Container `restart_count` attribute only while restarting** — Dockhand
+  only counts restarts for a container that's restarting, so the attribute
+  always read 0 otherwise; it's now empty then.
+- **Update all is always there while update entities are on** —
+  unavailable while nothing is pending, rather than appearing and
+  disappearing, so automations and dashboards can rely on its entity ID.
 - **Versions show without a leading "v"** — HACS shows release tags,
   which from this release are plain version numbers (`1.11.4`, test builds
   such as `1.11.5-dev.42`), like most other HACS repositories. Earlier

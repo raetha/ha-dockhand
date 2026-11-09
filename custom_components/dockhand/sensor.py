@@ -52,6 +52,7 @@ from .helpers import (
     _find_git_stack,
     _image_display_name,
     _image_group_device,
+    _image_version_label,
     _network_group_device,
     _stack_device,
     _volume_group_device,
@@ -1162,10 +1163,26 @@ class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
 # --------------------------------------------------------------------------- #
 
 
+# Docker's container states (Engine API ContainerState.Status) and health
+# statuses; anything else Dockhand ever reports reads as unknown.
+CONTAINER_STATES = [
+    "created",
+    "running",
+    "paused",
+    "restarting",
+    "removing",
+    "exited",
+    "dead",
+]
+CONTAINER_HEALTH_STATES = ["healthy", "unhealthy", "starting"]
+
+
 class DockhandContainerStateSensor(BaseFastContainerSensor):
     """Container state sensor — aligned with Portainer's sensor.container_state."""
 
     _attr_translation_key = "state"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = CONTAINER_STATES
 
     def __init__(
         self,
@@ -1184,8 +1201,8 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
     @property
     @override
     def native_value(self) -> str | None:
-        c = self._container()
-        return c.get("state") if c else None
+        state = (self._container() or {}).get("state")
+        return state if state in CONTAINER_STATES else None
 
     @property
     @override
@@ -1193,11 +1210,15 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
         c = self._container()
         if not c:
             return {}
+        restarting = c.get("state") == "restarting"
         return {
             "name": self._container_name,
             "status": c.get("status"),
             "image": c.get("image"),
-            "restart_count": c.get("restartCount"),
+            "image_version": _image_version_label(c.get("labels")),
+            # Dockhand only counts restarts for a container restarting now.
+            "restart_count": c.get("restartCount") if restarting else None,
+            "exit_code": c.get("exitCode") if c.get("state") == "exited" else None,
             "networks": {
                 n: i.get("ipAddress") for n, i in (c.get("networks") or {}).items()
             },
@@ -1215,6 +1236,8 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = "health"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = CONTAINER_HEALTH_STATES
 
     def __init__(
         self,
@@ -1233,8 +1256,8 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
     @property
     @override
     def native_value(self) -> str | None:
-        c = self._container()
-        return c.get("health") if c else None
+        health = (self._container() or {}).get("health")
+        return health if health in CONTAINER_HEALTH_STATES else None
 
 
 # DockhandContainerImageSensor was removed in 1.6.0 — the image name is

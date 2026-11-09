@@ -141,10 +141,24 @@
         "name": "Aktivitetshändelser"
       },
       "state": {
-        "name": "Tillstånd"
+        "name": "Tillstånd",
+        "state": {
+          "created": "Skapad",
+          "running": "Körs",
+          "paused": "Pausad",
+          "restarting": "Startar om",
+          "removing": "Tas bort",
+          "exited": "Avslutad",
+          "dead": "Död"
+        }
       },
       "health": {
-        "name": "Hälsa"
+        "name": "Hälsa",
+        "state": {
+          "healthy": "Frisk",
+          "unhealthy": "Ohälsosam",
+          "starting": "Startar"
+        }
       },
       "status": {
         "name": "Status"
@@ -412,6 +426,13 @@
         "volumes": "Oanvända volymer",
         "networks": "Oanvända nätverk"
       }
+    }
+  },
+  "system_health": {
+    "info": {
+      "can_reach_server": "Nå Dockhand-servern",
+      "environments": "Miljöer",
+      "version": "Dockhand-version"
     }
   }
 }

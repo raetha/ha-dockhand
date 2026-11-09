@@ -146,6 +146,22 @@ class DockhandClient:
     # Read endpoints
     # ------------------------------------------------------------------ #
 
+    async def async_check_health(self) -> None:
+        """Raise unless Dockhand answers its liveness check, which needs no
+        token, within 5 seconds."""
+        await self._request("GET", "/api/health", timeout_seconds=5)
+
+    async def async_get_dockhand_version(self) -> str | None:
+        """The running Dockhand's version.
+
+        Dockhand reports it nowhere else: its changelog is bundled with each
+        build, newest release first, and needs no permission.
+        """
+        changelog = await self._get_list("/api/changelog")
+        newest = changelog[0] if changelog else None
+        version = newest.get("version") if isinstance(newest, dict) else None
+        return version if isinstance(version, str) and version else None
+
     async def async_get_environments(self) -> list[dict[str, Any]]:
         return await self._get_list("/api/environments")
 

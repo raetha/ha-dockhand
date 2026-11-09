@@ -22,6 +22,7 @@ from .const import (
     FAST_POLL_INTERVAL,
     PRECISE_UPDATES_POLL_INTERVAL,
     SLOW_POLL_INTERVAL,
+    VERSION_POLL_INTERVAL,
 )
 from .helpers import (
     _all_envs,
@@ -1444,3 +1445,34 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         items = await self.client.async_check_container_updates(env_id)
         self.async_merge_check_results(env_id, items)
+
+
+class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
+    """Dockhand's own version, for the instance device's software version
+    and system health.
+
+    Separate from the fast and slow coordinators because it changes only
+    when Dockhand is upgraded, while its source is a large response.
+    """
+
+    def __init__(
+        self,
+        hass: HomeAssistant,
+        client: DockhandClient,
+        entry: ConfigEntry | None = None,
+    ) -> None:
+        self.client = client
+        super().__init__(
+            hass,
+            _LOGGER,
+            name=f"{DOMAIN}_version",
+            update_interval=VERSION_POLL_INTERVAL,
+            config_entry=entry,
+        )
+
+    @override
+    async def _async_update_data(self) -> str | None:
+        try:
+            return await self.client.async_get_dockhand_version()
+        except Exception as err:
+            raise UpdateFailed(f"Version error: {err}") from err
