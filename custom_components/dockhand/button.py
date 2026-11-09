@@ -12,6 +12,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import (
     CONF_API_URL,
+    CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_UPDATE_ENTITIES,
     DEFAULT_ENABLE_UPDATE_ENTITIES,
 )
@@ -20,13 +21,18 @@ from .coordinator import (
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
 )
-from .entity import DockhandContainerEntity, DockhandStackEntity
+from .entity import (
+    DockhandContainerEntity,
+    DockhandScheduleEntity,
+    DockhandStackEntity,
+)
 from .helpers import (
     _actionable_pending_update_container_ids,
     _all_envs,
     _coordinator_env,
     _env_device,
     _find_git_stack,
+    _schedule_can_run,
     _stack_device,
     _stack_has_system_container,
     already_registered,
@@ -169,14 +175,35 @@ async def async_setup_entry(
                     base_url,
                     container,
                 )
-                if not already_registered(
-                    hass,
-                    known_ids,
-                    "button",
-                    restart_button.unique_id,
-                    pending_readd_ids=pending_readd_ids,
+                for button in (
+                    restart_button,
+                    DockhandContainerPauseButton(
+                        fast,
+                        client,
+                        entry.entry_id,
+                        env_id,
+                        env_name,
+                        base_url,
+                        container,
+                    ),
+                    DockhandContainerResumeButton(
+                        fast,
+                        client,
+                        entry.entry_id,
+                        env_id,
+                        env_name,
+                        base_url,
+                        container,
+                    ),
                 ):
-                    new.append(restart_button)
+                    if not already_registered(
+                        hass,
+                        known_ids,
+                        "button",
+                        button.unique_id,
+                        pending_readd_ids=pending_readd_ids,
+                    ):
+                        new.append(button)
 
             for stack in env_data.get("stacks") or []:
                 has_system = _stack_has_system_container(
@@ -247,6 +274,21 @@ async def async_setup_entry(
                     pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(git_deploy_button)
+        if entry.options.get(CONF_ENABLE_SCHEDULES, False):
+            for sched in (slow.data or {}).get("schedules") or []:
+                if sched.get("id") is None or not _schedule_can_run(sched):
+                    continue
+                run_button = DockhandScheduleRunButton(
+                    slow, client, entry.entry_id, sched, base_url
+                )
+                if not already_registered(
+                    hass,
+                    known_ids,
+                    "button",
+                    run_button.unique_id,
+                    pending_readd_ids=pending_readd_ids,
+                ):
+                    new.append(run_button)
         return new
 
     async_add_entities(_build_entities())
@@ -328,6 +370,62 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
             self._client.async_restart_container(self._env_id, c["id"])
         )
         await self.coordinator.async_refresh_environment(self._env_id)
+
+
+class _ContainerStateButton(_BaseFastContainerButton):
+    """Pause or resume: only offered in the state it applies to, and off by
+    default, since most people never pause a container."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _from_state: str
+    _suffix: str
+    _client_call: str
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._attr_unique_id = (
+            f"{self._entry_id}_{self._env_id}_container_"
+            f"{self._container_name}_{self._suffix}"
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        c = self._container()
+        return (
+            super().available and c is not None and c.get("state") == self._from_state
+        )
+
+    @override
+    async def async_press(self) -> None:
+        c = self._container()
+        if not c:
+            raise HomeAssistantError(
+                translation_domain="dockhand",
+                translation_key="container_not_found",
+            )
+        call = getattr(self._client, self._client_call)
+        await async_dockhand_action(call(self._env_id, c["id"]))
+        await self.coordinator.async_refresh_environment(self._env_id)
+
+
+class DockhandContainerPauseButton(_ContainerStateButton):
+    """Freeze a running container's processes."""
+
+    _attr_translation_key = "pause"
+    _from_state = "running"
+    _suffix = "pause"
+    _client_call = "async_pause_container"
+
+
+class DockhandContainerResumeButton(_ContainerStateButton):
+    """Let a paused container's processes run again."""
+
+    _attr_translation_key = "resume"
+    _from_state = "paused"
+    _suffix = "resume"
+    _client_call = "async_unpause_container"
 
 
 class DockhandStackRestartButton(_BaseFastStackButton):
@@ -826,4 +924,33 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
                 translation_key="git_stack_not_found",
             )
         await async_dockhand_action(self._client.async_deploy_git_stack(gs["id"]))
+        await self.coordinator.async_refresh()
+
+
+class DockhandScheduleRunButton(DockhandScheduleEntity, ButtonEntity):
+    """Run a schedule once now, outside its own timing."""
+
+    _attr_translation_key = "schedule_run"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        client: Any,
+        entry_id: str,
+        sched: dict[str, Any],
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, sched, base_url, "run")
+        self._client = client
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._find() is not None
+
+    @override
+    async def async_press(self) -> None:
+        await async_dockhand_action(
+            self._client.async_run_schedule(self._sched_type, self._sched_id)
+        )
         await self.coordinator.async_refresh()

@@ -9,9 +9,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
-from .const import CONF_API_URL
+from .const import CONF_API_URL, CONF_ENABLE_SCHEDULES
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
-from .entity import DockhandContainerEntity, DockhandStackEntity
+from .entity import (
+    DockhandContainerEntity,
+    DockhandScheduleEntity,
+    DockhandStackEntity,
+)
 from .helpers import (
     _all_envs,
     _compose_project,
@@ -19,6 +23,8 @@ from .helpers import (
     _coordinator_env,
     _find_container,
     _find_git_stack,
+    _schedule_can_toggle,
+    _schedule_is_system_toggle,
     _stack_device,
     _stack_has_system_container,
     already_registered,
@@ -162,6 +168,21 @@ async def async_setup_entry(
                 ):
                     continue
                 new.append(git_switch)
+        if entry.options.get(CONF_ENABLE_SCHEDULES, False):
+            for sched in (slow.data or {}).get("schedules") or []:
+                if sched.get("id") is None or not _schedule_can_toggle(sched):
+                    continue
+                sched_switch = DockhandScheduleEnabledSwitch(
+                    slow, client, entry.entry_id, sched, base_url
+                )
+                if not already_registered(
+                    hass,
+                    known_ids,
+                    "switch",
+                    sched_switch.unique_id,
+                    pending_readd_ids=pending_readd_ids,
+                ):
+                    new.append(sched_switch)
         return new
 
     def _add_fast_entities() -> None:
@@ -251,9 +272,13 @@ class DockhandContainerRunningSwitch(_BaseFastContainerSwitch):
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        await async_dockhand_action(
-            self._client.async_start_container(self._env_id, c["id"])
+        # A paused container can't be started, only resumed.
+        start = (
+            self._client.async_unpause_container
+            if c.get("state") == "paused"
+            else self._client.async_start_container
         )
+        await async_dockhand_action(start(self._env_id, c["id"]))
         await self.coordinator.async_refresh_environment(self._env_id)
 
     @override
@@ -515,3 +540,55 @@ class DockhandGitStackAutoUpdateSwitch(
             self._base_url,
             source_type="git",
         )
+
+
+class DockhandScheduleEnabledSwitch(DockhandScheduleEntity, SwitchEntity):
+    """Whether a Dockhand schedule runs: off pauses it, as in Dockhand."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "schedule_enabled"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        client: Any,
+        entry_id: str,
+        sched: dict[str, Any],
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, sched, base_url, "enabled")
+        self._client = client
+        self._system = _schedule_is_system_toggle(sched)
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._find() is not None
+
+    @property
+    @override
+    def is_on(self) -> bool | None:
+        s = self._find()
+        return bool(s.get("enabled")) if s else None
+
+    async def _set(self, enabled: bool) -> None:
+        # Dockhand only flips, and this entity's state can be up to a poll
+        # old, so flip until Dockhand reports the wanted state (at most
+        # twice: the second flip undoes a change made elsewhere meanwhile).
+        for _ in range(2):
+            now = await async_dockhand_action(
+                self._client.async_toggle_schedule(
+                    self._sched_type, self._sched_id, system=self._system
+                )
+            )
+            if now == enabled:
+                break
+        await self.coordinator.async_refresh()
+
+    @override
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._set(True)
+
+    @override
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._set(False)

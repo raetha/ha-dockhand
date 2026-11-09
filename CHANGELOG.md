@@ -15,6 +15,21 @@
   and refresh from an automation on your own schedule instead.
   Downgrading to 1.11.x still works and keeps the intervals you'd set.
 
+### Added
+
+- **Run schedules now, and pause them** — each schedule gets a **Run now**
+  button and, where Dockhand allows it, an **Enabled** switch, so
+  schedules are no longer read-only in Home Assistant.
+- **Pause and Resume buttons** for each container (disabled by default).
+- **`dockhand.prune` action** — deletes stopped containers and unused
+  images, volumes or networks in an environment, and reports how much
+  space it freed. Administrators only.
+- **`dockhand.recreate_container` action** — recreates a container from
+  its current settings, optionally pulling its image again first, like
+  saving it in Dockhand's editor. Administrators only.
+- **README: which Dockhand Enterprise permissions each feature needs**,
+  and what a Docker socket proxy in front of Dockhand has to allow.
+
 ### Changed
 
 - **Actions refresh only their own environment** — after a button, switch
@@ -39,6 +54,8 @@
   its identity, so the old URL can be added again, and a URL already used
   by another Dockhand entry is refused. The entry's name follows the URL
   unless you've renamed it.
+- **Turning a paused container's switch on** now resumes it; it used to
+  fail, since Docker can't start a paused container.
 - **Clear error when Dockhand denies an action** — with Dockhand
   Enterprise roles, an action the API token's user isn't allowed to do now
   says so, instead of showing a raw "API error 403".

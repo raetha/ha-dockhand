@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "自动部署"
+      },
+      "schedule_enabled": {
+        "name": "已启用"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "更新所有容器"
+      },
+      "pause": {
+        "name": "暂停"
+      },
+      "resume": {
+        "name": "恢复"
+      },
+      "schedule_run": {
+        "name": "立即运行"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "未找到容器 — 它可能已被删除"
     },
+    "entry_not_loaded": {
+      "message": "该 Dockhand 实例未加载。请在“设置 → 设备与服务”中检查。"
+    },
     "git_stack_not_found": {
       "message": "未找到 Git 堆栈 — 可能已被移除"
     },
+    "invalid_target": {
+      "message": "该设备不是此操作可用的 Dockhand 环境或容器。"
+    },
     "permission_denied": {
       "message": "Dockhand 拒绝了此操作：API 令牌对应的用户没有相应权限。请在 Dockhand 中检查该用户的角色。"
+    },
+    "system_container": {
+      "message": "无法从 Home Assistant 重建 Dockhand 自身的容器和 Hawser 代理。"
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "已自动恢复 {container} 的内存限制",
       "description": "容器 \"{container}\" 在其内存限制被降低后不久就停止运行，当新限制低于容器实际使用量时，内核会立即强制执行该限制，从而导致此情况。内存限制已自动恢复为先前的值（{memory_bytes} 字节）。请在 Dockhand 中检查该容器的日志和当前健康状态。"
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "清理未使用的资源",
+      "description": "删除某个 Dockhand 环境中未使用的 Docker 资源，并报告删除了哪些内容。",
+      "fields": {
+        "device_id": {
+          "name": "环境",
+          "description": "要清理的 Dockhand 环境。"
+        },
+        "resources": {
+          "name": "资源",
+          "description": "要删除的内容。"
+        },
+        "all_images": {
+          "name": "所有未使用的镜像",
+          "description": "同时删除没有容器使用的带标签镜像，而不仅仅是悬空（无标签）镜像。"
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "重建容器",
+      "description": "按容器当前配置重建容器，效果与在 Dockhand 编辑器中保存相同，可选先拉取其镜像。",
+      "fields": {
+        "device_id": {
+          "name": "容器",
+          "description": "要重建的容器。"
+        },
+        "pull": {
+          "name": "拉取镜像",
+          "description": "先重新拉取容器的镜像，以获取同一标签下的更新镜像。"
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "已停止的容器",
+        "images": "镜像",
+        "volumes": "未使用的卷",
+        "networks": "未使用的网络"
+      }
     }
   }
 }

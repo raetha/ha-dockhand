@@ -275,6 +275,9 @@
       },
       "git_stack_auto_deploy": {
         "name": "Auto deploy"
+      },
+      "schedule_enabled": {
+        "name": "Enabled"
       }
     },
     "button": {
@@ -292,6 +295,15 @@
       },
       "env_bulk_update": {
         "name": "Update all containers"
+      },
+      "pause": {
+        "name": "Pause"
+      },
+      "resume": {
+        "name": "Resume"
+      },
+      "schedule_run": {
+        "name": "Run now"
       }
     },
     "number": {
@@ -324,11 +336,20 @@
     "container_not_found": {
       "message": "Container not found — it may have been removed"
     },
+    "entry_not_loaded": {
+      "message": "That Dockhand instance isn't loaded. Check it under Settings → Devices & services."
+    },
     "git_stack_not_found": {
       "message": "Git stack not found — it may have been removed"
     },
+    "invalid_target": {
+      "message": "That device isn't a Dockhand environment or container this action can use."
+    },
     "permission_denied": {
       "message": "Dockhand refused this: the API token's user doesn't have permission for it. Check the user's role in Dockhand."
+    },
+    "system_container": {
+      "message": "Dockhand's own container and Hawser agents can't be recreated from Home Assistant."
     }
   },
   "issues": {
@@ -347,6 +368,50 @@
     "runtime_memory_reverted": {
       "title": "Memory limit auto-reverted for {container}",
       "description": "Container \"{container}\" stopped running shortly after its memory limit was lowered, which can happen when the new limit is below the container's actual usage and the kernel enforces it immediately. The memory limit has been automatically reverted to its previous value ({memory_bytes} bytes). Check the container's logs and current health in Dockhand."
+    }
+  },
+  "services": {
+    "prune": {
+      "name": "Prune unused resources",
+      "description": "Deletes unused Docker resources in one Dockhand environment and reports what was removed.",
+      "fields": {
+        "device_id": {
+          "name": "Environment",
+          "description": "The Dockhand environment to clean up."
+        },
+        "resources": {
+          "name": "Resources",
+          "description": "What to delete."
+        },
+        "all_images": {
+          "name": "All unused images",
+          "description": "Also delete tagged images that no container uses, not only dangling (untagged) ones."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Recreate container",
+      "description": "Recreates a container from its current configuration, as saving it in Dockhand's editor does, optionally pulling its image first.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "The container to recreate."
+        },
+        "pull": {
+          "name": "Pull image",
+          "description": "Pull the container's image again first, picking up a newer image under the same tag."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Stopped containers",
+        "images": "Images",
+        "volumes": "Unused volumes",
+        "networks": "Unused networks"
+      }
     }
   }
 }

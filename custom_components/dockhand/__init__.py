@@ -6,9 +6,11 @@ from typing import Any
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import DockhandClient
 from .const import (
@@ -62,6 +64,7 @@ from .helpers import (
     _stack_has_system_container,
 )
 from .migration import async_run_migrations
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +90,7 @@ _GIT_STACK_SUFFIXES = (
 # Running switch + restart button + auto-update switch — suppressed for
 # system containers/stacks containing one, so unlike most container/stack
 # entities these can't rely purely on device cascade either.
-_CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update")
+_CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update", "pause", "resume")
 _STACK_ACTION_SUFFIXES = ("running", "restart")
 
 # Exact, full unique_id suffixes for standalone env-level entities that are
@@ -145,6 +148,14 @@ class DockhandData:
 # Typed config entry alias — used throughout all platform setup functions
 # so that entry.runtime_data is typed as DockhandData without casting.
 type DockhandConfigEntry = ConfigEntry[DockhandData]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration's actions, once, whatever entries exist."""
+    async_setup_services(hass)
+    return True
 
 
 def _normalized_entry_config(

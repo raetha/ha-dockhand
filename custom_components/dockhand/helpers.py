@@ -22,6 +22,17 @@ from .api import DockhandPermissionError
 from .const import DOMAIN
 
 
+def ha_schema(schema: Any) -> Any:
+    """A schema in whatever type this Home Assistant takes.
+
+    From 2026.10 Home Assistant validates with probatio and makes `import
+    voluptuous` load probatio, so at runtime these schemas already are
+    probatio schemas; only the static types differ. Voluptuous stays while
+    the minimum Home Assistant version predates probatio.
+    """
+    return schema
+
+
 async def async_dockhand_action[T](action: Awaitable[T]) -> T:
     """Await a Dockhand call made for a user action, turning any failure
     into an error Home Assistant shows to whoever triggered it."""
@@ -680,6 +691,36 @@ def _schedule_group_device(
     if parent_id is not None:
         info["via_device_id"] = parent_id
     return info
+
+
+# Schedule types Dockhand can't run on demand.
+_SCHEDULE_TYPES_WITHOUT_RUN = frozenset({"env_report", "stack_deploy"})
+# Schedule types whose Enabled switch is offered. Left out: container_update
+# and git_stack_sync (the container's Auto update and the git stack's Auto
+# deploy switches already control them), repo_* (Dockhand stops listing them
+# once off, so the switch would remove itself), env_report (no toggle route).
+_TOGGLEABLE_SCHEDULE_TYPES = frozenset(
+    {"container_start", "container_stop", "env_update_check", "image_prune", "backup"}
+)
+# Built-in cleanup jobs Dockhand lets you pause (by id); the rest always run.
+_TOGGLEABLE_SYSTEM_SCHEDULE_IDS = frozenset({1, 2, 4, 5})
+
+
+def _schedule_can_run(sched: dict) -> bool:
+    return sched.get("type") not in _SCHEDULE_TYPES_WITHOUT_RUN
+
+
+def _schedule_is_system_toggle(sched: dict) -> bool:
+    return (
+        sched.get("type") == "system_cleanup"
+        and sched.get("id") in _TOGGLEABLE_SYSTEM_SCHEDULE_IDS
+    )
+
+
+def _schedule_can_toggle(sched: dict) -> bool:
+    return sched.get(
+        "type"
+    ) in _TOGGLEABLE_SCHEDULE_TYPES or _schedule_is_system_toggle(sched)
 
 
 def _sched_device(

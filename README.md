@@ -118,6 +118,29 @@ If Dockhand authentication is fully disabled, no token is needed. The integratio
 ### Re-authentication
 If a token is revoked or expires, the integration will surface a re-authentication notification in HA. Go to **Settings → Devices & Services → Dockhand → Re-authenticate**, generate a new token in Dockhand, and paste it in.
 
+### Permissions
+
+A token acts as the Dockhand user who created it. In Dockhand's free edition every signed-in user may do everything, so there's nothing to set up. With **Dockhand Enterprise** roles, the token's user needs these permissions (per environment, where the role is environment-scoped):
+
+| For | Dockhand permission |
+|---|---|
+| Everything (environments, their stats and host details) | `environments: view` |
+| Containers, stacks and their sensors | `containers: view`, `stacks: view` |
+| Images, volumes, networks (when enabled) | `images: view`, `volumes: view`, `networks: view` |
+| Schedules and the Auto update switch's state | `schedules: view` |
+| Activity sensor | `activity: view` |
+| Container switch, Restart, Pause, Resume | `containers: start`, `stop`, `restart` |
+| Stack switch, Restart, Redeploy, git stack Deploy | `stacks: start`, `stop`, `restart` |
+| Install, Update all, runtime controls, `dockhand.recreate_container` | `containers: create` |
+| Auto update and git stack Auto deploy switches | `schedules: edit`, `stacks: edit` |
+| Schedule Run now / Enabled | `schedules: run` / `schedules: edit` (built-in cleanups: `settings: edit`; a container start/stop schedule also needs `containers: start` and `stop`) |
+| `dockhand.prune` | `remove` on each resource type pruned |
+| Updates to Dockhand itself (precise update versions) | an administrator |
+
+Anything the token can't read shows as unavailable (with a repair issue saying which data couldn't be fetched); an action it isn't allowed to take fails with a "doesn't have permission" error.
+
+**Docker socket proxies.** If Dockhand itself reaches Docker through a socket proxy (such as `tecnativa/docker-socket-proxy`), the proxy decides what Dockhand can do, whatever the token allows. Dockhand's own documentation covers what it needs; for this integration's features, note that actions need write requests (`POST`) allowed for the resource involved (`CONTAINERS`, `IMAGES`, `VOLUMES`, `NETWORKS`), pruning and recreating need `DELETE` too where the proxy separates it, and disk-usage figures need `SYSTEM` (`/system/df`).
+
 ---
 
 ## Device model
@@ -218,8 +241,9 @@ Also disabled by default, each sourced from its own gated API call — only fetc
 |---|---|---|
 | State | sensor | running / exited / paused / etc. |
 | Health | sensor | healthy / unhealthy / starting. Only created for containers with a Docker healthcheck configured — enabled by default |
-| Container | switch | turn on = start, turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
+| Container | switch | turn on = start (or resume, if paused), turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
 | Restart | button | restarts the container, or starts it if stopped. **Not created for system containers** — see note below |
+| Pause, Resume | button | freeze a running container's processes, and let a paused one run again; each is unavailable outside the state it applies to. Disabled by default in the entity registry. **Not created for system containers** — see note below |
 | Update | update | Created automatically for every container, as long as **Enable update entities** is on (default on; see Options above) — whether or not Dockhand's scheduled update check is turned on for the environment. Shows the image tag as `installed_version`, and flips `latest_version` to `update-pending` as soon as a Dockhand update check (scheduled or manual) finds one, with no registry query of its own. Enable **Enable precise update versions** in Configure to also show real image-digest version numbers via periodic registry queries. Install triggers a scanned pull-and-recreate via Dockhand's `batch-update-stream` API (works at either tier — it only needs the container ID), honoring the environment's configured vulnerability blocking policy, and reports live install progress. Disabled for system containers and containers with `dockhand.update=false` label. When Dockhand also finds a newer version tag (one you'd move to by changing the container's image tag, so Install can't apply it), it's shown as `latest_version` only while nothing installable is pending, and is always available in the `newer_version` attribute, with `newer_version_bump` (`major`/`minor`/`patch`) and `newer_versions_count` (how many newer versions there are, including that one) beside it. Two more cases Install can't apply, shown the way Dockhand's own containers list shows them: for an image pinned to a digest (`image:tag@sha256:…`) whose tag has moved on (Dockhand 1.0.54+), the entity turns on with Install unavailable and `pinned_digest_moved: true`, since the pin has to be changed; and an update Dockhand is holding until the new image reaches its minimum image age (Dockhand 1.0.52+) turns it on with Install unavailable too, with `update_held_hours` counting down the hours left (0 once the wait is over, until Dockhand's next update check offers it as a normal update). Both turn off again as soon as Dockhand stops reporting them |
 | Memory limit, CPU limit, Process limit | number | Live in-place resource limits (0 = unlimited, except Process limit where -1 = unlimited, matching Docker's own convention). Stack-less (non-Compose) containers only. **Optional — enable via Configure**, disabled by default in the entity registry. **Not created for system containers** — see note below |
 | Restart policy | select | Live restart policy (`no`/`always`/`unless-stopped`/`on-failure`). Stack-less containers only. **Optional — enable via Configure**, disabled by default in the entity registry. **Not created for system containers** — see note below |
@@ -280,16 +304,45 @@ One entity per volume, living under the **{env} – Volumes** group device.
 
 ### Schedule (optional, 600 s)
 
-Two entities per schedule, parented to a per-schedule device under the **Schedules** hub. The per-schedule device structure is preserved to future-proof for Dockhand API additions (run-now, enable/disable).
+Each schedule gets its own device under the **Schedules** hub (or its environment's Schedules group).
 
 | Entity | Type | Notes |
 |---|---|---|
 | Next run | sensor | TIMESTAMP device class; suitable for time-based automation triggers. Attributes include cron expression, enabled state, environment name, and schedule type |
 | Last status | sensor | DIAGNOSTIC; string value (`success`, `failed`, etc.) — use a `state` trigger for clean failure-alert automations. Attributes include triggered_by, triggered_at, duration_ms, error_message |
-
-> Schedules are **read-only**. Dockhand does not expose a run-now API endpoint, so no action button is provided. The per-schedule device is kept for when this changes.
+| Run now | button | runs the schedule once now, outside its timing. Not created for scheduled reports and stack deploys, which Dockhand can't run on demand |
+| Enabled | switch | off pauses the schedule, as in Dockhand. Only for the schedules Dockhand can pause from here: scheduled container start/stop (one switch covers a container's start and stop together), environment update checks, image prunes, backups, and the built-in schedule, event, scanner and scan-retention cleanups. A container's auto-update and a git stack's auto-sync are paused with the **Auto update** and **Auto deploy** switches on the container or stack instead |
 
 ---
+
+## Actions
+
+Two actions, for administrators only (they delete data or replace a container):
+
+| Action | Does | Fields |
+|---|---|---|
+| `dockhand.prune` | Deletes unused Docker resources in one environment and returns what was removed (`space_reclaimed` in bytes, and `images_deleted` etc. per resource) | `device_id`: the environment's device. `resources`: any of `containers` (stopped ones), `images`, `volumes`, `networks`. `all_images`: also delete tagged images no container uses, not only dangling ones (default off) |
+| `dockhand.recreate_container` | Recreates a container from its current configuration, as saving it in Dockhand's editor does — a container that was running is started again | `device_id`: the container's device. `pull`: pull its image again first, picking up a newer image under the same tag (default on). Not for Dockhand's own container or Hawser agents |
+
+```yaml
+automation:
+  - alias: "Weekly Docker clean-up"
+    triggers:
+      - trigger: time
+        at: "04:00:00"
+    conditions:
+      - condition: time
+        weekday: sun
+    actions:
+      - action: dockhand.prune
+        data:
+          device_id: 0123456789abcdef0123456789abcdef  # the environment's device
+          resources: [containers, images, networks]
+        response_variable: pruned
+      - action: persistent_notification.create
+        data:
+          message: "Freed {{ (pruned.space_reclaimed / 1048576) | round(1) }} MiB"
+```
 
 ## Container and Stack controls
 
@@ -405,7 +458,7 @@ Home Assistant doesn't let integrations offer a polling-interval setting; the in
 |---|---|---|
 | Fast coordinator | an environment's **Containers** sensor, or any container or stack entity | `sensor.local_containers` |
 | Slow coordinator | an environment's **Docker version** sensor, or any image, volume, network, schedule or git stack entity | `sensor.local_docker_version` |
-| Update coordinator | none: press an environment's **Check for updates** button (`button.press`), which checks that environment only | `button.local_check_for_updates` |
+| Update coordinator | none: press an environment's **Check for updates** button (`button.press`), which checks that environment only | `button.local_check_for_image_updates` |
 
 ```yaml
 automation:
@@ -455,8 +508,8 @@ Intentional — the Dockhand API has no run-now endpoint for schedules. The per-
 ## Known limitations
 
 - **No push updates.** Dockhand's API is polled, so changes appear on the next poll (see [Data Updates](#data-updates)).
-- **Schedules are read-only.** Dockhand's API has no way to run a schedule now, or to enable or disable one.
-- **Restart only works on running containers and stacks.** Docker can't restart a stopped one; turn its switch on instead.
+- **Some schedules can't be paused or run from here.** Dockhand can't run scheduled reports or stack deploys on demand, and can't pause backup-repository maintenance without it disappearing from its schedule list, so those get no Run now or Enabled entity.
+- **No build-cache pruning.** Dockhand's API has no build-cache prune, so `dockhand.prune` can't do it either.
 - **Runtime controls only for stand-alone containers.** Memory, CPU and process limits and the restart policy can't be changed live for a Compose-managed container, since the stack's own compose file would put them back.
 - **Pinned-version Dockhand and Hawser images get limited update notices.** Dockhand never reports a newer version tag for its own container or a Hawser agent. A pinned Dockhand is covered by Dockhand's own release check where it can see its own container; a pinned Hawser isn't covered at all. See the notes at the end of [Stack](#stack-always-on-60-s) — a floating tag avoids both.
 - **No controls for system containers.** Dockhand's own container and Hawser agents (and stacks containing one) get no start/stop/restart switch, button or runtime controls, matching Dockhand's own UI. Dockhand's scheduled update check skips them too, so their updates are found only by **Check for updates**.

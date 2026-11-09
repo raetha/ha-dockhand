@@ -353,6 +353,122 @@ async def test_restart_container(action_client):
     )
 
 
+@pytest.mark.parametrize("action", ["pause", "unpause"])
+async def test_pause_and_unpause_container(action_client, action: str):
+    await getattr(action_client, f"async_{action}_container")(1, "cid")
+    assert action_client._request.call_args.args == (
+        "POST",
+        f"/api/containers/cid/{action}?env=1",
+    )
+
+
+async def test_recreate_container_sends_the_current_name_and_image(action_client):
+    action_client._request.return_value = {"success": True, "id": "new"}
+    result = await action_client.async_recreate_container(
+        1, "cid", name="web", image="nginx:1", pull=True, start=False
+    )
+    assert result == {"success": True, "id": "new"}
+    call = action_client._request.call_args
+    assert call.args == ("POST", "/api/containers/cid/update?env=1")
+    assert call.kwargs["json"] == {
+        "name": "web",
+        "image": "nginx:1",
+        "repullImage": True,
+        "startAfterUpdate": False,
+    }
+
+
+async def test_recreate_container_tolerates_a_non_object_reply(action_client):
+    action_client._request.return_value = "ok"
+    assert (
+        await action_client.async_recreate_container(
+            1, "cid", name="web", image="nginx", pull=False, start=True
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize(
+    ("resource", "all_images", "path"),
+    [
+        ("images", False, "/api/prune/images?env=1&dangling=true"),
+        ("images", True, "/api/prune/images?env=1&dangling=false"),
+        ("volumes", True, "/api/prune/volumes?env=1"),
+    ],
+)
+async def test_prune_returns_dockers_report(
+    action_client, resource: str, all_images: bool, path: str
+):
+    action_client._request.return_value = {
+        "success": True,
+        "result": {"SpaceReclaimed": 5},
+    }
+    report = await action_client.async_prune(1, resource, all_images=all_images)
+    assert report == {"SpaceReclaimed": 5}
+    assert action_client._request.call_args.args == ("POST", path)
+
+
+@pytest.mark.parametrize(
+    ("reply", "message"),
+    [
+        ("not json", "Unexpected response"),
+        ({"success": False, "error": "Failed to prune images"}, "Failed to prune"),
+        ({"success": False}, "Pruning images failed"),
+    ],
+)
+async def test_prune_raises_when_dockhand_reports_a_failure(
+    action_client, reply, message: str
+):
+    action_client._request.return_value = reply
+    with pytest.raises(DockhandError, match=message):
+        await action_client.async_prune(1, "images")
+
+
+async def test_prune_without_a_report(action_client):
+    action_client._request.return_value = {"success": True, "result": None}
+    assert await action_client.async_prune(1, "networks") == {}
+
+
+async def test_run_schedule(action_client):
+    action_client._request.return_value = {"success": True, "message": "ok"}
+    await action_client.async_run_schedule("image_prune", 3)
+    assert action_client._request.call_args.args == (
+        "POST",
+        "/api/schedules/image_prune/3/run",
+    )
+
+
+async def test_run_schedule_raises_when_the_task_fails(action_client):
+    action_client._request.return_value = {"success": False, "message": "No disk"}
+    with pytest.raises(DockhandError, match="No disk"):
+        await action_client.async_run_schedule("backup", 3)
+
+
+@pytest.mark.parametrize(
+    ("system", "path"),
+    [
+        (False, "/api/schedules/image_prune/3/toggle"),
+        (True, "/api/schedules/system/3/toggle"),
+    ],
+)
+async def test_toggle_schedule_returns_the_new_state(
+    action_client, system: bool, path: str
+):
+    action_client._request.return_value = {"success": True, "enabled": False}
+    assert (
+        await action_client.async_toggle_schedule("image_prune", 3, system=system)
+        is False
+    )
+    assert action_client._request.call_args.args == ("POST", path)
+
+
+@pytest.mark.parametrize("reply", [None, {"success": True}])
+async def test_toggle_schedule_rejects_an_unexpected_reply(action_client, reply):
+    action_client._request.return_value = reply
+    with pytest.raises(DockhandError):
+        await action_client.async_toggle_schedule("image_prune", 3)
+
+
 async def test_start_stack(action_client):
     await action_client.async_start_stack(1, "myapp")
     assert action_client._request.call_args.args == (

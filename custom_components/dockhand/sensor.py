@@ -32,7 +32,11 @@ from .coordinator import (
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
 )
-from .entity import DockhandContainerEntity, DockhandStackEntity
+from .entity import (
+    DockhandContainerEntity,
+    DockhandScheduleEntity,
+    DockhandStackEntity,
+)
 from .helpers import (
     _actionable_pending_update_container_ids,
     _all_envs,
@@ -49,8 +53,6 @@ from .helpers import (
     _image_display_name,
     _image_group_device,
     _network_group_device,
-    _sched_device,
-    _sched_key,
     _stack_device,
     _volume_group_device,
     already_registered,
@@ -2409,50 +2411,8 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
 # --------------------------------------------------------------------------- #
 
 
-class _BaseScheduleSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorEntity):
+class _BaseScheduleSensor(DockhandScheduleEntity, SensorEntity):
     """Common base for per-schedule sensors."""
-
-    _attr_has_entity_name = True
-
-    def __init__(
-        self,
-        coordinator: DockhandSlowCoordinator,
-        entry_id: str,
-        sched: dict,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._sched_id = sched["id"]
-        self._sched_type = sched["type"]
-        self._sched_name = sched["name"]
-        self._sched_env_id = sched.get("environmentId")
-        self._sched_env_name = sched.get("environmentName")
-        self._base_url = base_url
-
-    def _find(self) -> dict | None:
-        for s in (self.coordinator.data or {}).get("schedules") or []:
-            if (
-                isinstance(s, dict)
-                and s["id"] == self._sched_id
-                and s["type"] == self._sched_type
-            ):
-                return s
-        return None
-
-    @property
-    @override
-    def device_info(self) -> DeviceInfo:
-        return _sched_device(
-            getattr(self, "hass", None),
-            self._entry_id,
-            self._sched_id,
-            self._sched_type,
-            self._sched_name,
-            self._base_url,
-            environment_id=self._sched_env_id,
-            environment_name=self._sched_env_name,
-        )
 
 
 class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
@@ -2472,8 +2432,7 @@ class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
         sched: dict,
         base_url: str,
     ) -> None:
-        super().__init__(coordinator, entry_id, sched, base_url)
-        self._attr_unique_id = f"{self._entry_id}_sched_{_sched_key(sched)}_next_run"
+        super().__init__(coordinator, entry_id, sched, base_url, "next_run")
 
     @property
     @override
@@ -2530,8 +2489,7 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
         sched: dict,
         base_url: str,
     ) -> None:
-        super().__init__(coordinator, entry_id, sched, base_url)
-        self._attr_unique_id = f"{self._entry_id}_sched_{_sched_key(sched)}_last_status"
+        super().__init__(coordinator, entry_id, sched, base_url, "last_status")
 
     @property
     @override
