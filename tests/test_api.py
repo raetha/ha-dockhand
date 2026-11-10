@@ -940,3 +940,16 @@ async def test_check_self_update_url(client_with_mock_request):
 async def test_check_self_update_non_dict_becomes_empty(client_with_mock_request):
     client_with_mock_request._request.return_value = "Admin access required"
     assert await client_with_mock_request.async_check_self_update() == {}
+
+
+@pytest.mark.parametrize(
+    ("call", "path"),
+    [
+        (lambda c: c.async_get_tags(), "/api/tags"),
+        (lambda c: c.async_get_container_tags(3), "/api/container-tags?env=3"),
+        (lambda c: c.async_get_stack_tags(3), "/api/stack-tags?env=3"),
+    ],
+)
+async def test_tag_reads(action_client, call, path):
+    await call(action_client)
+    assert action_client._request.call_args.args == ("GET", path)

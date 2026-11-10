@@ -220,6 +220,9 @@ def make_mock_client(
     client.async_get_volumes = AsyncMock(return_value=[])
     client.async_get_schedules = AsyncMock(return_value=[])
     client.async_get_dockhand_version = AsyncMock(return_value="1.0.57")
+    client.async_get_tags = AsyncMock(return_value={"tags": []})
+    client.async_get_container_tags = AsyncMock(return_value={})
+    client.async_get_stack_tags = AsyncMock(return_value={})
 
     client.async_start_container = AsyncMock()
     client.async_stop_container = AsyncMock()

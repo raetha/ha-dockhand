@@ -67,22 +67,21 @@ the reasoning first and only revisit if the stated condition has changed.
   that logic client-side. Revisit after a few more Dockhand releases, or
   sooner if Dockhand ships something that makes this moot or easier.
 
-- **Auto-applying a semver "newer version tag" suggestion** (i.e. having
-  Install move a container to the tag `newerVersion` recommends, or editing
-  the pinned tag in the container's compose file/config on the user's
-  behalf). Rejected outright, not just deferred — Dockhand's own frontend
-  treats this purely as an advisory, session-only badge with no install
-  action (confirmed by reading `VersionUpdateModal.svelte`: a "view
-  releases" link and a Close button, nothing else), and for good reason:
-  the compose file is the user's own, and this integration doesn't own it.
-  Editing it out from under the user, or silently changing what tag a
-  freestanding container is configured with, is a correctness/trust
-  problem, not a convenience — see `update.py`'s
-  `_semver_advisory_only()`/module docstring for how the update entity
-  reflects this (Install withheld when this is the only signal). Not
-  worth revisiting unless Dockhand itself ships a "move to this tag"
-  action we could call instead of reimplementing our own.
-
+- **Moving a standalone container to a newer version tag** (an image pinned
+  to `nginx:1.27` when Dockhand suggests `1.28`). Open for the maintainer
+  to decide (2026-11-09). Compose-managed containers stay out of scope for
+  good: the compose file is the user's own, and editing it out from under
+  them is a trust problem. A container created with `docker run` or in
+  Dockhand's own UI has no file to edit, and Dockhand's
+  `POST /api/containers/{id}/update` (what `dockhand.recreate_container`
+  already calls) takes the image to recreate with, so Install could
+  recreate it on `newerVersion`'s tag. Questions to settle first: how to
+  tell a standalone container reliably (no `com.docker.compose.project`
+  label), whether this belongs on Install (which today only ever keeps the
+  tag) or a separate action, how to present the version jump (often a
+  breaking change, unlike a same-tag update), and how it interacts with
+  Dockhand's minimum image age and vulnerability blocking. Dockhand's own
+  UI only offers the suggestion as a badge with a link to release notes.
 - **Re-checking a container right after Install so a "newer version tag"
   suggestion reappears immediately.** When a pinned image has both an
   installable same-tag update and a `newerVersion` suggestion, applying the
@@ -137,24 +136,6 @@ the reasoning first and only revisit if the stated condition has changed.
   using `section()` to copy the exact translation structure from, or some way to
   render/test the actual frontend rather than guessing from source reading.
 
-- **Container and stack tags** (Dockhand 1.0.49+). Dockhand now has
-  user-defined tags with a name, colour and icon (`GET /api/tags`), assigned
-  per container (`GET /api/container-tags?env=` → `{name: [tagId]}`) and per
-  stack (`GET /api/stack-tags?env=`), plus a `dockhand.tags` container label
-  that stacks inherit. Exposing them would mean a `tags` attribute (names,
-  maybe colours) on the container and stack state/status sensors, fetched
-  per environment on the slow coordinator (needs `containers:view` /
-  `stacks:view`). The main consumer would be ha-dockhand-cards: tag pills
-  and filtering/grouping by tag, which fits the filters planned for cards
-  2.0.0. Raetha: worth doing, not urgent (2026-10-14).
-
-- **`UnitOfRatio.PERCENTAGE` for percentage sensors.** A newer HA enum
-  than what this integration currently targets — requires HA minimum
-  bumped past 2026.7. Current minimum is 2026.3; no other reason to bump
-  it has come up yet (the `async_get_device_by_identifier` migration that
-  was expected to force it landed in 1.11.0 behind feature detection
-  instead, keeping the minimum where it is).
-
 - **Runtime controls: Block I/O (`Blkio*`) fields.** Left out of the
   first pass — low value for home-lab use, and real complexity (per-device
   weight maps, not scalars like the other runtime controls). See
@@ -183,18 +164,6 @@ the reasoning first and only revisit if the stated condition has changed.
   selected entity individually, so there was never a way to detect or
   hook into it from an integration. Nothing further to do here unless HA
   core adds a real bulk-install primitive later.
-
-- **Slow coordinator's per-environment gather** (`return_exceptions=True`,
-  logs and omits that env's key from `environments` this cycle on
-  failure) — checked against the fetch-failure principle in
-  `docs/architecture.md` §3 and not currently believed to be the same
-  bug (a missing dict key reads as "no fresh data this cycle" to
-  consumers going through `_coordinator_env`, not "confirmed
-  empty"), but wasn't traced all the way through every
-  slow-coordinator-driven cleanup path (images/volumes/networks) the
-  way the fast coordinator was. Worth a closer look if a similar
-  disappearing-devices report ever surfaces for those entity types
-  specifically.
 
 ## Rejected
 

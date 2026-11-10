@@ -1291,3 +1291,10 @@ gating, mirroring the Containers group device's own condition exactly
 (both lack a config toggle to turn the feature off entirely, unlike
 Images/Networks/Volumes, so both only ever have the "confirmed empty"
 case to check, not an "explicitly disabled" one too).
+
+**A whole environment failing in the slow coordinator** (its `_fetch_env` raising) leaves that
+environment out of `environments` for the cycle. Cleanup reads that as "no fresh data", never as
+"empty": `_build_live_sets` only puts an environment in `images_fetch_ok_env_ids` (and the
+networks, volumes and git-stack equivalents) when it's present with that resource neither failed
+nor unconfirmed, and every image, network, volume and group removal requires that membership.
+Checked end to end for images, networks and volumes in November 2026.

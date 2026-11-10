@@ -77,6 +77,9 @@ def _make_client(
     c.async_get_git_stacks = AsyncMock(return_value=[])
     c.async_get_auto_update_settings = AsyncMock(return_value={})
     c.async_get_pending_updates = AsyncMock(return_value=[])
+    c.async_get_tags = AsyncMock(return_value={"tags": []})
+    c.async_get_container_tags = AsyncMock(return_value={})
+    c.async_get_stack_tags = AsyncMock(return_value={})
     return c
 
 
