@@ -1841,3 +1841,21 @@ async def test_entity_redraws_on_its_environments_install_progress(hass):
         async_dispatcher_send(hass, install_signal(ENTRY_ID, ENV_ID + 1))
         await hass.async_block_till_done()
     write.assert_called_once()
+
+
+def test_on_whenever_latest_differs_even_if_it_sorts_lower():
+    """An image's version label and its tags can number differently (a
+    label "v2026.11.0", tags "4.0"). Home Assistant's own comparison would
+    call Dockhand's newer tag older and turn the entity off; any latest
+    version that differs from the installed one is a signal here."""
+    container = {
+        **CONTAINER_NORMAL,
+        "labels": {"org.opencontainers.image.version": "v2026.11.0"},
+    }
+    item = {
+        **ITEM_UP_TO_DATE,
+        "newerVersion": {"tag": "4.0", "bump": "major", "skipped": ["4.0"]},
+    }
+    entity = _make_entity(item, containers=[container])
+    assert (entity.installed_version, entity.latest_version) == ("v2026.11.0", "4.0")
+    assert entity.state == "on"

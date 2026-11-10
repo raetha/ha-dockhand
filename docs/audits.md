@@ -46,8 +46,10 @@ review has its own log in [quality-scale.md](quality-scale.md).
 - Home Assistant 2026.11 (source and contributors blog): actions read the deprecated
   `DeviceEntry.config_entries`, logging a warning on 2026.10+; now feature-detected, with a
   regression test (reverted, failed, restored). Device info built with `DeviceInfo(...)` ahead of
-  plain dictionaries being deprecated. Proposed, not built: linking repair issues to the config
-  entry (2026.11) so they go with it; `has_update` on update entities.
+  plain dictionaries being deprecated. Follow-ups the owner approved: repair issues linked to their
+  config entry where HA supports it (2026.11+). `has_update` (2026.11) isn't needed, but looking at
+  it found that HA's version comparison could turn an update entity off for a real newer tag;
+  `version_is_newer` now treats any difference as an update, on every supported HA version.
 - Repair issues for runtime-change warnings now include the entry id, so two instances can't
   replace each other's.
 - `stale.yml` gets `permissions: {}` at the top like `build.yml`'s `contents: read`.

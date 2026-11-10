@@ -30,6 +30,7 @@ from .helpers import (
     _find_container,
     already_registered,
     async_dockhand_action,
+    create_issue,
 )
 
 PARALLEL_UPDATES = 0
@@ -175,9 +176,9 @@ class DockhandContainerRestartPolicySelect(
 
         warnings = response.get("warnings") or []
         if warnings:
-            ir.async_create_issue(
+            create_issue(
                 self.hass,
-                DOMAIN,
+                self._entry_id,
                 f"runtime_update_warning_{self._entry_id}_{self._env_id}_"
                 f"{self._container_name}_RestartPolicy",
                 is_fixable=False,

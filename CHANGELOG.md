@@ -53,6 +53,8 @@
 - **Container `exit_code` and `image_version` attributes** on the State
   sensor: the exit code while a container is stopped, and the version from
   its image's `org.opencontainers.image.version` label.
+- **Repair issues go with the integration** — on Home Assistant 2026.11
+  and later, removing a Dockhand entry also removes its repair issues.
 - **README: which Dockhand Enterprise permissions each feature needs**,
   and what a Docker socket proxy in front of Dockhand has to allow.
 
@@ -110,6 +112,11 @@
 - **Runtime-change warnings from two Dockhand instances no longer replace
   each other** in Repairs when both have a container with the same name in
   an environment with the same number.
+- **An update entity could stay off for a newer version tag** when the
+  image's version label and its tags number differently (a label
+  `v2026.11.0`, tags like `4.0`): Home Assistant's version comparison
+  called the newer tag older. Any newer tag or pending update Dockhand
+  reports now turns the entity on.
 
 ### Internal
 
@@ -124,6 +131,7 @@
 - Devices are described with `DeviceInfo(...)`, which Home Assistant
   2026.11 made a dataclass; plain dictionaries are due to be deprecated.
 - Dead code found by CodeQL removed; ruff 0.17.4.
+- Two tag tests no longer move the event loop's clock, which made one fail at random.
 - The live feed skips its refresh when an action's refresh or a poll that
   started after the event already shows it, saving an API round per action.
 
