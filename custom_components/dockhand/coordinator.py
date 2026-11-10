@@ -9,6 +9,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from . import tags
 from .api import DockhandAuthError, DockhandClient, DockhandNotFoundError
 from .const import (
     CONF_ENABLE_IMAGES,
@@ -306,6 +307,12 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # arriving before it starts can share, and a lock so only one runs.
         self._queued_env_refresh: dict[int, asyncio.Task[None]] = {}
         self._env_refresh_locks: dict[int, asyncio.Lock] = {}
+        # Tags change rarely, so they're read on the slow coordinator's
+        # schedule; they live here because the containers and stacks they
+        # label do. Keyed by env id, None for the catalogue.
+        self._tag_catalog: dict[int, tags.Tag] = {}
+        self._tag_assignments: dict[int, tuple[dict, dict]] = {}
+        self._tags_read_at: dict[int | None, float] = {}
         super().__init__(
             hass,
             _LOGGER,
@@ -420,6 +427,73 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # this coordinator has somewhere to put any future hub-level
         # (non-per-environment) data without another reshape.
         return {"environments": out}
+
+    def _tags_due(self, key: int | None) -> bool:
+        """Whether tags are due to be read again; marks them read, so
+        environments polled together read the catalogue once."""
+        now = self.hass.loop.time()
+        last = self._tags_read_at.get(key)
+        if last is not None and now - last < SLOW_POLL_INTERVAL.total_seconds():
+            return False
+        self._tags_read_at[key] = now
+        return True
+
+    async def _async_tags(
+        self, env_id: int, containers: list[dict], stacks: list[dict]
+    ) -> tuple[dict[str, list[tags.Tag]], dict[str, list[tags.Tag]]]:
+        """Each container's and stack's tags, by name. Reading them is best
+        effort: a Dockhand older than 1.0.49 (404), a user who can't view
+        them (403) or a failed read just leaves the last tags known."""
+        if self._tags_due(None):
+            try:
+                self._tag_catalog = tags.catalog_from_api(
+                    await self.client.async_get_tags()
+                )
+            except Exception as err:
+                _LOGGER.debug("Dockhand: tag catalogue not read: %s", err)
+        if self._tags_due(env_id):
+            assigned = await asyncio.gather(
+                self.client.async_get_container_tags(env_id),
+                self.client.async_get_stack_tags(env_id),
+                return_exceptions=True,
+            )
+            old_containers, old_stacks = self._tag_assignments.get(env_id, ({}, {}))
+            new_containers, new_stacks = assigned
+            for result in assigned:
+                if isinstance(result, BaseException):
+                    _LOGGER.debug(
+                        "Dockhand: tags not read for env %s: %s", env_id, result
+                    )
+            self._tag_assignments[env_id] = (
+                new_containers if isinstance(new_containers, dict) else old_containers,
+                new_stacks if isinstance(new_stacks, dict) else old_stacks,
+            )
+        container_assigned, stack_assigned = self._tag_assignments.get(env_id, ({}, {}))
+        container_tags = {
+            c["name"]: found
+            for c in containers
+            if c.get("name")
+            and (
+                found := tags.resolve(
+                    container_assigned.get(c["name"]),
+                    tags.label_tags(c.get("labels")),
+                    self._tag_catalog,
+                )
+            )
+        }
+        stack_tags = {
+            st["name"]: found
+            for st in stacks
+            if st.get("name")
+            and (
+                found := tags.resolve(
+                    stack_assigned.get(st["name"]),
+                    tags.stack_label_tags(st, containers),
+                    self._tag_catalog,
+                )
+            )
+        }
+        return container_tags, stack_tags
 
     async def _fetch_env(self, env_id: int, stats: dict[str, Any]) -> tuple[int, dict]:
         # Named tasks rather than a positionally-indexed list, so an
@@ -556,6 +630,7 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 env_id, key, _names(items, "name"), _stats_total(stats, key)
             )
         }
+        container_tags, stack_tags = await self._async_tags(env_id, containers, stacks)
         self._apply_system_check_results(
             env_id,
             containers,
@@ -571,6 +646,8 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "stack_stats": stack_stats,
             "pending_update_container_ids": pending_update_container_ids,
             "pending_update_details": pending_update_details,
+            "container_tags": container_tags,
+            "stack_tags": stack_tags,
             # Checked by __init__.py's _build_live_sets before an empty
             # list counts as grounds for cleanup. Unconfirmed emptiness
             # isn't a failure, so it raises no repair issue.

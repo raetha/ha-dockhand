@@ -305,6 +305,18 @@ class DockhandClient:
     async def async_get_stacks(self, env_id: int) -> list[dict[str, Any]]:
         return await self._get_list(f"/api/stacks?env={_q(env_id)}")
 
+    async def async_get_tags(self) -> Any:
+        """Dockhand's tag catalogue (1.0.49+): {"tags": [{id, name, color}]}."""
+        return await self._request("GET", "/api/tags")
+
+    async def async_get_container_tags(self, env_id: int) -> Any:
+        """Tags assigned to containers: {container name: [tag id]}."""
+        return await self._request("GET", f"/api/container-tags?env={_q(env_id)}")
+
+    async def async_get_stack_tags(self, env_id: int) -> Any:
+        """Tags assigned to stacks: {stack name: [tag id]}."""
+        return await self._request("GET", f"/api/stack-tags?env={_q(env_id)}")
+
     async def async_get_networks(self, env_id: int) -> list[dict[str, Any]]:
         return await self._get_list(f"/api/networks?env={_q(env_id)}")
 

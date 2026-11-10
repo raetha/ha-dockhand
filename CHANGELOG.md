@@ -34,6 +34,10 @@
   and catches anything missed; the feed reconnects on its own after
   Dockhand restarts or its host loses power. Needs the `activity: view`
   permission on Dockhand Enterprise.
+- **Dockhand tags** (Dockhand 1.0.49+) on the container State and stack
+  Status sensors: `tags` (names, for automations and templates) and
+  `tag_colors`, from tags assigned in Dockhand and from containers'
+  `dockhand.tags` labels, merged the way Dockhand's own lists show them.
 - **Docker event entity per container**, like Home Assistant's Portainer
   integration: fires when a container starts, stops, dies (with its exit
   code), is killed, runs out of memory, restarts, pauses, resumes, is
@@ -108,6 +112,8 @@
   generator are gone: Dockhand now publishes `static/openapi.json`, and
   upstream reviews diff that between release tags.
 - Code comments trimmed to explain why, not how the code got here.
+- Percentage sensors use Home Assistant's `PERCENTAGE` unit constant (the
+  same `%`).
 - The live feed skips its refresh when an action's refresh or a poll that
   started after the event already shows it, saving an API round per action.
 
