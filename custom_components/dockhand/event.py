@@ -100,6 +100,15 @@ class DockhandContainerEventEntity(DockhandContainerEntity, EventEntity):
         )
 
     @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        # Nothing here is keyed on entity_id, so a rename can happen in
+        # place (HA 2026.11+) instead of removing and re-adding the entity,
+        # which defining async_added_to_hass otherwise forces. Only ever
+        # called by HA versions that have this method, which is also why
+        # mypy (checking against an older one) can't see it yet.
+        super().async_entity_id_changed(old_entity_id)  # type: ignore[misc, unused-ignore]
+
+    @callback
     def _async_docker_event(self, data: dict[str, Any]) -> None:
         action = str(data.get("action") or "")
         if action.startswith("health_status"):

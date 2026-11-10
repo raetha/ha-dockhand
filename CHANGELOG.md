@@ -65,6 +65,14 @@
 - **Container `restart_count` attribute only while restarting** — Dockhand
   only counts restarts for a container that's restarting, so the attribute
   always read 0 otherwise; it's now empty then.
+- **Updating several containers at once is one Dockhand job** — Installs
+  that start together (Home Assistant's "update all", the cards' Update
+  all, a script) go to Dockhand as a single update job instead of one each,
+  and the environment's precise update check runs once afterwards instead
+  of once per container: ten updates used to mean ten registry checks of
+  the whole environment. Each update entity still shows its own progress
+  and result, and Update all now shows progress on each container's update
+  entity too.
 - **Actions on many containers at once share refreshes** — one action on
   ten containers refreshes their environment twice rather than ten times.
 - **Update all is always there while update entities are on** —

@@ -67,6 +67,7 @@ from .helpers import (
     _instance_device,
     _stack_has_system_container,
 )
+from .installs import DockhandInstaller
 from .migration import async_run_migrations
 from .services import async_setup_services
 
@@ -128,6 +129,7 @@ class DockhandData:
     update_coordinator: DockhandUpdateCoordinator | None
     version_coordinator: DockhandVersionCoordinator
     event_stream: DockhandEventStream
+    installer: DockhandInstaller
     # Which entities (domain-prefixed unique_ids) have been added to HA
     # during *this* setup's lifetime — reset fresh every time
     # async_setup_entry runs (fresh instance created below), which is
@@ -387,6 +389,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         update_coordinator=update_coordinator,
         version_coordinator=version_coordinator,
         event_stream=DockhandEventStream(hass, entry),
+        installer=DockhandInstaller(
+            hass, entry.entry_id, client, fast_coordinator, update_coordinator
+        ),
     )
 
     # Run any pending one-time registry migrations BEFORE pre-registering

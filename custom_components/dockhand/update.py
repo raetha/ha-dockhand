@@ -194,14 +194,14 @@ systemContainer is used as well once a check has covered the container
 in batch-update either way; this is what keeps Install from being offered.
 """
 
-import asyncio
 import logging
 from typing import Any, override
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -219,40 +219,15 @@ from .helpers import (
     _short_digest,
     _update_held_hours,
     already_registered,
-    async_dockhand_action,
 )
+from .installs import DockhandInstaller, install_signal, raise_for_outcome
 
 _LOGGER = logging.getLogger(__name__)
 
-# No limit in Home Assistant: each Install is one batch-update job, and
-# Dockhand queues the Docker work itself (see quality_scale.yaml).
+# No limit in Home Assistant: Installs that start together must all reach
+# the install queue at once to share one Dockhand job (installs.py), and
+# Dockhand updates a job's containers one after another itself.
 PARALLEL_UPDATES = 0
-
-# How often to poll GET /api/jobs/{id} while an install is running.
-_JOB_POLL_INTERVAL_SECONDS = 2
-# Upper bound on total wait — protects against a job stuck in "running"
-# forever (e.g. a Dockhand-side crash mid-job). Generous because a scan
-# plus a large image pull can legitimately take several minutes.
-_JOB_POLL_MAX_ATTEMPTS = 900  # 900 * 2s = 30 minutes
-
-# Dockhand's own "current"/"total" on batch-update-stream progress lines
-# are a batch-index counter (current = i+1 over containerIds.length), NOT
-# intra-container progress — meaningless here since we always send exactly
-# one container ID, so total is always 1 and current/total hits 100% on
-# the very first progress line (step="pulling"), long before the actual
-# pull/scan/recreate work happens. We derive our own percentage instead,
-# from the fixed, known pipeline of "step" values Dockhand's route always
-# emits in this order for a single container: pulling -> scanning (only
-# if a scanner is configured) -> creating -> done. Monotonically
-# increasing only, in case of any out-of-order duplicate step events
-# (e.g. "creating" is sent more than once via a progress callback during
-# the actual recreate call).
-_STEP_PERCENTAGES = {
-    "pulling": 20,
-    "scanning": 45,
-    "creating": 75,
-    "done": 100,
-}
 
 # Cap a fetched release-notes body — some upstream release bodies embed
 # screenshots/large diffs. Same bound the more-info dialog's other content
@@ -311,6 +286,7 @@ async def async_setup_entry(
                     env_id=env_id,
                     env_name=env_name,
                     container_name=container_name,
+                    installer=data.installer,
                 )
                 if already_registered(
                     hass,
@@ -357,9 +333,11 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         env_id: int,
         env_name: str,
         container_name: str,
+        installer: DockhandInstaller,
     ) -> None:
         super().__init__(fast_coordinator)
         self._update_coordinator = update_coordinator
+        self._installer = installer
         self._entry_id = entry_id
         self._env_id = env_id
         self._container_name = container_name
@@ -804,11 +782,10 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
     async def async_install(
         self, version: str | None, backup: bool, **kwargs: Any
     ) -> None:
-        """Trigger a scanned pull-and-recreate update via Dockhand's job API.
-
-        Only ever needs the container's current ID — never a digest — so
-        this works identically whether Tier 2 has ever run for this
-        container or not.
+        """Pull and recreate the container through Dockhand's update job,
+        shared with any other Install in the environment that starts at
+        the same time (see installs.py). Only needs the container's current
+        id, never a digest, so it works with or without precise updates.
         """
         c = self._container()
         container_id = c.get("id", "") if c else ""
@@ -817,143 +794,42 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
+        outcomes = await self._installer.async_install(self._env_id, [container_id])
+        raise_for_outcome(outcomes[container_id])
 
-        self._attr_in_progress = True
-        self._attr_update_percentage = 0
-        self.async_write_ha_state()
+    @property
+    @override
+    def in_progress(self) -> bool:
+        return self._install_progress() is not None
 
-        try:
-            criteria = await self._vulnerability_criteria()
-            job_id = await async_dockhand_action(
-                self.coordinator.client.async_start_batch_update_stream(
-                    self._env_id, [container_id], vulnerability_criteria=criteria
-                )
-            )
-            skipped = await self._poll_job(job_id, container_id)
-        except HomeAssistantError:
-            raise
-        except Exception as err:
-            _LOGGER.error(
-                "batch-update-stream failed for container '%s' (env %s, id %s): %s: %s",
-                self._container_name,
-                self._env_id,
-                container_id,
-                type(err).__name__,
-                err,
-            )
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        finally:
-            self._attr_in_progress = False
-            self._attr_update_percentage = None
-            self.async_write_ha_state()
-        # Awaited, not async_request_refresh(): see docs/architecture.md §3.
-        # Tier 2 is re-checked for this environment only, so a precise
-        # digest shows up without waiting for its daily run.
-        await self.coordinator.async_refresh_environment(self._env_id)
-        if self._update_coordinator is not None:
-            try:
-                await self._update_coordinator.async_check_environment(self._env_id)
-            except Exception as err:  # the install itself worked
-                _LOGGER.debug("Dockhand: post-install update check failed: %s", err)
-        if skipped is not None:
-            # Dockhand reports a skip as a successful job, but nothing was
-            # updated, so it must not look like Install worked.
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": skipped},
-            )
+    @property
+    @override
+    def update_percentage(self) -> int | None:
+        return self._install_progress()
 
-    async def _vulnerability_criteria(self) -> str | None:
-        """Fetch this environment's configured vulnerability blocking policy.
-
-        Best-effort: falls back to None (Dockhand's own server-side default,
-        "never" — scan but don't block) if the settings call fails, so a
-        transient error here doesn't prevent the update itself from running.
-        """
-        try:
-            settings = await self.coordinator.client.async_get_update_check_settings(
-                self._env_id
-            )
-            return settings.get("vulnerabilityCriteria")
-        except Exception as err:
-            _LOGGER.warning(
-                "Could not fetch vulnerability criteria for env %s — Dockhand"
-                " will use its own default ('never': scan but don't block): %s",
-                self._env_id,
-                err,
-            )
+    def _install_progress(self) -> int | None:
+        c = self._container()
+        container_id = c.get("id") if c else None
+        if not container_id:
             return None
+        return self._installer.progress(self._env_id, container_id)
 
-    async def _poll_job(self, job_id: str, container_id: str) -> str | None:
-        """Poll GET /api/jobs/{id} until the job finishes, reporting progress.
-
-        Dockhand's job endpoint returns the full accumulated "lines" array on
-        every call rather than a stream — we re-scan it each poll, which is
-        cheap since a single-container update produces at most a handful of
-        lines. Raises HomeAssistantError on a blocked update, a per-container
-        failure, a job-level error, or a timeout. Returns Dockhand's message
-        when it skipped the container instead of updating it (e.g. it is the
-        container Dockhand reaches the environment through), else None.
-        """
-        skipped: str | None = None
-        for _ in range(_JOB_POLL_MAX_ATTEMPTS):
-            job = await self.coordinator.client.async_get_job(job_id)
-
-            for line in job.get("lines") or []:
-                data = line.get("data") or {}
-                if data.get("containerId") not in (container_id, None):
-                    continue
-
-                step = data.get("step")
-                new_pct = _STEP_PERCENTAGES.get(step) if isinstance(step, str) else None
-                if new_pct is not None and (
-                    self._attr_update_percentage is None
-                    or new_pct > self._attr_update_percentage
-                ):
-                    self._attr_update_percentage = new_pct
-                    self.async_write_ha_state()
-
-                event_type = data.get("type")
-                if event_type == "blocked":
-                    reason = data.get("blockReason", "vulnerability findings")
-                    raise HomeAssistantError(
-                        translation_domain="dockhand",
-                        translation_key="action_failed",
-                        translation_placeholders={"error": f"Update blocked: {reason}"},
-                    )
-                if event_type == "progress" and data.get("step") == "skipped":
-                    skipped = data.get("message") or "update skipped by Dockhand"
-                if event_type == "progress" and data.get("step") == "failed":
-                    raise HomeAssistantError(
-                        translation_domain="dockhand",
-                        translation_key="action_failed",
-                        translation_placeholders={
-                            "error": data.get("error", "update failed")
-                        },
-                    )
-
-            status = job.get("status")
-            if status == "done":
-                return skipped
-            if status == "error":
-                result = job.get("result") or {}
-                raise HomeAssistantError(
-                    translation_domain="dockhand",
-                    translation_key="action_failed",
-                    translation_placeholders={
-                        "error": result.get("error", "update job failed")
-                    },
-                )
-
-            await asyncio.sleep(_JOB_POLL_INTERVAL_SECONDS)
-
-        raise HomeAssistantError(
-            translation_domain="dockhand",
-            translation_key="action_failed",
-            translation_placeholders={"error": "update timed out waiting for Dockhand"},
+    @override
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                install_signal(self._entry_id, self._env_id),
+                self.async_write_ha_state,
+            )
         )
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        # Nothing here is keyed on entity_id, so a rename can happen in
+        # place (HA 2026.11+) instead of removing and re-adding the entity,
+        # which defining async_added_to_hass otherwise forces. Only ever
+        # called by HA versions that have this method, which is also why
+        # mypy (checking against an older one) can't see it yet.
+        super().async_entity_id_changed(old_entity_id)  # type: ignore[misc, unused-ignore]
