@@ -619,6 +619,21 @@ Dockhand upgrade. A 30 s read timeout against Dockhand's 5 s heartbeat detects a
 retries back off 5 s → 5 min (reset only once a heartbeat arrives, since a user with no environments gets a silent stream), and 403/404 (no `activity: view`, or an older Dockhand) retry hourly.
 `iot_class` stays `local_polling`: polling remains the source of truth.
 
+**Installs share Dockhand jobs (`installs.py`).** `DockhandInstaller`, one per entry, owns every
+install: update entities' Install and Update all both call `async_install(env_id, ids)`. The
+first call for an environment creates a waiting batch and a task that sleeps `GATHER_SECONDS` (2 s)
+before taking the environment's lock; every call until the task takes the lock adds its ids to
+that batch, later ones to a new one, because `batch-update-stream` fixes its container list when
+it starts. The task is created with `eager_start=False` for the same reason as the shared
+refresh above. One job runs per environment at a time; per-container outcomes come from the job's
+lines (first verdict wins: blocked, failed, skipped, or done at job end), and a job-level failure
+becomes every container's outcome. After the job: one awaited `async_refresh_environment`, then
+the precise check (environment-wide registry calls, Dockhand has no per-container check) as a
+background task with at most one running and one queued per environment. Progress lives in the
+installer, keyed by the container's current id, and is announced with `install_signal`, so an
+update entity shows it whichever path started the install. `PARALLEL_UPDATES = 0` in update.py is
+what lets HA's concurrent Installs reach the queue together.
+
 ## 4. Config entry migrations
 
 The config entry schema is at **version 2.3** (`SCHEMA_VERSION` 2,

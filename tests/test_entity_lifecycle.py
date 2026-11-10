@@ -23,6 +23,7 @@ _ADD_REMOVE_METHODS = (
 _PLATFORMS = (
     "binary_sensor",
     "button",
+    "event",
     "number",
     "select",
     "sensor",
@@ -70,3 +71,17 @@ def test_memory_limit_number_hook_calls_super():
     with patch.object(base, "async_entity_id_changed", create=True) as parent:
         entity.async_entity_id_changed("number.old")
     parent.assert_called_once_with("number.old")
+
+
+def test_update_and_event_hooks_call_super():
+    from unittest.mock import patch
+
+    from custom_components.dockhand.event import DockhandContainerEventEntity
+    from custom_components.dockhand.update import ContainerUpdateEntity
+
+    for cls in (ContainerUpdateEntity, DockhandContainerEventEntity):
+        entity = cls.__new__(cls)
+        base = cls.__mro__[1]
+        with patch.object(base, "async_entity_id_changed", create=True) as parent:
+            entity.async_entity_id_changed("x.old")
+        parent.assert_called_once_with("x.old")

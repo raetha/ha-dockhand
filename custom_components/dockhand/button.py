@@ -1,4 +1,3 @@
-import asyncio
 from typing import Any, override
 
 from homeassistant.components.button import ButtonEntity
@@ -38,16 +37,11 @@ from .helpers import (
     already_registered,
     async_dockhand_action,
 )
+from .installs import DockhandInstaller, summarize_failures
 
 # Reads come from the coordinators. Actions aren't limited: each is one
 # request to Dockhand, which queues the Docker work itself.
 PARALLEL_UPDATES = 0
-
-# Same values as update.py's _poll_job — one shared job-polling budget
-# across both platforms since Dockhand's job endpoint behaves identically
-# either way.
-_JOB_POLL_INTERVAL_SECONDS = 2
-_JOB_POLL_MAX_ATTEMPTS = 900  # 900 * 2s = 30 minutes
 
 
 async def async_setup_entry(
@@ -111,7 +105,7 @@ async def async_setup_entry(
                 bulk_button = DockhandEnvBulkUpdateButton(
                     fast,
                     update_coordinator,
-                    client,
+                    entry.runtime_data.installer,
                     entry.entry_id,
                     env_id,
                     env_name,
@@ -483,13 +477,9 @@ class DockhandEnvBulkUpdateButton(
     "Update all" button exactly (confirmed from its frontend source:
     same endpoint, same non-system-container exclusion).
 
-    Conditionally present, not just conditionally enabled: only created
-    when there is at least one non-system-container pending update in
-    this environment (same as Dockhand's own `{#if updatableContainersCount
-    > 0}` gating for its "Update all" button) — removed via the central
-    cleanup system the moment there's nothing left to update, exactly
-    mirroring how the button disappears in Dockhand's own UI rather than
-    just going idle/disabled.
+    Present while update entities are on and available only while
+    something can be updated: Dockhand's own button disappears instead,
+    but an entity that comes and goes breaks automations and history.
 
     "Pending update" here means either Tier 1 (Dockhand's own cached
     pending-updates check) or Tier 2 (the optional precise digest-based
@@ -515,7 +505,7 @@ class DockhandEnvBulkUpdateButton(
         self,
         fast_coordinator: DockhandFastCoordinator,
         update_coordinator: DockhandUpdateCoordinator | None,
-        client: Any,
+        installer: DockhandInstaller,
         entry_id: str,
         env_id: int,
         env_name: str,
@@ -523,7 +513,7 @@ class DockhandEnvBulkUpdateButton(
     ) -> None:
         super().__init__(fast_coordinator)
         self._update_coordinator = update_coordinator
-        self._client = client
+        self._installer = installer
         self._entry_id = entry_id
         self._env_id = env_id
         self._env_name = env_name
@@ -570,16 +560,6 @@ class DockhandEnvBulkUpdateButton(
     def device_info(self) -> DeviceInfo:
         return _env_device(self._entry_id, self._env_id, self._env_name, self._base_url)
 
-    async def _vulnerability_criteria(self) -> str | None:
-        """Same best-effort fetch-then-fall-back-to-Dockhand's-own-default
-        pattern as the per-container update entities in update.py."""
-        try:
-            settings = await self._client.async_get_update_check_settings(self._env_id)
-        except Exception:
-            return None
-        criteria = settings.get("vulnerabilityCriteria")
-        return str(criteria) if criteria else None
-
     @override
     async def async_press(self) -> None:
         container_ids = self._updatable_container_ids()
@@ -589,78 +569,17 @@ class DockhandEnvBulkUpdateButton(
                 translation_key="action_failed",
                 translation_placeholders={"error": "No pending updates"},
             )
-        try:
-            criteria = await self._vulnerability_criteria()
-            job_id = await async_dockhand_action(
-                self._client.async_start_batch_update_stream(
-                    self._env_id, container_ids, vulnerability_criteria=criteria
-                )
+        names = {
+            c.get("id"): c.get("name") or c.get("id")
+            for c in _coordinator_env(self.coordinator.data, self._env_id).get(
+                "containers"
             )
-            await self._poll_job(job_id)
-        except HomeAssistantError:
-            raise
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh_environment(self._env_id)
-
-    async def _poll_job(self, job_id: str) -> None:
-        """Poll GET /api/jobs/{id} until the whole batch finishes.
-
-        Unlike update.py's per-entity _poll_job, this covers multiple
-        containers in one job with no single update_percentage to
-        report (ButtonEntity has no progress concept) — collects every
-        per-container failure/block across the batch and raises a
-        single summary error covering all of them, rather than stopping
-        at the first one, since a partial batch failure shouldn't hide
-        that other containers in the same press may have failed too.
-        """
-        failures: list[str] = []
-        for _ in range(_JOB_POLL_MAX_ATTEMPTS):
-            job = await self._client.async_get_job(job_id)
-
-            for line in job.get("lines") or []:
-                data = line.get("data") or {}
-                event_type = data.get("type")
-                if event_type == "blocked":
-                    reason = data.get("blockReason", "vulnerability findings")
-                    cid = data.get("containerId", "?")
-                    failures.append(f"{cid}: blocked ({reason})")
-                elif event_type == "progress" and data.get("step") == "failed":
-                    failures.append(
-                        f"{data.get('containerId', '?')}: {data.get('error', 'failed')}"
-                    )
-
-            status = job.get("status")
-            if status == "done":
-                if failures:
-                    raise HomeAssistantError(
-                        translation_domain="dockhand",
-                        translation_key="action_failed",
-                        translation_placeholders={
-                            "error": "; ".join(dict.fromkeys(failures))
-                        },
-                    )
-                return
-            if status == "error":
-                result = job.get("result") or {}
-                raise HomeAssistantError(
-                    translation_domain="dockhand",
-                    translation_key="action_failed",
-                    translation_placeholders={
-                        "error": result.get("error", "batch update failed")
-                    },
-                )
-            await asyncio.sleep(_JOB_POLL_INTERVAL_SECONDS)
-
-        raise HomeAssistantError(
-            translation_domain="dockhand",
-            translation_key="action_failed",
-            translation_placeholders={"error": "Timed out waiting for batch update"},
-        )
+            or []
+        }
+        # The same queue as the update entities, so they show their
+        # progress and an Install pressed meanwhile joins this job.
+        outcomes = await self._installer.async_install(self._env_id, container_ids)
+        summarize_failures(outcomes, lambda cid: str(names.get(cid, cid)))
 
 
 class DockhandCheckUpdatesButton(

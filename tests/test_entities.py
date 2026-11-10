@@ -16,6 +16,7 @@ from homeassistant.const import EntityCategory
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import entity_registry as er
 
+from custom_components.dockhand.installs import InstallSkipped
 from custom_components.dockhand.api import DockhandPermissionError
 
 DOMAIN = "dockhand"
@@ -2715,14 +2716,16 @@ def _make_bulk_update_button(pending=None, containers=None, update_data=None):
     if update_data is not None:
         update_coord = MagicMock()
         update_coord.data = {"environments": {ENV_ID: update_data}}
-    client = MagicMock()
-    client.async_get_update_check_settings = AsyncMock(return_value={})
+    installer = MagicMock()
+    installer.async_install = AsyncMock(
+        side_effect=lambda env_id, ids: dict.fromkeys(ids)
+    )
     return (
         DockhandEnvBulkUpdateButton(
-            coord, update_coord, client, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+            coord, update_coord, installer, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
         coord,
-        client,
+        installer,
     )
 
 
@@ -2787,74 +2790,6 @@ async def test_bulk_update_press_raises_when_nothing_updatable():
     button, _, _ = _make_bulk_update_button()
     with pytest.raises(HomeAssistantError):
         await button.async_press()
-
-
-async def test_bulk_update_press_success():
-    button, coord, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
-    )
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(return_value={"status": "done", "lines": []})
-    await button.async_press()
-    client.async_start_batch_update_stream.assert_called_once_with(
-        ENV_ID, ["id-web"], vulnerability_criteria=None
-    )
-    coord.async_refresh_environment.assert_awaited_once_with(ENV_ID)
-
-
-async def test_bulk_update_press_raises_on_job_error():
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
-    )
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(
-        return_value={"status": "error", "result": {"error": "pull failed"}}
-    )
-    with pytest.raises(HomeAssistantError):
-        await button.async_press()
-
-
-async def test_bulk_update_press_collects_multiple_failures():
-    """A partial batch failure (some containers blocked/failed, others
-    fine) shouldn't hide that multiple containers failed — the summary
-    error should mention all of them, not just the first."""
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web", "id-db"},
-        containers=[
-            {"id": "id-web", "name": "web", "systemContainer": None},
-            {"id": "id-db", "name": "db", "systemContainer": None},
-        ],
-    )
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {
-                    "data": {
-                        "type": "blocked",
-                        "containerId": "id-web",
-                        "blockReason": "critical CVE",
-                    }
-                },
-                {
-                    "data": {
-                        "type": "progress",
-                        "step": "failed",
-                        "containerId": "id-db",
-                        "error": "pull timeout",
-                    }
-                },
-            ],
-        }
-    )
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await button.async_press()
-    message = str(exc_info.value.translation_placeholders["error"])
-    assert "id-web" in message
-    assert "id-db" in message
 
 
 async def test_setup_entry_creates_bulk_update_button_when_pending(hass):
@@ -3358,91 +3293,58 @@ async def test_container_stats_entities_created_when_option_on(hass):
     assert STATS_SENSOR_NAMES.issubset(set(names))
 
 
-async def test_bulk_update_press_uses_the_environments_vulnerability_policy():
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+WEB = {"id": "id-web", "name": "web", "systemContainer": None}
+DB = {"id": "id-db", "name": "db", "systemContainer": None}
+
+
+async def test_bulk_update_press_queues_every_updatable_container():
+    button, _, installer = _make_bulk_update_button(
+        pending={"id-web", "id-db"}, containers=[WEB, DB]
     )
-    client.async_get_update_check_settings = AsyncMock(
-        return_value={"vulnerabilityCriteria": "critical"}
-    )
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(return_value={"status": "done", "lines": []})
     await button.async_press()
-    client.async_start_batch_update_stream.assert_called_once_with(
-        ENV_ID, ["id-web"], vulnerability_criteria="critical"
-    )
+    env_id, ids = installer.async_install.await_args.args
+    assert env_id == ENV_ID
+    assert sorted(ids) == ["id-db", "id-web"]
 
 
-async def test_bulk_update_press_without_the_policy_uses_dockhands_default():
-    """Reading the policy is best effort: Dockhand applies its own default."""
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+async def test_bulk_update_press_names_every_container_that_didnt_update():
+    button, _, installer = _make_bulk_update_button(
+        pending={"id-web", "id-db"}, containers=[WEB, DB]
     )
-    client.async_get_update_check_settings = AsyncMock(side_effect=Exception("500"))
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(return_value={"status": "done", "lines": []})
-    await button.async_press()
-    assert (
-        client.async_start_batch_update_stream.call_args.kwargs[
-            "vulnerability_criteria"
-        ]
-        is None
+    installer.async_install = AsyncMock(
+        return_value={
+            "id-web": _action_failed("Update blocked: critical CVE"),
+            "id-db": InstallSkipped("Skipping db"),
+        }
     )
-
-
-async def test_bulk_update_press_wraps_an_api_error():
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
-    )
-    client.async_start_batch_update_stream = AsyncMock(side_effect=Exception("boom"))
     with pytest.raises(HomeAssistantError) as err:
         await button.async_press()
-    assert err.value.translation_key == "action_failed"
+    message = err.value.translation_placeholders["error"]
+    assert "web: Update blocked: critical CVE" in message
+    assert "db: Skipping db" in message
 
 
-async def test_bulk_update_press_wraps_a_failure_while_following_the_job():
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+async def test_bulk_update_press_raises_a_whole_job_failure_as_it_is():
+    button, _, installer = _make_bulk_update_button(
+        pending={"id-web", "id-db"}, containers=[WEB, DB]
     )
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(side_effect=Exception("connection reset"))
-    with pytest.raises(HomeAssistantError) as err:
-        await button.async_press()
-    assert err.value.translation_placeholders == {"error": "connection reset"}
-
-
-async def test_bulk_update_press_reports_a_permission_refusal():
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+    refusal = HomeAssistantError(
+        translation_domain=DOMAIN, translation_key="permission_denied"
     )
-    client.async_start_batch_update_stream = AsyncMock(
-        side_effect=DockhandPermissionError("403")
+    installer.async_install = AsyncMock(
+        return_value={"id-web": refusal, "id-db": refusal}
     )
     with pytest.raises(HomeAssistantError) as err:
         await button.async_press()
     assert err.value.translation_key == "permission_denied"
 
 
-async def test_bulk_update_press_times_out_on_a_job_that_never_finishes():
-    button, _, client = _make_bulk_update_button(
-        pending={"id-web"},
-        containers=[{"id": "id-web", "name": "web", "systemContainer": None}],
+def _action_failed(message: str) -> HomeAssistantError:
+    return HomeAssistantError(
+        translation_domain=DOMAIN,
+        translation_key="action_failed",
+        translation_placeholders={"error": message},
     )
-    client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    client.async_get_job = AsyncMock(return_value={"status": "running"})
-    with (
-        patch("custom_components.dockhand.button._JOB_POLL_MAX_ATTEMPTS", 2),
-        patch("custom_components.dockhand.button.asyncio.sleep", AsyncMock()),
-        pytest.raises(HomeAssistantError) as err,
-    ):
-        await button.async_press()
-    assert "Timed out" in err.value.translation_placeholders["error"]
-    assert client.async_get_job.await_count == 2
 
 
 def test_bulk_update_button_belongs_to_the_environment_device():
