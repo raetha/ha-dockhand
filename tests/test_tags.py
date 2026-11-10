@@ -244,11 +244,11 @@ def test_system_container_flag_on_container_and_stack():
         coord, "entry", 1, "local", "http://dh", WEB
     )
     stack = DockhandStackStatusSensor(coord, "entry", 1, "local", "http://dh", STACK)
-    assert container.extra_state_attributes["system_container"] == "hawser"
-    assert stack.extra_state_attributes["system_container"] == "hawser"
+    assert container.extra_state_attributes["system_container"] is True
+    assert stack.extra_state_attributes["system_container"] is True
     env["containers"] = [WEB]
-    assert container.extra_state_attributes["system_container"] is None
-    assert stack.extra_state_attributes["system_container"] is None
+    assert container.extra_state_attributes["system_container"] is False
+    assert stack.extra_state_attributes["system_container"] is False
 
 
 def test_stack_status_is_an_enum():

@@ -427,17 +427,17 @@ def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
-def _instance_device(
-    entry_id: str, name: str, base_url: str, version: str | None
-) -> DeviceInfo:
+def _instance_device(entry_id: str, base_url: str, version: str | None) -> DeviceInfo:
     """The Dockhand server itself, parent of its environments.
 
-    Registered in async_setup_entry before any other device and never
-    removed while the entry is loaded.
+    Named "Dockhand" rather than after the entry, whose title is its API
+    URL; a second instance is told apart by its configuration URL, and can
+    be renamed. Registered in async_setup_entry before any other device
+    and never removed while the entry is loaded.
     """
     info = DeviceInfo(
         identifiers={(DOMAIN, _device_id_instance(entry_id))},
-        name=name,
+        name="Dockhand",
         manufacturer="Dockhand",
         model="Dockhand",
         entry_type=DeviceEntryType.SERVICE,
@@ -829,18 +829,11 @@ def _stack_has_system_container(stack: dict | None, all_containers: list) -> boo
     in it, including ones the user may not realize are Dockhand
     infrastructure.
     """
-    return stack_system_container(stack, all_containers) is not None
-
-
-def stack_system_container(stack: dict | None, all_containers: list) -> str | None:
-    """Which Dockhand system container ("dockhand", "hawser") a stack holds,
-    if any; see _stack_has_system_container for how a stack's containers
-    are matched."""
     stack_container_ids = set((stack or {}).get("containers") or [])
-    for c in all_containers or []:
-        if c.get("id") in stack_container_ids and c.get("systemContainer"):
-            return str(c["systemContainer"])
-    return None
+    return any(
+        c.get("id") in stack_container_ids and c.get("systemContainer")
+        for c in all_containers or []
+    )
 
 
 def _container_has_pending_update(

@@ -13,7 +13,9 @@ from .const import DOMAIN
 def async_register(
     hass: HomeAssistant, register: system_health.SystemHealthRegistration
 ) -> None:
-    register.async_register_info(system_health_info)
+    register.async_register_info(
+        system_health_info, f"/config/integrations/integration/{DOMAIN}"
+    )
 
 
 async def _can_reach(hass: HomeAssistant) -> str | dict[str, str]:

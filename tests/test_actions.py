@@ -55,6 +55,7 @@ def _slow(schedules: list[dict]) -> MagicMock:
     coord.data = {"environments": {}, "schedules": schedules}
     coord.last_update_success = True
     coord.async_refresh = AsyncMock()
+    coord.async_refresh_schedules = AsyncMock()
     return coord
 
 
@@ -187,7 +188,7 @@ async def test_schedule_run_button():
     assert button.available is True
     await button.async_press()
     client.async_run_schedule.assert_awaited_once_with("image_prune", 7)
-    button.coordinator.async_refresh.assert_awaited_once()
+    button.coordinator.async_refresh_schedules.assert_awaited_once()
 
 
 def test_schedule_entities_unavailable_once_the_schedule_is_gone():
@@ -224,7 +225,7 @@ async def test_schedule_switch_flips_until_dockhand_agrees(
     await (switch.async_turn_on() if turn_on else switch.async_turn_off())
     assert client.async_toggle_schedule.await_count == flips
     client.async_toggle_schedule.assert_awaited_with("image_prune", 7, system=False)
-    switch.coordinator.async_refresh.assert_awaited_once()
+    switch.coordinator.async_refresh_schedules.assert_awaited_once()
 
 
 async def test_system_schedule_switch_uses_the_system_route():
