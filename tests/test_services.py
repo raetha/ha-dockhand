@@ -54,7 +54,7 @@ def _device(hass: HomeAssistant, entry: MockConfigEntry, identifier: str) -> str
 
 
 async def test_prune_reports_what_was_removed(
-    hass: HomeAssistant, entry: MockConfigEntry
+    hass: HomeAssistant, entry: MockConfigEntry, caplog: pytest.LogCaptureFixture
 ):
     device_id = _device(hass, entry, f"{entry.entry_id}_env_1")
     response = await hass.services.async_call(
@@ -83,6 +83,8 @@ async def test_prune_reports_what_was_removed(
     assert client.async_prune.await_args.kwargs == {"all_images": True}
     entry.runtime_data.fast_coordinator.async_refresh_environment.assert_awaited_with(1)
     entry.runtime_data.slow_coordinator.async_refresh.assert_awaited_once()
+    # Finding the device's entry doesn't read the deprecated config_entries.
+    assert "config_entries" not in caplog.text
 
 
 async def test_prune_rejects_an_unknown_resource(

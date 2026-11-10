@@ -28,8 +28,8 @@ OPTION_KEYS = (
     CONF_ENABLE_RESOURCE_STATS,
 )
 
-# Removed in 1.2.0 (breaking change) — session-cookie auth replaced by API tokens.
-# Kept as constants only so __init__.py can detect and migrate legacy config entries.
+# Session-cookie credentials from before API tokens: read only so __init__.py
+# can ask an old entry for a token and drop them.
 _LEGACY_CONF_USERNAME = "username"
 _LEGACY_CONF_PASSWORD = "password"
 _LEGACY_CONF_SESSION_COOKIE = "session_cookie"

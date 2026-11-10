@@ -243,7 +243,8 @@ class _BaseRuntimeControlNumber(
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
-                f"runtime_update_warning_{self._env_id}_{self._container_name}_{field}",
+                f"runtime_update_warning_{self._entry_id}_{self._env_id}_"
+                f"{self._container_name}_{field}",
                 is_fixable=False,
                 is_persistent=False,
                 severity=ir.IssueSeverity.WARNING,

@@ -188,6 +188,11 @@ async def test_warnings_create_repair_issue():
         await entity.async_select_option("always")
     mock_issue.assert_called_once()
     assert mock_issue.call_args.kwargs["translation_key"] == "runtime_update_warning"
+    # Scoped to the config entry: two Dockhand instances can share an env id
+    # and container name.
+    assert mock_issue.call_args.args[2].startswith(
+        f"runtime_update_warning_{entity._entry_id}_"
+    )
 
 
 def test_disabled_by_default():

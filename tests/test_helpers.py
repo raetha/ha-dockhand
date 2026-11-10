@@ -27,6 +27,7 @@ from custom_components.dockhand.helpers import (
     async_dockhand_action,
     _actionable_pending_update_container_ids,
     _device_by_identifier,
+    device_config_entry_ids,
     _all_envs,
     _compose_project,
     _container_device,
@@ -1359,3 +1360,15 @@ async def test_dockhand_action_turns_failures_into_user_errors(
         await async_dockhand_action(fail())
     assert exc_info.value.translation_key == translation_key
     assert exc_info.value.__cause__ is error
+
+
+def test_device_config_entry_ids_reads_the_single_entry_on_current_ha():
+    device = MagicMock(spec=["config_entry_id"], config_entry_id="entry_a")
+    assert device_config_entry_ids(device) == {"entry_a"}
+    device.config_entry_id = None
+    assert device_config_entry_ids(device) == set()
+
+
+def test_device_config_entry_ids_falls_back_on_ha_before_2026_8():
+    device = MagicMock(spec=["config_entries"], config_entries={"entry_a", "entry_b"})
+    assert device_config_entry_ids(device) == {"entry_a", "entry_b"}

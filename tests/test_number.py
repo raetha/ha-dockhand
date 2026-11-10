@@ -392,6 +392,11 @@ async def test_warnings_create_repair_issue():
         await entity.async_set_native_value(268435456)
     mock_issue.assert_called_once()
     assert mock_issue.call_args.kwargs["translation_key"] == "runtime_update_warning"
+    # Scoped to the config entry: two Dockhand instances can share an env id
+    # and container name.
+    assert mock_issue.call_args.args[2].startswith(
+        f"runtime_update_warning_{entity._entry_id}_"
+    )
 
 
 async def test_no_warnings_no_repair_issue():

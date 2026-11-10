@@ -1,4 +1,3 @@
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -58,8 +57,6 @@ from .helpers import (
     _volume_group_device,
     already_registered,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def _parse_dt(value: str | int | float | None) -> datetime | None:
@@ -1250,10 +1247,6 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
         return health if health in CONTAINER_HEALTH_STATES else None
 
 
-# DockhandContainerImageSensor was removed in 1.6.0 — the image name is
-# already surfaced as the `image` attribute on DockhandContainerStateSensor.
-
-
 # --------------------------------------------------------------------------- #
 # Fast coordinator — container stats sensors
 #
@@ -2223,7 +2216,7 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         if isinstance(created_ts, int):
             try:
                 created_iso = dt_util.utc_from_timestamp(created_ts).isoformat()
-            except Exception:
+            except OverflowError, OSError, ValueError:
                 pass
 
         attrs: dict[str, Any] = {

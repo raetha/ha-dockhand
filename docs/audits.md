@@ -36,6 +36,24 @@ review has its own log in [quality-scale.md](quality-scale.md).
    `docs/development.md`, the README).
 8. **Record it:** a dated section below, and changelog lines for anything users notice.
 
+## 2026-11-09: full review before testing 2.0.0
+
+- Open pull requests: none. Every action pin matches its tag and is the latest release; hassfest
+  is on master's head. ruff 0.17.3 → 0.17.4. PHCC 0.13.375 (HA 2026.10.4) is still the newest.
+- `pip-audit`: only pillow (test-only, through Home Assistant's pin; fixed in 13.0, which HA's
+  pin doesn't allow yet). CodeQL (Python, Actions): no security findings; unused names removed,
+  the other notes are imports pytest needs or migration constants CodeQL can't see used.
+- Home Assistant 2026.11 (source and contributors blog): actions read the deprecated
+  `DeviceEntry.config_entries`, logging a warning on 2026.10+; now feature-detected, with a
+  regression test (reverted, failed, restored). Device info built with `DeviceInfo(...)` ahead of
+  plain dictionaries being deprecated. Proposed, not built: linking repair issues to the config
+  entry (2026.11) so they go with it; `has_update` on update entities.
+- Repair issues for runtime-change warnings now include the entry id, so two instances can't
+  replace each other's.
+- `stale.yml` gets `permissions: {}` at the top like `build.yml`'s `contents: read`.
+- Tests, ruff, mypy, quality scale rules: pass, 100% coverage. Diagnostics still redact the token,
+  labels, TLS keys and Hawser tokens; the event entity carries only the exit code.
+
 ## 2026-11-02: moved to the dev/main workflow
 
 - `ci.yml` and `release.yml` replaced by one `build.yml` (changelog check, ruff, mypy, pytest with
