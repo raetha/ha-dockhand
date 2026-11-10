@@ -234,3 +234,26 @@ def test_untagged_items_have_empty_tags():
         coord, "entry", 1, "local", "http://dh", WEB
     ).extra_state_attributes
     assert attrs["tags"] == []
+
+
+def test_system_container_flag_on_container_and_stack():
+    coord = _fast_data()
+    env = coord.data["environments"][1]
+    env["containers"] = [{**WEB, "systemContainer": "hawser"}]
+    container = DockhandContainerStateSensor(
+        coord, "entry", 1, "local", "http://dh", WEB
+    )
+    stack = DockhandStackStatusSensor(coord, "entry", 1, "local", "http://dh", STACK)
+    assert container.extra_state_attributes["system_container"] == "hawser"
+    assert stack.extra_state_attributes["system_container"] == "hawser"
+    env["containers"] = [WEB]
+    assert container.extra_state_attributes["system_container"] is None
+    assert stack.extra_state_attributes["system_container"] is None
+
+
+def test_stack_status_is_an_enum():
+    coord = _fast_data()
+    sensor = DockhandStackStatusSensor(coord, "entry", 1, "local", "http://dh", STACK)
+    assert sensor.native_value == "running"
+    coord.data["environments"][1]["stacks"] = [{**STACK, "status": "brand_new"}]
+    assert sensor.native_value is None

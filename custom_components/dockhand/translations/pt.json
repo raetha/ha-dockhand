@@ -161,7 +161,14 @@
         }
       },
       "status": {
-        "name": "Estado"
+        "name": "Estado",
+        "state": {
+          "running": "Em execução",
+          "partial": "Parcial",
+          "restarting": "A reiniciar",
+          "stopped": "Parado",
+          "created": "Criado"
+        }
       },
       "containers_in_stack": {
         "name": "Contêineres"
@@ -170,10 +177,61 @@
         "name": "Versão do agente Hawser"
       },
       "next_run": {
-        "name": "Próxima execução"
+        "name": "Próxima execução",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Atualização de contêiner",
+              "container_start": "Início do contentor",
+              "container_stop": "Paragem do contentor",
+              "git_stack_sync": "Sincronização de stack Git",
+              "system_cleanup": "Limpeza do sistema",
+              "env_update_check": "Verificação de atualizações do ambiente",
+              "image_prune": "Limpeza de imagens",
+              "backup": "Cópia de segurança",
+              "repo_prune": "Limpeza do repositório",
+              "repo_check": "Verificação do repositório",
+              "repo_verify": "Validação do repositório",
+              "stack_deploy": "Implementação de stack",
+              "deploy_log_reconcile": "Conciliação do log de implantação",
+              "env_report": "Relatório de estado"
+            }
+          }
+        }
       },
       "last_status": {
-        "name": "Último status"
+        "name": "Último status",
+        "state": {
+          "queued": "Na fila",
+          "running": "Em execução",
+          "success": "Sucesso",
+          "failed": "Falhou",
+          "skipped": "Ignorado",
+          "warning": "Aviso",
+          "error": "Erro",
+          "cancelled": "Cancelado",
+          "stale": "Desatualizado"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Atualização de contêiner",
+              "container_start": "Início do contentor",
+              "container_stop": "Paragem do contentor",
+              "git_stack_sync": "Sincronização de stack Git",
+              "system_cleanup": "Limpeza do sistema",
+              "env_update_check": "Verificação de atualizações do ambiente",
+              "image_prune": "Limpeza de imagens",
+              "backup": "Cópia de segurança",
+              "repo_prune": "Limpeza do repositório",
+              "repo_check": "Verificação do repositório",
+              "repo_verify": "Validação do repositório",
+              "stack_deploy": "Implementação de stack",
+              "deploy_log_reconcile": "Conciliação do log de implantação",
+              "env_report": "Relatório de estado"
+            }
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "Uso de CPU"

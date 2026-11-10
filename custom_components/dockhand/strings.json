@@ -161,7 +161,14 @@
         }
       },
       "status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "running": "Running",
+          "partial": "Partial",
+          "restarting": "Restarting",
+          "stopped": "Stopped",
+          "created": "Created"
+        }
       },
       "containers_in_stack": {
         "name": "Containers"
@@ -170,10 +177,61 @@
         "name": "Hawser agent version"
       },
       "next_run": {
-        "name": "Next run"
+        "name": "Next run",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Container update",
+              "container_start": "Container start",
+              "container_stop": "Container stop",
+              "git_stack_sync": "Git stack sync",
+              "system_cleanup": "System cleanup",
+              "env_update_check": "Environment update check",
+              "image_prune": "Image prune",
+              "backup": "Backup",
+              "repo_prune": "Repo prune",
+              "repo_check": "Repo check",
+              "repo_verify": "Repo verify",
+              "stack_deploy": "Stack deploy",
+              "deploy_log_reconcile": "Deploy log reconcile",
+              "env_report": "State report"
+            }
+          }
+        }
       },
       "last_status": {
-        "name": "Last status"
+        "name": "Last status",
+        "state": {
+          "queued": "Queued",
+          "running": "Running",
+          "success": "Success",
+          "failed": "Failed",
+          "skipped": "Skipped",
+          "warning": "Warning",
+          "error": "Error",
+          "cancelled": "Cancelled",
+          "stale": "Stale"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Container update",
+              "container_start": "Container start",
+              "container_stop": "Container stop",
+              "git_stack_sync": "Git stack sync",
+              "system_cleanup": "System cleanup",
+              "env_update_check": "Environment update check",
+              "image_prune": "Image prune",
+              "backup": "Backup",
+              "repo_prune": "Repo prune",
+              "repo_check": "Repo check",
+              "repo_verify": "Repo verify",
+              "stack_deploy": "Stack deploy",
+              "deploy_log_reconcile": "Deploy log reconcile",
+              "env_report": "State report"
+            }
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "CPU usage"

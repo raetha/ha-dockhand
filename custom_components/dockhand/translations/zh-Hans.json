@@ -161,7 +161,14 @@
         }
       },
       "status": {
-        "name": "状态"
+        "name": "状态",
+        "state": {
+          "running": "运行中",
+          "partial": "部分运行",
+          "restarting": "正在重启",
+          "stopped": "已停止",
+          "created": "已创建"
+        }
       },
       "containers_in_stack": {
         "name": "容器"
@@ -170,10 +177,61 @@
         "name": "Hawser 代理版本"
       },
       "next_run": {
-        "name": "下次运行"
+        "name": "下次运行",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "容器更新",
+              "container_start": "容器启动",
+              "container_stop": "容器停止",
+              "git_stack_sync": "Git 堆栈同步",
+              "system_cleanup": "系统清理",
+              "env_update_check": "环境更新检查",
+              "image_prune": "镜像清理",
+              "backup": "备份",
+              "repo_prune": "仓库清理",
+              "repo_check": "仓库检查",
+              "repo_verify": "仓库校验",
+              "stack_deploy": "堆栈部署",
+              "deploy_log_reconcile": "部署日志核对",
+              "env_report": "状态报告"
+            }
+          }
+        }
       },
       "last_status": {
-        "name": "上次状态"
+        "name": "上次状态",
+        "state": {
+          "queued": "排队中",
+          "running": "运行中",
+          "success": "成功",
+          "failed": "失败",
+          "skipped": "已跳过",
+          "warning": "警告",
+          "error": "错误",
+          "cancelled": "已取消",
+          "stale": "已过时"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "容器更新",
+              "container_start": "容器启动",
+              "container_stop": "容器停止",
+              "git_stack_sync": "Git 堆栈同步",
+              "system_cleanup": "系统清理",
+              "env_update_check": "环境更新检查",
+              "image_prune": "镜像清理",
+              "backup": "备份",
+              "repo_prune": "仓库清理",
+              "repo_check": "仓库检查",
+              "repo_verify": "仓库校验",
+              "stack_deploy": "堆栈部署",
+              "deploy_log_reconcile": "部署日志核对",
+              "env_report": "状态报告"
+            }
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "CPU使用率"

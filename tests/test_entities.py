@@ -1700,6 +1700,13 @@ def test_schedule_last_status_failed():
     assert _make_last_status(SCHEDULE_FAILED).native_value == "failed"
 
 
+def test_schedule_last_status_unknown_word_is_unknown():
+    """An enum sensor: a status Dockhand adds later reads as unknown rather
+    than an option Home Assistant rejects."""
+    sched = {**SCHEDULE, "lastExecution": {"status": "brand_new"}}
+    assert _make_last_status(sched).native_value is None
+
+
 def test_schedule_last_status_attributes_on_failure():
     attrs = _make_last_status(SCHEDULE_FAILED).extra_state_attributes
     assert attrs["error_message"] == "Connection timeout"
