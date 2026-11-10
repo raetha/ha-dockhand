@@ -122,6 +122,21 @@ If Dockhand authentication is fully disabled, no token is needed. The integratio
 ### Re-authentication
 If a token is revoked or expires, the integration will surface a re-authentication notification in HA. Go to **Settings → Devices & Services → Dockhand → Re-authenticate**, generate a new token in Dockhand, and paste it in.
 
+### Tags
+
+Dockhand 1.0.49+ lets you tag containers and stacks with short coloured labels (`media`, `critical`, `auth`…), assigned in Dockhand or named in a container's `dockhand.tags` label (`dockhand.tags=media,critical:red`). The container State sensor and the stack Status sensor carry them as `tags` (a list of names) and `tag_colors` (each name's colour, as Dockhand draws it), so an automation can act on a tag:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: sensor.web_state
+    to: exited
+conditions:
+  - "{{ 'critical' in state_attr('sensor.web_state', 'tags') }}"
+```
+
+They show the tags Dockhand's own lists show. A container's tags don't include its stack's, which Dockhand only adds when you turn that on in its containers list. Tags are read every 10 minutes (labels with every poll), so a new tag can take that long to appear.
+
 ### Permissions
 
 A token acts as the Dockhand user who created it. In Dockhand's free edition every signed-in user may do everything, so there's nothing to set up. With **Dockhand Enterprise** roles, the token's user needs these permissions (per environment, where the role is environment-scoped):
@@ -129,7 +144,7 @@ A token acts as the Dockhand user who created it. In Dockhand's free edition eve
 | For | Dockhand permission |
 |---|---|
 | Everything (environments, their stats and host details) | `environments: view` |
-| Containers, stacks and their sensors | `containers: view`, `stacks: view` |
+| Containers, stacks and their sensors (including their Dockhand tags) | `containers: view`, `stacks: view` |
 | Images, volumes, networks (when enabled) | `images: view`, `volumes: view`, `networks: view` |
 | Schedules and the Auto update switch's state | `schedules: view` |
 | Activity sensor, live updates | `activity: view` |
@@ -246,7 +261,7 @@ Also disabled by default, each sourced from its own gated API call — only fetc
 ### Container (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| State | sensor | One of Docker's states: `created`, `running`, `paused`, `restarting`, `removing`, `exited` or `dead` (shown translated; anything else Docker might add later shows as unknown). Attributes include `exit_code` while the container is exited, `restart_count` while it's restarting (Dockhand only counts restarts then), and `image_version` from the image's `org.opencontainers.image.version` label |
+| State | sensor | One of Docker's states: `created`, `running`, `paused`, `restarting`, `removing`, `exited` or `dead` (shown translated; anything else Docker might add later shows as unknown). Attributes include `tags` (see [Tags](#tags)), `exit_code` while the container is exited, `restart_count` while it's restarting (Dockhand only counts restarts then), and `image_version` from the image's `org.opencontainers.image.version` label |
 | Health | sensor | `healthy`, `unhealthy` or `starting`. Only created for containers with a Docker healthcheck configured — enabled by default |
 | Docker event | event | Fires when Docker reports the container starting, stopping, dying (with its `exit_code`), being killed, running out of memory, restarting, pausing, resuming, being updated, or its health check passing, failing or starting — for automations, like the Portainer integration's. Comes from the live feed (see [Data Updates](#data-updates)), so it's unavailable for environments Dockhand doesn't send events for, and misses events while the feed is disconnected. Disabled by default |
 | Container | switch | turn on = start (or resume, if paused), turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
@@ -273,7 +288,7 @@ The following **diagnostic sensors** are created for every container while **Ena
 ### Stack (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| Status | sensor | running / partial / stopped. The stack device's `model` (Internal Stack / Git Stack / Untracked Stack) shows why a stack does or doesn't have the git-stack entities below. "Untracked" matches Dockhand's own terminology for a stack it discovered but never created/adopted/git-tracked through its own UI |
+| Status | sensor | running / partial / stopped. The stack device's `model` (Internal Stack / Git Stack / Untracked Stack) shows why a stack does or doesn't have the git-stack entities below. Carries the stack's `tags` and `tag_colors` (see [Tags](#tags)). "Untracked" matches Dockhand's own terminology for a stack it discovered but never created/adopted/git-tracked through its own UI |
 | Stack | switch | turn on = start, turn off = stop. **Not created for a stack containing a system container** — see note below |
 | Restart | button | restarts the stack, or starts it if stopped. **Not created for a stack containing a system container** — see note below |
 | Redeploy | button | pulls the latest image for each service and redeploys — matches Dockhand's own Redeploy popover exactly, including its own literal button title, with its default checkboxes (Pull images checked, Build images and Force recreate unchecked), so it behaves the same as clicking Redeploy in Dockhand's own UI without touching any options. Only recreates containers whose config actually changed (e.g. a new image digest) — doesn't force-recreate everything. **Internal stacks only** — git stacks have their own Deploy/Sync from Git button (below) with different mechanics; not created for Untracked stacks (no compose file location for Dockhand to redeploy from) or for a stack containing a system container |

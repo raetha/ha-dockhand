@@ -327,6 +327,9 @@ raises it. Test builds carry it, and release reviews re-check it. The changelog 
 | `dev` | Adopted work, and Dependabot's updates. `[Unreleased]` is kept current here. | Publishes a test build. |
 | `try/<topic>` | Experiments that may be dropped. Branched from `dev`. | Nothing by itself: open a (draft) pull request into `dev` to run CI. |
 
+Don't end a branch name in `tags` (`try/tags`, `try/dockhand-tags`): HACS's downloader removes
+every `tags/` from a URL, so HACS validation then reads `hacs.json` from the wrong path and fails.
+
 Adopted `try/` work is squash-merged into `dev`; ideas dropped for good get a line in
 [backlog.md](backlog.md).
 

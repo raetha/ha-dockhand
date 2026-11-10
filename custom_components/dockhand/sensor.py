@@ -11,13 +11,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfInformation
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DockhandConfigEntry
+from . import DockhandConfigEntry, tags
 from .const import (
     CONF_API_URL,
     CONF_ENABLE_IMAGES,
@@ -663,7 +663,7 @@ class DockhandEnvConnectionTypeSensor(BaseFastEnvSensor):
 
 class DockhandEnvCpuSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "cpu_usage"
     _unrecorded_attributes = frozenset({"top_containers"})
@@ -732,7 +732,7 @@ class DockhandEnvCpuSensor(BaseFastEnvSensor):
 
 class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "memory_usage"
 
@@ -1207,6 +1207,11 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
             "networks": {
                 n: i.get("ipAddress") for n, i in (c.get("networks") or {}).items()
             },
+            **tags.attributes(
+                _coordinator_env(self.coordinator.data, self._env_id)
+                .get("container_tags", {})
+                .get(self._container_name, [])
+            ),
         }
 
 
@@ -1271,7 +1276,7 @@ class DockhandContainerCpuSensor(BaseFastContainerStatsSensor):
     """Container CPU usage as a percentage of total host CPU capacity."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "container_cpu_percent"
 
@@ -1352,7 +1357,7 @@ class DockhandContainerMemoryPercentSensor(BaseFastContainerStatsSensor):
     """Container memory usage as a percentage of its configured limit."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "container_memory_percent"
 
@@ -1629,6 +1634,7 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
             "type": type_label,
             "container_count": len(container_ids),
             "container_names": container_names,
+            **tags.attributes(env_data.get("stack_tags", {}).get(self._stack_name, [])),
         }
 
 
@@ -1745,7 +1751,7 @@ STACK_STATS_SENSORS: tuple[DockhandStackStatsDescription, ...] = (
     DockhandStackStatsDescription(
         key="cpu_percent",
         translation_key="stack_cpu_percent",
-        native_unit_of_measurement="%",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda t: _round2(t.get("cpuPercent")),
     ),
