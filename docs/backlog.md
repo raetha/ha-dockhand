@@ -11,7 +11,7 @@ the reasoning first and only revisit if the stated condition has changed.
   version reaches 2026.10.** That release switched form schemas to probatio
   (aliasing `import voluptuous` to it at runtime) and moved
   `BinarySensorDeviceClass` to `homeassistant.components.binary_sensor.const`.
-  The minimum (2026.3) has neither, so `config_flow.py` keeps voluptuous and
+  The minimum (2026.8) has neither, so `config_flow.py` keeps voluptuous and
   passes schemas through `_form()`, and `binary_sensor.py`'s import carries a
   `type: ignore`. At 2026.10+: build the schemas with probatio directly,
   delete `_form()`, and import from `binary_sensor.const`. Likewise

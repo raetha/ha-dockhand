@@ -3,6 +3,9 @@
 ## [Unreleased]
 
 ### Removed
+- **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3),
+  as for other widely used custom integrations. HACS and the Marketplace
+  won't install this release on older versions; 1.11.3 keeps working there.
 
 - **Breaking: polling intervals can no longer be set.** Home Assistant
   doesn't allow integrations to offer polling-interval settings, so the
@@ -131,6 +134,7 @@
 - Devices are described with `DeviceInfo(...)`, which Home Assistant
   2026.11 made a dataclass; plain dictionaries are due to be deprecated.
 - Dead code found by CodeQL removed; ruff 0.17.4.
+- Fallbacks for Home Assistant before 2026.8's device registry calls removed.
 - Two tag tests no longer move the event loop's clock, which made one fail at random.
 - The live feed skips its refresh when an action's refresh or a poll that
   started after the event already shows it, saving an API round per action.

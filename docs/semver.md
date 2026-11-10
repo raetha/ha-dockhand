@@ -70,21 +70,16 @@ corresponding release to actually resolve and use the new entity.
 
 ## HA compatibility floor: the two repos are allowed to differ, but only one direction
 
-`ha-dockhand` and `ha-dockhand-cards` currently declare different Home Assistant minimums (see
-each repo's own README) — that's fine as a starting point, confirmed 2026-07-25 after actually
-verifying `ha-dockhand-cards`' code against HA's real frontend source at every 2026.3.x release
-(not estimated — every 2026.3.x core release was checked directly against
-`homeassistant/components/frontend/manifest.json`'s pinned frontend build). One component
-(`ha-input`) genuinely doesn't exist in any 2026.3 release, so matching floors right now would
-mean either losing that component's use across every editor or adding a runtime feature-detection
-shim — not something to take on without a reason better than "the numbers should match."
+Both repos require Home Assistant 2026.8 from 2.0.0, matching other widely used custom
+integrations; it's where HA's entry-scoped device registry calls arrived, so neither repo needs a
+fallback for older device lookups. Raising either floor is a major change (above).
 
 The rule going forward: **`ha-dockhand-cards`' floor must never sit below `ha-dockhand`'s** — the
-cards depend on the integration, not the reverse, so there's no scenario where an older cards
-floor than the integration's makes sense. Whenever `ha-dockhand`'s HA minimum is raised for a
-release, raise `ha-dockhand-cards`' to at least match in the same pass (verify against real HA
-source first, the same way this session did, rather than assuming compatibility) — don't wait for
-a separate ask. They don't need to match at every point in between; they need to never invert.
+cards depend on the integration, not the reverse, so there's no scenario where an older cards floor
+than the integration's makes sense. Whenever `ha-dockhand`'s HA minimum is raised for a release,
+raise `ha-dockhand-cards`' to at least match in the same pass (verify against HA's real frontend
+source first rather than assuming compatibility) — don't wait for a separate ask. They don't need
+to match at every point in between; they need to never invert.
 
 ## Notes
 

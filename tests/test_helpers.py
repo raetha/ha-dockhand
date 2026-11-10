@@ -28,7 +28,6 @@ from custom_components.dockhand.helpers import (
     _actionable_pending_update_container_ids,
     _device_by_identifier,
     create_issue,
-    device_config_entry_ids,
     _all_envs,
     _compose_project,
     _container_device,
@@ -209,27 +208,6 @@ def mock_dr(monkeypatch):
 
     mock_hass = MagicMock()
     return registry_map, mock_hass
-
-
-# ---------------------------------------------------------------------------
-# _device_by_identifier
-# ---------------------------------------------------------------------------
-
-
-def test_device_by_identifier_uses_scoped_lookup_when_available():
-    """HA 2026.8+: the entry-scoped lookup, never the deprecated one."""
-    reg = MagicMock()
-    _device_by_identifier(reg, ("dockhand", "x"), ENTRY_ID)
-    reg.async_get_device_by_identifier.assert_called_once_with(
-        ("dockhand", "x"), ENTRY_ID
-    )
-    reg.async_get_device.assert_not_called()
-
-
-def test_device_by_identifier_falls_back_before_ha_2026_8():
-    reg = MagicMock(spec=["async_get_device"])
-    _device_by_identifier(reg, ("dockhand", "x"), ENTRY_ID)
-    reg.async_get_device.assert_called_once_with(identifiers={("dockhand", "x")})
 
 
 # ---------------------------------------------------------------------------
@@ -1361,18 +1339,6 @@ async def test_dockhand_action_turns_failures_into_user_errors(
         await async_dockhand_action(fail())
     assert exc_info.value.translation_key == translation_key
     assert exc_info.value.__cause__ is error
-
-
-def test_device_config_entry_ids_reads_the_single_entry_on_current_ha():
-    device = MagicMock(spec=["config_entry_id"], config_entry_id="entry_a")
-    assert device_config_entry_ids(device) == {"entry_a"}
-    device.config_entry_id = None
-    assert device_config_entry_ids(device) == set()
-
-
-def test_device_config_entry_ids_falls_back_on_ha_before_2026_8():
-    device = MagicMock(spec=["config_entries"], config_entries={"entry_a", "entry_b"})
-    assert device_config_entry_ids(device) == {"entry_a", "entry_b"}
 
 
 def test_create_issue_links_the_entry_where_home_assistant_can(monkeypatch):
