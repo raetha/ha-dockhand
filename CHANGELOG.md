@@ -83,8 +83,8 @@
   unavailable while nothing is pending, rather than appearing and
   disappearing, so automations and dashboards can rely on its entity ID.
 - **Versions show without a leading "v"** — HACS shows release tags,
-  which from this release are plain version numbers (`1.11.4`, test builds
-  such as `1.11.5-dev.42`), like most other HACS repositories. Earlier
+  which from this release are plain version numbers (`2.0.0`, test builds
+  such as `2.0.1-dev.42`), like most other HACS repositories. Earlier
   releases keep their `v` tags.
 
 ### Fixed
@@ -105,6 +105,11 @@
 - **Clear error when Dockhand denies an action** — with Dockhand
   Enterprise roles, an action the API token's user isn't allowed to do now
   says so, instead of showing a raw "API error 403".
+- **No deprecation warning in the log from Dockhand actions** on Home
+  Assistant 2026.10 and later (`DeviceEntry.config_entries`).
+- **Runtime-change warnings from two Dockhand instances no longer replace
+  each other** in Repairs when both have a container with the same name in
+  an environment with the same number.
 
 ### Internal
 
@@ -116,6 +121,9 @@
 - Code comments trimmed to explain why, not how the code got here.
 - Percentage sensors use Home Assistant's `PERCENTAGE` unit constant (the
   same `%`).
+- Devices are described with `DeviceInfo(...)`, which Home Assistant
+  2026.11 made a dataclass; plain dictionaries are due to be deprecated.
+- Dead code found by CodeQL removed; ruff 0.17.4.
 - The live feed skips its refresh when an action's refresh or a poll that
   started after the event already shows it, saving an API round per action.
 

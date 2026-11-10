@@ -86,6 +86,19 @@ def _device_by_identifier(
     return registry.async_get_device(identifiers={identifier})
 
 
+def device_config_entry_ids(device: Any) -> set[str]:
+    """The config entries a device belongs to.
+
+    HA 2026.8 gave a device a single `config_entry_id` and deprecated
+    `config_entries`, which logs a warning on every read (removed in
+    2027.10). Feature-detected so the HA minimum can stay below 2026.8.
+    """
+    if hasattr(device, "config_entry_id"):
+        entry_id: str | None = device.config_entry_id
+        return {entry_id} if entry_id is not None else set()
+    return set(device.config_entries)
+
+
 def already_registered(
     hass: HomeAssistant,
     known_ids: set[str],
@@ -431,13 +444,13 @@ def _instance_device(
     Registered in async_setup_entry before any other device and never
     removed while the entry is loaded.
     """
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_instance(entry_id))},
-        "name": name,
-        "manufacturer": "Dockhand",
-        "model": "Dockhand",
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_instance(entry_id))},
+        name=name,
+        manufacturer="Dockhand",
+        model="Dockhand",
+        entry_type=DeviceEntryType.SERVICE,
+    )
     if base_url:
         info["configuration_url"] = base_url
     if version:
@@ -457,17 +470,17 @@ def _under_instance(hass: Any, entry_id: str, info: DeviceInfo) -> DeviceInfo:
 def _env_device(
     entry_id: str, env_id: int, env_name: str, base_url: str, stats: dict | None = None
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_env(entry_id, env_id))},
-        "name": env_name,
-        "manufacturer": "Dockhand",
-        "model": "Environment",
-        "configuration_url": _env_settings_url(base_url, env_id),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_env(entry_id, env_id))},
+        name=env_name,
+        manufacturer="Dockhand",
+        model="Environment",
+        configuration_url=_env_settings_url(base_url, env_id),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     if stats:
         conn = stats.get("connectionType")
-        if conn:
+        if isinstance(conn, str) and conn:
             info["hw_version"] = conn
     return info
 
@@ -475,14 +488,14 @@ def _env_device(
 def _containers_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_containers_group(entry_id, env_id))},
-        "name": f"{env_name} – Containers",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _container_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_containers_group(entry_id, env_id))},
+        name=f"{env_name} – Containers",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_container_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -492,14 +505,14 @@ def _containers_group_device(
 def _stacks_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_stacks_group(entry_id, env_id))},
-        "name": f"{env_name} – Stacks",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _stack_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_stacks_group(entry_id, env_id))},
+        name=f"{env_name} – Stacks",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_stack_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -509,14 +522,14 @@ def _stacks_group_device(
 def _network_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_networks_group(entry_id, env_id))},
-        "name": f"{env_name} – Networks",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _network_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_networks_group(entry_id, env_id))},
+        name=f"{env_name} – Networks",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_network_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -526,14 +539,14 @@ def _network_group_device(
 def _volume_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_volumes_group(entry_id, env_id))},
-        "name": f"{env_name} – Volumes",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _volume_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_volumes_group(entry_id, env_id))},
+        name=f"{env_name} – Volumes",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_volume_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -566,16 +579,14 @@ def _container_device(
         parent_identifier = _device_id_stack(entry_id, env_id, stack_name)
     else:
         parent_identifier = _device_id_containers_group(entry_id, env_id)
-    info: DeviceInfo = {
-        "identifiers": {
-            (DOMAIN, _device_id_container(entry_id, env_id, container_name))
-        },
-        "name": f"{env_name} – Containers – {container_name}",
-        "manufacturer": "Dockhand",
-        "model": "Container",
-        "configuration_url": _container_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_container(entry_id, env_id, container_name))},
+        name=f"{env_name} – Containers – {container_name}",
+        manufacturer="Dockhand",
+        model="Container",
+        configuration_url=_container_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, parent_identifier)
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -619,16 +630,16 @@ def _stack_device(
     stacks that predate installing Dockhand were never explicitly
     recorded in its database.
     """
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_stack(entry_id, env_id, stack_name))},
-        "name": f"{env_name} – Stacks – {stack_name}",
-        "manufacturer": "Dockhand",
-        "model": _STACK_MODEL_BY_SOURCE_TYPE.get(
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_stack(entry_id, env_id, stack_name))},
+        name=f"{env_name} – Stacks – {stack_name}",
+        manufacturer="Dockhand",
+        model=_STACK_MODEL_BY_SOURCE_TYPE.get(
             source_type or "external", "Untracked Stack"
         ),
-        "configuration_url": _stack_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+        configuration_url=_stack_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(
         hass, entry_id, _device_id_stacks_group(entry_id, env_id)
     )
@@ -640,14 +651,14 @@ def _stack_device(
 def _image_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_images_group(entry_id, env_id))},
-        "name": f"{env_name} – Images",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _image_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_images_group(entry_id, env_id))},
+        name=f"{env_name} – Images",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_image_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -669,14 +680,14 @@ def _schedule_group_device(
     group-of-entities, since individual schedule devices (via `_sched_device`)
     need to exist as their own devices regardless of this grouping.
     """
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_schedules_group(entry_id, env_id))},
-        "name": f"{env_name} – Schedules",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _schedules_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_schedules_group(entry_id, env_id))},
+        name=f"{env_name} – Schedules",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_schedules_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -752,14 +763,14 @@ def _sched_device(
     else:
         parent_identifier = _device_id_schedules_hub(entry_id)
         prefix = "Dockhand"
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_schedule(entry_id, sched_id, sched_type))},
-        "name": f"{prefix} – Schedules – {sched_name}",
-        "manufacturer": "Dockhand",
-        "model": "Schedule",
-        "configuration_url": _schedules_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_schedule(entry_id, sched_id, sched_type))},
+        name=f"{prefix} – Schedules – {sched_name}",
+        manufacturer="Dockhand",
+        model="Schedule",
+        configuration_url=_schedules_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, parent_identifier)
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -796,7 +807,6 @@ def _container_has_healthcheck(container: dict) -> bool:
     return bool(h) and h not in ("none", "unknown")
 
 
-_TRUTHY_LABEL_VALUES = {"true", "yes", "1"}
 _FALSY_LABEL_VALUES = {"false", "no", "0"}
 
 
@@ -1223,14 +1233,14 @@ def _ensure_hub_devices(
     /api/schedules — filtering to global-only happens here.
     """
     registry = dr.async_get(hass)
-    hub: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_schedules_hub(entry_id))},
-        "name": "Dockhand – Schedules",
-        "manufacturer": "Dockhand",
-        "model": "Service",
-        "configuration_url": _schedules_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    hub = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_schedules_hub(entry_id))},
+        name="Dockhand – Schedules",
+        manufacturer="Dockhand",
+        model="Service",
+        configuration_url=_schedules_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     registry.async_get_or_create(
         config_entry_id=entry_id, **_under_instance(hass, entry_id, hub)
     )
