@@ -526,7 +526,7 @@ Both follow what Dockhand's own Schedules page offers. Environment reports and s
 
 ## Requirements
 
-- Home Assistant 2026.3 or later (requires Python 3.14)
+- Home Assistant 2026.8 or later
 - Dockhand ≥ 1.0.26 (for API token authentication; no-auth installs work on any version)
 - Some features need a newer Dockhand and simply don't appear on older ones: the stack **Updates available** sensor (1.0.37+) and stack resource stats (1.0.52+)
 - Dockhand reachable from the HA host

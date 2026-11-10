@@ -74,18 +74,9 @@ def _device_entry_id(hass: Any, entry_id: str, identifier: str) -> str | None:
 def _device_by_identifier(
     registry: dr.DeviceRegistry, identifier: tuple[str, str], config_entry_id: str
 ) -> dr.DeviceEntry | None:
-    """The device with this identifier in this config entry.
-
-    HA 2026.8 replaced async_get_device(identifiers=...) with the
-    entry-scoped async_get_device_by_identifier and logs a deprecation
-    warning for the old call (removed in 2027.8). Feature-detected so the
-    HA minimum can stay below 2026.8.
-    """
-    by_identifier = getattr(registry, "async_get_device_by_identifier", None)
-    if by_identifier is not None:
-        device: dr.DeviceEntry | None = by_identifier(identifier, config_entry_id)
-        return device
-    return registry.async_get_device(identifiers={identifier})
+    """The device with this identifier in this config entry (scoped, since
+    two Dockhand instances can share an identifier)."""
+    return registry.async_get_device_by_identifier(identifier, config_entry_id)
 
 
 def create_issue(
@@ -97,19 +88,6 @@ def create_issue(
     if "config_entry_id" in inspect.signature(ir.async_create_issue).parameters:
         kwargs["config_entry_id"] = entry_id
     ir.async_create_issue(hass, DOMAIN, issue_id, **kwargs)
-
-
-def device_config_entry_ids(device: Any) -> set[str]:
-    """The config entries a device belongs to.
-
-    HA 2026.8 gave a device a single `config_entry_id` and deprecated
-    `config_entries`, which logs a warning on every read (removed in
-    2027.10). Feature-detected so the HA minimum can stay below 2026.8.
-    """
-    if hasattr(device, "config_entry_id"):
-        entry_id: str | None = device.config_entry_id
-        return {entry_id} if entry_id is not None else set()
-    return set(device.config_entries)
 
 
 def already_registered(

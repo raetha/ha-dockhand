@@ -27,7 +27,6 @@ from .helpers import (
     _device_id_env,
     _find_container,
     async_dockhand_action,
-    device_config_entry_ids,
     ha_schema,
 )
 
@@ -86,8 +85,9 @@ def _device_and_entry(
     device = dr.async_get(hass).async_get(device_id)
     if device is None:
         raise _invalid_target()
-    for entry_id in device_config_entry_ids(device):
-        entry = hass.config_entries.async_get_entry(entry_id)
+    # config_entry_id, not the deprecated config_entries (warns on read).
+    if device.config_entry_id is not None:
+        entry = hass.config_entries.async_get_entry(device.config_entry_id)
         if entry is not None and entry.domain == DOMAIN:
             if entry.state is not ConfigEntryState.LOADED:
                 raise ServiceValidationError(
