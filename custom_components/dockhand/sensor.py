@@ -56,6 +56,7 @@ from .helpers import (
     _stack_device,
     _volume_group_device,
     already_registered,
+    stack_system_container,
 )
 
 
@@ -1157,6 +1158,20 @@ CONTAINER_STATES = [
     "dead",
 ]
 CONTAINER_HEALTH_STATES = ["healthy", "unhealthy", "starting"]
+# Dockhand's stack statuses (stacks.ts, stack-status.ts).
+STACK_STATES = ["running", "partial", "restarting", "stopped", "created"]
+# Dockhand's ScheduleStatus (db.ts).
+SCHEDULE_STATUSES = [
+    "queued",
+    "running",
+    "success",
+    "failed",
+    "skipped",
+    "warning",
+    "error",
+    "cancelled",
+    "stale",
+]
 
 
 class DockhandContainerStateSensor(BaseFastContainerSensor):
@@ -1204,6 +1219,8 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
             "networks": {
                 n: i.get("ipAddress") for n, i in (c.get("networks") or {}).items()
             },
+            # Dockhand's own infrastructure ("dockhand", "hawser"), else None.
+            "system_container": c.get("systemContainer") or None,
             **tags.attributes(
                 _coordinator_env(self.coordinator.data, self._env_id)
                 .get("container_tags", {})
@@ -1576,6 +1593,8 @@ class DockhandContainerBlockWriteSensor(BaseFastContainerStatsSensor):
 
 class DockhandStackStatusSensor(BaseFastStackSensor):
     _attr_translation_key = "status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = STACK_STATES
 
     def __init__(
         self,
@@ -1594,8 +1613,8 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
     @property
     @override
     def native_value(self) -> str | None:
-        s = self._stack()
-        return s.get("status") if s else None
+        status = (self._stack() or {}).get("status")
+        return status if status in STACK_STATES else None
 
     @property
     @override
@@ -1627,6 +1646,9 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
             "type": type_label,
             "container_count": len(container_ids),
             "container_names": container_names,
+            "system_container": stack_system_container(
+                s, env_data.get("containers") or []
+            ),
             **tags.attributes(env_data.get("stack_tags", {}).get(self._stack_name, [])),
         }
 
@@ -2485,6 +2507,8 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
     """
 
     _attr_translation_key = "last_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = SCHEDULE_STATUSES
 
     def __init__(
         self,
@@ -2500,8 +2524,8 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
     def native_value(self) -> str | None:
         s = self._find()
         if s:
-            last = s.get("lastExecution")
-            return last.get("status") if last else None
+            status = (s.get("lastExecution") or {}).get("status")
+            return status if status in SCHEDULE_STATUSES else None
         return None
 
     @property

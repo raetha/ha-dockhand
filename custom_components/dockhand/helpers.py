@@ -829,15 +829,18 @@ def _stack_has_system_container(stack: dict | None, all_containers: list) -> boo
     in it, including ones the user may not realize are Dockhand
     infrastructure.
     """
-    if not stack:
-        return False
-    stack_container_ids = set(stack.get("containers") or [])
-    if not stack_container_ids:
-        return False
+    return stack_system_container(stack, all_containers) is not None
+
+
+def stack_system_container(stack: dict | None, all_containers: list) -> str | None:
+    """Which Dockhand system container ("dockhand", "hawser") a stack holds,
+    if any; see _stack_has_system_container for how a stack's containers
+    are matched."""
+    stack_container_ids = set((stack or {}).get("containers") or [])
     for c in all_containers or []:
         if c.get("id") in stack_container_ids and c.get("systemContainer"):
-            return True
-    return False
+            return str(c["systemContainer"])
+    return None
 
 
 def _container_has_pending_update(

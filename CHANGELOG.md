@@ -19,6 +19,9 @@
   Downgrading to 1.11.x still works and keeps the intervals you'd set.
 
 ### Added
+- **Which containers and stacks are Dockhand's own** — a `system_container`
+  attribute (`dockhand` or `hawser`, else empty) on the container State and
+  stack Status sensors.
 
 - **Run schedules now, and pause them** — each schedule gets a **Run now**
   button and, where Dockhand allows it, an **Enabled** switch, so
@@ -62,6 +65,10 @@
   and what a Docker socket proxy in front of Dockhand has to allow.
 
 ### Changed
+- **Stack Status and schedule Last status list their states**, translated,
+  so Home Assistant offers them in automations and shows them in your
+  language; the schedule type attribute is translated too. A status Dockhand
+  adds later shows as unknown until the integration knows it.
 
 - **Actions refresh only their own environment** — after a button, switch
   or Install, only that environment's containers and stacks are re-read

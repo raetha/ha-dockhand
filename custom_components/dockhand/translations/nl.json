@@ -161,7 +161,14 @@
         }
       },
       "status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "running": "Actief",
+          "partial": "Gedeeltelijk",
+          "restarting": "Herstarten",
+          "stopped": "Gestopt",
+          "created": "Aangemaakt"
+        }
       },
       "containers_in_stack": {
         "name": "Containers"
@@ -170,10 +177,61 @@
         "name": "Hawser-agentversie"
       },
       "next_run": {
-        "name": "Volgende uitvoering"
+        "name": "Volgende uitvoering",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Containerupdate",
+              "container_start": "Container starten",
+              "container_stop": "Container stoppen",
+              "git_stack_sync": "Git-stacksynchronisatie",
+              "system_cleanup": "Systeemopschoning",
+              "env_update_check": "Updatecontrole voor omgeving",
+              "image_prune": "Images opschonen",
+              "backup": "Back-up",
+              "repo_prune": "Repository opschonen",
+              "repo_check": "Repositorycontrole",
+              "repo_verify": "Repositoryverificatie",
+              "stack_deploy": "Stack uitrollen",
+              "deploy_log_reconcile": "Afstemming van implementatielogboek",
+              "env_report": "Statusrapport"
+            }
+          }
+        }
       },
       "last_status": {
-        "name": "Laatste status"
+        "name": "Laatste status",
+        "state": {
+          "queued": "In wachtrij",
+          "running": "Actief",
+          "success": "Geslaagd",
+          "failed": "Mislukt",
+          "skipped": "Overgeslagen",
+          "warning": "Waarschuwing",
+          "error": "Fout",
+          "cancelled": "Geannuleerd",
+          "stale": "Verouderd"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Containerupdate",
+              "container_start": "Container starten",
+              "container_stop": "Container stoppen",
+              "git_stack_sync": "Git-stacksynchronisatie",
+              "system_cleanup": "Systeemopschoning",
+              "env_update_check": "Updatecontrole voor omgeving",
+              "image_prune": "Images opschonen",
+              "backup": "Back-up",
+              "repo_prune": "Repository opschonen",
+              "repo_check": "Repositorycontrole",
+              "repo_verify": "Repositoryverificatie",
+              "stack_deploy": "Stack uitrollen",
+              "deploy_log_reconcile": "Afstemming van implementatielogboek",
+              "env_report": "Statusrapport"
+            }
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "CPU-gebruik"

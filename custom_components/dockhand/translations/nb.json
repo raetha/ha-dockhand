@@ -161,7 +161,14 @@
         }
       },
       "status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "running": "Kjører",
+          "partial": "Delvis",
+          "restarting": "Starter på nytt",
+          "stopped": "Stoppet",
+          "created": "Opprettet"
+        }
       },
       "containers_in_stack": {
         "name": "Beholdere"
@@ -170,10 +177,61 @@
         "name": "Hawser-agentversjon"
       },
       "next_run": {
-        "name": "Neste kjøring"
+        "name": "Neste kjøring",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Beholderoppdatering",
+              "container_start": "Containerstart",
+              "container_stop": "Containerstopp",
+              "git_stack_sync": "Synkronisering av Git-stabel",
+              "system_cleanup": "Systemopprydding",
+              "env_update_check": "Oppdateringssjekk for miljø",
+              "image_prune": "Opprydding av images",
+              "backup": "Sikkerhetskopi",
+              "repo_prune": "Opprydding i repo",
+              "repo_check": "Repo-kontroll",
+              "repo_verify": "Repo-verifisering",
+              "stack_deploy": "Stack-utrulling",
+              "deploy_log_reconcile": "Avstemming av distribusjonslogg",
+              "env_report": "Statusrapport"
+            }
+          }
+        }
       },
       "last_status": {
-        "name": "Siste status"
+        "name": "Siste status",
+        "state": {
+          "queued": "I kø",
+          "running": "Kjører",
+          "success": "Vellykket",
+          "failed": "Mislyktes",
+          "skipped": "Hoppet over",
+          "warning": "Advarsel",
+          "error": "Feil",
+          "cancelled": "Avbrutt",
+          "stale": "Utdatert"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Beholderoppdatering",
+              "container_start": "Containerstart",
+              "container_stop": "Containerstopp",
+              "git_stack_sync": "Synkronisering av Git-stabel",
+              "system_cleanup": "Systemopprydding",
+              "env_update_check": "Oppdateringssjekk for miljø",
+              "image_prune": "Opprydding av images",
+              "backup": "Sikkerhetskopi",
+              "repo_prune": "Opprydding i repo",
+              "repo_check": "Repo-kontroll",
+              "repo_verify": "Repo-verifisering",
+              "stack_deploy": "Stack-utrulling",
+              "deploy_log_reconcile": "Avstemming av distribusjonslogg",
+              "env_report": "Statusrapport"
+            }
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "CPU-bruk"
