@@ -1,6 +1,6 @@
 # Notes for Claude sessions
 
-Dockhand: a Home Assistant custom integration (HACS, Python 3.14) for the
+Dockhand: a Home Assistant custom integration (Marketplace/HACS, Python 3.14) for the
 [Dockhand](https://github.com/Finsys/dockhand) Docker management platform, with a companion card
 library, [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards). It has a real
 multi-user base, so breaking changes need migrations or clear documentation. The canonical guide
@@ -27,7 +27,7 @@ short version.
   checklist (including the quality scale review in `docs/quality-scale.md`), then `dev` → `main`.
   CI tags, publishes the release, and resets `dev` to `main`.
 - Each push to `dev` publishes a test build (`<version>-dev.<run>` pre-release) that the owner
-  installs through HACS's Pre-release switch to test on a real Home Assistant.
+  installs through the Marketplace's pre-release option to test on a real Home Assistant.
 - Before proposing anything, check `docs/backlog.md`. Before new work against Dockhand or Home
   Assistant changes, check `docs/development.md` → "Upstream compatibility" and update it after
   reviewing newer releases. When reviewing upstream release notes, propose new functionality
@@ -74,4 +74,5 @@ short version.
 - The owner's own Dockhand reaches its hosts only through Hawser (no direct Docker socket), so
   socket-connected scenarios can't be tested on their install; say so when a change depends on them.
 - HACS not showing the integration's icon in its store panel is an upstream HACS bug
-  (hacs/integration#5171, #5223): nothing to fix here.
+  (hacs/integration#5171, #5223): nothing to fix here. The Marketplace (HA 2026.11+) is HACS
+  built in, same catalog and `hacs.json`; HA 2026.10 and older still need HACS installed.

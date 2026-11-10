@@ -1,4 +1,4 @@
-[![HACS Badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/default)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/default)
 [![Release](https://img.shields.io/github/v/release/raetha/ha-dockhand?style=for-the-badge)](https://github.com/raetha/ha-dockhand/releases)
 [![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/build.yml?branch=main&label=build&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/build.yml)
 [![Installs](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=blue&label=installs&cacheSeconds=3600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.dockhand.total)](https://analytics.home-assistant.io/custom_integrations.json)
@@ -19,16 +19,20 @@ Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://githu
 
 ## Installation
 
-### HACS (Recommended)
+### Marketplace (Recommended)
 
-This integration is available in the default HACS catalog.
+Dockhand is in the default catalog of Home Assistant's **Marketplace**, built in from Home
+Assistant 2026.11 (it grew out of HACS, and uses the same catalog).
 
-1. Open HACS in Home Assistant
-2. Go to **Integrations**
-3. Find **Dockhand** in the integration list and install it
-4. Restart Home Assistant
+1. Go to **Settings → Marketplace**
+2. Find **Dockhand** and install it
+3. Restart Home Assistant
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=raetha&repository=ha-dockhand&category=integration)
+[![Open your Home Assistant instance and show Dockhand in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=raetha&repository=ha-dockhand&category=integration)
+
+**Home Assistant 2026.10 and older** have no Marketplace: install [HACS](https://hacs.xyz)
+yourself, then the steps are the same in HACS (**HACS → Integrations**, find Dockhand,
+download it, restart).
 
 ### Manual
 
@@ -40,13 +44,13 @@ This integration is available in the default HACS catalog.
 ### Test builds
 
 Upcoming changes are published as test builds (pre-releases such as `1.11.5-dev.42`) before
-they're released, for anyone willing to try them early. To get them through HACS:
+they're released, for anyone willing to try them early:
 
-1. Go to **Settings → Devices & services → Entities**, search for the Dockhand **Pre-release**
-   switch that HACS creates (it's disabled by default), and enable it
-2. Turn the switch on. HACS then offers the latest test build as an update; install it and restart
-   Home Assistant
-3. To go back to releases, turn the switch off, then in HACS open Dockhand, choose **⋮ →
+1. Turn on pre-releases for Dockhand: in the Marketplace, open Dockhand and use its **⋮** menu,
+   or turn on the Dockhand **Pre-release** switch (**Settings → Devices & services → Entities**;
+   it's disabled by default, so enable it first). On HACS only the switch is there.
+2. The latest test build is then offered as an update; install it and restart Home Assistant
+3. To go back to releases, turn pre-releases off again, then open Dockhand, choose **⋮ →
    Redownload** and pick the latest release
 
 Test builds show their own version (for example `1.11.3-dev.42`) in Home Assistant and in
@@ -567,7 +571,8 @@ All devices, entities, and configuration data created by this integration will b
 automatically. No edits to `configuration.yaml` are required. Any automations or dashboard
 cards referencing Dockhand entities should be updated or removed manually.
 
-### Uninstalling via HACS
+### Uninstalling via the Marketplace (or HACS)
 
-After deleting the integration from Settings, go to **HACS → Integrations**, find
-**Dockhand**, and click **Remove**. Restart Home Assistant when prompted.
+After deleting the integration from Settings, go to **Settings → Marketplace** (or **HACS →
+Integrations** on 2026.10 and older), find **Dockhand**, and remove it. Restart Home Assistant
+when prompted.
