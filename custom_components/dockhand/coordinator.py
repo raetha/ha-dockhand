@@ -4,9 +4,10 @@ import re
 from typing import Any, override
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from . import tags
@@ -805,6 +806,20 @@ class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_set_updated_data({"environments": environments})
 
 
+# A schedule run in progress is followed this often, so its result shows
+# soon after it ends rather than at the next 10-minute poll. Dockhand's
+# activity feed only carries Docker events, not schedule runs.
+SCHEDULE_RUN_POLL = 10.0
+_RUN_IN_PROGRESS = frozenset({"queued", "running"})
+
+
+def _schedule_run_in_progress(schedules: list[dict]) -> bool:
+    return any(
+        (s.get("lastExecution") or {}).get("status") in _RUN_IN_PROGRESS
+        for s in schedules
+    )
+
+
 class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Polls 600s: images, volumes, networks, schedules, runtime controls
     (all opt-in), git stacks/host/auto_update_settings/env_meta (always —
@@ -869,6 +884,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             config.get(CONF_ENABLE_RUNTIME_CONTROLS, False)
         )
         self._removal_guard = _RemovalGuard()
+        self._unsub_run_poll: CALLBACK_TYPE | None = None
         super().__init__(
             hass,
             _LOGGER,
@@ -891,7 +907,45 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _sync_fetch_issues(
             self.hass, self.config_entry, "slow", result, self._fast_coordinator.data
         )
+        self._async_follow_runs(result["schedules"])
         return result
+
+    async def async_refresh_schedules(self) -> None:
+        """Re-fetch only the schedules, for a run started from Home Assistant
+        or one still in progress. The scheduled poll isn't pushed back."""
+        if not self._enable_schedules or self.data is None:
+            return
+        try:
+            schedules = _safe_list(await self.client.async_get_schedules())
+        except Exception as err:  # noqa: BLE001 - the next poll retries
+            _LOGGER.debug("Dockhand: schedules refresh failed: %s", err)
+            schedules = self.data.get("schedules") or []
+        else:
+            self.data = {**self.data, "schedules": schedules}
+            self.async_update_listeners()
+        self._async_follow_runs(schedules)
+
+    @callback
+    def _async_follow_runs(self, schedules: list[dict]) -> None:
+        """While any schedule run is queued or running, look again shortly."""
+        if self._unsub_run_poll is not None or not _schedule_run_in_progress(schedules):
+            return
+
+        @callback
+        def _poll(_now: Any) -> None:
+            self._unsub_run_poll = None
+            self.hass.async_create_background_task(
+                self.async_refresh_schedules(), "dockhand schedule run"
+            )
+
+        self._unsub_run_poll = async_call_later(self.hass, SCHEDULE_RUN_POLL, _poll)
+
+    @override
+    async def async_shutdown(self) -> None:
+        if self._unsub_run_poll is not None:
+            self._unsub_run_poll()
+            self._unsub_run_poll = None
+        await super().async_shutdown()
 
     async def _fetch(self) -> dict[str, Any]:
         # Which environments exist still comes from the fast coordinator's

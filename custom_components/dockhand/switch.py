@@ -583,7 +583,7 @@ class DockhandScheduleEnabledSwitch(DockhandScheduleEntity, SwitchEntity):
             )
             if now == enabled:
                 break
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_refresh_schedules()
 
     @override
     async def async_turn_on(self, **kwargs: Any) -> None:

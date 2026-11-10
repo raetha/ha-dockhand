@@ -812,4 +812,4 @@ class DockhandScheduleRunButton(DockhandScheduleEntity, ButtonEntity):
         await async_dockhand_action(
             self._client.async_run_schedule(self._sched_type, self._sched_id)
         )
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_refresh_schedules()

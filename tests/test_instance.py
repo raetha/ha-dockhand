@@ -20,6 +20,7 @@ from custom_components.dockhand import (
     _update_instance_version,
     async_remove_config_entry_device,
 )
+from custom_components.dockhand import system_health
 from custom_components.dockhand.api import DockhandClient
 from custom_components.dockhand.const import DOMAIN
 from custom_components.dockhand.coordinator import DockhandVersionCoordinator
@@ -105,7 +106,7 @@ async def test_instance_device_parents_the_environments(
     hass: HomeAssistant, loaded_entry: MockConfigEntry
 ):
     instance = _instance(hass, loaded_entry)
-    assert instance.name == "Home Dockhand"
+    assert instance.name == "Dockhand"
     assert instance.sw_version == "1.0.57"
     assert instance.configuration_url == "http://dh.test:3000"
     env = _device_by_identifier(
@@ -150,6 +151,14 @@ async def test_diagnostics_include_the_version(
 ):
     result = await async_get_config_entry_diagnostics(hass, loaded_entry)
     assert result["dockhand_version"] == "1.0.57"
+
+
+def test_system_health_links_to_the_integration():
+    register = MagicMock()
+    system_health.async_register(MagicMock(), register)
+    assert register.async_register_info.call_args.args[1] == (
+        "/config/integrations/integration/dockhand"
+    )
 
 
 async def test_system_health(hass: HomeAssistant, loaded_entry: MockConfigEntry):

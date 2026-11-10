@@ -1978,3 +1978,55 @@ def test_self_update_newer_version_needs_a_tag(response):
 )
 def test_version_bump_unknown(current, new):
     assert coordinator_module._version_bump(current, new) is None
+
+
+async def test_schedule_run_in_progress_is_followed_until_it_ends(
+    hass: HomeAssistant,
+):
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import (
+        async_fire_time_changed,
+    )
+
+    running = {"id": 7, "type": "image_prune", "lastExecution": {"status": "running"}}
+    done = {"id": 7, "type": "image_prune", "lastExecution": {"status": "success"}}
+    client = _make_client(schedules=[running])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["schedules"] == [running]
+    client.async_get_environments.reset_mock()
+
+    # Only the schedules are fetched again, until the run is over.
+    client.async_get_schedules = AsyncMock(side_effect=[[running], [done]])
+    for _ in range(3):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow()
+            + timedelta(seconds=coordinator_module.SCHEDULE_RUN_POLL + 1),
+        )
+        await hass.async_block_till_done()
+    assert coord.data["schedules"] == [done]
+    assert client.async_get_schedules.await_count == 2
+    client.async_get_environments.assert_not_called()
+    await coord.async_shutdown()
+
+
+async def test_schedule_refresh_keeps_data_when_it_fails(hass: HomeAssistant):
+    running = {"id": 7, "type": "image_prune", "lastExecution": {"status": "queued"}}
+    client = _make_client(schedules=[running])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    client.async_get_schedules = AsyncMock(side_effect=Exception("timeout"))
+    await coord.async_refresh_schedules()
+    assert coord.data["schedules"] == [running]
+    # Still followed, and stopped on shutdown.
+    assert coord._unsub_run_poll is not None
+    await coord.async_shutdown()
+    assert coord._unsub_run_poll is None
+
+
+async def test_schedule_refresh_does_nothing_without_schedules(hass: HomeAssistant):
+    client = _make_client()
+    coord = _slow(hass, client, config={"enable_schedules": False})
+    await coord.async_refresh_schedules()
+    client.async_get_schedules.assert_not_called()

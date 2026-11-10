@@ -54,9 +54,9 @@ from .helpers import (
     _image_version_label,
     _network_group_device,
     _stack_device,
+    _stack_has_system_container,
     _volume_group_device,
     already_registered,
-    stack_system_container,
 )
 
 
@@ -1219,8 +1219,8 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
             "networks": {
                 n: i.get("ipAddress") for n, i in (c.get("networks") or {}).items()
             },
-            # Dockhand's own infrastructure ("dockhand", "hawser"), else None.
-            "system_container": c.get("systemContainer") or None,
+            # Dockhand's own infrastructure: Dockhand itself or a Hawser agent.
+            "system_container": bool(c.get("systemContainer")),
             **tags.attributes(
                 _coordinator_env(self.coordinator.data, self._env_id)
                 .get("container_tags", {})
@@ -1646,7 +1646,7 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
             "type": type_label,
             "container_count": len(container_ids),
             "container_names": container_names,
-            "system_container": stack_system_container(
+            "system_container": _stack_has_system_container(
                 s, env_data.get("containers") or []
             ),
             **tags.attributes(env_data.get("stack_tags", {}).get(self._stack_name, [])),

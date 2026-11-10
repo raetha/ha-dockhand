@@ -3,9 +3,9 @@
 ## [Unreleased]
 
 ### Removed
-- **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3),
-  as for other widely used custom integrations. HACS and the Marketplace
-  won't install this release on older versions; 1.11.3 keeps working there.
+- **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3).
+  HACS and the Marketplace won't install this release on older versions;
+  1.11.3 keeps working there.
 
 - **Breaking: polling intervals can no longer be set.** Home Assistant
   doesn't allow integrations to offer polling-interval settings, so the
@@ -20,12 +20,14 @@
 
 ### Added
 - **Which containers and stacks are Dockhand's own** — a `system_container`
-  attribute (`dockhand` or `hawser`, else empty) on the container State and
-  stack Status sensors.
+  attribute (`true` for Dockhand's own container and Hawser agents) on the
+  container State and stack Status sensors.
 
 - **Run schedules now, and pause them** — each schedule gets a **Run now**
   button and, where Dockhand allows it, an **Enabled** switch, so
-  schedules are no longer read-only in Home Assistant.
+  schedules are no longer read-only in Home Assistant. While a run is
+  queued or running, its schedule is checked every 10 seconds, so the
+  result shows soon after it ends.
 - **Pause and Resume buttons** for each container (disabled by default).
 - **`dockhand.prune` action** — deletes stopped containers and unused
   images, volumes or networks in an environment, and reports how much
@@ -50,12 +52,13 @@
   updated, or its health check passes, fails or starts, for automations.
   It comes from the live feed, so it's only available for environments
   Dockhand sends events for. Disabled by default.
-- **Dockhand device** — a device for the Dockhand server itself, showing
-  its version (updated after an upgrade). Environments and the Schedules
-  hub now appear connected through it.
+- **Dockhand device** — a device named **Dockhand** for the Dockhand server
+  itself, showing its version (updated after an upgrade). Environments and
+  the Schedules hub now appear connected through it.
 - **Dockhand on the System information page** (Settings → System →
   Repairs → ⋮ → System information): whether Dockhand answers, its
-  version and how many environments it has.
+  version and how many environments it has, with a **Manage** link to the
+  integration.
 - **Container `exit_code` and `image_version` attributes** on the State
   sensor: the exit code while a container is stopped, and the version from
   its image's `org.opencontainers.image.version` label.
