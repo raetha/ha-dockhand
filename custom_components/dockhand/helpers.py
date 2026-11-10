@@ -6,6 +6,7 @@ dependencies.  Platform modules (sensor.py etc.) are loaded lazily by HA and
 must never be imported by __init__.py or by each other.
 """
 
+import inspect
 import math
 from collections.abc import Awaitable
 from datetime import datetime
@@ -15,6 +16,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.util import dt as dt_util
 
@@ -84,6 +86,17 @@ def _device_by_identifier(
         device: dr.DeviceEntry | None = by_identifier(identifier, config_entry_id)
         return device
     return registry.async_get_device(identifiers={identifier})
+
+
+def create_issue(
+    hass: HomeAssistant, entry_id: str, issue_id: str, **kwargs: Any
+) -> None:
+    """A repair issue of this config entry's, linked to it where Home
+    Assistant supports that (2026.11+) so it's removed with the entry.
+    Feature-detected so the HA minimum can stay below 2026.11."""
+    if "config_entry_id" in inspect.signature(ir.async_create_issue).parameters:
+        kwargs["config_entry_id"] = entry_id
+    ir.async_create_issue(hass, DOMAIN, issue_id, **kwargs)
 
 
 def device_config_entry_ids(device: Any) -> set[str]:

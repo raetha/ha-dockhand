@@ -27,6 +27,7 @@ from custom_components.dockhand.helpers import (
     async_dockhand_action,
     _actionable_pending_update_container_ids,
     _device_by_identifier,
+    create_issue,
     device_config_entry_ids,
     _all_envs,
     _compose_project,
@@ -1372,3 +1373,29 @@ def test_device_config_entry_ids_reads_the_single_entry_on_current_ha():
 def test_device_config_entry_ids_falls_back_on_ha_before_2026_8():
     device = MagicMock(spec=["config_entries"], config_entries={"entry_a", "entry_b"})
     assert device_config_entry_ids(device) == {"entry_a", "entry_b"}
+
+
+def test_create_issue_links_the_entry_where_home_assistant_can(monkeypatch):
+    calls = []
+
+    def current(hass, domain, issue_id, *, config_entry_id=None, **kwargs):
+        calls.append((domain, issue_id, config_entry_id))
+
+    monkeypatch.setattr(
+        "custom_components.dockhand.helpers.ir.async_create_issue", current
+    )
+    create_issue(MagicMock(), "entry_a", "x", is_fixable=False)
+    assert calls == [("dockhand", "x", "entry_a")]
+
+
+def test_create_issue_without_entry_links_before_2026_11(monkeypatch):
+    calls = []
+
+    def before(hass, domain, issue_id, *, is_fixable):
+        calls.append((domain, issue_id))
+
+    monkeypatch.setattr(
+        "custom_components.dockhand.helpers.ir.async_create_issue", before
+    )
+    create_issue(MagicMock(), "entry_a", "x", is_fixable=False)
+    assert calls == [("dockhand", "x")]

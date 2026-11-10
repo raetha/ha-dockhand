@@ -30,6 +30,7 @@ from .helpers import (
     _compose_project,
     _coordinator_env,
     _extract_runtime_config,
+    create_issue,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -1222,9 +1223,9 @@ def _sync_fetch_issues(
     top_failures: set[str] = result.get("fetch_failures") or set()
     top_issue_id = f"{entry_id}_fetch_failed_top_level_{source}"
     if top_failures:
-        ir.async_create_issue(
+        create_issue(
             hass,
-            DOMAIN,
+            entry_id,
             top_issue_id,
             is_fixable=False,
             is_persistent=False,
@@ -1244,9 +1245,9 @@ def _sync_fetch_issues(
                 .get("stats", {})
                 .get("name", f"Environment {env_id}")
             )
-            ir.async_create_issue(
+            create_issue(
                 hass,
-                DOMAIN,
+                entry_id,
                 issue_id,
                 is_fixable=False,
                 is_persistent=False,

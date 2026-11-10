@@ -143,15 +143,16 @@ async def test_tags_reach_the_environments_data(hass: HomeAssistant):
 async def test_tags_are_read_on_the_slow_schedule(hass: HomeAssistant):
     client = _client()
     coord = DockhandFastCoordinator(hass, client, {})
-    now = hass.loop.time()
-    with patch.object(hass.loop, "time", return_value=now):
-        await coord.async_refresh()
-        await coord.async_refresh()
+    await coord.async_refresh()
+    await coord.async_refresh()
     assert client.async_get_tags.await_count == 1
     assert client.async_get_container_tags.await_count == 1
-    later = now + timedelta(minutes=10).total_seconds()
-    with patch.object(hass.loop, "time", return_value=later):
-        await coord.async_refresh()
+    # Ten minutes on: age the reads rather than move the event loop's clock,
+    # which would also fire the coordinator's own timers.
+    age = timedelta(minutes=10).total_seconds()
+    for key in coord._tags_read_at:
+        coord._tags_read_at[key] -= age
+    await coord.async_refresh()
     assert client.async_get_tags.await_count == 2
     assert client.async_get_stack_tags.await_count == 2
 
@@ -159,14 +160,13 @@ async def test_tags_are_read_on_the_slow_schedule(hass: HomeAssistant):
 async def test_a_failed_read_keeps_the_tags_known(hass: HomeAssistant):
     client = _client()
     coord = DockhandFastCoordinator(hass, client, {})
-    now = hass.loop.time()
-    with patch.object(hass.loop, "time", return_value=now):
-        await coord.async_refresh()
+    await coord.async_refresh()
     client.async_get_tags = AsyncMock(side_effect=OSError("down"))
     client.async_get_container_tags = AsyncMock(side_effect=OSError("down"))
     client.async_get_stack_tags = AsyncMock(return_value={})
-    with patch.object(hass.loop, "time", return_value=now + 601):
-        await coord.async_refresh()
+    for key in coord._tags_read_at:
+        coord._tags_read_at[key] -= 601
+    await coord.async_refresh()
     env = coord.data["environments"][1]
     assert [t["name"] for t in env["container_tags"]["web"]] == ["media", "edge"]
     assert [t["name"] for t in env["stack_tags"]["app"]] == ["edge"]

@@ -433,6 +433,17 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             or self._check_updates_item().get("systemContainer")
         )
 
+    @override
+    def version_is_newer(self, latest_version: str, installed_version: str) -> bool:
+        """Any latest version that differs from the installed one is a signal.
+
+        latest_version is set apart from installed_version only when Dockhand
+        reports something, and the two often number differently (an image's
+        version label "v2026.11.0", its tags "4.0"), so Home Assistant's own
+        comparison could call a real update older and turn the entity off.
+        """
+        return latest_version != installed_version
+
     def _advisory_only(self, item: dict) -> bool:
         """True when the only reason installed_version != latest_version is
         something Install can't apply: a newer version tag (the container's

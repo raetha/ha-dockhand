@@ -66,6 +66,7 @@ from .helpers import (
     _find_container,
     already_registered,
     async_dockhand_action,
+    create_issue,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -240,9 +241,9 @@ class _BaseRuntimeControlNumber(
 
         warnings = response.get("warnings") or []
         if warnings:
-            ir.async_create_issue(
+            create_issue(
                 self.hass,
-                DOMAIN,
+                self._entry_id,
                 f"runtime_update_warning_{self._entry_id}_{self._env_id}_"
                 f"{self._container_name}_{field}",
                 is_fixable=False,
@@ -346,10 +347,11 @@ class DockhandContainerMemoryLimitNumber(_BaseRuntimeControlNumber):
                 )
             self._optimistic_value = previous_memory
             self.async_write_ha_state()
-            ir.async_create_issue(
+            create_issue(
                 self.hass,
-                DOMAIN,
-                f"runtime_memory_reverted_{self._env_id}_{self._container_name}",
+                self._entry_id,
+                f"runtime_memory_reverted_{self._entry_id}_{self._env_id}_"
+                f"{self._container_name}",
                 is_fixable=False,
                 is_persistent=False,
                 severity=ir.IssueSeverity.WARNING,
