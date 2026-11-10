@@ -336,7 +336,7 @@ Day to day:
    `try/<topic>` branch with a pull request into `dev`, which Claude squash-merges once CI is
    green. Either way the `[Unreleased]` line(s) come with the change and
    `bash scripts/run_tests.sh --full` passes.
-2. The owner installs the test build through HACS to try it on a real Home Assistant.
+2. The owner installs the test build through the Marketplace to try it on a real Home Assistant.
 3. `dev` stays releasable: a change that needs the owner's decision first waits on its `try/`
    branch (a draft pull request) until they've seen it.
 
@@ -407,10 +407,11 @@ on, `<next patch>-dev.<run>`), so it sorts above the installed release. Its note
 Home Assistant and diagnostics show a test build as one (for example `1.11.3-dev.42`). Older
 test builds are deleted, so there's only ever one.
 
-To install one: HACS adds a **Pre-release** switch entity for each repository, disabled by
-default. Enable Dockhand's switch (Settings → Entities) and turn it on; HACS then offers the test
-build as an update. To go back, turn the switch off and redownload the latest release from HACS
-(⋮ → Redownload).
+To install one: turn on pre-releases for Dockhand, from its **⋮** menu in the Marketplace or with
+the **Pre-release** switch entity the Marketplace (or HACS) adds for each repository, disabled by
+default (enable it under Settings → Entities; HACS on 2026.10 and older has only the switch). It
+then offers the test build as an update. To go back, turn pre-releases off and redownload the
+latest release (⋮ → Redownload).
 
 ### Repository settings
 
