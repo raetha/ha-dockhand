@@ -107,6 +107,38 @@
           "enable_resource_stats": "Tworzy czujniki CPU, pamięci, sieci i operacji dyskowych dla każdego kontenera oraz sumy dla każdego stosu. Domyślnie wyłączone, bo to wiele encji, których większość osób nie potrzebuje; wyłączenie usuwa też już utworzone.",
           "enable_update_entities": "Tworzy encję aktualizacji Home Assistant dla każdego kontenera. Wyłącz tę opcję, jeśli zarządzasz aktualizacjami w inny sposób i nie chcesz, aby kontenery Dockhand pojawiały się we własnym zarządzaniu aktualizacjami HA. Ukrywa też przycisk „Zaktualizuj wszystko”; „Sprawdź aktualizacje” nadal działa.",
           "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. To także jedyny sposób, by zobaczyć status aktualizacji własnych, chronionych kontenerów Dockhand (jego samego i Hawsera) — Dockhand nigdy nie udostępnia ich statusu aktualizacji poprzez zwykłe zbuforowane dane sprawdzania aktualizacji. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Encje środowisk",
+            "description": "Encje domyślnie wyłączone, włączone dla każdego środowiska, także dodanych później.",
+            "data": {
+              "enabled": "Włącz dla każdego środowiska"
+            },
+            "data_description": {
+              "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
+            }
+          },
+          "container_entities": {
+            "name": "Encje kontenerów",
+            "description": "Encje domyślnie wyłączone, włączone dla każdego kontenera, także dodanych później.",
+            "data": {
+              "enabled": "Włącz dla każdego kontenera"
+            },
+            "data_description": {
+              "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
+            }
+          },
+          "stack_entities": {
+            "name": "Encje stosów",
+            "description": "Encje domyślnie wyłączone, włączone dla każdego stosu, także dodanych później.",
+            "data": {
+              "enabled": "Włącz dla każdego stosu"
+            },
+            "data_description": {
+              "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Obrazy",
         "volumes": "Nieużywane wolumeny",
         "networks": "Nieużywane sieci"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Zbieranie aktywności",
+        "metrics_collection": "Zbieranie metryk",
+        "vulnerability_scanning": "Skanowanie podatności",
+        "update_checks": "Sprawdzanie aktualizacji",
+        "auto_update": "Automatyczna aktualizacja",
+        "image_pruning": "Czyszczenie obrazów",
+        "activity_events": "Zdarzenia aktywności",
+        "disk_usage": "Wykorzystanie dysku",
+        "vulnerabilities": "Podatności",
+        "hawser_agent_version": "Wersja agenta Hawser",
+        "host_docker_version": "Wersja Dockera",
+        "host_platform": "Platforma hosta",
+        "uptime": "Czas działania"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Zdarzenie Dockera",
+        "pause": "Wstrzymaj",
+        "resume": "Wznów",
+        "container_auto_update": "Automatyczna aktualizacja",
+        "container_cpu_limit": "Limit CPU",
+        "container_memory_limit": "Limit pamięci",
+        "container_pids_limit": "Limit procesów",
+        "container_restart_policy": "Zasady ponownego uruchamiania"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatyczne wdrażanie"
       }
     }
   },

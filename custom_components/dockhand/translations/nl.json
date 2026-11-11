@@ -107,6 +107,38 @@
           "enable_resource_stats": "Maakt CPU-, geheugen-, netwerk- en schijf-I/O-sensoren per container, plus totalen per stack. Standaard uit, omdat het veel entiteiten zijn die de meeste mensen niet nodig hebben; uitschakelen verwijdert ook de al aangemaakte.",
           "enable_update_entities": "Maakt een Home Assistant-update-entiteit aan voor elke container. Schakel dit uit als je updates op een andere manier beheert en niet wilt dat Dockhands containers verschijnen in HA's eigen updatebeheer. Verbergt ook de knop \"Alles bijwerken\"; \"Controleren op updates\" blijft hoe dan ook werken.",
           "enable_precise_updates": "Werkt update-entiteiten bij om precieze versienummers (image-digests) te tonen via periodieke registerquery's, in plaats van alleen een image-tag. Dit is ook de enige manier om de updatestatus te zien van Dockhands eigen beschermde containers (zichzelf en Hawser) — Dockhand toont hun updatestatus nooit via de normale gecachte update-controlegegevens. Vereist \"Update-entiteiten inschakelen\" hierboven."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Omgevingsentiteiten",
+            "description": "Entiteiten die standaard uit staan, ingeschakeld voor elke omgeving, ook later toegevoegde.",
+            "data": {
+              "enabled": "Inschakelen voor elke omgeving"
+            },
+            "data_description": {
+              "enabled": "Een type aanvinken schakelt het overal in, behalve waar je het zelf hebt uitgeschakeld. Het uitvinken schakelt het overal weer uit, ook waar je het met de hand had ingeschakeld."
+            }
+          },
+          "container_entities": {
+            "name": "Containerentiteiten",
+            "description": "Entiteiten die standaard uit staan, ingeschakeld voor elke container, ook later toegevoegde.",
+            "data": {
+              "enabled": "Inschakelen voor elke container"
+            },
+            "data_description": {
+              "enabled": "Een type aanvinken schakelt het overal in, behalve waar je het zelf hebt uitgeschakeld. Het uitvinken schakelt het overal weer uit, ook waar je het met de hand had ingeschakeld."
+            }
+          },
+          "stack_entities": {
+            "name": "Stack-entiteiten",
+            "description": "Entiteiten die standaard uit staan, ingeschakeld voor elke stack, ook later toegevoegde.",
+            "data": {
+              "enabled": "Inschakelen voor elke stack"
+            },
+            "data_description": {
+              "enabled": "Een type aanvinken schakelt het overal in, behalve waar je het zelf hebt uitgeschakeld. Het uitvinken schakelt het overal weer uit, ook waar je het met de hand had ingeschakeld."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Images",
         "volumes": "Ongebruikte volumes",
         "networks": "Ongebruikte netwerken"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Activiteitenverzameling",
+        "metrics_collection": "Metriekenverzameling",
+        "vulnerability_scanning": "Kwetsbaarheidsscan",
+        "update_checks": "Updatecontroles",
+        "auto_update": "Automatisch bijwerken",
+        "image_pruning": "Image-opschoning",
+        "activity_events": "Activiteitsgebeurtenissen",
+        "disk_usage": "Schijfgebruik",
+        "vulnerabilities": "Kwetsbaarheden",
+        "hawser_agent_version": "Hawser-agentversie",
+        "host_docker_version": "Docker-versie",
+        "host_platform": "Hostplatform",
+        "uptime": "Uptime"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker-gebeurtenis",
+        "pause": "Pauzeren",
+        "resume": "Hervatten",
+        "container_auto_update": "Automatisch bijwerken",
+        "container_cpu_limit": "CPU-limiet",
+        "container_memory_limit": "Geheugenlimiet",
+        "container_pids_limit": "Proceslimiet",
+        "container_restart_policy": "Herstartbeleid"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatisch implementeren"
       }
     }
   },

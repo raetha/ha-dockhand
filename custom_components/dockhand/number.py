@@ -58,6 +58,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import CONF_API_URL, CONF_ENABLE_RUNTIME_CONTROLS, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
+from .entity_defaults import enabling_chosen
 from .helpers import (
     _all_envs,
     _compose_project,
@@ -84,6 +85,9 @@ async def async_setup_entry(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    async_add_entities = enabling_chosen(
+        entry.entry_id, entry.options, async_add_entities
+    )
     data = entry.runtime_data
 
     def _opt(key: str, default: Any) -> Any:

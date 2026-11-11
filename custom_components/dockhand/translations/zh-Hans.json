@@ -107,6 +107,38 @@
           "enable_resource_stats": "为每个容器创建 CPU、内存、网络和磁盘 I/O 传感器，并为每个堆栈创建汇总。默认关闭，因为这会产生大量多数人不需要的实体；关闭后也会移除已创建的传感器。",
           "enable_update_entities": "为每个容器创建一个 Home Assistant 更新实体。如果你以其他方式管理更新，且不希望 Dockhand 的容器出现在 HA 自身的更新管理中，可关闭此选项。这也会隐藏“全部更新”按钮；“检查更新”仍会照常工作。",
           "enable_precise_updates": "通过定期查询镜像仓库，将更新实体升级为显示精确的版本号（镜像摘要），而不仅仅是镜像标签。这也是查看 Dockhand 自身受保护容器（其自身和 Hawser）更新状态的唯一方式——Dockhand 从不通过常规的缓存更新检查数据公开它们的更新状态。需要先开启上方的“启用更新实体”。"
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "环境实体",
+            "description": "默认关闭的实体，为每个环境开启，包括以后添加的环境。",
+            "data": {
+              "enabled": "为每个环境开启"
+            },
+            "data_description": {
+              "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
+            }
+          },
+          "container_entities": {
+            "name": "容器实体",
+            "description": "默认关闭的实体，为每个容器开启，包括以后添加的容器。",
+            "data": {
+              "enabled": "为每个容器开启"
+            },
+            "data_description": {
+              "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
+            }
+          },
+          "stack_entities": {
+            "name": "堆栈实体",
+            "description": "默认关闭的实体，为每个堆栈开启，包括以后添加的堆栈。",
+            "data": {
+              "enabled": "为每个堆栈开启"
+            },
+            "data_description": {
+              "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "镜像",
         "volumes": "未使用的卷",
         "networks": "未使用的网络"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "活动收集",
+        "metrics_collection": "指标收集",
+        "vulnerability_scanning": "漏洞扫描",
+        "update_checks": "更新检查",
+        "auto_update": "自动更新",
+        "image_pruning": "镜像清理",
+        "activity_events": "活动事件",
+        "disk_usage": "磁盘使用情况",
+        "vulnerabilities": "漏洞",
+        "hawser_agent_version": "Hawser 代理版本",
+        "host_docker_version": "Docker 版本",
+        "host_platform": "主机平台",
+        "uptime": "正常运行时间"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker 事件",
+        "pause": "暂停",
+        "resume": "恢复",
+        "container_auto_update": "自动更新",
+        "container_cpu_limit": "CPU 限制",
+        "container_memory_limit": "内存限制",
+        "container_pids_limit": "进程数限制",
+        "container_restart_policy": "重启策略"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "自动部署"
       }
     }
   },

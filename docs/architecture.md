@@ -1302,3 +1302,24 @@ environment out of `environments` for the cycle. Cleanup reads that as "no fresh
 networks, volumes and git-stack equivalents) when it's present with that resource neither failed
 nor unconfirmed, and every image, network, volume and group removal requires that membership.
 Checked end to end for images, networks and volumes in November 2026.
+
+## 10. Turning disabled-by-default types on for every device
+
+The options' **Environment / Container / Stack entities** sections (collapsed `section()`s, labels
+under `options.step.init.sections.<section>.data`, which is where the frontend looks for a field
+inside a section) store `enabled_entities: {kind: [translation_key, …]}`. `entity_defaults.py`
+holds the list of types per kind (`OPTIONAL_ENTITIES`), keyed by `translation_key`; the selector's
+option labels are the entities' own names, copied into `selector.<kind>_entities` per locale.
+
+- **New entities:** every platform's `async_setup_entry` wraps `async_add_entities` with
+  `enabling_chosen()`, which sets `entity_registry_enabled_default` on the chosen types. A device's
+  kind comes from its identifier (`{entry_id}_env_…`, `_container_…`, `_stack_…`).
+- **Existing entities:** saving the options calls `async_apply_choice()` with the old and new
+  options. A type newly chosen: entities disabled by the integration are enabled; ones the user
+  disabled (`disabled_by: user`) stay off. A type no longer chosen: every enabled one is disabled
+  by the integration, including any enabled by hand, since the registry records who disabled an
+  entity but not who enabled it (the help text says so). Unchanged types aren't touched.
+- Container and stack stats aren't in the list: their own option already decides.
+- Adding a type: its translation key to `OPTIONAL_ENTITIES` and its name to every locale's
+  `selector.<kind>_entities` (the tests check both).
+

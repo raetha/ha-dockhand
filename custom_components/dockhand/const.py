@@ -13,6 +13,9 @@ CONF_ENABLE_UPDATE_ENTITIES = "enable_update_entities"
 CONF_ENABLE_PRECISE_UPDATES = "enable_precise_updates"
 CONF_ENABLE_RUNTIME_CONTROLS = "enable_runtime_controls"
 CONF_ENABLE_RESOURCE_STATS = "enable_resource_stats"
+# By device kind, the disabled-by-default entity types turned on for every
+# device of that kind (entity_defaults.py).
+CONF_ENABLED_ENTITIES = "enabled_entities"
 CONF_VERIFY_SSL = "verify_ssl"
 
 # Everything the Configure dialog sets. These live in entry.options; entry.data
@@ -26,6 +29,7 @@ OPTION_KEYS = (
     CONF_ENABLE_PRECISE_UPDATES,
     CONF_ENABLE_RUNTIME_CONTROLS,
     CONF_ENABLE_RESOURCE_STATS,
+    CONF_ENABLED_ENTITIES,
 )
 
 # Session-cookie credentials from before API tokens: read only so __init__.py

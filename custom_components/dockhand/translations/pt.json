@@ -107,6 +107,38 @@
           "enable_resource_stats": "Cria sensores de CPU, memória, rede e E/S de disco para cada contêiner, além de totais para cada stack. Desativado por padrão, pois são muitas entidades que a maioria não precisa; desativar também remove as já criadas.",
           "enable_update_entities": "Cria uma entidade de atualização do Home Assistant para cada contêiner. Desative esta opção se você gerencia atualizações de outra forma e não quer que os contêineres do Dockhand apareçam no gerenciamento de atualizações do HA. Também oculta o botão \"Atualizar tudo\"; \"Verificar atualizações\" continua funcionando de qualquer forma.",
           "enable_precise_updates": "Atualiza as entidades de atualização para mostrar números de versão precisos (digests de imagem) por meio de consultas periódicas ao registro, em vez de apenas uma tag de imagem. Também é a única forma de ver o status de atualização dos próprios contêineres protegidos do Dockhand (ele mesmo e o Hawser) — o Dockhand nunca expõe o status de atualização deles pelos dados normais de verificação de atualização em cache. Requer \"Ativar entidades de atualização\" acima."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Entidades de ambiente",
+            "description": "Entidades desativadas por predefinição, ativadas para cada ambiente, incluindo os adicionados mais tarde.",
+            "data": {
+              "enabled": "Ativar para cada ambiente"
+            },
+            "data_description": {
+              "enabled": "Marcar um tipo ativa-o em todo o lado, exceto onde o desativou. Desmarcá-lo desativa-o de novo em todo o lado, incluindo os que ativou à mão."
+            }
+          },
+          "container_entities": {
+            "name": "Entidades de contentor",
+            "description": "Entidades desativadas por predefinição, ativadas para cada contentor, incluindo os adicionados mais tarde.",
+            "data": {
+              "enabled": "Ativar para cada contentor"
+            },
+            "data_description": {
+              "enabled": "Marcar um tipo ativa-o em todo o lado, exceto onde o desativou. Desmarcá-lo desativa-o de novo em todo o lado, incluindo os que ativou à mão."
+            }
+          },
+          "stack_entities": {
+            "name": "Entidades de stack",
+            "description": "Entidades desativadas por predefinição, ativadas para cada stack, incluindo as adicionadas mais tarde.",
+            "data": {
+              "enabled": "Ativar para cada stack"
+            },
+            "data_description": {
+              "enabled": "Marcar um tipo ativa-o em todo o lado, exceto onde o desativou. Desmarcá-lo desativa-o de novo em todo o lado, incluindo os que ativou à mão."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Imagens",
         "volumes": "Volumes não utilizados",
         "networks": "Redes não utilizadas"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Coleta de atividade",
+        "metrics_collection": "Coleta de métricas",
+        "vulnerability_scanning": "Verificação de vulnerabilidades",
+        "update_checks": "Verificação de atualizações",
+        "auto_update": "Atualização automática",
+        "image_pruning": "Limpeza de imagens",
+        "activity_events": "Eventos de atividade",
+        "disk_usage": "Uso de disco",
+        "vulnerabilities": "Vulnerabilidades",
+        "hawser_agent_version": "Versão do agente Hawser",
+        "host_docker_version": "Versão do Docker",
+        "host_platform": "Plataforma do host",
+        "uptime": "Tempo de atividade"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Evento do Docker",
+        "pause": "Pausar",
+        "resume": "Retomar",
+        "container_auto_update": "Atualização automática",
+        "container_cpu_limit": "Limite de CPU",
+        "container_memory_limit": "Limite de memória",
+        "container_pids_limit": "Limite de processos",
+        "container_restart_policy": "Política de reinício"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Implantação automática"
       }
     }
   },

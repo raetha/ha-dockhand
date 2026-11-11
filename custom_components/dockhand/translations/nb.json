@@ -107,6 +107,38 @@
           "enable_resource_stats": "Oppretter sensorer for CPU, minne, nettverk og disk-I/O for hver container, pluss totaler for hver stack. Av som standard fordi det er mange entiteter de fleste ikke trenger; å slå det av fjerner også de som allerede er opprettet.",
           "enable_update_entities": "Oppretter en Home Assistant-oppdateringsenhet for hver container. Slå dette av hvis du håndterer oppdateringer på en annen måte og ikke vil at Dockhands containere skal vises i HAs egen oppdateringshåndtering. Skjuler også «Oppdater alle»-knappen; «Se etter oppdateringer» fungerer likevel fortsatt.",
           "enable_precise_updates": "Oppgraderer oppdateringsenheter til å vise presise versjonsnumre (image-digests) via periodiske registerspørringer, i stedet for bare en image-tag. Dette er også den eneste måten å se oppdateringsstatus for Dockhands egne beskyttede containere (seg selv og Hawser) — Dockhand eksponerer aldri oppdateringsstatusen deres via de vanlige mellomlagrede oppdateringssjekk-dataene. Krever «Aktiver oppdateringsenheter» ovenfor."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Miljøentiteter",
+            "description": "Entiteter som er av som standard, slått på for hvert miljø, også de som legges til senere.",
+            "data": {
+              "enabled": "Slå på for hvert miljø"
+            },
+            "data_description": {
+              "enabled": "Å krysse av en type slår den på overalt, unntatt der du har slått den av selv. Å fjerne krysset slår den av overalt igjen, også der du slo den på manuelt."
+            }
+          },
+          "container_entities": {
+            "name": "Containerentiteter",
+            "description": "Entiteter som er av som standard, slått på for hver container, også de som legges til senere.",
+            "data": {
+              "enabled": "Slå på for hver container"
+            },
+            "data_description": {
+              "enabled": "Å krysse av en type slår den på overalt, unntatt der du har slått den av selv. Å fjerne krysset slår den av overalt igjen, også der du slo den på manuelt."
+            }
+          },
+          "stack_entities": {
+            "name": "Stack-entiteter",
+            "description": "Entiteter som er av som standard, slått på for hver stack, også de som legges til senere.",
+            "data": {
+              "enabled": "Slå på for hver stack"
+            },
+            "data_description": {
+              "enabled": "Å krysse av en type slår den på overalt, unntatt der du har slått den av selv. Å fjerne krysset slår den av overalt igjen, også der du slo den på manuelt."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Images",
         "volumes": "Ubrukte volumer",
         "networks": "Ubrukte nettverk"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Aktivitetsinnsamling",
+        "metrics_collection": "Metrikinnsamling",
+        "vulnerability_scanning": "Sårbarhetsskanning",
+        "update_checks": "Oppdateringssjekker",
+        "auto_update": "Automatisk oppdatering",
+        "image_pruning": "Rydding av images",
+        "activity_events": "Aktivitetshendelser",
+        "disk_usage": "Diskbruk",
+        "vulnerabilities": "Sårbarheter",
+        "hawser_agent_version": "Hawser-agentversjon",
+        "host_docker_version": "Docker-versjon",
+        "host_platform": "Vertsplattform",
+        "uptime": "Oppetid"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker-hendelse",
+        "pause": "Sett på pause",
+        "resume": "Gjenoppta",
+        "container_auto_update": "Automatisk oppdatering",
+        "container_cpu_limit": "CPU-grense",
+        "container_memory_limit": "Minnegrense",
+        "container_pids_limit": "Prosessgrense",
+        "container_restart_policy": "Omstartspolicy"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatisk distribusjon"
       }
     }
   },
