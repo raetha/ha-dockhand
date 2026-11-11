@@ -56,8 +56,9 @@
   **Dockhand (*host*)**, showing its version (updated after an upgrade).
   Environments and the Schedules hub now appear connected through it. It
   has an **update** entity saying whether a newer Dockhand release exists
-  (from Dockhand's own check; needs an admin token when authentication is
-  on) and a diagnostic **Live updates** sensor showing whether Dockhand's
+  (from Dockhand's own check, created once that check works: it needs an
+  admin token when authentication is on, and Docker access to Dockhand's
+  own container, which Hawser-only setups don't give it) and a diagnostic **Live updates** sensor showing whether Dockhand's
   live feed is connected.
 - **Dockhand on the System information page** (Settings → System →
   Repairs → ⋮ → System information): whether Dockhand answers, its

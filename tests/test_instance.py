@@ -262,7 +262,6 @@ async def test_dockhand_update_entity(
             "on",
             "abcdef012345",
         ),
-        ({"updateAvailable": False, "error": "no Docker"}, "unknown", None),
     ]
     for check, expected, latest in cases:
         version.self_update = check
@@ -272,10 +271,70 @@ async def test_dockhand_update_entity(
         assert state.state == expected
         assert state.attributes["latest_version"] == latest
 
-    # A failed check is unavailable; a refused one too, and not created again.
-    version.self_update = None
+    # A check that can't tell, or couldn't run: unavailable.
+    for check in ({"updateAvailable": False, "error": "no Docker"}, None):
+        version.self_update = check
+        version.async_set_updated_data("1.0.57")
+        await hass.async_block_till_done()
+        assert hass.states.get(entity_id).state == "unavailable"
+
+
+def _patched(client: MagicMock):
+    return (
+        patch("custom_components.dockhand.async_get_clientsession"),
+        patch("custom_components.dockhand.DockhandClient", return_value=client),
+    )
+
+
+async def _setup_with_check(
+    hass: HomeAssistant, check: dict
+) -> tuple[MockConfigEntry, MagicMock]:
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="t",
+        data={"api_url": "http://dh.test:3000", "api_token": "t"},
+        options={},
+    )
+    entry.add_to_hass(hass)
+    client = make_mock_client()
+    client.async_check_self_update = AsyncMock(return_value=check)
+    client.async_get_pending_updates = AsyncMock(return_value=[])
+    client.async_get_stack_stats = AsyncMock(return_value=[])
+    session, dockhand = _patched(client)
+    with session, dockhand:
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    return entry, client
+
+
+async def test_dockhand_update_entity_waits_for_a_working_check(hass: HomeAssistant):
+    """Hawser-only: Dockhand can't inspect its own container, so no entity
+    until a check says something, then it's added without a reload."""
+    entry, client = await _setup_with_check(
+        hass, {"updateAvailable": False, "error": "Failed to inspect own container"}
+    )
+    registry = er.async_get(hass)
+    unique_id = f"{entry.entry_id}_instance_update"
+    assert registry.async_get_entity_id("update", DOMAIN, unique_id) is None
+
+    version = entry.runtime_data.version_coordinator
+    version.self_update = {"updateAvailable": False, "currentVersion": "1.0.57"}
     version.async_set_updated_data("1.0.57")
     await hass.async_block_till_done()
+    entity_id = registry.async_get_entity_id("update", DOMAIN, unique_id)
+    assert hass.states.get(entity_id).state == "off"
+    # Added once.
+    version.async_set_updated_data("1.0.57")
+    await hass.async_block_till_done()
+
+    # Once it has worked, it's set up again even while the check can't tell.
+    client.async_check_self_update = AsyncMock(
+        return_value={"updateAvailable": False, "error": "down"}
+    )
+    session, dockhand = _patched(client)
+    with session, dockhand:
+        assert await hass.config_entries.async_reload(entry.entry_id)
+        await hass.async_block_till_done()
     assert hass.states.get(entity_id).state == "unavailable"
 
 

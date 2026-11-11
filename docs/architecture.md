@@ -81,7 +81,11 @@ Only registration sets that: entity `device_info` omits it, which leaves it unch
 "Dockhand (*host*)" (`instance_host()`, the host as the cards label an instance), not after
 the entry, whose title is the API URL. Its entities' unique IDs are `{entry_id}_instance_{what}`
 (`instance_update`, `instance_live_updates`): no env_id, so the cleanup pass's type dispatch skips
-them, and they're never removed while the entry is loaded. (HA
+them, and they're never removed while the entry is loaded. The update entity is added only once Dockhand's own check
+(`/api/self-update/check`, in the version coordinator) answers without an `error`: Dockhand
+answers with one when it can't inspect its own container, as when it reaches its hosts only
+through Hawser. A listener on the version coordinator adds it when a later check works, and once
+it's in the registry it's added on every setup (unavailable while the check can't tell). (HA
 2026.10 deprecates `via_device` in `DeviceInfo` in favor of `via_device_id`, which needs the
 registry id, hence the lookup.)
 
@@ -1304,6 +1308,11 @@ nor unconfirmed, and every image, network, volume and group removal requires tha
 Checked end to end for images, networks and volumes in November 2026.
 
 ## 10. Turning disabled-by-default types on for every device
+
+**The rule:** an entity that exists without any option may be created disabled, and then belongs
+in these sections. An entity that exists only because an option is on (images, volumes, networks,
+schedules, update entities, stats, runtime controls) is created enabled, since turning the option
+on is the choice to have it, and isn't listed here.
 
 The options' **Environment / Container / Stack entities** sections (collapsed `section()`s, labels
 under `options.step.init.sections.<section>.data`, which is where the frontend looks for a field

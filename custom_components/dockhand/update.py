@@ -198,8 +198,9 @@ import logging
 from typing import Any, override
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
-from homeassistant.core import HomeAssistant, callback
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -261,9 +262,7 @@ async def async_setup_entry(
     offline" (which must never trigger cleanup), so update entities
     reuse that same safety logic rather than duplicating it.
     """
-    version = entry.runtime_data.version_coordinator
-    if version.self_update_allowed:
-        async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
+    _async_add_self_update_entity(hass, entry, async_add_entities)
 
     if not entry.options.get(
         CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES
@@ -318,6 +317,41 @@ async def async_setup_entry(
     entry.async_on_unload(fast_coordinator.async_add_listener(_add_new_entities))
 
 
+@callback
+def _async_add_self_update_entity(
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add Dockhand's update entity once its check works, or straight away
+    if it has before (it stays, unavailable while the check can't tell).
+    The check runs every 6 hours whatever happens, so a setup that starts
+    working later (Dockhand given Docker access to its own container)
+    gets the entity then, without a reload."""
+    version = entry.runtime_data.version_coordinator
+    unique_id = f"{entry.entry_id}_instance_update"
+    seen = er.async_get(hass).async_get_entity_id("update", DOMAIN, unique_id)
+    if seen or version.self_update_usable:
+        async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
+        return
+
+    listening: list[CALLBACK_TYPE] = []
+
+    @callback
+    def _stop() -> None:
+        while listening:
+            listening.pop()()
+
+    @callback
+    def _check_works() -> None:
+        if version.self_update_usable:
+            _stop()
+            async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
+
+    listening.append(version.async_add_listener(_check_works))
+    entry.async_on_unload(_stop)
+
+
 class DockhandSelfUpdateEntity(
     CoordinatorEntity[DockhandVersionCoordinator], UpdateEntity
 ):
@@ -343,11 +377,7 @@ class DockhandSelfUpdateEntity(
     @property
     @override
     def available(self) -> bool:
-        return (
-            super().available
-            and self.coordinator.self_update_allowed
-            and self.coordinator.self_update is not None
-        )
+        return super().available and self.coordinator.self_update_usable
 
     @property
     @override
@@ -361,8 +391,7 @@ class DockhandSelfUpdateEntity(
         check = self.coordinator.self_update or {}
         installed = self.installed_version
         if not check.get("updateAvailable"):
-            # A failed check says nothing either way.
-            return None if check.get("error") else installed
+            return installed
         if check.get("latestVersion"):
             return str(check["latestVersion"])
         # A moving tag (latest) has a newer image rather than a version.
