@@ -211,7 +211,9 @@ async def test_runtime_controls_follow_their_option(hass: HomeAssistant):
         disabled_by=Disabler.USER,
     )
     other = _entity(hass, entry, "container_1_web", "button", "pause")
+    stats = _entity(hass, entry, "container_1_web", "sensor", "container_memory_limit")
     async_enable_runtime_controls(hass, entry)
+    assert _disabled_by(hass, stats) is Disabler.INTEGRATION
     assert _disabled_by(hass, restored) is None
     assert _disabled_by(hass, mine) is Disabler.USER
     assert _disabled_by(hass, other) is Disabler.INTEGRATION

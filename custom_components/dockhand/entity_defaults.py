@@ -127,13 +127,14 @@ def async_apply_choice(
 
 
 # Runtime controls exist only while their option is on, which is the choice
-# to use them, so they're created enabled.
+# to use them, so they're created enabled. By platform too: the read-only
+# Memory limit stats sensor shares its translation key with the control.
 RUNTIME_CONTROLS = frozenset(
     {
-        "container_cpu_limit",
-        "container_memory_limit",
-        "container_pids_limit",
-        "container_restart_policy",
+        ("number", "container_cpu_limit"),
+        ("number", "container_memory_limit"),
+        ("number", "container_pids_limit"),
+        ("select", "container_restart_policy"),
     }
 )
 
@@ -152,7 +153,7 @@ def async_enable_runtime_controls(hass: HomeAssistant, entry: ConfigEntry) -> No
     registry = er.async_get(hass)
     for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
         if (
-            entity.translation_key in RUNTIME_CONTROLS
+            (entity.domain, entity.translation_key) in RUNTIME_CONTROLS
             and entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION
         ):
             registry.async_update_entity(entity.entity_id, disabled_by=None)
