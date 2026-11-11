@@ -13,16 +13,23 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import CONF_ENABLED_ENTITIES, DOMAIN
+from .const import (
+    CONF_ENABLE_RUNTIME_CONTROLS,
+    CONF_ENABLED_ENTITIES,
+    DEFAULT_ENABLE_RUNTIME_CONTROLS,
+    DOMAIN,
+)
 
 # By device kind, the translation keys of the entities that are disabled by
-# default. Container and stack stats aren't here: their own option decides.
+# default. Container and stack stats and runtime controls aren't here:
+# their own options decide.
 OPTIONAL_ENTITIES: dict[str, tuple[str, ...]] = {
     "environment": (
         "activity_logging",
@@ -44,10 +51,6 @@ OPTIONAL_ENTITIES: dict[str, tuple[str, ...]] = {
         "pause",
         "resume",
         "container_auto_update",
-        "container_cpu_limit",
-        "container_memory_limit",
-        "container_pids_limit",
-        "container_restart_policy",
     ),
     "stack": ("git_stack_auto_deploy",),
 }
@@ -121,3 +124,35 @@ def async_apply_choice(
                 entity.entity_id,
                 disabled_by=er.RegistryEntryDisabler.INTEGRATION,
             )
+
+
+# Runtime controls exist only while their option is on, which is the choice
+# to use them, so they're created enabled.
+RUNTIME_CONTROLS = frozenset(
+    {
+        "container_cpu_limit",
+        "container_memory_limit",
+        "container_pids_limit",
+        "container_restart_policy",
+    }
+)
+
+
+@callback
+def async_enable_runtime_controls(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Enable the runtime controls the integration disabled: ones created
+    before they were enabled by default, and ones Home Assistant restores
+    disabled when the option is turned back on. One you disabled yourself
+    stays off, and so does every new entity while "Enable newly added
+    entities" is off for the integration."""
+    if entry.pref_disable_new_entities or not entry.options.get(
+        CONF_ENABLE_RUNTIME_CONTROLS, DEFAULT_ENABLE_RUNTIME_CONTROLS
+    ):
+        return
+    registry = er.async_get(hass)
+    for entity in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            entity.translation_key in RUNTIME_CONTROLS
+            and entity.disabled_by is er.RegistryEntryDisabler.INTEGRATION
+        ):
+            registry.async_update_entity(entity.entity_id, disabled_by=None)

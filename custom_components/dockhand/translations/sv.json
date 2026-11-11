@@ -573,11 +573,7 @@
         "docker_event": "Docker-händelse",
         "pause": "Pausa",
         "resume": "Återuppta",
-        "container_auto_update": "Automatisk uppdatering",
-        "container_cpu_limit": "CPU-gräns",
-        "container_memory_limit": "Minnesgräns",
-        "container_pids_limit": "Processgräns",
-        "container_restart_policy": "Omstartspolicy"
+        "container_auto_update": "Automatisk uppdatering"
       }
     },
     "stack_entities": {

@@ -195,8 +195,8 @@ async def test_warnings_create_repair_issue():
     )
 
 
-def test_disabled_by_default():
-    assert not _make_entity()._attr_entity_registry_enabled_default
+def test_enabled_by_default():
+    assert _make_entity().entity_registry_enabled_default
 
 
 def test_unique_id_format():

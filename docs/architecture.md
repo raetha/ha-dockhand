@@ -1319,7 +1319,12 @@ option labels are the entities' own names, copied into `selector.<kind>_entities
   disabled (`disabled_by: user`) stay off. A type no longer chosen: every enabled one is disabled
   by the integration, including any enabled by hand, since the registry records who disabled an
   entity but not who enabled it (the help text says so). Unchanged types aren't touched.
-- Container and stack stats aren't in the list: their own option already decides.
+- Container and stack stats and runtime controls aren't in the list: their own options decide.
+  Runtime controls are created enabled, since turning their option on is the choice to use them.
+  Home Assistant restores an entity removed and re-created with its old `disabled_by`, so turning
+  the option off and on again would bring them back disabled; `async_enable_runtime_controls()`
+  runs on every setup and enables the ones disabled by the integration (never by the user, and not
+  while the entry's "Enable newly added entities" is off).
 - Adding a type: its translation key to `OPTIONAL_ENTITIES` and its name to every locale's
   `selector.<kind>_entities` (the tests check both).
 

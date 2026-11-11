@@ -106,7 +106,6 @@ class DockhandContainerRestartPolicySelect(
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_translation_key = "container_restart_policy"
     _attr_options = _RESTART_POLICY_OPTIONS
 

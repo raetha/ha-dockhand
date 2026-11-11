@@ -573,11 +573,7 @@
         "docker_event": "Docker 事件",
         "pause": "暂停",
         "resume": "恢复",
-        "container_auto_update": "自动更新",
-        "container_cpu_limit": "CPU 限制",
-        "container_memory_limit": "内存限制",
-        "container_pids_limit": "进程数限制",
-        "container_restart_policy": "重启策略"
+        "container_auto_update": "自动更新"
       }
     },
     "stack_entities": {

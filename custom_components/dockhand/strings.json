@@ -573,11 +573,7 @@
         "docker_event": "Docker event",
         "pause": "Pause",
         "resume": "Resume",
-        "container_auto_update": "Auto update",
-        "container_cpu_limit": "CPU limit",
-        "container_memory_limit": "Memory limit",
-        "container_pids_limit": "Process limit",
-        "container_restart_policy": "Restart policy"
+        "container_auto_update": "Auto update"
       }
     },
     "stack_entities": {

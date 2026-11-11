@@ -72,6 +72,10 @@
   and what a Docker socket proxy in front of Dockhand has to allow.
 
 ### Changed
+- **Runtime controls are enabled when you turn their option on** — the
+  memory, CPU and process limits and the restart policy were created
+  disabled even with **Enable runtime controls** on. Ones you disabled
+  yourself stay off.
 - **Stack Status and schedule Last status list their states**, translated,
   so Home Assistant offers them in automations and shows them in your
   language; the schedule type attribute is translated too. A status Dockhand
