@@ -985,12 +985,6 @@ async def test_environment_settings_requests(client_with_mock_request):
             {"enabled": False, "pruneMode": "all"},
         ),
         (
-            c.async_set_disk_warning_settings(5, threshold=90),
-            "POST",
-            "/api/environments/5/disk-warning",
-            {"threshold": 90},
-        ),
-        (
             c.async_set_scanner(5, "trivy"),
             "POST",
             "/api/settings/scanner",
@@ -1013,9 +1007,10 @@ async def test_environment_settings_reads(client_with_mock_request):
     assert (
         c._request.call_args.args[1] == "/api/settings/scanner?env=5&settingsOnly=true"
     )
-    c._request.return_value = {"enabled": True, "mode": "absolute"}
-    assert (await c.async_get_disk_warning_settings(5))["mode"] == "absolute"
+    await c.async_get_scanner_setting(None)
+    assert c._request.call_args.args[1] == "/api/settings/scanner?settingsOnly=true"
+    await c.async_set_scanner(None, "none")
+    assert c._request.call_args.kwargs["json"] == {"scanner": "none"}
     c._request.return_value = "oops"
     assert await c.async_get_image_prune_settings(5) == {}
-    assert await c.async_get_disk_warning_settings(5) == {}
     assert await c.async_get_scanner_setting(5) is None

@@ -696,38 +696,26 @@ class DockhandClient:
             "POST", f"/api/environments/{_q(env_id)}/image-prune", json=body
         )
 
-    async def async_get_disk_warning_settings(self, env_id: int) -> dict[str, Any]:
-        """GET /api/environments/{id}/disk-warning: {enabled, mode
-        ("percentage" | "absolute"), threshold (%), thresholdGb,
-        percentageSupported, storageDriver}."""
-        result = await self._request(
-            "GET", f"/api/environments/{_q(env_id)}/disk-warning"
-        )
-        return result if isinstance(result, dict) else {}
-
-    async def async_set_disk_warning_settings(self, env_id: int, **fields: Any) -> None:
-        """POST /api/environments/{id}/disk-warning; each field is optional
-        and saved on its own."""
-        await self._request(
-            "POST", f"/api/environments/{_q(env_id)}/disk-warning", json=fields
-        )
-
-    async def async_get_scanner_setting(self, env_id: int) -> str | None:
-        """The environment's vulnerability scanner ("none", "grype",
-        "trivy", "both"), from GET /api/settings/scanner without its
+    async def async_get_scanner_setting(self, env_id: int | None) -> str | None:
+        """The vulnerability scanner ("none", "grype", "trivy", "both") for
+        an environment, which falls back to Dockhand's default, or with no
+        `env_id` that default itself. GET /api/settings/scanner without its
         Docker checks (settingsOnly)."""
+        query = f"env={_q(env_id)}&" if env_id is not None else ""
         result = await self._request(
-            "GET", f"/api/settings/scanner?env={_q(env_id)}&settingsOnly=true"
+            "GET", f"/api/settings/scanner?{query}settingsOnly=true"
         )
         settings = result.get("settings") if isinstance(result, dict) else None
         scanner = settings.get("scanner") if isinstance(settings, dict) else None
         return scanner if isinstance(scanner, str) else None
 
-    async def async_set_scanner(self, env_id: int, scanner: str) -> None:
-        """POST /api/settings/scanner; fields left out keep their values."""
-        await self._request(
-            "POST", "/api/settings/scanner", json={"scanner": scanner, "envId": env_id}
-        )
+    async def async_set_scanner(self, env_id: int | None, scanner: str) -> None:
+        """POST /api/settings/scanner: an environment's scanner, or with no
+        `env_id` Dockhand's default. Fields left out keep their values."""
+        body: dict[str, Any] = {"scanner": scanner}
+        if env_id is not None:
+            body["envId"] = env_id
+        await self._request("POST", "/api/settings/scanner", json=body)
 
     async def async_get_version_notes(
         self, env_id: int, container_id: str, versions: list[str]

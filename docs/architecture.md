@@ -1339,29 +1339,37 @@ option labels are the entities' own names, copied into `selector.<kind>_entities
 
 ## 11. Environment settings as entities
 
-`env_settings.py`: switches, selects and numbers for an environment's own settings, one
-`EnvSettingDescription` each (`section`, `field`, `unique_suffix`), defined in the platform
-files. Where they live in Dockhand:
+`env_settings.py`: switches and selects for an environment's own settings, one
+`EnvSettingDescription` each (`read`, `field`, `write`, `write_field`, `requires`,
+`unique_suffix`), defined in the platform files. Reads cost nothing new where Dockhand's
+dashboard stats already carry the flag; they're the same stored values its settings endpoints
+return.
 
-| Section | Read | Written |
+| Setting | Read | Written |
 |---|---|---|
-| `environment` (activity, metrics) | fast coordinator's stats | `PUT /api/environments/{id}` (partial), then a fast refresh |
-| `update_check` | `GET …/update-check` | `POST …/update-check`, which replaces every field: re-read first, change one |
-| `image_prune` | `GET …/image-prune` | `POST …/image-prune`, same |
-| `disk_warning` | `GET …/disk-warning` | `POST …/disk-warning` (partial) |
-| `scanner` | `GET /api/settings/scanner?env=&settingsOnly=true` | `POST /api/settings/scanner` (partial) |
+| Activity, metrics collection | dashboard stats (fast poll) | `PUT /api/environments/{id}` (partial) |
+| Update checks, auto-update | dashboard stats (`updateCheckEnabled`, `updateCheckAutoUpdate`) | `POST …/update-check`, which replaces every field: re-read first, change one |
+| Image pruning, prune mode | `GET …/image-prune` (slow poll) | `POST …/image-prune`, same |
+| Vulnerability scanner | `GET /api/settings/scanner?env=&settingsOnly=true` (slow poll) | `POST /api/settings/scanner` (partial) |
+| Default scanner (Dockhand device) | the same without `env` (slow poll) | the same without `envId` |
 
-- The slow poll reads the four endpoints per environment into `settings`
-  (`_fetch_env_settings`): a failed read keeps the previous value, and one never read (no
-  permission) stays absent, so no entity is created for it. After a change,
-  `async_refresh_env_settings()` reads that environment's back without pushing back the poll.
-- Entities are added from fast and slow listeners as their setting becomes readable, and are
-  unavailable while it isn't. They're configuration entities, enabled by default: they're the
-  environment's own settings, and a configuration entity stays off auto-generated dashboards.
+- A stats-read setting is read back with a fast refresh after a change; the others with
+  `async_refresh_env_settings()` (or `async_refresh_scanner_default()`, which also re-reads each
+  environment's scanner, since one without its own follows the default), neither pushing back the
+  poll. A failed read keeps the previous value; one never read (no permission) stays absent, so
+  no entity is created for it.
+- Auto-update is unavailable while update checks are off: Dockhand's stats report it off then,
+  whatever is saved, and it has no effect.
+- Entities are added from fast and slow listeners as their setting becomes readable. They're
+  configuration entities, enabled by default. A token that can read but not change a setting still
+  gets the entity, showing the value; changing it reports Dockhand's "permission denied".
+  Dockhand gives no way to ask a token what it may change (`/api/auth/session` answers for browser
+  sessions only), and only its Enterprise edition restricts permissions at all.
 - They replace the 1.x binary sensors with the same unique IDs; `_cleanup_stale_registry` removes
-  the old ones (`_RETIRED_ENV_BINARY_SENSORS`). The translation keys are unchanged, so the
-  cards, which find entities by translation key and read on/off, need no change. Vulnerability
-  scanning stays a binary sensor: its control picks a scanner, not on/off.
+  the old ones (`_RETIRED_ENV_BINARY_SENSORS`). The translation keys are unchanged, so the cards,
+  which find entities by translation key and read on/off, need no change. Vulnerability scanning
+  stays a binary sensor: its control picks a scanner, not on/off.
+- Not exposed: the disk-space warning (a Dockhand notification when Docker's own disk usage
+  passes a threshold); the Disk usage sensor lets an automation do the same.
 - Unique ID suffixes avoid the cleanup's type words (`image_prune_mode` is `prune_mode`), or are
   listed in `_TYPE_COLLISION_EXCLUDED_SUFFIXES`.
-

@@ -828,23 +828,18 @@ def _schedule_run_in_progress(schedules: list[dict]) -> bool:
 async def _fetch_env_settings(
     client: DockhandClient, env_id: int, previous: dict[str, Any]
 ) -> dict[str, Any]:
-    """An environment's settings the switch, select and number entities
-    change: update checks, image pruning, the disk-space warning and the
-    vulnerability scanner. One that can't be read keeps its previous value;
-    one never read (a token without permission to see it) stays absent, so
-    its entities aren't created."""
+    """An environment's settings that Dockhand's dashboard stats don't
+    carry: image pruning (with its mode) and which vulnerability scanner.
+    One that can't be read keeps its previous value; one never read (a
+    token without permission to see it) stays absent, so its entities
+    aren't created."""
     named = {
-        "update_check": client.async_get_update_check_settings(env_id),
         "image_prune": client.async_get_image_prune_settings(env_id),
-        "disk_warning": client.async_get_disk_warning_settings(env_id),
         "scanner": client.async_get_scanner_setting(env_id),
     }
     out: dict[str, Any] = {}
-    for key, value in zip(
-        named,
-        await asyncio.gather(*named.values(), return_exceptions=True),
-        strict=True,
-    ):
+    gathered = await asyncio.gather(*named.values(), return_exceptions=True)
+    for key, value in zip(named, gathered, strict=True):
         if isinstance(value, Exception) or value in (None, {}):
             if isinstance(value, Exception):
                 _LOGGER.debug("Dockhand: %s settings env=%s: %s", key, env_id, value)
@@ -959,6 +954,27 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.data = {**self.data, "schedules": schedules}
             self.async_update_listeners()
         self._async_follow_runs(schedules)
+
+    async def _fetch_scanner_default(self) -> str | None:
+        """Dockhand's default vulnerability scanner, which environments
+        without their own use. The previous value while it can't be read;
+        None if it never could (no permission to see settings)."""
+        previous = (self.data or {}).get("scanner_default")
+        try:
+            return await self.client.async_get_scanner_setting(None) or previous
+        except Exception as err:  # noqa: BLE001 - kept until the next poll
+            _LOGGER.debug("Dockhand: default scanner: %s", err)
+            return previous
+
+    async def async_refresh_scanner_default(self) -> None:
+        """Read the default scanner back after Home Assistant changed it,
+        without pushing back the poll. Environments without their own
+        scanner follow it, so theirs are read again too."""
+        default = await self._fetch_scanner_default()
+        self.data = {**(self.data or {}), "scanner_default": default}
+        for env_id in list(_all_envs(self.data)):
+            await self.async_refresh_env_settings(env_id)
+        self.async_update_listeners()
 
     async def async_refresh_env_settings(self, env_id: int) -> None:
         """Re-read one environment's settings after Home Assistant changed
@@ -1278,6 +1294,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         return {
             "environments": environments,
             "schedules": schedules,
+            "scanner_default": await self._fetch_scanner_default(),
             # Which top-level (not per-environment) fetches failed this
             # cycle — currently just "environments" and "schedules", the
             # only two fetched via top_coros above. See _unwrap's own doc

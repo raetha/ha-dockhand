@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Image pruning"
-      },
-      "disk_warning": {
-        "name": "Disk space warning"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Process limit"
-      },
-      "disk_warning_threshold": {
-        "name": "Disk space warning threshold"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Disk space warning threshold (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "All unused images"
         }
       },
-      "disk_warning_mode": {
-        "name": "Disk space warning mode",
+      "default_vulnerability_scanner": {
+        "name": "Default vulnerability scanner",
         "state": {
-          "percentage": "Percentage used",
-          "absolute": "Space free"
+          "none": "None",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype and Trivy"
         }
       }
     },

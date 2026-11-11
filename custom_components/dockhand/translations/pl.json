@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Czyszczenie obrazów"
-      },
-      "disk_warning": {
-        "name": "Ostrzeżenie o miejscu na dysku"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Limit procesów"
-      },
-      "disk_warning_threshold": {
-        "name": "Próg ostrzeżenia o miejscu na dysku"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Próg ostrzeżenia o miejscu na dysku (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "Wszystkie nieużywane obrazy"
         }
       },
-      "disk_warning_mode": {
-        "name": "Tryb ostrzeżenia o miejscu na dysku",
+      "default_vulnerability_scanner": {
+        "name": "Domyślny skaner podatności",
         "state": {
-          "percentage": "Procent zajęty",
-          "absolute": "Wolne miejsce"
+          "none": "Brak",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype i Trivy"
         }
       }
     },

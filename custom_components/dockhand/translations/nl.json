@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Image-opschoning"
-      },
-      "disk_warning": {
-        "name": "Waarschuwing schijfruimte"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Proceslimiet"
-      },
-      "disk_warning_threshold": {
-        "name": "Drempel waarschuwing schijfruimte"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Drempel waarschuwing schijfruimte (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "Alle ongebruikte images"
         }
       },
-      "disk_warning_mode": {
-        "name": "Modus waarschuwing schijfruimte",
+      "default_vulnerability_scanner": {
+        "name": "Standaard kwetsbaarheidsscanner",
         "state": {
-          "percentage": "Percentage gebruikt",
-          "absolute": "Vrije ruimte"
+          "none": "Geen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype en Trivy"
         }
       }
     },

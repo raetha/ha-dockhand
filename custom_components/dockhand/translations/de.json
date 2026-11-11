@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Image-Bereinigung"
-      },
-      "disk_warning": {
-        "name": "Speicherplatzwarnung"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Prozesslimit"
-      },
-      "disk_warning_threshold": {
-        "name": "Schwelle der Speicherplatzwarnung"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Schwelle der Speicherplatzwarnung (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "Alle ungenutzten Images"
         }
       },
-      "disk_warning_mode": {
-        "name": "Modus der Speicherplatzwarnung",
+      "default_vulnerability_scanner": {
+        "name": "Standard-Schwachstellenscanner",
         "state": {
-          "percentage": "Belegter Anteil",
-          "absolute": "Freier Speicher"
+          "none": "Keiner",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype und Trivy"
         }
       }
     },
