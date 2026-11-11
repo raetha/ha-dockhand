@@ -31,10 +31,17 @@ review has its own log in [quality-scale.md](quality-scale.md).
 6. **Workflows:** `contents: read` at the top, write only on the jobs that release or push;
    actions pinned to commit SHAs; no `${{ }}` expansions inside `run:` scripts; no secrets used on
    pull requests (`tests/test_workflows.py` checks the first three).
-7. **Leftovers:** finished experiments, migrations older than the downgrade rule needs
+7. **Entity model:** re-read Home Assistant's current entity guidance ("State and attributes",
+   the entity naming and category pages on developers.home-assistant.io) and walk every entity
+   against it and [architecture.md](architecture.md) §12: values that change on their own are
+   their own sensors, not attributes; static facts in device info; attributes always present;
+   nothing that changes on every poll in an attribute or a recorded state; names from the device,
+   not a `name` attribute. Note new guidance in §12, and fix or propose what drifted (renaming a
+   `translation_key` breaks the cards, so a conversion changes both repositories together).
+8. **Leftovers:** finished experiments, migrations older than the downgrade rule needs
    ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`,
    `docs/development.md`, the README).
-8. **Record it:** a dated section below, and changelog lines for anything users notice.
+9. **Record it:** a dated section below, and changelog lines for anything users notice.
 
 ## 2026-11-09: full review before testing 2.0.0
 

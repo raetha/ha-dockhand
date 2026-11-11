@@ -206,6 +206,7 @@ def _sensor_classes():
         DockhandContainerBlockWriteSensor,
         DockhandContainerCpuSensor,
         DockhandContainerHealthSensor,
+        DockhandContainerMemoryCacheSensor,
         DockhandContainerMemoryLimitSensor,
         DockhandContainerMemoryPercentSensor,
         DockhandContainerMemoryUsageSensor,
@@ -269,6 +270,33 @@ def _button_classes():
 # ===========================================================================
 
 
+def _env_value(key, coord, update_coord=None):
+    """The value of the environment sensor ENV_VALUE_SENSORS calls `key`."""
+    from custom_components.dockhand.sensor import (
+        ENV_VALUE_SENSORS,
+        DockhandEnvValueSensor,
+    )
+
+    description = next(d for d in ENV_VALUE_SENSORS if d.key == key)
+    return DockhandEnvValueSensor(
+        coord, update_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, description
+    ).native_value
+
+
+def _updates(coord, update_coord=None):
+    return {
+        kind: _env_value(f"{kind}_updates", coord, update_coord)
+        for kind in (
+            "pending",
+            "installable",
+            "system",
+            "version_tag",
+            "pinned_digest",
+            "held",
+        )
+    }
+
+
 @pytest.fixture
 def env_sensors():
     sc = _sensor_classes()
@@ -282,7 +310,7 @@ def env_sensors():
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
         "containers": sc["DockhandEnvContainerCountSensor"](
-            coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+            coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
         ),
         "stacks": sc["DockhandEnvStacksSensor"](
             coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
@@ -386,11 +414,10 @@ def test_mem_percent_value(env_sensors):
     assert abs(env_sensors["mem"].native_value - 45.2) < 1e-9
 
 
-def test_mem_attributes_raw_bytes(env_sensors):
-    attrs = env_sensors["mem"].extra_state_attributes
-    assert attrs["memory_used_bytes"] == 4724464640
-    assert attrs["memory_total_bytes"] == 8589934592
-    assert "memory_used_mib" not in attrs
+def test_memory_used_and_total_in_bytes():
+    coord = _fast_coord()
+    assert _env_value("memory_used", coord) == 4724464640
+    assert _env_value("memory_total", coord) == 8589934592
 
 
 def test_env_cpu_and_mem_value_none_when_metrics_explicitly_null():
@@ -416,25 +443,22 @@ def test_env_cpu_and_mem_value_none_when_metrics_explicitly_null():
     )
     assert cpu_sensor.native_value is None
     assert mem_sensor.native_value is None
-    assert mem_sensor.extra_state_attributes == {
-        "memory_used_bytes": None,
-        "memory_total_bytes": None,
-    }
+    assert _env_value("memory_used", coord) is None
+    assert _env_value("memory_total", coord) is None
 
 
 def test_container_count_total(env_sensors):
     assert env_sensors["containers"].native_value == 4
 
 
-def test_container_count_attributes(env_sensors):
-    attrs = env_sensors["containers"].extra_state_attributes
-    assert attrs["running"] == 3
-    assert attrs["stopped"] == 1
+def test_container_state_counts():
+    coord = _fast_coord()
+    assert _env_value("running_containers", coord) == 3
+    assert _env_value("stopped_containers", coord) == 1
     # Sourced from pending_update_container_ids (Tier 1), not Dockhand's
-    # own stats.containers.pendingUpdates — see the sensor's own comment
-    # for why. This fixture's env_data sets pending_update_container_ids
-    # to one container id, matching the pre-existing expectation here.
-    assert attrs["pending_updates"] == 1
+    # own stats.containers.pendingUpdates. This fixture's env_data sets
+    # pending_update_container_ids to one container id.
+    assert _env_value("installable_updates", coord) == 1
 
 
 def test_container_count_pending_updates_excludes_system_containers():
@@ -448,7 +472,6 @@ def test_container_count_pending_updates_excludes_system_containers():
     three attributes instead of one: a single count can't correctly
     answer both "how many things need attention" (should include this)
     and "how many things can I safely bulk-update" (should not) at once."""
-    sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -466,13 +489,10 @@ def test_container_count_pending_updates_excludes_system_containers():
             "pending_update_container_ids": {"sys-1"},
         }
     )
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_updates"] == 0
-    assert attrs["pending_system_updates"] == 1
-    assert attrs["pending_updates_total"] == 1
+    attrs = _updates(coord)
+    assert attrs["installable"] == 0
+    assert attrs["system"] == 1
+    assert attrs["pending"] == 1
 
 
 def test_container_count_pending_updates_mixed_system_and_normal():
@@ -481,7 +501,6 @@ def test_container_count_pending_updates_mixed_system_and_normal():
     leaking into another (e.g. a bug that summed both into
     pending_updates, or double-counted the normal one into
     pending_system_updates)."""
-    sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -499,13 +518,10 @@ def test_container_count_pending_updates_mixed_system_and_normal():
             "pending_update_container_ids": {CONTAINER["id"], "sys-1"},
         }
     )
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_updates"] == 1
-    assert attrs["pending_system_updates"] == 1
-    assert attrs["pending_updates_total"] == 2
+    attrs = _updates(coord)
+    assert attrs["installable"] == 1
+    assert attrs["system"] == 1
+    assert attrs["pending"] == 2
 
 
 def test_container_count_pending_updates_includes_tier_2_only_containers():
@@ -521,7 +537,6 @@ def test_container_count_pending_updates_includes_tier_2_only_containers():
     this environment's Updates card rows) shows. This container is
     absent from pending_update_container_ids entirely — only Tier 2 (via
     update_coordinator) flags it — and must still be counted."""
-    sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -533,17 +548,13 @@ def test_container_count_pending_updates_includes_tier_2_only_containers():
     )
     update_coord = MagicMock()
     update_coord.data = {"environments": {ENV_ID: {"tier2-only": {"hasUpdate": True}}}}
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, update_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    assert sensor.extra_state_attributes["pending_updates"] == 1
+    assert _updates(coord, update_coord)["installable"] == 1
 
 
 def test_container_count_counts_semver_only_suggestions():
     """A container whose only signal is a newer version tag has its update
     entity on, so pending_updates_total must include it (as
     pending_version_updates) while pending_updates stays actionable-only."""
-    sc = _sensor_classes()
     newer = {"tag": "18.6", "bump": "major", "skipped": ["18.6"]}
     coord = _fast_coord(
         env_data={
@@ -570,21 +581,17 @@ def test_container_count_counts_semver_only_suggestions():
             ENV_ID: {"tier2-semver": {"hasUpdate": False, "newerVersion": newer}}
         }
     }
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, update_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_updates"] == 2
-    assert attrs["pending_system_updates"] == 0
-    assert attrs["pending_version_updates"] == 2
-    assert attrs["pending_updates_total"] == 4
+    attrs = _updates(coord, update_coord)
+    assert attrs["installable"] == 2
+    assert attrs["system"] == 0
+    assert attrs["version_tag"] == 2
+    assert attrs["pending"] == 4
 
 
 def test_container_count_ignores_suggestion_matching_installed_version():
     """A floating tag ("2026.8") already running the suggested version
     ("2026.8.3", per its OCI label) has its update entity off, so it must not
     be counted either."""
-    sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -606,16 +613,12 @@ def test_container_count_ignores_suggestion_matching_installed_version():
             },
         }
     )
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_version_updates"] == 0
-    assert attrs["pending_updates_total"] == 0
+    attrs = _updates(coord)
+    assert attrs["version_tag"] == 0
+    assert attrs["pending"] == 0
 
 
 def test_container_count_ignores_newer_version_without_tag():
-    sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -628,19 +631,15 @@ def test_container_count_ignores_newer_version_without_tag():
             },
         }
     )
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_version_updates"] == 0
-    assert attrs["pending_updates_total"] == 0
+    attrs = _updates(coord)
+    assert attrs["version_tag"] == 0
+    assert attrs["pending"] == 0
 
 
 def test_container_count_pending_updates_none_when_update_coordinator_absent():
     """update_coordinator is optional (Tier 2 is opt-in) — must not crash
     or misbehave when it's None, same as _container_has_pending_update's
     own contract for its update_env_data parameter."""
-    sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -650,10 +649,7 @@ def test_container_count_pending_updates_none_when_update_coordinator_absent():
             "pending_update_container_ids": set(),
         }
     )
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, None, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    assert sensor.extra_state_attributes["pending_updates"] == 0
+    assert _updates(coord)["installable"] == 0
 
 
 def test_stacks_value(env_sensors):
@@ -664,20 +660,8 @@ def test_images_count(env_sensors):
     assert env_sensors["images"].native_value == 5
 
 
-def test_images_attribute_raw_bytes(env_sensors):
-    attrs = env_sensors["images"].extra_state_attributes
-    assert attrs["total_size_bytes"] == 2147483648
-    assert "total_size_mib" not in attrs
-
-
 def test_volumes_count(env_sensors):
     assert env_sensors["volumes"].native_value == 2
-
-
-def test_volumes_attribute_raw_bytes(env_sensors):
-    attrs = env_sensors["volumes"].extra_state_attributes
-    assert "total_size_bytes" in attrs
-    assert "total_size_mib" not in attrs
 
 
 def test_networks_count(env_sensors):
@@ -692,14 +676,17 @@ def test_disk_usage_total_bytes(env_sensors):
     )
 
 
-def test_disk_usage_attributes(env_sensors):
-    attrs = env_sensors["disk_usage"].extra_state_attributes
-    assert attrs == {
-        "images_size_bytes": 2147483648,
-        "volumes_size_bytes": 1073741824,
-        "containers_size_bytes": 524288000,
-        "build_cache_size_bytes": 104857600,
-    }
+def test_disk_usage_parts():
+    coord = _fast_coord()
+    assert _env_value("images_size", coord) == 2147483648
+    assert _env_value("volumes_size", coord) == 1073741824
+    assert _env_value("containers_size", coord) == 524288000
+    assert _env_value("build_cache_size", coord) == 104857600
+
+    from custom_components.dockhand.sensor import DockhandEnvDiskUsageSensor
+
+    sensor = DockhandEnvDiskUsageSensor(coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL)
+    assert sensor.extra_state_attributes is None
 
 
 def test_disk_usage_disabled_by_default(env_sensors):
@@ -769,8 +756,12 @@ def test_activity_total_event_count():
     assert _make_activity().native_value == 42
 
 
-def test_activity_today_attribute():
-    assert _make_activity().extra_state_attributes["today"] == 7
+def test_activity_today_has_its_own_sensor():
+    coord = _fast_coord(
+        env_data={"stats": {**STATS, "events": {"total": 42, "today": 7}}}
+    )
+    assert _env_value("events_today", coord) == 7
+    assert list(_make_activity().extra_state_attributes) == ["recent_events"]
 
 
 def test_activity_disabled_by_default():
@@ -897,9 +888,29 @@ def _make_vuln_sensor(vulnerabilities=None, fetch_failures=None):
 
 
 def test_vulnerabilities_native_value():
-    sensor = _make_vuln_sensor({"total": 7, "critical": 1})
+    from custom_components.dockhand.sensor import (
+        VULNERABILITY_SENSORS,
+        DockhandEnvVulnerabilityCountSensor,
+    )
+
+    sensor = _make_vuln_sensor({"total": 7, "critical": 1, "imagesScanned": 4})
     assert sensor.native_value == 7
-    assert sensor.extra_state_attributes["critical"] == 1
+    assert sensor.extra_state_attributes is None
+    counts = {
+        field: DockhandEnvVulnerabilityCountSensor(
+            sensor.coordinator, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, field
+        )
+        for field in VULNERABILITY_SENSORS
+    }
+    assert counts["critical"].native_value == 1
+    assert (
+        counts["critical"].unique_id == f"{ENTRY_ID}_{ENV_ID}_vulnerabilities_critical"
+    )
+    assert counts["critical"].translation_key == "vulnerabilities_critical"
+    assert counts["high"].native_value is None
+    assert counts["imagesScanned"].native_value == 4
+    assert counts["imagesScanned"].translation_key == "images_scanned"
+    assert not counts["low"].entity_registry_enabled_default
 
 
 def test_vulnerabilities_available_when_fetch_succeeded():
@@ -923,18 +934,10 @@ def test_hawser_disabled_by_default():
     assert not _make_hawser()._attr_entity_registry_enabled_default
 
 
-def test_hawser_has_no_attributes():
-    """agent_name/agent_id/last_seen were dropped along with the
-    /api/environments call entirely — /api/host doesn't have them (it
-    only forwards hawserVersion from its internal agent-info call), and
-    the only other source is a side-effecting manual-action endpoint we
-    shouldn't poll. Rather than gate them, they're just gone — a low-use
-    edge-mode-only detail wasn't worth keeping a whole extra API call
-    around for (see coordinator.py for the /api/environments removal
-    rationale: it also returns tlsKey/hawserToken fully decrypted with no
-    redaction on Dockhand's side)."""
+def test_hawser_agent_attributes_always_present():
+    """None outside Hawser Edge, the only mode Dockhand fills them in for."""
     sensor = _make_hawser(host_environment={"hawserVersion": "1.4.2"})
-    assert sensor.extra_state_attributes is None
+    assert sensor.extra_state_attributes == {"agent_name": None, "agent_id": None}
 
 
 # ===========================================================================
@@ -981,7 +984,7 @@ def test_host_platform_sensor_architecture_attribute():
 
 def test_host_platform_sensor_architecture_attribute_absent_when_missing():
     sensor = _make_host_sensor("DockhandEnvPlatformSensor", {"platform": "linux"})
-    assert sensor.extra_state_attributes == {}
+    assert sensor.extra_state_attributes == {"architecture": None}
 
 
 def test_host_docker_version_sensor():
@@ -1011,6 +1014,19 @@ def test_host_last_boot_sensor_computed_from_uptime():
     # itself takes nonzero time to run.
     expected = dt_util.utcnow() - __import__("datetime").timedelta(seconds=3600)
     assert abs((result - expected).total_seconds()) < 5
+
+
+def test_host_last_boot_sensor_ignores_drift_but_follows_a_reboot():
+    """Uptime and the clock are read at slightly different moments, so
+    the computed boot time wobbles; a wobble must not change the state."""
+    sensor = _make_host_sensor("DockhandEnvLastBootSensor", {"uptime": 3600})
+    first = sensor.native_value
+    host = sensor.coordinator.data["environments"][ENV_ID]["host"]
+    host["uptime"] = 3610.5
+    assert sensor.native_value == first
+    host["uptime"] = 60
+    rebooted = sensor.native_value
+    assert (rebooted - first).total_seconds() > 3000
 
 
 def test_host_last_boot_sensor_none_when_uptime_absent():
@@ -1152,6 +1168,7 @@ def stats_sensors():
     sensors = {
         "cpu": sc["DockhandContainerCpuSensor"](*args),
         "mem_usage": sc["DockhandContainerMemoryUsageSensor"](*args),
+        "mem_cache": sc["DockhandContainerMemoryCacheSensor"](*args),
         "mem_pct": sc["DockhandContainerMemoryPercentSensor"](*args),
         "mem_limit": sc["DockhandContainerMemoryLimitSensor"](*args),
         "net_rx": sc["DockhandContainerNetworkRxSensor"](*args),
@@ -1195,10 +1212,9 @@ def test_stats_block_write_value_raw_bytes(stats_sensors):
     assert stats_sensors["blk_write"].native_value == 31_457_280
 
 
-def test_stats_memory_usage_cache_attribute(stats_sensors):
-    attrs = stats_sensors["mem_usage"].extra_state_attributes
-    assert "memory_cache_bytes" in attrs
-    assert attrs["memory_cache_bytes"] == 20_971_520
+def test_stats_memory_cache_value_raw_bytes(stats_sensors):
+    assert stats_sensors["mem_cache"].native_value == 20_971_520
+    assert stats_sensors["mem_usage"].extra_state_attributes is None
 
 
 def test_stats_available_when_running(stats_sensors):
@@ -1302,8 +1318,7 @@ def test_stack_container_count(stack_sensors):
 def test_stack_container_count_names_attribute():
     """The container count entity is the one the card links to for
     more-info, so this is where the container list is most useful to
-    see at a glance — added alongside the same attribute on the status
-    entity, not instead of it."""
+    see at a glance."""
     sc = _sensor_classes()
     stack = {"name": "myapp", "status": "running", "containers": ["abc123", "def456"]}
     containers = [
@@ -1324,11 +1339,14 @@ def test_stack_container_count_names_attribute():
     assert sensor.extra_state_attributes == {"container_names": ["web", "worker"]}
 
 
-def test_stack_status_container_count_attribute(stack_sensors):
-    assert "container_count" in stack_sensors["status"].extra_state_attributes
+def test_stack_status_leaves_the_containers_to_their_own_sensor(stack_sensors):
+    attrs = stack_sensors["status"].extra_state_attributes
+    assert "container_count" not in attrs
+    assert "container_names" not in attrs
+    assert "name" not in attrs
 
 
-def test_stack_status_container_names_resolved_from_ids():
+def test_stack_container_names_resolved_from_ids():
     """Dockhand's own stack.containers field is a list of raw container
     IDs (verified against Dockhand's source, src/lib/server/stacks.ts),
     not names — this attribute must resolve them against the
@@ -1347,13 +1365,13 @@ def test_stack_status_container_names_resolved_from_ids():
             "container_stats": {},
         }
     )
-    sensor = sc["DockhandStackStatusSensor"](
+    sensor = sc["DockhandStackContainerCountSensor"](
         coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
     )
     assert sensor.extra_state_attributes["container_names"] == ["web", "worker"]
 
 
-def test_stack_status_container_names_sorted_alphabetically():
+def test_stack_container_names_sorted_alphabetically():
     """Real, reported usability issue: an unsorted list is hard to skim
     for a stack with many containers. Deliberately feeds IDs in an order
     that would NOT already happen to look sorted, to actually exercise
@@ -1377,7 +1395,7 @@ def test_stack_status_container_names_sorted_alphabetically():
             "container_stats": {},
         }
     )
-    sensor = sc["DockhandStackStatusSensor"](
+    sensor = sc["DockhandStackContainerCountSensor"](
         coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
     )
     # Case-insensitive: "Mike" sorts between "alpha" and "zebra", not
@@ -1389,7 +1407,7 @@ def test_stack_status_container_names_sorted_alphabetically():
     ]
 
 
-def test_stack_status_container_names_falls_back_to_id_when_unresolved():
+def test_stack_container_names_falls_back_to_id_when_unresolved():
     """A container ID that isn't in the environment's current container
     list (e.g. removed since the stack's own list last refreshed) should
     still show up as its raw ID, not silently vanish from the list."""
@@ -1404,7 +1422,7 @@ def test_stack_status_container_names_falls_back_to_id_when_unresolved():
             "container_stats": {},
         }
     )
-    sensor = sc["DockhandStackStatusSensor"](
+    sensor = sc["DockhandStackContainerCountSensor"](
         coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
     )
     assert sensor.extra_state_attributes["container_names"] == ["gone999", "web"]
@@ -1712,11 +1730,11 @@ def test_schedule_last_status_attributes_on_failure():
 
 def test_schedule_last_status_identity_attributes():
     """last_status, not next_run, is the comprehensive/primary entity for a
-    schedule — it carries name/description/is_system plus the scheduling
+    schedule — it carries description/is_system plus the scheduling
     attributes duplicated from next_run (see the class docstring for why
-    duplication, not a move, for the latter)."""
+    duplication, not a move, for the latter). The name is the device's."""
     attrs = _make_last_status().extra_state_attributes
-    assert attrs["name"] == "nightly-backup"
+    assert "name" not in attrs
     assert attrs["description"] == "Removes old logs older than 30 days"
     assert attrs["is_system"] is True
     assert attrs["cron_expression"] == "0 2 * * *"
@@ -1735,16 +1753,18 @@ def test_schedule_last_status_none_when_no_execution():
 
 
 def test_schedule_last_status_identity_attributes_present_without_execution():
-    """A schedule that has never run yet still has a name/description/type —
-    those shouldn't disappear just because there's no lastExecution."""
+    """A schedule that has never run yet still has a description and type,
+    and the last run's attributes are there, empty: attributes don't come
+    and go."""
     sched = {**SCHEDULE, "lastExecution": None}
     sc = _sensor_classes()
     sensor = sc["DockhandScheduleLastStatusSensor"](
         _slow_coord(schedules=[sched]), ENTRY_ID, sched, BASE_URL
     )
     attrs = sensor.extra_state_attributes
-    assert attrs["name"] == "nightly-backup"
-    assert "triggered_at" not in attrs
+    assert attrs["description"] == "Removes old logs older than 30 days"
+    assert attrs["triggered_at"] is None
+    assert attrs["updates_found"] is None
 
 
 def test_schedule_both_sensors_share_device():
@@ -1815,7 +1835,7 @@ def test_binary_online_is_on():
     assert _make_binary("DockhandEnvOnlineSensor").is_on
 
 
-def test_binary_online_carries_name_and_connection_attributes():
+def test_binary_online_carries_connection_attributes():
     from custom_components.dockhand.binary_sensor import DockhandEnvOnlineSensor
 
     fast_coord = _fast_coord(
@@ -1826,7 +1846,6 @@ def test_binary_online_carries_name_and_connection_attributes():
     )
     sensor = DockhandEnvOnlineSensor(fast_coord, slow_coord, ENTRY_ID, ENV_ID, BASE_URL)
     assert sensor.extra_state_attributes == {
-        "name": "prod",
         "connection_host": "192.168.1.5",
         "connection_port": 2375,
         "labels": [],
@@ -1842,7 +1861,6 @@ def test_binary_online_attributes_none_when_env_meta_absent():
     slow_coord = _slow_coord(env_data={})
     sensor = DockhandEnvOnlineSensor(fast_coord, slow_coord, ENTRY_ID, ENV_ID, BASE_URL)
     assert sensor.extra_state_attributes == {
-        "name": "prod",
         "connection_host": None,
         "connection_port": None,
         "labels": [],
@@ -1878,24 +1896,32 @@ def _make_stack_updates_sensor(stack):
     )
 
 
+def _make_stack_update_count(stack):
+    from custom_components.dockhand.sensor import DockhandStackUpdateCountSensor
+
+    coord = _fast_coord({"stats": STATS, "containers": [], "stacks": [stack]})
+    return DockhandStackUpdateCountSensor(
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
+    )
+
+
 def test_stack_updates_available_true():
     stack = {**STACK, "updatesAvailable": True, "updateCount": 2}
     sensor = _make_stack_updates_sensor(stack)
     assert sensor.is_on is True
-    assert sensor.extra_state_attributes == {
-        "update_count": 2,
-        "pending_container_names": [],
-    }
+    assert sensor.extra_state_attributes == {"pending_container_names": []}
+    count = _make_stack_update_count(stack)
+    assert count.native_value == 2
+    assert count.unique_id == f"{ENTRY_ID}_{ENV_ID}_stack_myapp_update_count"
 
 
 def test_stack_updates_available_false():
     stack = {**STACK, "updatesAvailable": False, "updateCount": 0}
     sensor = _make_stack_updates_sensor(stack)
     assert sensor.is_on is False
-    assert sensor.extra_state_attributes == {
-        "update_count": 0,
-        "pending_container_names": [],
-    }
+    assert sensor.extra_state_attributes == {"pending_container_names": []}
+    assert _make_stack_update_count(stack).native_value == 0
+    assert _make_stack_update_count({**stack, "updateCount": None}).native_value is None
 
 
 def test_stack_updates_available_has_no_device_class():
@@ -3129,6 +3155,7 @@ async def _created_entity_names(hass, entry):
 STATS_SENSOR_NAMES = {
     "DockhandContainerCpuSensor",
     "DockhandContainerMemoryUsageSensor",
+    "DockhandContainerMemoryCacheSensor",
     "DockhandContainerMemoryPercentSensor",
     "DockhandContainerMemoryLimitSensor",
     "DockhandContainerNetworkRxSensor",
@@ -3136,6 +3163,29 @@ STATS_SENSOR_NAMES = {
     "DockhandContainerBlockReadSensor",
     "DockhandContainerBlockWriteSensor",
 }
+
+
+async def test_environment_sensors_created_with_hawser_last_seen_for_edge(hass):
+    entry = _make_container_stats_setup_entry(hass, False)
+    entry.runtime_data.fast_coordinator.data["environments"][ENV_ID]["stats"] = {
+        **STATS,
+        "connectionType": "hawser-edge",
+    }
+    entry.runtime_data.slow_coordinator.data = {
+        "environments": {ENV_ID: {}},
+        "schedules": [],
+    }
+    names = await _created_entity_names(hass, entry)
+    assert names.count("DockhandEnvValueSensor") == 21
+    assert names.count("DockhandEnvVulnerabilityCountSensor") == 5
+    assert "DockhandEnvHawserLastSeenSensor" in names
+
+    # Only Hawser Edge has one.
+    entry.runtime_data.fast_coordinator.data["environments"][ENV_ID]["stats"] = STATS
+    entry.runtime_data.known_entity_ids.clear()
+    assert "DockhandEnvHawserLastSeenSensor" not in await _created_entity_names(
+        hass, entry
+    )
 
 
 async def test_container_stats_entities_not_created_when_option_off(hass):
@@ -3165,7 +3215,7 @@ async def test_stack_stats_entities_created_when_dockhand_has_the_endpoint(hass)
         hass, True, stacks=[STACK], stack_stats={}
     )
     names = await _created_entity_names(hass, entry)
-    assert names.count("DockhandStackStatsSensor") == 7
+    assert names.count("DockhandStackStatsSensor") == 8
 
 
 async def test_stack_stats_entities_not_created_without_the_endpoint(hass):
@@ -3229,7 +3279,8 @@ def test_stack_stats_report_dockhands_own_totals():
     assert sensors["network_tx"].native_value == 524288
     assert sensors["block_read"].native_value == 0
     assert sensors["block_write"].native_value == 4096
-    assert sensors["cpu_percent"].extra_state_attributes == {"running_containers": 2}
+    assert sensors["running_containers"].native_value == 2
+    assert sensors["cpu_percent"].extra_state_attributes is None
 
 
 def test_stack_stats_have_no_memory_percent():
@@ -3242,7 +3293,6 @@ def test_stack_stats_unavailable_when_dockhand_omits_the_stack():
     sensors = _stack_stats_sensors({"other": {**MYAPP_STACK_STATS, "name": "other"}})
     assert all(not s.available for s in sensors.values())
     assert sensors["cpu_percent"].native_value is None
-    assert sensors["cpu_percent"].extra_state_attributes == {}
 
 
 def test_stack_stats_unavailable_when_the_fetch_failed():
@@ -3348,21 +3398,17 @@ def test_parse_dt_edge_cases():
     assert _parse_dt(1e20) is None  # out of range
 
 
-@pytest.mark.parametrize(
-    "cls_name",
-    [
-        "DockhandContainerStateSensor",
-        "DockhandContainerMemoryUsageSensor",
-    ],
-)
-def test_container_sensor_attributes_once_the_container_is_gone(cls_name):
+def test_container_sensor_attributes_once_the_container_is_gone():
     sc = _sensor_classes()
     coord = _fast_coord({"stats": STATS, "containers": [], "stacks": []})
-    args = (coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER)
-    if cls_name == "DockhandContainerMemoryUsageSensor":
-        args = (*args, True)
-    sensor = sc[cls_name](*args)
+    sensor = sc["DockhandContainerStateSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER
+    )
     assert sensor.extra_state_attributes == {}
+    cache = sc["DockhandContainerMemoryCacheSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, CONTAINER, True
+    )
+    assert cache.native_value is None
 
 
 @pytest.mark.parametrize(
@@ -3388,11 +3434,16 @@ def test_hawser_edge_attributes():
         "hawserAgentId": "a1",
         "hawserLastSeen": "2026-10-01T00:00:00Z",
     }
-    assert sensor.extra_state_attributes == {
-        "agent_name": "nas",
-        "agent_id": "a1",
-        "last_seen": "2026-10-01T00:00:00Z",
-    }
+    assert sensor.extra_state_attributes == {"agent_name": "nas", "agent_id": "a1"}
+
+    from custom_components.dockhand.sensor import DockhandEnvHawserLastSeenSensor
+
+    last_seen = DockhandEnvHawserLastSeenSensor(
+        sensor.coordinator, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
+    )
+    assert last_seen.native_value.isoformat() == "2026-10-01T00:00:00+00:00"
+    assert last_seen.unique_id == f"{ENTRY_ID}_{ENV_ID}_hawser_last_seen"
+    assert not last_seen.entity_registry_enabled_default
 
 
 def test_image_sensor_once_the_image_is_gone():
@@ -3470,7 +3521,6 @@ def test_container_count_pinned_digest_and_held_updates():
     """A moved digest behind a digest-pinned image and an update held by the
     minimum image age both turn their update entity on (not installable),
     so both are in pending_updates_total."""
-    sc = _sensor_classes()
     newer = {"tag": "18.6", "bump": "major", "skipped": ["18.6"]}
     coord = _fast_coord(
         env_data={
@@ -3501,12 +3551,9 @@ def test_container_count_pinned_digest_and_held_updates():
             ENV_ID: {"tier2-pinned": {"hasUpdate": False, "pinnedToDigest": True}}
         }
     }
-    sensor = sc["DockhandEnvContainerCountSensor"](
-        coord, update_coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL
-    )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_updates"] == 0
-    assert attrs["pending_version_updates"] == 1  # the one that also has a tag
-    assert attrs["pending_pinned_digest_updates"] == 2
-    assert attrs["pending_held_updates"] == 1
-    assert attrs["pending_updates_total"] == 4
+    attrs = _updates(coord, update_coord)
+    assert attrs["installable"] == 0
+    assert attrs["version_tag"] == 1  # the one that also has a tag
+    assert attrs["pinned_digest"] == 2
+    assert attrs["held"] == 1
+    assert attrs["pending"] == 4

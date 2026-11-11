@@ -453,7 +453,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
     @property
     @override
     def extra_state_attributes(self) -> dict[str, Any]:
-        attrs: dict[str, Any] = {"name": self._container_name}
+        attrs: dict[str, Any] = {}
         # latest_version only carries the newer tag while nothing actionable
         # is pending, so a consumer showing both needs it on its own.
         newer = self._check_updates_item().get("newerVersion") or {}

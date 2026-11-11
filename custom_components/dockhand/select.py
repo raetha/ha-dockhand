@@ -83,6 +83,26 @@ async def async_setup_entry(
     _add_default()
     entry.async_on_unload(data.slow_coordinator.async_add_listener(_add_default))
 
+    # How Dockhand collects Docker's events, once it can be read.
+    collection_added: list[bool] = []
+
+    def _add_event_collection() -> None:
+        slow = data.slow_coordinator
+        if collection_added or not (slow.data or {}).get("event_collection"):
+            return
+        collection_added.append(True)
+        async_add_entities(
+            [
+                DockhandEventCollectionSelect(slow, data.client, entry.entry_id),
+                DockhandEventPollIntervalSelect(slow, data.client, entry.entry_id),
+            ]
+        )
+
+    _add_event_collection()
+    entry.async_on_unload(
+        data.slow_coordinator.async_add_listener(_add_event_collection)
+    )
+
     def _opt(key: str, default: Any) -> Any:
         return entry.options.get(key, default)
 
@@ -319,3 +339,87 @@ class DockhandDefaultScannerSelect(
     async def async_select_option(self, option: str) -> None:
         await async_dockhand_action(self._client.async_set_scanner(None, option))
         await self.coordinator.async_refresh_scanner_default()
+
+
+EVENT_COLLECTION_MODES = ["stream", "poll"]
+
+
+class DockhandEventCollectionSelect(
+    CoordinatorEntity[DockhandSlowCoordinator], SelectEntity
+):
+    """How Dockhand collects Docker's events, on the Dockhand device: Stream
+    as they happen, or Poll at an interval. Live updates and the Docker
+    event entities depend on it (README → Data Updates)."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "event_collection_mode"
+    _attr_options = EVENT_COLLECTION_MODES
+
+    def __init__(
+        self, coordinator: DockhandSlowCoordinator, client: Any, entry_id: str
+    ) -> None:
+        super().__init__(coordinator)
+        self._client = client
+        self._attr_unique_id = f"{entry_id}_instance_event_collection_mode"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, _device_id_instance(entry_id))}
+        )
+
+    @property
+    def _collection(self) -> dict[str, Any]:
+        return (self.coordinator.data or {}).get("event_collection") or {}
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and bool(self._collection)
+
+    @property
+    @override
+    def current_option(self) -> str | None:
+        mode = self._collection.get("mode")
+        return mode if mode in EVENT_COLLECTION_MODES else None
+
+    @override
+    async def async_select_option(self, option: str) -> None:
+        await async_dockhand_action(
+            self._client.async_set_event_collection_mode(option)
+        )
+        await self.coordinator.async_refresh_event_collection()
+
+
+# The poll intervals Dockhand offers, in seconds.
+EVENT_POLL_INTERVALS = ["30", "60", "120", "300"]
+
+
+class DockhandEventPollIntervalSelect(DockhandEventCollectionSelect):
+    """How often Dockhand polls for events in Poll mode. Like Dockhand's
+    own setting, only available while it polls."""
+
+    _attr_translation_key = "event_poll_interval"
+    _attr_options = EVENT_POLL_INTERVALS
+
+    def __init__(
+        self, coordinator: DockhandSlowCoordinator, client: Any, entry_id: str
+    ) -> None:
+        super().__init__(coordinator, client, entry_id)
+        self._attr_unique_id = f"{entry_id}_instance_event_poll_interval"
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._collection.get("mode") == "poll"
+
+    @property
+    @override
+    def current_option(self) -> str | None:
+        interval = str(self._collection.get("interval"))
+        return interval if interval in EVENT_POLL_INTERVALS else None
+
+    @override
+    async def async_select_option(self, option: str) -> None:
+        await async_dockhand_action(
+            self._client.async_set_event_poll_interval(int(option))
+        )
+        await self.coordinator.async_refresh_event_collection()

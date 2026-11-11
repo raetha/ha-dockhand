@@ -137,6 +137,96 @@
           "hawser-standard": "mdi:transit-connection-variant",
           "hawser-edge": "mdi:undo-variant"
         }
+      },
+      "containers_running": {
+        "default": "mdi:play-circle"
+      },
+      "containers_stopped": {
+        "default": "mdi:stop-circle"
+      },
+      "containers_paused": {
+        "default": "mdi:pause-circle"
+      },
+      "containers_restarting": {
+        "default": "mdi:restart"
+      },
+      "containers_unhealthy": {
+        "default": "mdi:heart-broken"
+      },
+      "stacks_running": {
+        "default": "mdi:layers-triple"
+      },
+      "stacks_partial": {
+        "default": "mdi:layers-triple-outline"
+      },
+      "stacks_stopped": {
+        "default": "mdi:layers-off"
+      },
+      "pending_updates": {
+        "default": "mdi:update"
+      },
+      "installable_updates": {
+        "default": "mdi:download"
+      },
+      "system_updates": {
+        "default": "mdi:shield-sync"
+      },
+      "version_tag_updates": {
+        "default": "mdi:tag-arrow-up"
+      },
+      "pinned_digest_updates": {
+        "default": "mdi:pin"
+      },
+      "held_updates": {
+        "default": "mdi:timer-sand"
+      },
+      "memory_used": {
+        "default": "mdi:memory"
+      },
+      "memory_total": {
+        "default": "mdi:memory"
+      },
+      "disk_usage_images": {
+        "default": "mdi:image-multiple"
+      },
+      "disk_usage_containers": {
+        "default": "mdi:docker"
+      },
+      "disk_usage_volumes": {
+        "default": "mdi:database"
+      },
+      "disk_usage_build_cache": {
+        "default": "mdi:hammer-wrench"
+      },
+      "activity_events_today": {
+        "default": "mdi:pulse"
+      },
+      "vulnerabilities_critical": {
+        "default": "mdi:shield-alert"
+      },
+      "vulnerabilities_high": {
+        "default": "mdi:shield-alert-outline"
+      },
+      "vulnerabilities_medium": {
+        "default": "mdi:shield-half-full"
+      },
+      "vulnerabilities_low": {
+        "default": "mdi:shield-outline"
+      },
+      "images_scanned": {
+        "default": "mdi:shield-search"
+      },
+      "hawser_last_seen": {
+        "default": "mdi:clock-check-outline"
+      },
+      "container_memory_cache": {
+        "default": "mdi:memory"
+      },
+      "stack_running_containers": {
+        "default": "mdi:play-circle"
+      },
+      "stack_pending_updates": {
+        "default": "mdi:update"
       }
     },
     "binary_sensor": {
@@ -241,6 +331,16 @@
       },
       "default_vulnerability_scanner": {
         "default": "mdi:shield-search"
+      },
+      "event_collection_mode": {
+        "default": "mdi:transit-connection-variant",
+        "state": {
+          "stream": "mdi:transit-connection-variant",
+          "poll": "mdi:timer-sync-outline"
+        }
+      },
+      "event_poll_interval": {
+        "default": "mdi:timer-cog-outline"
       }
     },
     "event": {

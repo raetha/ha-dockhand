@@ -717,6 +717,35 @@ class DockhandClient:
             body["envId"] = env_id
         await self._request("POST", "/api/settings/scanner", json=body)
 
+    async def async_get_event_collection(self) -> dict[str, Any] | None:
+        """How Dockhand collects Docker's events: {"mode": "stream" | "poll",
+        "interval": seconds between polls}, from GET /api/settings/general.
+        None without the permission to view settings, which leaves them out."""
+        result = await self._request("GET", "/api/settings/general")
+        mode = result.get("eventCollectionMode") if isinstance(result, dict) else None
+        if mode not in ("stream", "poll"):
+            return None
+        interval = result.get("eventPollInterval")
+        return {
+            "mode": mode,
+            "interval": interval // 1000 if isinstance(interval, int) else None,
+        }
+
+    async def async_set_event_collection_mode(self, mode: str) -> None:
+        """POST /api/settings/general with only the event collection mode;
+        the settings left out keep their values."""
+        await self._request(
+            "POST", "/api/settings/general", json={"eventCollectionMode": mode}
+        )
+
+    async def async_set_event_poll_interval(self, seconds: int) -> None:
+        """POST /api/settings/general with only the event poll interval."""
+        await self._request(
+            "POST",
+            "/api/settings/general",
+            json={"eventPollInterval": seconds * 1000},
+        )
+
     async def async_get_version_notes(
         self, env_id: int, container_id: str, versions: list[str]
     ) -> dict[str, Any]:

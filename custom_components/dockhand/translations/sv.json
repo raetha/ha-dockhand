@@ -342,6 +342,96 @@
           "hawser-standard": "Hawser-agent (standard)",
           "hawser-edge": "Hawser-agent (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Körande containrar"
+      },
+      "containers_stopped": {
+        "name": "Stoppade containrar"
+      },
+      "containers_paused": {
+        "name": "Pausade containrar"
+      },
+      "containers_restarting": {
+        "name": "Containrar som startar om"
+      },
+      "containers_unhealthy": {
+        "name": "Ohälsosamma containrar"
+      },
+      "stacks_running": {
+        "name": "Körande stackar"
+      },
+      "stacks_partial": {
+        "name": "Delvis körande stackar"
+      },
+      "stacks_stopped": {
+        "name": "Stoppade stackar"
+      },
+      "pending_updates": {
+        "name": "Väntande uppdateringar"
+      },
+      "installable_updates": {
+        "name": "Installerbara uppdateringar"
+      },
+      "system_updates": {
+        "name": "Uppdateringar för systemcontainrar"
+      },
+      "version_tag_updates": {
+        "name": "Nyare versionstaggar"
+      },
+      "pinned_digest_updates": {
+        "name": "Uppdateringar för låsta digester"
+      },
+      "held_updates": {
+        "name": "Tillbakahållna uppdateringar"
+      },
+      "memory_used": {
+        "name": "Använt minne"
+      },
+      "memory_total": {
+        "name": "Totalt minne"
+      },
+      "disk_usage_images": {
+        "name": "Diskanvändning för images"
+      },
+      "disk_usage_containers": {
+        "name": "Diskanvändning för containrar"
+      },
+      "disk_usage_volumes": {
+        "name": "Diskanvändning för volymer"
+      },
+      "disk_usage_build_cache": {
+        "name": "Diskanvändning för byggcache"
+      },
+      "activity_events_today": {
+        "name": "Aktivitetshändelser i dag"
+      },
+      "vulnerabilities_critical": {
+        "name": "Kritiska sårbarheter"
+      },
+      "vulnerabilities_high": {
+        "name": "Höga sårbarheter"
+      },
+      "vulnerabilities_medium": {
+        "name": "Medelhöga sårbarheter"
+      },
+      "vulnerabilities_low": {
+        "name": "Låga sårbarheter"
+      },
+      "images_scanned": {
+        "name": "Skannade images"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser senast sedd"
+      },
+      "container_memory_cache": {
+        "name": "Minnescache"
+      },
+      "stack_running_containers": {
+        "name": "Körande containrar"
+      },
+      "stack_pending_updates": {
+        "name": "Väntande uppdateringar"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype och Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Insamling av händelser",
+        "state": {
+          "stream": "Ström",
+          "poll": "Avfrågning"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Avfrågningsintervall för händelser",
+        "state": {
+          "30": "30 sekunder",
+          "60": "60 sekunder",
+          "120": "120 sekunder",
+          "300": "300 sekunder"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Minnesgräns återställd automatiskt för {container}",
       "description": "Container \"{container}\" slutade köras strax efter att dess minnesgräns sänktes, vilket kan inträffa när den nya gränsen är lägre än containerns faktiska användning och kärnan tillämpar den omedelbart. Minnesgränsen har automatiskt återställts till sitt tidigare värde ({memory_bytes} bytes). Kontrollera containerns loggar och aktuella hälsostatus i Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand frågar efter Docker-händelser",
+      "description": "Dockhand samlar in Docker-händelser genom att fråga var {interval}:e sekund i stället för att strömma dem. För {environments} kan liveuppdateringar och Docker-händelseentiteter komma upp till {interval} sekunder för sent, och med ett intervall över 30 sekunder kommer vissa händelser aldrig fram: varje avfrågning läser bara de senaste 30 sekunderna. Ställ in Insamling av händelser på Dockhand-enheten på Ström för att strömma dem (i Dockhand: Settings → General → Activity event collection mode). Om du föredrar avfrågning, ignorera det här problemet: det kommer bara tillbaka efter ett byte till Ström och tillbaka till Avfrågning."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Sårbarhetsgenomsökning",
         "activity_events": "Aktivitetshändelser",
+        "activity_events_today": "Aktivitetshändelser i dag",
         "disk_usage": "Diskanvändning",
+        "disk_usage_images": "Diskanvändning för images",
+        "disk_usage_containers": "Diskanvändning för containrar",
+        "disk_usage_volumes": "Diskanvändning för volymer",
+        "disk_usage_build_cache": "Diskanvändning för byggcache",
         "vulnerabilities": "Sårbarheter",
+        "vulnerabilities_critical": "Kritiska sårbarheter",
+        "vulnerabilities_high": "Höga sårbarheter",
+        "vulnerabilities_medium": "Medelhöga sårbarheter",
+        "vulnerabilities_low": "Låga sårbarheter",
+        "images_scanned": "Skannade images",
+        "pinned_digest_updates": "Uppdateringar för låsta digester",
+        "held_updates": "Tillbakahållna uppdateringar",
         "hawser_agent_version": "Hawser-agentversion",
+        "hawser_last_seen": "Hawser senast sedd",
         "host_docker_version": "Docker-version",
         "host_platform": "Värdplattform",
         "uptime": "Drifttid"

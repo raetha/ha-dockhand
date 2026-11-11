@@ -342,6 +342,96 @@
           "hawser-standard": "Agent Hawser (standardowy)",
           "hawser-edge": "Agent Hawser (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Uruchomione kontenery"
+      },
+      "containers_stopped": {
+        "name": "Zatrzymane kontenery"
+      },
+      "containers_paused": {
+        "name": "Wstrzymane kontenery"
+      },
+      "containers_restarting": {
+        "name": "Restartujące kontenery"
+      },
+      "containers_unhealthy": {
+        "name": "Niesprawne kontenery"
+      },
+      "stacks_running": {
+        "name": "Uruchomione stacki"
+      },
+      "stacks_partial": {
+        "name": "Częściowo uruchomione stacki"
+      },
+      "stacks_stopped": {
+        "name": "Zatrzymane stacki"
+      },
+      "pending_updates": {
+        "name": "Oczekujące aktualizacje"
+      },
+      "installable_updates": {
+        "name": "Aktualizacje do zainstalowania"
+      },
+      "system_updates": {
+        "name": "Aktualizacje kontenerów systemowych"
+      },
+      "version_tag_updates": {
+        "name": "Nowsze tagi wersji"
+      },
+      "pinned_digest_updates": {
+        "name": "Aktualizacje przypiętych digestów"
+      },
+      "held_updates": {
+        "name": "Wstrzymane aktualizacje"
+      },
+      "memory_used": {
+        "name": "Użyta pamięć"
+      },
+      "memory_total": {
+        "name": "Całkowita pamięć"
+      },
+      "disk_usage_images": {
+        "name": "Miejsce na dysku: obrazy"
+      },
+      "disk_usage_containers": {
+        "name": "Miejsce na dysku: kontenery"
+      },
+      "disk_usage_volumes": {
+        "name": "Miejsce na dysku: wolumeny"
+      },
+      "disk_usage_build_cache": {
+        "name": "Miejsce na dysku: pamięć podręczna buildów"
+      },
+      "activity_events_today": {
+        "name": "Zdarzenia aktywności dzisiaj"
+      },
+      "vulnerabilities_critical": {
+        "name": "Krytyczne podatności"
+      },
+      "vulnerabilities_high": {
+        "name": "Wysokie podatności"
+      },
+      "vulnerabilities_medium": {
+        "name": "Średnie podatności"
+      },
+      "vulnerabilities_low": {
+        "name": "Niskie podatności"
+      },
+      "images_scanned": {
+        "name": "Przeskanowane obrazy"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser ostatnio widziany"
+      },
+      "container_memory_cache": {
+        "name": "Pamięć podręczna"
+      },
+      "stack_running_containers": {
+        "name": "Uruchomione kontenery"
+      },
+      "stack_pending_updates": {
+        "name": "Oczekujące aktualizacje"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype i Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Tryb zbierania zdarzeń",
+        "state": {
+          "stream": "Strumień",
+          "poll": "Odpytywanie"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Interwał odpytywania zdarzeń",
+        "state": {
+          "30": "30 sekund",
+          "60": "60 sekund",
+          "120": "120 sekund",
+          "300": "300 sekund"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Limit pamięci automatycznie przywrócony dla {container}",
       "description": "Kontener \"{container}\" przestał działać wkrótce po obniżeniu limitu pamięci, co może się zdarzyć, gdy nowy limit jest niższy niż rzeczywiste zużycie kontenera, a jądro systemu natychmiast go egzekwuje. Limit pamięci został automatycznie przywrócony do poprzedniej wartości ({memory_bytes} bajtów). Sprawdź dzienniki i bieżący stan kontenera w Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand odpytuje o zdarzenia Dockera",
+      "description": "Dockhand zbiera zdarzenia Dockera, odpytując co {interval} sekund, zamiast odbierać je strumieniowo. Dla {environments} aktualizacje na żywo i encje zdarzeń Dockera mogą się spóźniać nawet o {interval} sekund, a przy interwale powyżej 30 sekund niektóre zdarzenia nigdy nie docierają: każde odpytanie czyta tylko ostatnie 30 sekund. Aby odbierać je strumieniowo, ustaw Tryb zbierania zdarzeń urządzenia Dockhand na Strumień (w Dockhand: Settings → General → Activity event collection mode). Jeśli wolisz odpytywanie, zignoruj ten problem: wróci dopiero po przełączeniu na Strumień i z powrotem na Odpytywanie."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Skanowanie podatności",
         "activity_events": "Zdarzenia aktywności",
+        "activity_events_today": "Zdarzenia aktywności dzisiaj",
         "disk_usage": "Wykorzystanie dysku",
+        "disk_usage_images": "Miejsce na dysku: obrazy",
+        "disk_usage_containers": "Miejsce na dysku: kontenery",
+        "disk_usage_volumes": "Miejsce na dysku: wolumeny",
+        "disk_usage_build_cache": "Miejsce na dysku: pamięć podręczna buildów",
         "vulnerabilities": "Podatności",
+        "vulnerabilities_critical": "Krytyczne podatności",
+        "vulnerabilities_high": "Wysokie podatności",
+        "vulnerabilities_medium": "Średnie podatności",
+        "vulnerabilities_low": "Niskie podatności",
+        "images_scanned": "Przeskanowane obrazy",
+        "pinned_digest_updates": "Aktualizacje przypiętych digestów",
+        "held_updates": "Wstrzymane aktualizacje",
         "hawser_agent_version": "Wersja agenta Hawser",
+        "hawser_last_seen": "Hawser ostatnio widziany",
         "host_docker_version": "Wersja Dockera",
         "host_platform": "Platforma hosta",
         "uptime": "Czas działania"

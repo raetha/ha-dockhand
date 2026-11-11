@@ -342,6 +342,96 @@
           "hawser-standard": "Hawser-Agent (Standard)",
           "hawser-edge": "Hawser-Agent (Edge)"
         }
+      },
+      "containers_running": {
+        "name": "Laufende Container"
+      },
+      "containers_stopped": {
+        "name": "Gestoppte Container"
+      },
+      "containers_paused": {
+        "name": "Pausierte Container"
+      },
+      "containers_restarting": {
+        "name": "Neu startende Container"
+      },
+      "containers_unhealthy": {
+        "name": "Fehlerhafte Container"
+      },
+      "stacks_running": {
+        "name": "Laufende Stacks"
+      },
+      "stacks_partial": {
+        "name": "Teilweise laufende Stacks"
+      },
+      "stacks_stopped": {
+        "name": "Gestoppte Stacks"
+      },
+      "pending_updates": {
+        "name": "Ausstehende Updates"
+      },
+      "installable_updates": {
+        "name": "Installierbare Updates"
+      },
+      "system_updates": {
+        "name": "Updates für Systemcontainer"
+      },
+      "version_tag_updates": {
+        "name": "Neuere Versions-Tags"
+      },
+      "pinned_digest_updates": {
+        "name": "Updates für gepinnte Digests"
+      },
+      "held_updates": {
+        "name": "Zurückgehaltene Updates"
+      },
+      "memory_used": {
+        "name": "Belegter Speicher"
+      },
+      "memory_total": {
+        "name": "Gesamtspeicher"
+      },
+      "disk_usage_images": {
+        "name": "Speicherplatz Images"
+      },
+      "disk_usage_containers": {
+        "name": "Speicherplatz Container"
+      },
+      "disk_usage_volumes": {
+        "name": "Speicherplatz Volumes"
+      },
+      "disk_usage_build_cache": {
+        "name": "Speicherplatz Build-Cache"
+      },
+      "activity_events_today": {
+        "name": "Aktivitätsereignisse heute"
+      },
+      "vulnerabilities_critical": {
+        "name": "Kritische Schwachstellen"
+      },
+      "vulnerabilities_high": {
+        "name": "Hohe Schwachstellen"
+      },
+      "vulnerabilities_medium": {
+        "name": "Mittlere Schwachstellen"
+      },
+      "vulnerabilities_low": {
+        "name": "Niedrige Schwachstellen"
+      },
+      "images_scanned": {
+        "name": "Gescannte Images"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser zuletzt gesehen"
+      },
+      "container_memory_cache": {
+        "name": "Speicher-Cache"
+      },
+      "stack_running_containers": {
+        "name": "Laufende Container"
+      },
+      "stack_pending_updates": {
+        "name": "Ausstehende Updates"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype und Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Ereigniserfassung",
+        "state": {
+          "stream": "Stream",
+          "poll": "Abfrage"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Abfrageintervall für Ereignisse",
+        "state": {
+          "30": "30 Sekunden",
+          "60": "60 Sekunden",
+          "120": "120 Sekunden",
+          "300": "300 Sekunden"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Speicherlimit für {container} automatisch zurückgesetzt",
       "description": "Container \"{container}\" wurde kurz nach der Absenkung seines Speicherlimits beendet, was auftreten kann, wenn das neue Limit unter der tatsächlichen Nutzung des Containers liegt und der Kernel es sofort durchsetzt. Das Speicherlimit wurde automatisch auf seinen vorherigen Wert ({memory_bytes} Bytes) zurückgesetzt. Überprüfen Sie die Protokolle und den aktuellen Zustand des Containers in Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand fragt Docker-Ereignisse ab",
+      "description": "Dockhand erfasst Docker-Ereignisse per Abfrage alle {interval} Sekunden statt als Stream. Für {environments} können Live-Updates und Docker-Ereignis-Entitäten bis zu {interval} Sekunden verspätet sein, und bei einem Intervall über 30 Sekunden kommen manche Ereignisse nie an: Jede Abfrage liest nur die letzten 30 Sekunden. Für einen Stream setze Ereigniserfassung am Dockhand-Gerät auf Stream (in Dockhand: Settings → General → Activity event collection mode). Wenn du die Abfrage bevorzugst, ignoriere dieses Problem: Es erscheint erst wieder nach einem Wechsel zu Stream und zurück zu Abfrage."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Schwachstellen-Scan",
         "activity_events": "Aktivitätsereignisse",
+        "activity_events_today": "Aktivitätsereignisse heute",
         "disk_usage": "Speicherplatznutzung",
+        "disk_usage_images": "Speicherplatz Images",
+        "disk_usage_containers": "Speicherplatz Container",
+        "disk_usage_volumes": "Speicherplatz Volumes",
+        "disk_usage_build_cache": "Speicherplatz Build-Cache",
         "vulnerabilities": "Schwachstellen",
+        "vulnerabilities_critical": "Kritische Schwachstellen",
+        "vulnerabilities_high": "Hohe Schwachstellen",
+        "vulnerabilities_medium": "Mittlere Schwachstellen",
+        "vulnerabilities_low": "Niedrige Schwachstellen",
+        "images_scanned": "Gescannte Images",
+        "pinned_digest_updates": "Updates für gepinnte Digests",
+        "held_updates": "Zurückgehaltene Updates",
         "hawser_agent_version": "Hawser-Agent-Version",
+        "hawser_last_seen": "Hawser zuletzt gesehen",
         "host_docker_version": "Docker-Version",
         "host_platform": "Host-Plattform",
         "uptime": "Betriebszeit"

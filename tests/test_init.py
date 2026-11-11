@@ -3555,3 +3555,88 @@ def test_removes_the_binary_sensors_settings_switches_replaced(hass: HomeAssista
     _cleanup_stale_registry(hass, entry)
     assert not any(_entity_exists(hass, e.entity_id) for e in retired)
     assert all(_entity_exists(hass, e.entity_id) for e in kept)
+
+
+# ---------------------------------------------------------------------------
+# Entities introduced in 2.0.0 that come and go with their environment's
+# connection type or Dockhand's stack data
+# ---------------------------------------------------------------------------
+
+
+def _env_with(connection_type, online=True, stacks=()):
+    return {
+        1: {
+            "containers": [],
+            "stacks": list(stacks),
+            "stats": {
+                "name": "myenv",
+                "online": online,
+                "connectionType": connection_type,
+            },
+        }
+    }
+
+
+def test_hawser_last_seen_kept_for_hawser_edge(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("hawser-edge"),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_hawser_last_seen")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_hawser_last_seen_removed_once_the_environment_connects_otherwise(
+    hass: HomeAssistant,
+):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("hawser-standard"),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_hawser_last_seen")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_hawser_last_seen_kept_while_the_environment_is_offline(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with(None, online=False),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_hawser_last_seen")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_stack_update_count_follows_dockhands_stack_updates(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    with_updates = {"name": "app", "containers": [], "updatesAvailable": False}
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("socket", stacks=[with_updates]),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_stack_app_update_count")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("socket", stacks=[{"name": "app", "containers": []}]),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_stack_running_containers_removed_with_the_stats_option(hass: HomeAssistant):
+    entry = _make_entry(hass, options={"enable_resource_stats": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("socket", stacks=[{"name": "app", "containers": []}]),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_stack_app_running_containers")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
