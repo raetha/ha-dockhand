@@ -1602,9 +1602,12 @@ class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
         entry: ConfigEntry | None = None,
     ) -> None:
         self.client = client
-        # Dockhand's own update check: None until read, or while it fails;
-        # self_update_allowed turns False once the token is refused (it
-        # needs an admin when authentication is on) or Dockhand lacks it.
+        # Dockhand's own update check: None until read, or while it can't
+        # be made; self_update_allowed turns False once the token is
+        # refused (it needs an admin when authentication is on) or
+        # Dockhand lacks it. A check that ran but couldn't tell (no Docker
+        # access to Dockhand's own container, as with Hawser-only setups)
+        # carries an `error`.
         self.self_update: dict[str, Any] | None = None
         self.self_update_allowed = True
         super().__init__(
@@ -1614,6 +1617,12 @@ class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
             update_interval=VERSION_POLL_INTERVAL,
             config_entry=entry,
         )
+
+    @property
+    def self_update_usable(self) -> bool:
+        """Whether the last check said whether a newer release exists."""
+        check = self.self_update
+        return self.self_update_allowed and check is not None and not check.get("error")
 
     @override
     async def _async_update_data(self) -> str | None:

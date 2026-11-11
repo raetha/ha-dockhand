@@ -230,7 +230,7 @@ If you're also running the Portainer integration, note that this integration use
 ### Dockhand
 | Entity | Type | Notes |
 |---|---|---|
-| (the device's name) | update | Whether a newer Dockhand release exists, from Dockhand's own check (**Settings → About** in Dockhand), every 6 hours. Read only: update Dockhand from Dockhand. Needs an admin token when Dockhand's authentication is on; without one there's no entity. Where Dockhand runs in an environment it manages, its container's own update entity can show the same update, from the image's side |
+| (the device's name) | update | Whether a newer Dockhand release exists, from Dockhand's own check (**Settings → About** in Dockhand), every 6 hours. Read only: update Dockhand from Dockhand. Needs an admin token when Dockhand's authentication is on, and Docker access to Dockhand's own container (a local socket or a direct connection; not when Dockhand reaches its hosts only through Hawser) unless Dockhand doesn't run in a container. Until the check works there's no entity; it appears by itself once it does, and stays (unavailable while the check can't tell). Where Dockhand runs in an environment it manages, its container's own update entity can show the same update, from the image's side |
 | Live updates | binary_sensor | Diagnostic, connectivity: whether Dockhand's live feed is connected. `in_use` is false while no environment sends events, when there's nothing to receive |
 
 ### Environment (always on, 60 s)

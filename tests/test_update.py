@@ -1228,7 +1228,7 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     entry.entry_id = ENTRY_ID
     entry.runtime_data.fast_coordinator = fast_coord
     entry.runtime_data.update_coordinator = None
-    entry.runtime_data.version_coordinator.self_update_allowed = False
+    entry.runtime_data.version_coordinator.self_update_usable = False
     entry.runtime_data.known_entity_ids = set()
     entry.runtime_data.pending_readd_entity_ids = set()
     entry.async_on_unload = MagicMock()
