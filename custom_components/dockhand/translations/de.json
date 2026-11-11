@@ -348,23 +348,8 @@
       "online": {
         "name": "Online"
       },
-      "activity_logging": {
-        "name": "Aktivitätserfassung"
-      },
-      "metrics_collection": {
-        "name": "Metrikenerfassung"
-      },
       "vulnerability_scanning": {
         "name": "Schwachstellen-Scan"
-      },
-      "update_checks": {
-        "name": "Update-Prüfungen"
-      },
-      "auto_update": {
-        "name": "Automatisches Update"
-      },
-      "image_pruning": {
-        "name": "Image-Bereinigung"
       },
       "git_stack_sync_error": {
         "name": "Synchronisierungsfehler"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "Aktiviert"
+      },
+      "activity_logging": {
+        "name": "Aktivitätserfassung"
+      },
+      "metrics_collection": {
+        "name": "Metrikenerfassung"
+      },
+      "update_checks": {
+        "name": "Update-Prüfungen"
+      },
+      "auto_update": {
+        "name": "Automatisches Update"
+      },
+      "image_pruning": {
+        "name": "Image-Bereinigung"
+      },
+      "disk_warning": {
+        "name": "Speicherplatzwarnung"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "Prozesslimit"
+      },
+      "disk_warning_threshold": {
+        "name": "Schwelle der Speicherplatzwarnung"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "Schwelle der Speicherplatzwarnung (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "Immer",
           "unless-stopped": "Außer bei Stopp",
           "on-failure": "Bei Fehler"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "Schwachstellenscanner",
+        "state": {
+          "none": "Keiner",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype und Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Image-Bereinigungsmodus",
+        "state": {
+          "dangling": "Nur verwaiste Images",
+          "all": "Alle ungenutzten Images"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "Modus der Speicherplatzwarnung",
+        "state": {
+          "percentage": "Belegter Anteil",
+          "absolute": "Freier Speicher"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "Aktivitätserfassung",
-        "metrics_collection": "Metrikenerfassung",
         "vulnerability_scanning": "Schwachstellen-Scan",
-        "update_checks": "Update-Prüfungen",
-        "auto_update": "Automatisches Update",
-        "image_pruning": "Image-Bereinigung",
         "activity_events": "Aktivitätsereignisse",
         "disk_usage": "Speicherplatznutzung",
         "vulnerabilities": "Schwachstellen",

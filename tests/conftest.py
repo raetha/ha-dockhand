@@ -220,6 +220,25 @@ def make_mock_client(
     client.async_get_volumes = AsyncMock(return_value=[])
     client.async_get_schedules = AsyncMock(return_value=[])
     client.async_get_dockhand_version = AsyncMock(return_value="1.0.57")
+    client.async_get_update_check_settings = AsyncMock(
+        return_value={"enabled": True, "cron": "0 4 * * *", "autoUpdate": False}
+    )
+    client.async_get_image_prune_settings = AsyncMock(
+        return_value={
+            "enabled": True,
+            "cronExpression": "0 3 * * 0",
+            "pruneMode": "dangling",
+        }
+    )
+    client.async_get_disk_warning_settings = AsyncMock(
+        return_value={
+            "enabled": False,
+            "mode": "absolute",
+            "threshold": 80,
+            "thresholdGb": 50,
+        }
+    )
+    client.async_get_scanner_setting = AsyncMock(return_value="grype")
     client.async_check_self_update = AsyncMock(
         return_value={"updateAvailable": False, "currentVersion": "1.0.57"}
     )

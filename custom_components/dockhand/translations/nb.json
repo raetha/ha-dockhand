@@ -348,23 +348,8 @@
       "online": {
         "name": "Tilkoblet"
       },
-      "activity_logging": {
-        "name": "Aktivitetsinnsamling"
-      },
-      "metrics_collection": {
-        "name": "Metrikinnsamling"
-      },
       "vulnerability_scanning": {
         "name": "Sårbarhetsskanning"
-      },
-      "update_checks": {
-        "name": "Oppdateringssjekker"
-      },
-      "auto_update": {
-        "name": "Automatisk oppdatering"
-      },
-      "image_pruning": {
-        "name": "Rydding av images"
       },
       "git_stack_sync_error": {
         "name": "Synkroniseringsfeil"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "Aktivert"
+      },
+      "activity_logging": {
+        "name": "Aktivitetsinnsamling"
+      },
+      "metrics_collection": {
+        "name": "Metrikinnsamling"
+      },
+      "update_checks": {
+        "name": "Oppdateringssjekker"
+      },
+      "auto_update": {
+        "name": "Automatisk oppdatering"
+      },
+      "image_pruning": {
+        "name": "Rydding av images"
+      },
+      "disk_warning": {
+        "name": "Varsel om diskplass"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "Prosessgrense"
+      },
+      "disk_warning_threshold": {
+        "name": "Terskel for varsel om diskplass"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "Terskel for varsel om diskplass (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "Alltid",
           "unless-stopped": "Med mindre stoppet",
           "on-failure": "Ved feil"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "Sårbarhetsskanner",
+        "state": {
+          "none": "Ingen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype og Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Modus for opprydding av images",
+        "state": {
+          "dangling": "Bare foreldreløse images",
+          "all": "Alle ubrukte images"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "Modus for varsel om diskplass",
+        "state": {
+          "percentage": "Prosent brukt",
+          "absolute": "Ledig plass"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "Aktivitetsinnsamling",
-        "metrics_collection": "Metrikinnsamling",
         "vulnerability_scanning": "Sårbarhetsskanning",
-        "update_checks": "Oppdateringssjekker",
-        "auto_update": "Automatisk oppdatering",
-        "image_pruning": "Rydding av images",
         "activity_events": "Aktivitetshendelser",
         "disk_usage": "Diskbruk",
         "vulnerabilities": "Sårbarheter",

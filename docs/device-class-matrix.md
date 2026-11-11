@@ -86,12 +86,12 @@ Parent: none (root device). Entity ID prefix: `<platform>.{env}`
 | Build cache size | sensor | data_size | measurement | B | — | |
 | Activity events | sensor | — | measurement | — | — | Total event count. Attributes: today |
 | Hawser agent version | sensor | — | — | — | — | Slow coordinator. Attributes: agent_name, agent_id, last_seen |
-| Activity logging | binary_sensor | — | — | — | — | Whether event collection is enabled |
-| Metrics collection | binary_sensor | — | — | — | — | Whether CPU/memory metrics are collected |
-| Vulnerability scanning | binary_sensor | — | — | — | — | Whether image scanning is enabled |
-| Update checks | binary_sensor | — | — | — | — | Whether auto-update checks are enabled |
-| Auto update | binary_sensor | — | — | — | — | Whether auto-update deployment is enabled |
-| Image pruning | binary_sensor | — | — | — | — | Slow coordinator. Whether scheduled image pruning is enabled |
+| Vulnerability scanning | binary_sensor | — | — | — | — | Whether a scanner is set |
+| Activity collection, Metrics collection | switch | — | — | — | — | Config. Environment record (fast coordinator's stats) |
+| Update checks, Auto update, Image pruning, Disk space warning | switch | — | — | — | — | Config. Slow coordinator's `settings` |
+| Vulnerability scanner, Image prune mode, Disk space warning mode | select | — | — | — | — | Config |
+| Disk space warning threshold | number | — | — | % | — | Config, 1–100 |
+| Disk space warning threshold (GB) | number | — | — | GB | — | Config, 1–100000 |
 | Check for updates | button | — | — | — | ✓ | Triggers immediate update check. Only present when updates are enabled |
 
 ---

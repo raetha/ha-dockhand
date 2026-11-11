@@ -1337,3 +1337,31 @@ option labels are the entities' own names, copied into `selector.<kind>_entities
 - Adding a type: its translation key to `OPTIONAL_ENTITIES` and its name to every locale's
   `selector.<kind>_entities` (the tests check both).
 
+## 11. Environment settings as entities
+
+`env_settings.py`: switches, selects and numbers for an environment's own settings, one
+`EnvSettingDescription` each (`section`, `field`, `unique_suffix`), defined in the platform
+files. Where they live in Dockhand:
+
+| Section | Read | Written |
+|---|---|---|
+| `environment` (activity, metrics) | fast coordinator's stats | `PUT /api/environments/{id}` (partial), then a fast refresh |
+| `update_check` | `GET …/update-check` | `POST …/update-check`, which replaces every field: re-read first, change one |
+| `image_prune` | `GET …/image-prune` | `POST …/image-prune`, same |
+| `disk_warning` | `GET …/disk-warning` | `POST …/disk-warning` (partial) |
+| `scanner` | `GET /api/settings/scanner?env=&settingsOnly=true` | `POST /api/settings/scanner` (partial) |
+
+- The slow poll reads the four endpoints per environment into `settings`
+  (`_fetch_env_settings`): a failed read keeps the previous value, and one never read (no
+  permission) stays absent, so no entity is created for it. After a change,
+  `async_refresh_env_settings()` reads that environment's back without pushing back the poll.
+- Entities are added from fast and slow listeners as their setting becomes readable, and are
+  unavailable while it isn't. They're configuration entities, enabled by default: they're the
+  environment's own settings, and a configuration entity stays off auto-generated dashboards.
+- They replace the 1.x binary sensors with the same unique IDs; `_cleanup_stale_registry` removes
+  the old ones (`_RETIRED_ENV_BINARY_SENSORS`). The translation keys are unchanged, so the
+  cards, which find entities by translation key and read on/off, need no change. Vulnerability
+  scanning stays a binary sensor: its control picks a scanner, not on/off.
+- Unique ID suffixes avoid the cleanup's type words (`image_prune_mode` is `prune_mode`), or are
+  listed in `_TYPE_COLLISION_EXCLUDED_SUFFIXES`.
+

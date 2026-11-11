@@ -953,3 +953,69 @@ async def test_check_self_update_non_dict_becomes_empty(client_with_mock_request
 async def test_tag_reads(action_client, call, path):
     await call(action_client)
     assert action_client._request.call_args.args == ("GET", path)
+
+
+async def test_environment_settings_requests(client_with_mock_request):
+    c = client_with_mock_request
+    calls = [
+        (
+            c.async_update_environment(5, collectMetrics=True),
+            "PUT",
+            "/api/environments/5",
+            {"collectMetrics": True},
+        ),
+        (
+            c.async_set_update_check_settings(
+                5,
+                {
+                    "enabled": True,
+                    "cron": "x",
+                    "autoUpdate": False,
+                    "minimumReleaseAgeHours": 3,
+                },
+            ),
+            "POST",
+            "/api/environments/5/update-check",
+            {"enabled": True, "cron": "x", "autoUpdate": False},
+        ),
+        (
+            c.async_set_image_prune_settings(5, {"enabled": False, "pruneMode": "all"}),
+            "POST",
+            "/api/environments/5/image-prune",
+            {"enabled": False, "pruneMode": "all"},
+        ),
+        (
+            c.async_set_disk_warning_settings(5, threshold=90),
+            "POST",
+            "/api/environments/5/disk-warning",
+            {"threshold": 90},
+        ),
+        (
+            c.async_set_scanner(5, "trivy"),
+            "POST",
+            "/api/settings/scanner",
+            {"scanner": "trivy", "envId": 5},
+        ),
+    ]
+    for call, method, path, body in calls:
+        await call
+        assert c._request.call_args.args == (method, path)
+        assert c._request.call_args.kwargs["json"] == body
+
+
+async def test_environment_settings_reads(client_with_mock_request):
+    c = client_with_mock_request
+    c._request.return_value = {"settings": {"enabled": True, "pruneMode": "all"}}
+    assert (await c.async_get_image_prune_settings(5))["pruneMode"] == "all"
+    assert c._request.call_args.args[1] == "/api/environments/5/image-prune"
+    c._request.return_value = {"settings": {"scanner": "both"}}
+    assert await c.async_get_scanner_setting(5) == "both"
+    assert (
+        c._request.call_args.args[1] == "/api/settings/scanner?env=5&settingsOnly=true"
+    )
+    c._request.return_value = {"enabled": True, "mode": "absolute"}
+    assert (await c.async_get_disk_warning_settings(5))["mode"] == "absolute"
+    c._request.return_value = "oops"
+    assert await c.async_get_image_prune_settings(5) == {}
+    assert await c.async_get_disk_warning_settings(5) == {}
+    assert await c.async_get_scanner_setting(5) is None

@@ -17,6 +17,15 @@ from .entity import (
     DockhandStackEntity,
 )
 from .entity_defaults import enabling_chosen
+from .env_settings import (
+    DISK_WARNING,
+    ENVIRONMENT,
+    IMAGE_PRUNE,
+    UPDATE_CHECK,
+    DockhandEnvSettingEntity,
+    EnvSettingDescription,
+    build_setting_entities,
+)
 from .helpers import (
     _all_envs,
     _compose_project,
@@ -196,10 +205,78 @@ async def async_setup_entry(
     async_add_entities(_build_entities())
     async_add_entities(_build_auto_update_entities())
     async_add_entities(_build_git_stack_entities())
+
+    def _add_settings() -> None:
+        if new := build_setting_entities(
+            hass, entry, "switch", ENV_SETTING_SWITCHES, DockhandEnvSettingSwitch
+        ):
+            async_add_entities(new)
+
+    _add_settings()
+    entry.async_on_unload(fast.async_add_listener(_add_settings))
+    entry.async_on_unload(slow.async_add_listener(_add_settings))
     entry.async_on_unload(fast.async_add_listener(_add_fast_entities))
     entry.async_on_unload(
         slow.async_add_listener(lambda: async_add_entities(_build_git_stack_entities()))
     )
+
+
+ENV_SETTING_SWITCHES = (
+    EnvSettingDescription(
+        key="activity_logging",
+        section=ENVIRONMENT,
+        field="collectActivity",
+        unique_suffix="collect_activity",
+    ),
+    EnvSettingDescription(
+        key="metrics_collection",
+        section=ENVIRONMENT,
+        field="collectMetrics",
+        unique_suffix="collect_metrics",
+    ),
+    EnvSettingDescription(
+        key="update_checks",
+        section=UPDATE_CHECK,
+        field="enabled",
+        unique_suffix="update_check_enabled",
+    ),
+    EnvSettingDescription(
+        key="auto_update",
+        section=UPDATE_CHECK,
+        field="autoUpdate",
+        unique_suffix="auto_update",
+    ),
+    EnvSettingDescription(
+        key="image_pruning",
+        section=IMAGE_PRUNE,
+        field="enabled",
+        unique_suffix="image_prune_enabled",
+    ),
+    EnvSettingDescription(
+        key="disk_warning",
+        section=DISK_WARNING,
+        field="enabled",
+        unique_suffix="disk_warning_enabled",
+    ),
+)
+
+
+class DockhandEnvSettingSwitch(DockhandEnvSettingEntity, SwitchEntity):
+    """An environment setting that's on or off (env_settings.py)."""
+
+    @property
+    @override
+    def is_on(self) -> bool | None:
+        value = self._value
+        return bool(value) if value is not None else None
+
+    @override
+    async def async_turn_on(self, **kwargs: Any) -> None:
+        await self._save(True)
+
+    @override
+    async def async_turn_off(self, **kwargs: Any) -> None:
+        await self._save(False)
 
 
 class _BaseFastContainerSwitch(DockhandContainerEntity, SwitchEntity):

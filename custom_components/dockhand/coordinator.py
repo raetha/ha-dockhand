@@ -825,13 +825,43 @@ def _schedule_run_in_progress(schedules: list[dict]) -> bool:
     )
 
 
+async def _fetch_env_settings(
+    client: DockhandClient, env_id: int, previous: dict[str, Any]
+) -> dict[str, Any]:
+    """An environment's settings the switch, select and number entities
+    change: update checks, image pruning, the disk-space warning and the
+    vulnerability scanner. One that can't be read keeps its previous value;
+    one never read (a token without permission to see it) stays absent, so
+    its entities aren't created."""
+    named = {
+        "update_check": client.async_get_update_check_settings(env_id),
+        "image_prune": client.async_get_image_prune_settings(env_id),
+        "disk_warning": client.async_get_disk_warning_settings(env_id),
+        "scanner": client.async_get_scanner_setting(env_id),
+    }
+    out: dict[str, Any] = {}
+    for key, value in zip(
+        named,
+        await asyncio.gather(*named.values(), return_exceptions=True),
+        strict=True,
+    ):
+        if isinstance(value, Exception) or value in (None, {}):
+            if isinstance(value, Exception):
+                _LOGGER.debug("Dockhand: %s settings env=%s: %s", key, env_id, value)
+            if key in previous:
+                out[key] = previous[key]
+        else:
+            out[key] = value
+    return out
+
+
 class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     """Polls 600s: images, volumes, networks, schedules, runtime controls
     (all opt-in), git stacks/host/auto_update_settings/env_meta (always —
     cheap bulk calls, not gated), recent_events (gated on collectActivity),
     vulnerabilities (gated on scannerEnabled).
 
-    env_meta (imagePruneEnabled, hawserAgentName/Id/LastSeen) is the one
+    env_meta (hawserAgentName/Id/LastSeen, connection host/port) is the one
     thing still sourced from /api/environments — the only endpoint with
     these fields. Extracted immediately into a clean per-env dict
     (env_meta below); the raw response — which includes tlsKey/hawserToken
@@ -848,7 +878,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "recent_events": [{"containerName", "action", "timestamp", ...}],
                 "vulnerabilities": {"total", "critical", "high", "medium",
                                     "low", "imagesScanned", "totalImages"},
-                "env_meta": {"imagePruneEnabled": bool, "hawserAgentName": str|None,
+                "env_meta": {"hawserAgentName": str|None,
                              "hawserAgentId": str|None, "hawserLastSeen": str|None,
                              "connectionHost": str|None, "connectionPort": int|None},
                 # Which of this env's resource fetches failed this cycle
@@ -930,6 +960,24 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self.async_update_listeners()
         self._async_follow_runs(schedules)
 
+    async def async_refresh_env_settings(self, env_id: int) -> None:
+        """Re-read one environment's settings after Home Assistant changed
+        one, so its entities show Dockhand's saved value now rather than at
+        the next poll, which isn't pushed back."""
+        envs = _all_envs(self.data)
+        if env_id not in envs:
+            return
+        previous = envs[env_id].get("settings") or {}
+        settings = await _fetch_env_settings(self.client, env_id, previous)
+        envs = _all_envs(self.data)
+        if env_id not in envs:
+            return
+        self.data = {
+            **self.data,
+            "environments": {**envs, env_id: {**envs[env_id], "settings": settings}},
+        }
+        self.async_update_listeners()
+
     @callback
     def _async_follow_runs(self, schedules: list[dict]) -> None:
         """While any schedule run is queued or running, look again shortly."""
@@ -961,7 +1009,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # /api/environments succeeding.
         env_ids = list(_all_envs(self._fast_coordinator.data).keys())
 
-        # /api/environments is the only source for imagePruneEnabled and
+        # /api/environments is the only source for
         # the Hawser agent identity fields (agent_name/agent_id/last_seen)
         # — confirmed from Dockhand's source, no other endpoint has them.
         # It also returns tlsKey/hawserToken fully decrypted with no
@@ -990,7 +1038,6 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             for e in envs_raw:
                 if isinstance(e, dict) and e.get("id") is not None:
                     env_meta[e["id"]] = {
-                        "imagePruneEnabled": bool(e.get("imagePruneEnabled")),
                         "hawserAgentName": e.get("hawserAgentName"),
                         "hawserAgentId": e.get("hawserAgentId"),
                         "hawserLastSeen": e.get("hawserLastSeen"),
@@ -1102,6 +1149,14 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # hawserVersion on hawser-standard connections, which live-fetch
             # from the agent on every call.
             named["host"] = self.client.async_get_host_info(env_id)
+            previous_settings = (
+                _coordinator_env(self.data, env_id).get("settings") or {}
+                if self.data
+                else {}
+            )
+            named["settings"] = _fetch_env_settings(
+                self.client, env_id, previous_settings
+            )
 
             results: dict[str, Any] = {}
             failures: set[str] = set()
@@ -1109,7 +1164,11 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 keys = list(named)
                 gathered = await asyncio.gather(*named.values(), return_exceptions=True)
                 for key, val in zip(keys, gathered, strict=False):
-                    if key == "host":
+                    if key == "settings":
+                        # Never an exception: _fetch_env_settings keeps what
+                        # it can and swallows the rest.
+                        results["settings"] = val if isinstance(val, dict) else {}
+                    elif key == "host":
                         unwrapped = _unwrap(
                             val, {}, f"host env={env_id}", failures, "host"
                         )
@@ -1198,6 +1257,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "auto_update_settings": results.get("auto_update_settings", {}),
                 "recent_events": results.get("recent_events", []),
                 "vulnerabilities": results.get("vulnerabilities", {}),
+                "settings": results.get("settings", {}),
                 "env_meta": env_meta.get(env_id, {}),
                 # See the fast coordinator's matching keys.
                 "fetch_failures": failures,

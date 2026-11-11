@@ -348,23 +348,8 @@
       "online": {
         "name": "Online"
       },
-      "activity_logging": {
-        "name": "Coleta de atividade"
-      },
-      "metrics_collection": {
-        "name": "Coleta de métricas"
-      },
       "vulnerability_scanning": {
         "name": "Verificação de vulnerabilidades"
-      },
-      "update_checks": {
-        "name": "Verificação de atualizações"
-      },
-      "auto_update": {
-        "name": "Atualização automática"
-      },
-      "image_pruning": {
-        "name": "Limpeza de imagens"
       },
       "git_stack_sync_error": {
         "name": "Erro de sincronização"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "Ativado"
+      },
+      "activity_logging": {
+        "name": "Coleta de atividade"
+      },
+      "metrics_collection": {
+        "name": "Coleta de métricas"
+      },
+      "update_checks": {
+        "name": "Verificação de atualizações"
+      },
+      "auto_update": {
+        "name": "Atualização automática"
+      },
+      "image_pruning": {
+        "name": "Limpeza de imagens"
+      },
+      "disk_warning": {
+        "name": "Aviso de espaço em disco"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "Limite de processos"
+      },
+      "disk_warning_threshold": {
+        "name": "Limiar do aviso de espaço em disco"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "Limiar do aviso de espaço em disco (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "Sempre",
           "unless-stopped": "Exceto se parado",
           "on-failure": "Em caso de falha"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "Analisador de vulnerabilidades",
+        "state": {
+          "none": "Nenhum",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype e Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Modo de limpeza de imagens",
+        "state": {
+          "dangling": "Só imagens órfãs",
+          "all": "Todas as imagens não usadas"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "Modo do aviso de espaço em disco",
+        "state": {
+          "percentage": "Percentagem usada",
+          "absolute": "Espaço livre"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "Coleta de atividade",
-        "metrics_collection": "Coleta de métricas",
         "vulnerability_scanning": "Verificação de vulnerabilidades",
-        "update_checks": "Verificação de atualizações",
-        "auto_update": "Atualização automática",
-        "image_pruning": "Limpeza de imagens",
         "activity_events": "Eventos de atividade",
         "disk_usage": "Uso de disco",
         "vulnerabilities": "Vulnerabilidades",

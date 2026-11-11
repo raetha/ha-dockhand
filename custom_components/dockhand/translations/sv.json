@@ -348,23 +348,8 @@
       "online": {
         "name": "Online"
       },
-      "activity_logging": {
-        "name": "Aktivitetsinsamling"
-      },
-      "metrics_collection": {
-        "name": "Metrikinsamling"
-      },
       "vulnerability_scanning": {
         "name": "Sårbarhetsgenomsökning"
-      },
-      "update_checks": {
-        "name": "Uppdateringskontroller"
-      },
-      "auto_update": {
-        "name": "Automatisk uppdatering"
-      },
-      "image_pruning": {
-        "name": "Rensning av images"
       },
       "git_stack_sync_error": {
         "name": "Synkroniseringsfel"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "Aktiverad"
+      },
+      "activity_logging": {
+        "name": "Aktivitetsinsamling"
+      },
+      "metrics_collection": {
+        "name": "Metrikinsamling"
+      },
+      "update_checks": {
+        "name": "Uppdateringskontroller"
+      },
+      "auto_update": {
+        "name": "Automatisk uppdatering"
+      },
+      "image_pruning": {
+        "name": "Rensning av images"
+      },
+      "disk_warning": {
+        "name": "Varning om diskutrymme"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "Processgräns"
+      },
+      "disk_warning_threshold": {
+        "name": "Tröskel för varning om diskutrymme"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "Tröskel för varning om diskutrymme (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "Alltid",
           "unless-stopped": "Om inte stoppad",
           "on-failure": "Vid fel"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "Sårbarhetsskanner",
+        "state": {
+          "none": "Ingen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype och Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Rensningsläge för images",
+        "state": {
+          "dangling": "Endast föräldralösa images",
+          "all": "Alla oanvända images"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "Läge för varning om diskutrymme",
+        "state": {
+          "percentage": "Procent använt",
+          "absolute": "Ledigt utrymme"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "Aktivitetsinsamling",
-        "metrics_collection": "Metrikinsamling",
         "vulnerability_scanning": "Sårbarhetsgenomsökning",
-        "update_checks": "Uppdateringskontroller",
-        "auto_update": "Automatisk uppdatering",
-        "image_pruning": "Rensning av images",
         "activity_events": "Aktivitetshändelser",
         "disk_usage": "Diskanvändning",
         "vulnerabilities": "Sårbarheter",

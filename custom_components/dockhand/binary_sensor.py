@@ -62,21 +62,14 @@ async def async_setup_entry(
                 online_sensor.unique_id,
                 pending_readd_ids=pending_readd_ids,
             ):
+                # Activity logging, metrics, update checks, auto-update and
+                # image pruning are switches (env_settings.py); scanning stays
+                # a sensor, since its control picks a scanner, not on/off.
                 new += [
                     online_sensor,
-                    DockhandEnvCollectActivitySensor(
-                        fast, entry.entry_id, env_id, base_url
-                    ),
-                    DockhandEnvCollectMetricsSensor(
-                        fast, entry.entry_id, env_id, base_url
-                    ),
                     DockhandEnvScannerEnabledSensor(
                         fast, entry.entry_id, env_id, base_url
                     ),
-                    DockhandEnvUpdateCheckSensor(
-                        fast, entry.entry_id, env_id, base_url
-                    ),
-                    DockhandEnvAutoUpdateSensor(fast, entry.entry_id, env_id, base_url),
                 ]
             for stack in env_data.get("stacks") or []:
                 if "updatesAvailable" not in stack:
@@ -101,18 +94,6 @@ async def async_setup_entry(
         for env_id, env_data in slow_envs.items():
             fast_stats = (fast_data.get(env_id) or {}).get("stats") or {}
             env_name = fast_stats.get("name", f"Environment {env_id}")
-
-            image_prune_sensor = DockhandEnvImagePruneBinarySensor(
-                slow, entry.entry_id, env_id, env_name, base_url
-            )
-            if not already_registered(
-                hass,
-                known_ids,
-                "binary_sensor",
-                image_prune_sensor.unique_id,
-                pending_readd_ids=pending_readd_ids,
-            ):
-                new.append(image_prune_sensor)
 
             for git_stack in env_data.get("git_stacks") or []:
                 git_sensor = DockhandGitStackSyncErrorBinarySensor(
@@ -266,50 +247,6 @@ class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
         }
 
 
-class DockhandEnvCollectActivitySensor(BaseEnvBinarySensor):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_translation_key = "activity_logging"
-
-    def __init__(
-        self,
-        coordinator: DockhandFastCoordinator,
-        entry_id: str,
-        env_id: int,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator, entry_id, env_id, base_url)
-        self._attr_unique_id = f"{entry_id}_{env_id}_collect_activity"
-
-    @property
-    @override
-    def is_on(self) -> bool | None:
-        v = self._stats().get("collectActivity")
-        return bool(v) if v is not None else None
-
-
-class DockhandEnvCollectMetricsSensor(BaseEnvBinarySensor):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_translation_key = "metrics_collection"
-
-    def __init__(
-        self,
-        coordinator: DockhandFastCoordinator,
-        entry_id: str,
-        env_id: int,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator, entry_id, env_id, base_url)
-        self._attr_unique_id = f"{entry_id}_{env_id}_collect_metrics"
-
-    @property
-    @override
-    def is_on(self) -> bool | None:
-        v = self._stats().get("collectMetrics")
-        return bool(v) if v is not None else None
-
-
 class DockhandEnvScannerEnabledSensor(BaseEnvBinarySensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
@@ -330,99 +267,6 @@ class DockhandEnvScannerEnabledSensor(BaseEnvBinarySensor):
     def is_on(self) -> bool | None:
         v = self._stats().get("scannerEnabled")
         return bool(v) if v is not None else None
-
-
-class DockhandEnvUpdateCheckSensor(BaseEnvBinarySensor):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_translation_key = "update_checks"
-
-    def __init__(
-        self,
-        coordinator: DockhandFastCoordinator,
-        entry_id: str,
-        env_id: int,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator, entry_id, env_id, base_url)
-        self._attr_unique_id = f"{entry_id}_{env_id}_update_check_enabled"
-
-    @property
-    @override
-    def is_on(self) -> bool | None:
-        v = self._stats().get("updateCheckEnabled")
-        return bool(v) if v is not None else None
-
-
-class DockhandEnvAutoUpdateSensor(BaseEnvBinarySensor):
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_translation_key = "auto_update"
-
-    def __init__(
-        self,
-        coordinator: DockhandFastCoordinator,
-        entry_id: str,
-        env_id: int,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator, entry_id, env_id, base_url)
-        self._attr_unique_id = f"{entry_id}_{env_id}_auto_update"
-
-    @property
-    @override
-    def is_on(self) -> bool | None:
-        v = self._stats().get("updateCheckAutoUpdate")
-        return bool(v) if v is not None else None
-
-
-class DockhandEnvImagePruneBinarySensor(
-    CoordinatorEntity[DockhandSlowCoordinator], BinarySensorEntity
-):
-    """Whether automatic image pruning is enabled for this environment.
-
-    Sourced from env_meta (imagePruneEnabled), one of the four fields
-    extracted from /api/environments — see coordinator.py's
-    DockhandSlowCoordinator docstring for why that endpoint is used only
-    for this narrow purpose (the raw response, which includes
-    tlsKey/hawserToken fully decrypted with no redaction on Dockhand's
-    side, is never stored).
-    """
-
-    _attr_has_entity_name = True
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_entity_registry_enabled_default = False
-    _attr_translation_key = "image_pruning"
-
-    def __init__(
-        self,
-        coordinator: DockhandSlowCoordinator,
-        entry_id: str,
-        env_id: int,
-        env_name: str,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._env_id = env_id
-        self._env_name = env_name
-        self._base_url = base_url
-        self._attr_unique_id = f"{entry_id}_{env_id}_image_prune_enabled"
-
-    def _env_meta(self) -> dict:
-        slow_data = self.coordinator.data or {}
-        env = _coordinator_env(slow_data, self._env_id)
-        return env.get("env_meta") or {}
-
-    @property
-    @override
-    def is_on(self) -> bool | None:
-        return bool(self._env_meta().get("imagePruneEnabled"))
-
-    @property
-    @override
-    def device_info(self) -> DeviceInfo:
-        return _env_device(self._entry_id, self._env_id, self._env_name, self._base_url)
 
 
 class DockhandStackUpdatesAvailableBinarySensor(

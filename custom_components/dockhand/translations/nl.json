@@ -348,23 +348,8 @@
       "online": {
         "name": "Online"
       },
-      "activity_logging": {
-        "name": "Activiteitenverzameling"
-      },
-      "metrics_collection": {
-        "name": "Metriekenverzameling"
-      },
       "vulnerability_scanning": {
         "name": "Kwetsbaarheidsscan"
-      },
-      "update_checks": {
-        "name": "Updatecontroles"
-      },
-      "auto_update": {
-        "name": "Automatisch bijwerken"
-      },
-      "image_pruning": {
-        "name": "Image-opschoning"
       },
       "git_stack_sync_error": {
         "name": "Synchronisatiefout"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "Ingeschakeld"
+      },
+      "activity_logging": {
+        "name": "Activiteitenverzameling"
+      },
+      "metrics_collection": {
+        "name": "Metriekenverzameling"
+      },
+      "update_checks": {
+        "name": "Updatecontroles"
+      },
+      "auto_update": {
+        "name": "Automatisch bijwerken"
+      },
+      "image_pruning": {
+        "name": "Image-opschoning"
+      },
+      "disk_warning": {
+        "name": "Waarschuwing schijfruimte"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "Proceslimiet"
+      },
+      "disk_warning_threshold": {
+        "name": "Drempel waarschuwing schijfruimte"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "Drempel waarschuwing schijfruimte (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "Altijd",
           "unless-stopped": "Tenzij gestopt",
           "on-failure": "Bij fout"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "Kwetsbaarheidsscanner",
+        "state": {
+          "none": "Geen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype en Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Opschoonmodus images",
+        "state": {
+          "dangling": "Alleen losse images",
+          "all": "Alle ongebruikte images"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "Modus waarschuwing schijfruimte",
+        "state": {
+          "percentage": "Percentage gebruikt",
+          "absolute": "Vrije ruimte"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "Activiteitenverzameling",
-        "metrics_collection": "Metriekenverzameling",
         "vulnerability_scanning": "Kwetsbaarheidsscan",
-        "update_checks": "Updatecontroles",
-        "auto_update": "Automatisch bijwerken",
-        "image_pruning": "Image-opschoning",
         "activity_events": "Activiteitsgebeurtenissen",
         "disk_usage": "Schijfgebruik",
         "vulnerabilities": "Kwetsbaarheden",

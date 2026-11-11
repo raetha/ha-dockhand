@@ -32,12 +32,7 @@ from .const import (
 # their own options decide.
 OPTIONAL_ENTITIES: dict[str, tuple[str, ...]] = {
     "environment": (
-        "activity_logging",
-        "metrics_collection",
         "vulnerability_scanning",
-        "update_checks",
-        "auto_update",
-        "image_pruning",
         "activity_events",
         "disk_usage",
         "vulnerabilities",

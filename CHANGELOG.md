@@ -3,6 +3,12 @@
 ## [Unreleased]
 
 ### Removed
+- **Breaking: the environment's Activity collection, Metrics collection,
+  Update checks, Auto update and Image pruning binary sensors are now
+  switches**, enabled by default, so their entity IDs change from
+  `binary_sensor.…` to `switch.…`: update automations and dashboards that
+  use them. The old entities are removed. Vulnerability scanning stays a
+  sensor.
 - **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3).
   HACS and the Marketplace won't install this release on older versions;
   1.11.3 keeps working there.
@@ -165,6 +171,11 @@
 
 ### Added
 
+- **Change an environment's settings from Home Assistant** — switches for
+  activity and metrics collection, update checks, auto-update, image pruning
+  and the disk-space warning; selects for the vulnerability scanner, the
+  image prune mode and the disk-space warning mode; and numbers for the
+  warning's thresholds. Each appears when the token can read the setting.
 - **Turn on an entity type for every environment, container or stack** —
   **Configure** has collapsed **Environment entities**, **Container
   entities** and **Stack entities** sections listing the entities that are
