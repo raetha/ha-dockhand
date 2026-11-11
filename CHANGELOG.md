@@ -3,6 +3,36 @@
 ## [Unreleased]
 
 ### Removed
+- **Breaking: counts and sizes are sensors now, not attributes** — Home
+  Assistant keeps history and long-term statistics, and offers automation
+  triggers, for entity states only, so values that change are their own
+  sensors, as its guidance asks. New sensors: running, stopped, paused,
+  restarting and unhealthy containers; running, partially running and
+  stopped stacks; pending, installable, system container and newer
+  version tag updates (pinned digest and held updates too, disabled by
+  default); memory used and total; each part of disk usage, activity
+  events today, critical, high, medium and low vulnerabilities, scanned
+  images and Hawser last seen (disabled by default); a container's memory
+  cache; a stack's pending updates and running containers. The attributes
+  they replace are gone: `running`, `stopped`, `paused`, `restarting`,
+  `unhealthy` and the `pending_*` counts on Containers; `running`,
+  `partial` and `stopped` on Stacks; `memory_used_bytes` and
+  `memory_total_bytes` on Memory usage; `total_size_bytes` on Images and
+  Volumes; the `*_size_bytes` parts of Disk usage; `today` on Activity
+  events; the severity counts, `images_scanned` and `total_images` on
+  Vulnerabilities; `memory_cache_bytes` on a container's Memory usage;
+  `running_containers` on the stack stats; `update_count` on a stack's
+  Updates available; `last_seen` on Hawser agent version. Update
+  templates and automations that read them. **ha-dockhand-cards 2.0.0 is
+  needed**: earlier cards read these attributes.
+- **Breaking: no more `name` attributes** on the environment's Online
+  sensor, a container's State sensor and update entity, a stack's Status
+  sensor and a schedule's Last status: the device carries the name.
+- **Breaking: a container's State sensor no longer has Docker's `status`
+  text** ("Up 3 hours"), which changed every minute and wrote a new state
+  to the database each time; a stack's Status no longer repeats its
+  `container_count` and `container_names`, which its Containers sensor
+  has.
 - **Breaking: the environment's Activity collection, Metrics collection,
   Update checks, Auto update and Image pruning binary sensors are now
   switches**, enabled by default, so their entity IDs change from
@@ -25,6 +55,13 @@
   Downgrading to 1.11.x still works and keeps the intervals you'd set.
 
 ### Added
+- **Event collection mode on the Dockhand device** — a repair while
+  Dockhand polls for Docker events instead of streaming them, since live
+  updates and Docker event entities then arrive late, and some never do.
+  Ignore it if you prefer polling: it comes back only if the mode changes.
+  **Event collection mode** and **Event poll interval** selects change the
+  setting from Home Assistant. Needs `settings: view` on Dockhand
+  Enterprise to appear, and `settings: edit` to change.
 - **Which containers and stacks are Dockhand's own** — a `system_container`
   attribute (`true` for Dockhand's own container and Hawser agents) on the
   container State and stack Status sensors.
@@ -79,6 +116,10 @@
   and what a Docker socket proxy in front of Dockhand has to allow.
 
 ### Changed
+- **Attributes no longer come and go** — an image's version, vendor,
+  title and source, a schedule's last-run details, the Hawser agent's name
+  and ID and the host's architecture are always there, empty when there's
+  nothing to show.
 - **Runtime controls are enabled when you turn their option on** — the
   memory, CPU and process limits and the restart policy were created
   disabled even with **Enable runtime controls** on. Ones you disabled
@@ -119,6 +160,9 @@
 
 ### Fixed
 
+- **Host last boot changed every 10 minutes** by a fraction of a second,
+  adding a row to Home Assistant's database each time; it now changes only
+  when the host reboots.
 - **An offline environment's Online sensor kept the online icon** — it now
   shows the Wi-Fi-off icon.
 - **Stacks and images could disappear while Docker was briefly

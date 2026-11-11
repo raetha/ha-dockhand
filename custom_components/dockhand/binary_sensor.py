@@ -240,7 +240,6 @@ class DockhandEnvOnlineSensor(BaseEnvBinarySensor):
         meta = self._env_meta()
         labels = self._stats().get("labels")
         return {
-            "name": self._stats().get("name"),
             "connection_host": meta.get("connectionHost"),
             "connection_port": meta.get("connectionPort"),
             "labels": labels if isinstance(labels, list) else [],
@@ -358,10 +357,7 @@ class DockhandStackUpdatesAvailableBinarySensor(
             ),
             key=str.lower,
         )
-        return {
-            "update_count": s["updateCount"],
-            "pending_container_names": pending_container_names,
-        }
+        return {"pending_container_names": pending_container_names}
 
     @property
     @override

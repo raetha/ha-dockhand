@@ -1516,7 +1516,7 @@ def test_pending_updates_total_matches_update_entities_that_are_on():
     update count; it must equal the number of update entities that are on
     (latest_version != installed_version), whatever mix of actionable,
     system and semver-only signals is present."""
-    from custom_components.dockhand.sensor import DockhandEnvContainerCountSensor
+    from custom_components.dockhand.sensor import _pending_update_counts
 
     containers = [
         {**CONTAINER_NORMAL, "id": "actionable", "name": "a"},
@@ -1568,15 +1568,14 @@ def test_pending_updates_total_matches_update_entities_that_are_on():
         if entity.latest_version != entity.installed_version:
             on += 1
 
-    sensor = DockhandEnvContainerCountSensor(
-        fast, tier2, ENTRY_ID, ENV_ID, ENV_NAME, "http://dockhand"
+    counts = _pending_update_counts(
+        fast.data["environments"][ENV_ID], tier2.data["environments"][ENV_ID]
     )
-    attrs = sensor.extra_state_attributes
     assert on == 5
-    assert attrs["pending_updates_total"] == on
-    assert attrs["pending_updates"] == 2
-    assert attrs["pending_system_updates"] == 1
-    assert attrs["pending_version_updates"] == 2
+    assert counts["total"] == on
+    assert counts["installable"] == 2
+    assert counts["system"] == 1
+    assert counts["version_tag"] == 2
 
 
 # ---------------------------------------------------------------------------
@@ -1757,23 +1756,18 @@ def test_system_container_found_by_a_check_button_press_offers_no_install():
 
 
 def test_system_container_found_by_a_check_is_not_bulk_updated():
-    from custom_components.dockhand.sensor import DockhandEnvContainerCountSensor
+    from custom_components.dockhand.sensor import _pending_update_counts
 
     fast = _make_fast_coord(
         containers=[CONTAINER_DOCKHAND_BY_ID], pending_ids={CONTAINER_ID}
     )
-    sensor = DockhandEnvContainerCountSensor(
-        fast,
-        _make_update_coord(ITEM_DOCKHAND_UPDATE),
-        ENTRY_ID,
-        ENV_ID,
-        ENV_NAME,
-        "http://dockhand",
+    update = _make_update_coord(ITEM_DOCKHAND_UPDATE)
+    counts = _pending_update_counts(
+        fast.data["environments"][ENV_ID], update.data["environments"][ENV_ID]
     )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_updates"] == 0
-    assert attrs["pending_system_updates"] == 1
-    assert attrs["pending_updates_total"] == 1
+    assert counts["installable"] == 0
+    assert counts["system"] == 1
+    assert counts["total"] == 1
 
 
 def test_no_container_is_not_a_system_container():

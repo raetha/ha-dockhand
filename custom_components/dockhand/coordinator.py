@@ -937,6 +937,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         _sync_fetch_issues(
             self.hass, self.config_entry, "slow", result, self._fast_coordinator.data
         )
+        self._sync_event_collection_issue(result)
         self._async_follow_runs(result["schedules"])
         return result
 
@@ -965,6 +966,57 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         except Exception as err:  # noqa: BLE001 - kept until the next poll
             _LOGGER.debug("Dockhand: default scanner: %s", err)
             return previous
+
+    async def _fetch_event_collection(self) -> dict[str, Any] | None:
+        """How Dockhand collects Docker's events. The previous value while
+        it can't be read; None if it never could."""
+        previous = (self.data or {}).get("event_collection")
+        try:
+            collection = await self.client.async_get_event_collection()
+            return collection if isinstance(collection, dict) else previous
+        except Exception as err:  # noqa: BLE001 - kept until the next poll
+            _LOGGER.debug("Dockhand: event collection settings: %s", err)
+            return previous
+
+    async def async_refresh_event_collection(self) -> None:
+        """Read the event collection mode back after Home Assistant changed
+        it, without pushing back the poll."""
+        collection = await self._fetch_event_collection()
+        self.data = {**(self.data or {}), "event_collection": collection}
+        self._sync_event_collection_issue(self.data)
+        self.async_update_listeners()
+
+    def _sync_event_collection_issue(self, data: dict[str, Any]) -> None:
+        """A repair while Dockhand polls for events instead of streaming
+        them and an environment depends on that (Hawser Edge agents send
+        theirs). The issue stays while polling, so one the user ignored
+        stays ignored; it comes back only after a switch to Stream and back."""
+        if self.config_entry is None:
+            return
+        entry_id = self.config_entry.entry_id
+        issue_id = f"{entry_id}_event_collection_poll"
+        collection = data.get("event_collection") or {}
+        affected = [
+            (env.get("stats") or {}).get("name", f"Environment {env_id}")
+            for env_id, env in _all_envs(self._fast_coordinator.data).items()
+            if (env.get("stats") or {}).get("connectionType") != "hawser-edge"
+        ]
+        if collection.get("mode") == "poll" and affected:
+            create_issue(
+                self.hass,
+                entry_id,
+                issue_id,
+                is_fixable=False,
+                is_persistent=False,
+                severity=ir.IssueSeverity.WARNING,
+                translation_key="event_collection_poll",
+                translation_placeholders={
+                    "interval": str(collection.get("interval") or 60),
+                    "environments": ", ".join(sorted(affected)),
+                },
+            )
+        elif collection:
+            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def async_refresh_scanner_default(self) -> None:
         """Read the default scanner back after Home Assistant changed it,
@@ -1295,6 +1347,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             "environments": environments,
             "schedules": schedules,
             "scanner_default": await self._fetch_scanner_default(),
+            "event_collection": await self._fetch_event_collection(),
             # Which top-level (not per-environment) fetches failed this
             # cycle — currently just "environments" and "schedules", the
             # only two fetched via top_coros above. See _unwrap's own doc

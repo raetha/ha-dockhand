@@ -342,6 +342,96 @@
           "hawser-standard": "Agente Hawser (standard)",
           "hawser-edge": "Agente Hawser (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Container in esecuzione"
+      },
+      "containers_stopped": {
+        "name": "Container arrestati"
+      },
+      "containers_paused": {
+        "name": "Container in pausa"
+      },
+      "containers_restarting": {
+        "name": "Container in riavvio"
+      },
+      "containers_unhealthy": {
+        "name": "Container non integri"
+      },
+      "stacks_running": {
+        "name": "Stack in esecuzione"
+      },
+      "stacks_partial": {
+        "name": "Stack parzialmente in esecuzione"
+      },
+      "stacks_stopped": {
+        "name": "Stack arrestati"
+      },
+      "pending_updates": {
+        "name": "Aggiornamenti in sospeso"
+      },
+      "installable_updates": {
+        "name": "Aggiornamenti installabili"
+      },
+      "system_updates": {
+        "name": "Aggiornamenti dei container di sistema"
+      },
+      "version_tag_updates": {
+        "name": "Tag di versione più recenti"
+      },
+      "pinned_digest_updates": {
+        "name": "Aggiornamenti di digest fissato"
+      },
+      "held_updates": {
+        "name": "Aggiornamenti trattenuti"
+      },
+      "memory_used": {
+        "name": "Memoria utilizzata"
+      },
+      "memory_total": {
+        "name": "Memoria totale"
+      },
+      "disk_usage_images": {
+        "name": "Spazio su disco delle immagini"
+      },
+      "disk_usage_containers": {
+        "name": "Spazio su disco dei container"
+      },
+      "disk_usage_volumes": {
+        "name": "Spazio su disco dei volumi"
+      },
+      "disk_usage_build_cache": {
+        "name": "Spazio su disco della cache di build"
+      },
+      "activity_events_today": {
+        "name": "Eventi di attività oggi"
+      },
+      "vulnerabilities_critical": {
+        "name": "Vulnerabilità critiche"
+      },
+      "vulnerabilities_high": {
+        "name": "Vulnerabilità alte"
+      },
+      "vulnerabilities_medium": {
+        "name": "Vulnerabilità medie"
+      },
+      "vulnerabilities_low": {
+        "name": "Vulnerabilità basse"
+      },
+      "images_scanned": {
+        "name": "Immagini scansionate"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser visto l'ultima volta"
+      },
+      "container_memory_cache": {
+        "name": "Cache di memoria"
+      },
+      "stack_running_containers": {
+        "name": "Container in esecuzione"
+      },
+      "stack_pending_updates": {
+        "name": "Aggiornamenti in sospeso"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype e Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Modalità di raccolta eventi",
+        "state": {
+          "stream": "Stream",
+          "poll": "Polling"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Intervallo di polling degli eventi",
+        "state": {
+          "30": "30 secondi",
+          "60": "60 secondi",
+          "120": "120 secondi",
+          "300": "300 secondi"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Limite di memoria ripristinato automaticamente per {container}",
       "description": "Il container \"{container}\" ha smesso di funzionare poco dopo l'abbassamento del suo limite di memoria, il che può accadere quando il nuovo limite è inferiore all'utilizzo effettivo del container e il kernel lo applica immediatamente. Il limite di memoria è stato ripristinato automaticamente al suo valore precedente ({memory_bytes} byte). Controlla i log e lo stato di salute attuale del container in Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand interroga gli eventi Docker",
+      "description": "Dockhand raccoglie gli eventi Docker con un polling ogni {interval} secondi invece di riceverli in stream. Per {environments}, gli aggiornamenti in tempo reale e le entità degli eventi Docker possono arrivare fino a {interval} secondi in ritardo e, con un intervallo superiore a 30 secondi, alcuni eventi non arrivano mai: ogni polling legge solo gli ultimi 30 secondi. Per riceverli in stream, imposta Modalità di raccolta eventi del dispositivo Dockhand su Stream (in Dockhand: Settings → General → Activity event collection mode). Se preferisci il polling, ignora questo problema: torna solo dopo un passaggio a Stream e di nuovo a Polling."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Scansione vulnerabilità",
         "activity_events": "Eventi di attività",
+        "activity_events_today": "Eventi di attività oggi",
         "disk_usage": "Utilizzo del disco",
+        "disk_usage_images": "Spazio su disco delle immagini",
+        "disk_usage_containers": "Spazio su disco dei container",
+        "disk_usage_volumes": "Spazio su disco dei volumi",
+        "disk_usage_build_cache": "Spazio su disco della cache di build",
         "vulnerabilities": "Vulnerabilità",
+        "vulnerabilities_critical": "Vulnerabilità critiche",
+        "vulnerabilities_high": "Vulnerabilità alte",
+        "vulnerabilities_medium": "Vulnerabilità medie",
+        "vulnerabilities_low": "Vulnerabilità basse",
+        "images_scanned": "Immagini scansionate",
+        "pinned_digest_updates": "Aggiornamenti di digest fissato",
+        "held_updates": "Aggiornamenti trattenuti",
         "hawser_agent_version": "Versione agente Hawser",
+        "hawser_last_seen": "Hawser visto l'ultima volta",
         "host_docker_version": "Versione Docker",
         "host_platform": "Piattaforma host",
         "uptime": "Tempo di attività"

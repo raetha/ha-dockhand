@@ -231,6 +231,9 @@ def make_mock_client(
         }
     )
     client.async_get_scanner_setting = AsyncMock(return_value="grype")
+    client.async_get_event_collection = AsyncMock(
+        return_value={"mode": "stream", "interval": 60}
+    )
     client.async_check_self_update = AsyncMock(
         return_value={"updateAvailable": False, "currentVersion": "1.0.57"}
     )

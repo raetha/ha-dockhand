@@ -234,17 +234,27 @@ If you're also running the Portainer integration, note that this integration use
 |---|---|---|
 | (the device's name) | update | Whether a newer Dockhand release exists, from Dockhand's own check (**Settings → About** in Dockhand), every 6 hours. Read only: update Dockhand from Dockhand. Needs an admin token when Dockhand's authentication is on, and Docker access to Dockhand's own container (a local socket or a direct connection; not when Dockhand reaches its hosts only through Hawser) unless Dockhand doesn't run in a container. Until the check works there's no entity; it appears by itself once it does, and stays (unavailable while the check can't tell). Where Dockhand runs in an environment it manages, its container's own update entity can show the same update, from the image's side |
 | Default vulnerability scanner | select | Configuration: the scanner (`none`, `grype`, `trivy`, `both`) every environment without its own uses. Needs `settings: view` to appear and `settings: edit` to change |
+| Event collection mode | select | Configuration: how Dockhand collects Docker's events, `stream` (as they happen; Dockhand's default) or `poll`. Live updates and the Docker event entities depend on it (see [Data Updates](#data-updates)). Needs `settings: view` to appear and `settings: edit` to change |
+| Event poll interval | select | Configuration: 30, 60, 120 or 300 seconds between polls. Available only in Poll mode, like Dockhand's own setting |
 | Live updates | binary_sensor | Diagnostic, connectivity: whether Dockhand's live feed is connected. `in_use` is false while no environment sends events, when there's nothing to receive |
 
 ### Environment (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| Online | binary_sensor | Connectivity device class. Attributes: `name` (environment display name), `connection_host`/`connection_port` (the environment's configured Docker connection endpoint, from `/api/environments`), `labels` (the tags you've assigned to the environment in Dockhand) |
+| Online | binary_sensor | Connectivity device class. Attributes: `connection_host`/`connection_port` (the environment's configured Docker connection endpoint, from `/api/environments`), `labels` (the tags you've assigned to the environment in Dockhand) |
 | Connection type | sensor | `socket` / `direct` / `hawser-standard` / `hawser-edge` — matches Dockhand's own connection-type indicator, including its icon per type |
 | CPU usage | sensor | %, with `cpu_count` (logical CPU count, from `GET /api/host`) and `top_containers` (top 5 by CPU — name/CPU%/memory%; only populated when **Enable container and stack stats** is on) attributes |
-| Memory usage | sensor | %, with used/total bytes attributes |
-| Containers running | sensor | with total/stopped/unhealthy attributes, and update counts: `pending_updates` (installable, excluding system containers), `pending_system_updates`, `pending_version_updates` (newer version tag only), `pending_pinned_digest_updates` (moved digest on a pinned image only), `pending_held_updates` (held for the minimum image age only) and `pending_updates_total` (every container whose update entity is on) |
-| Images | sensor | count of Docker images on the environment |
+| Memory usage | sensor | % |
+| Memory used, Memory total | sensor | bytes (displayed in MiB) |
+| Containers | sensor | every container in the environment |
+| Running, Stopped, Paused, Restarting, Unhealthy containers | sensor | count of containers in each state |
+| Stacks | sensor | every stack in the environment |
+| Running, Partially running, Stopped stacks | sensor | count of stacks in each state |
+| Pending updates | sensor | every container whose update entity is on |
+| Installable updates | sensor | the containers **Update all** would update (system containers excluded) |
+| System container updates | sensor | Dockhand's own container and Hawser agents with an update, which are never updated in bulk |
+| Newer version tags | sensor | containers whose only update is a newer version tag (moving to it means changing the image tag) |
+| Images, Volumes, Networks | sensor | count of each on the environment |
 | Update all | button | Updates every container in the environment with a pending update in one batch (pull, scan if configured, recreate) — matches Dockhand's own "Update all" button exactly. Named "Update all containers" (a static name; Dockhand's own button shows a live "(N)" count, but a changing friendly name on a persistent entity reads as confusing churn in HA's own history, so ours doesn't). "Pending update" considers both the cheap cached check and, if enabled, the precise digest check — a container flagged by either counts. System containers are excluded from the count and from the update, same as Dockhand's own button. Goes through the same queue as Install, so each container's update entity shows its progress. **Only exists while Enable update entities is on**, and is unavailable while nothing is pending, so automations and dashboards can rely on its entity ID — this is the one thing that toggle actually gates besides entity display, since leaving it available with update entities disabled would be a backdoor to triggering real updates from HA |
 
 **Environment settings** (configuration entities), changing the environment's settings in Dockhand. Each appears only once the token can read that setting; changing one needs the permission in the table above (a token that can't gets Dockhand's "permission denied" and the setting stays as it was).
@@ -263,28 +273,34 @@ The following are sourced from `GET /api/host` (already polled every slow cycle 
 
 | Entity | Type | Notes |
 |---|---|---|
-| Hawser agent version | sensor | Live-fetched from the agent for standard-mode Hawser connections. `agent_name`/`agent_id`/`last_seen` attributes shown only for edge-mode connections (the only mode Dockhand populates them for), sourced from `/api/environments` |
+| Hawser agent version | sensor | Live-fetched from the agent for standard-mode Hawser connections. `agent_name`/`agent_id` attributes, filled in only for edge-mode connections (the only mode Dockhand records them for), sourced from `/api/environments` |
+| Hawser last seen | sensor | Timestamp of the Hawser Edge agent's last check-in. Hawser Edge environments only. It changes every poll, so each poll adds a row to Home Assistant's database while it's on |
 | Host platform | sensor | OS platform, e.g. `linux`, with an `architecture` attribute, e.g. `x64` |
 | Docker version | sensor | Docker Engine server version |
-| Host last boot | sensor | Timestamp, computed from host uptime |
+| Host last boot | sensor | Timestamp, computed from host uptime; changes only when the host reboots |
 
 Also disabled by default, but at no extra cost — the data's already part of the same `/api/dashboard/stats` call already polled every 60s:
 
 | Entity | Type | Notes |
 |---|---|---|
-| Disk usage | sensor | Total bytes across images, volumes, containers, and build cache, with each broken out as an attribute — matches Dockhand's own disk-usage breakdown |
+| Disk usage | sensor | Total bytes across images, volumes, containers, and build cache — matches Dockhand's own disk-usage breakdown |
+| Images, Containers, Volumes, Build cache disk usage | sensor | Each part of Disk usage on its own |
+| Pinned digest updates, Held updates | sensor | Containers whose only update is a moved digest on a pinned image, or one held for the minimum image age |
 
 Also disabled by default, each sourced from its own gated API call — only fetched at all when the matching Dockhand setting is on for that environment, so an environment that doesn't use the feature never pays for the extra request:
 
 | Entity | Type | Notes |
 |---|---|---|
-| Activity events | sensor | Total event count, with a `today` attribute and a `recent_events` list attribute (last 10, each with container name/action/timestamp). Only polled when **Activity collection** is on for the environment in Dockhand |
-| Vulnerabilities | sensor | Total finding count from Dockhand's own vulnerability scanner, with `critical`/`high`/`medium`/`low` and `images_scanned`/`total_images` attributes. Only polled when **Vulnerability scanning** is on for the environment in Dockhand |
+| Activity events | sensor | Total event count, with a `recent_events` list attribute (last 10, each with container name/action/timestamp). Only polled when **Activity collection** is on for the environment in Dockhand |
+| Activity events today | sensor | Events recorded today |
+| Vulnerabilities | sensor | Total finding count from Dockhand's own vulnerability scanner. Only polled when **Vulnerability scanning** is on for the environment in Dockhand |
+| Critical, High, Medium, Low vulnerabilities | sensor | Findings of each severity |
+| Scanned images | sensor | Images with at least one scan |
 
 ### Container (always on, 60 s)
 | Entity | Type | Notes |
 |---|---|---|
-| State | sensor | One of Docker's states: `created`, `running`, `paused`, `restarting`, `removing`, `exited` or `dead` (shown translated; anything else Docker might add later shows as unknown). Attributes include `tags` (see [Tags](#tags)), `exit_code` while the container is exited, `restart_count` while it's restarting (Dockhand only counts restarts then), `image_version` from the image's `org.opencontainers.image.version` label, and `system_container` (`true` for Dockhand's own container and Hawser agents) |
+| State | sensor | One of Docker's states: `created`, `running`, `paused`, `restarting`, `removing`, `exited` or `dead` (shown translated; anything else Docker might add later shows as unknown). Attributes include `image`, `networks`, `tags` (see [Tags](#tags)), `exit_code` while the container is exited, `restart_count` while it's restarting (Dockhand only counts restarts then), `image_version` from the image's `org.opencontainers.image.version` label, and `system_container` (`true` for Dockhand's own container and Hawser agents) |
 | Health | sensor | `healthy`, `unhealthy` or `starting`. Only created for containers with a Docker healthcheck configured — enabled by default |
 | Docker event | event | Fires when Docker reports the container starting, stopping, dying (with its `exit_code`), being killed, running out of memory, restarting, pausing, resuming, being updated, or its health check passing, failing or starting — for automations, like the Portainer integration's. Comes from the live feed (see [Data Updates](#data-updates)), so it's unavailable for environments Dockhand doesn't send events for, and misses events while the feed is disconnected. Disabled by default |
 | Container | switch | turn on = start (or resume, if paused), turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
@@ -300,7 +316,8 @@ The following **diagnostic sensors** are created for every container while **Ena
 | Entity | Type | Unit | Notes |
 |---|---|---|---|
 | CPU usage | sensor | % | Percentage of total host CPU capacity |
-| Memory usage | sensor | bytes (displayed in MiB) | Effective memory in use; page cache excluded. Includes `memory_cache_bytes` state attribute |
+| Memory usage | sensor | bytes (displayed in MiB) | Effective memory in use; page cache excluded |
+| Memory cache | sensor | bytes (displayed in MiB) | Page cache, left out of Memory usage |
 | Memory usage % | sensor | % | Memory used relative to configured limit (or host RAM if no limit is set) |
 | Memory limit | sensor | bytes (displayed in MiB) | Configured container memory limit, or host RAM when unconstrained |
 | Network in | sensor | bytes (displayed in MiB) | Cumulative bytes received; resets to 0 on container restart |
@@ -315,8 +332,9 @@ The following **diagnostic sensors** are created for every container while **Ena
 | Stack | switch | turn on = start, turn off = stop. **Not created for a stack containing a system container** — see note below |
 | Restart | button | restarts the stack, or starts it if stopped. **Not created for a stack containing a system container** — see note below |
 | Redeploy | button | pulls the latest image for each service and redeploys — matches Dockhand's own Redeploy popover exactly, including its own literal button title, with its default checkboxes (Pull images checked, Build images and Force recreate unchecked), so it behaves the same as clicking Redeploy in Dockhand's own UI without touching any options. Only recreates containers whose config actually changed (e.g. a new image digest) — doesn't force-recreate everything. **Internal stacks only** — git stacks have their own Deploy/Sync from Git button (below) with different mechanics; not created for Untracked stacks (no compose file location for Dockhand to redeploy from) or for a stack containing a system container |
-| Updates available | binary_sensor | on when any container in the stack has a pending image update, with an `update_count` attribute. Requires Dockhand 1.0.37+ — automatically not created on older versions, since this data isn't in the API response at all until then |
-| CPU usage, Memory usage, Memory limit, Network in, Network out, Disk read, Disk write | sensor | Diagnostic. The stack's totals exactly as Dockhand reports them (`GET /api/stack-stats`, the same numbers its own Stacks page shows), each with a `running_containers` attribute: everything summed over the stack's running containers except Memory limit, which is the largest single container limit. No memory percentage, since Dockhand doesn't report one for a stack. **Requires Dockhand 1.0.52+** — not created on older versions — and only created while **Enable container and stack stats** is on. Unavailable while none of the stack's containers is running |
+| Updates available | binary_sensor | on when any container in the stack has a pending image update. Requires Dockhand 1.0.37+ — automatically not created on older versions, since this data isn't in the API response at all until then |
+| Pending updates | sensor | How many of the stack's containers have an update, as Dockhand counts them. Created with Updates available |
+| CPU usage, Memory usage, Memory limit, Network in, Network out, Disk read, Disk write, Running containers | sensor | Diagnostic. The stack's totals exactly as Dockhand reports them (`GET /api/stack-stats`, the same numbers its own Stacks page shows): everything summed over the stack's running containers except Memory limit, which is the largest single container limit. No memory percentage, since Dockhand doesn't report one for a stack. **Requires Dockhand 1.0.52+** — not created on older versions — and only created while **Enable container and stack stats** is on. Unavailable while none of the stack's containers is running |
 
 > **System containers.** Dockhand classifies its own management container and any Hawser remote agent as "system containers" — Dockhand's own UI hides start/stop/restart for these (and for any stack containing one), since taking them down can break Dockhand's ability to manage the host at all. Dockhand's API itself doesn't enforce this — only its UI does — so this integration enforces it independently: the Container/Stack switch, Restart button, container Auto update switch, and runtime controls (memory/CPU/process limits, restart policy) simply aren't created for a system container or a stack that contains one. Read-only entities (State, Health, resource sensors) are unaffected. A system container's Update entity still reports when a new image is available, but Dockhand's own scheduled update check skips system containers, so that is only detected by the environment's **Check for updates** button (or by **Enable precise update versions**, which runs that same check on its own schedule). A result from the button is kept until the container is recreated or the next check, but not across a Home Assistant restart.
 
@@ -495,7 +513,7 @@ Entities update automatically when their coordinator refreshes. If a whole poll 
 
 **Live updates.** Dockhand watches Docker's events for every environment that collects activity or metrics (both are environment settings in Dockhand; metrics are on by default), and Hawser Edge agents always send theirs. While at least one environment does, the integration keeps Dockhand's activity feed open, and a change there (a container stopping, starting, turning unhealthy, being recreated) refreshes that environment's containers and stacks within a couple of seconds, instead of at the next poll. An environment going offline or coming back triggers a full refresh. The feed only speeds things up: polling carries on as before and catches anything missed. If the connection drops (Dockhand restarting, its host losing power), it's retried after 5 seconds, backing off to 5 minutes, and everything is refreshed once it's back. Without the `activity: view` permission, or with environments that collect neither, there's no feed and changes show on the next poll, so within a minute. **Settings → System → Repairs → ⋮ → System information** shows whether the feed is connected.
 
-Leave Dockhand's **Settings → General → Activity event collection mode** on **Stream**, its default. In **Poll** mode Dockhand reads Docker's events only once per interval (60 seconds by default), so the live feed and the Docker event entities lag by up to that interval, and with an interval over 30 seconds some events never arrive: each poll reads only the last 30 seconds. Hawser Edge environments aren't affected; their agents send events themselves.
+Leave Dockhand's **Settings → General → Activity event collection mode** on **Stream**, its default (the Dockhand device's **Event collection mode** shows it, and Home Assistant raises a repair while it's on Poll). In **Poll** mode Dockhand reads Docker's events only once per interval (60 seconds by default), so the live feed and the Docker event entities lag by up to that interval, and with an interval over 30 seconds some events never arrive: each poll reads only the last 30 seconds. Hawser Edge environments aren't affected; their agents send events themselves.
 
 An action taken from Home Assistant (a switch, a button, Install) refreshes that environment straight away. Actions on many containers at once (one `switch.turn_off` on ten containers, say) share those refreshes rather than making one each.
 

@@ -342,6 +342,96 @@
           "hawser-standard": "Hawser 代理（标准）",
           "hawser-edge": "Hawser 代理（边缘）"
         }
+      },
+      "containers_running": {
+        "name": "运行中的容器"
+      },
+      "containers_stopped": {
+        "name": "已停止的容器"
+      },
+      "containers_paused": {
+        "name": "已暂停的容器"
+      },
+      "containers_restarting": {
+        "name": "正在重启的容器"
+      },
+      "containers_unhealthy": {
+        "name": "不健康的容器"
+      },
+      "stacks_running": {
+        "name": "运行中的堆栈"
+      },
+      "stacks_partial": {
+        "name": "部分运行的堆栈"
+      },
+      "stacks_stopped": {
+        "name": "已停止的堆栈"
+      },
+      "pending_updates": {
+        "name": "待处理更新"
+      },
+      "installable_updates": {
+        "name": "可安装的更新"
+      },
+      "system_updates": {
+        "name": "系统容器更新"
+      },
+      "version_tag_updates": {
+        "name": "更新的版本标签"
+      },
+      "pinned_digest_updates": {
+        "name": "固定摘要更新"
+      },
+      "held_updates": {
+        "name": "暂缓的更新"
+      },
+      "memory_used": {
+        "name": "已用内存"
+      },
+      "memory_total": {
+        "name": "总内存"
+      },
+      "disk_usage_images": {
+        "name": "镜像磁盘用量"
+      },
+      "disk_usage_containers": {
+        "name": "容器磁盘用量"
+      },
+      "disk_usage_volumes": {
+        "name": "卷磁盘用量"
+      },
+      "disk_usage_build_cache": {
+        "name": "构建缓存磁盘用量"
+      },
+      "activity_events_today": {
+        "name": "今日活动事件"
+      },
+      "vulnerabilities_critical": {
+        "name": "严重漏洞"
+      },
+      "vulnerabilities_high": {
+        "name": "高危漏洞"
+      },
+      "vulnerabilities_medium": {
+        "name": "中危漏洞"
+      },
+      "vulnerabilities_low": {
+        "name": "低危漏洞"
+      },
+      "images_scanned": {
+        "name": "已扫描镜像"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser 最后在线时间"
+      },
+      "container_memory_cache": {
+        "name": "内存缓存"
+      },
+      "stack_running_containers": {
+        "name": "运行中的容器"
+      },
+      "stack_pending_updates": {
+        "name": "待处理更新"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype 和 Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "事件收集模式",
+        "state": {
+          "stream": "流式",
+          "poll": "轮询"
+        }
+      },
+      "event_poll_interval": {
+        "name": "事件轮询间隔",
+        "state": {
+          "30": "30 秒",
+          "60": "60 秒",
+          "120": "120 秒",
+          "300": "300 秒"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "已自动恢复 {container} 的内存限制",
       "description": "容器 \"{container}\" 在其内存限制被降低后不久就停止运行，当新限制低于容器实际使用量时，内核会立即强制执行该限制，从而导致此情况。内存限制已自动恢复为先前的值（{memory_bytes} 字节）。请在 Dockhand 中检查该容器的日志和当前健康状态。"
+    },
+    "event_collection_poll": {
+      "title": "Dockhand 正在轮询 Docker 事件",
+      "description": "Dockhand 设置为每 {interval} 秒轮询一次 Docker 事件，而不是以流式接收。对于 {environments}，实时更新和 Docker 事件实体最多可能延迟 {interval} 秒；间隔超过 30 秒时，部分事件永远不会到达：每次轮询只读取最近 30 秒。要以流式接收，请将 Dockhand 设备上的“事件收集模式”设为“流式”（在 Dockhand 中：Settings → General → Activity event collection mode）。如果你更喜欢轮询，请忽略此问题：只有在切换到“流式”再切回“轮询”后才会再次出现。"
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "漏洞扫描",
         "activity_events": "活动事件",
+        "activity_events_today": "今日活动事件",
         "disk_usage": "磁盘使用情况",
+        "disk_usage_images": "镜像磁盘用量",
+        "disk_usage_containers": "容器磁盘用量",
+        "disk_usage_volumes": "卷磁盘用量",
+        "disk_usage_build_cache": "构建缓存磁盘用量",
         "vulnerabilities": "漏洞",
+        "vulnerabilities_critical": "严重漏洞",
+        "vulnerabilities_high": "高危漏洞",
+        "vulnerabilities_medium": "中危漏洞",
+        "vulnerabilities_low": "低危漏洞",
+        "images_scanned": "已扫描镜像",
+        "pinned_digest_updates": "固定摘要更新",
+        "held_updates": "暂缓的更新",
         "hawser_agent_version": "Hawser 代理版本",
+        "hawser_last_seen": "Hawser 最后在线时间",
         "host_docker_version": "Docker 版本",
         "host_platform": "主机平台",
         "uptime": "正常运行时间"

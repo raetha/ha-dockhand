@@ -514,10 +514,10 @@ exclusion out into its own named predicate,
 container.get("systemContainer")`), and a composed helper,
 `_actionable_pending_update_container_ids()`, that's now the one
 function anything about to *act* on a set of containers should call —
-both of `button.py`'s call sites do, and Dockhand's own "containers"
-sensor's `pending_updates` attribute (the bulk-eligible count, as
-opposed to `pending_system_updates`/`pending_updates_total` — see
-sensor.py's own comment on `DockhandEnvContainerCountSensor`) does too.
+both of `button.py`'s call sites do, and so does the environment's
+Installable updates sensor (the bulk-eligible count, as opposed to
+System container updates and Pending updates — see sensor.py's
+`_pending_update_counts`).
 The general shape worth repeating elsewhere: when a safety exclusion
 depends on "don't act on X," don't rely on every caller remembering to
 filter X out inline — give the exclusion its own named function so
@@ -840,6 +840,9 @@ Walk through, in order:
    offline/failed-poll preservation case?
 4. Section 4 — did any config option's underlying key change? If so, is
    there a migration?
+5. Section 12 — is every new value that changes its own entity rather
+   than an attribute, and does every attribute stay present (None when
+   empty) instead of coming and going?
 
 Getting any of these wrong doesn't fail loudly. It leaves users with
 entities that silently never clean up, or (worse) an entity ID that
@@ -1373,3 +1376,33 @@ return.
   passes a threshold); the Disk usage sensor lets an automation do the same.
 - Unique ID suffixes avoid the cleanup's type words (`image_prune_mode` is `prune_mode`), or are
   listed in `_TYPE_COLLISION_EXCLUDED_SUFFIXES`.
+
+## 12. Entities, not attributes
+
+Home Assistant's guidance (developer docs, "State and attributes"): before adding an attribute,
+ask whether it should be an entity. Attributes get no long-term statistics, can't feed the energy
+dashboard and aren't translated as easily, so a value that changes on its own belongs in its own
+sensor. Static facts about a device belong in its device info. An attribute that is expected is
+always present, None when it has no value, rather than coming and going. Every attribute change
+writes a state row to the database, so nothing that changes on every update belongs in one.
+
+How this integration applies it (2.0.0):
+
+- **Counts and sizes are sensors.** An environment's containers and stacks by state, its update
+  counts by kind (`_pending_update_counts`), memory used and total, each part of disk usage,
+  today's activity events, and the vulnerability counts by severity and images scanned are each
+  their own sensor (`ENV_VALUE_SENSORS`, `VULNERABILITY_SENSORS`); so are a container's memory
+  cache, a stack's running containers and its update count. The totals keep their sensors.
+- **Attributes describe the state**, and don't change on their own: a container's image,
+  networks, exit code; a stack's type; an image's tags and labels; a schedule's last run. Lists
+  (`recent_events`, `top_containers`) stay attributes, unrecorded.
+- **Nothing that churns.** Docker's status text ("Up 3 hours") is gone from the container's State
+  sensor. Host last boot keeps its value unless the computed boot time moves by more than a
+  minute. Hawser Edge's last check-in is a sensor, disabled by default, for those who want it.
+- **No name attributes.** An entity's device names it: the cards take a container's or stack's
+  name from its device identifier, an environment's from its device, a schedule's from its
+  device name.
+- **Defaults:** sensors the cards draw from (container and stack states, the update counts the
+  Environment card shows, memory used and total) are enabled; the rest are disabled and listed in
+  the bulk sections (§10).
+

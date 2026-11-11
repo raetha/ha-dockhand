@@ -188,13 +188,14 @@ def already_registered(
     return False
 
 
-# Unique_id suffixes for the 8 container-stat sensors (CPU/memory/network/
+# Unique_id suffixes for the container stats sensors (CPU/memory/network/
 # block-I/O), matching how each builds self._attr_unique_id in sensor.py.
 # Each includes its leading underscore, so `uid.endswith(CONTAINER_STATS_SUFFIXES)`
 # matches a whole suffix rather than any trailing substring.
 CONTAINER_STATS_SUFFIXES = (
     "_cpu_percent",
     "_memory_usage",
+    "_memory_cache",
     "_memory_percent",
     "_memory_limit",
     "_network_rx",
@@ -203,10 +204,16 @@ CONTAINER_STATS_SUFFIXES = (
     "_block_write",
 )
 
-# The stack totals Dockhand reports (GET /api/stack-stats) — the container
-# set minus memory percent, which Dockhand doesn't give for a stack.
-STACK_STATS_SUFFIXES = tuple(
-    suffix for suffix in CONTAINER_STATS_SUFFIXES if suffix != "_memory_percent"
+# The stack totals Dockhand reports (GET /api/stack-stats): the container
+# set without memory cache and percent, which Dockhand doesn't give for a
+# stack, plus how many of its containers are running.
+STACK_STATS_SUFFIXES = (
+    *(
+        suffix
+        for suffix in CONTAINER_STATS_SUFFIXES
+        if suffix not in ("_memory_cache", "_memory_percent")
+    ),
+    "_running_containers",
 )
 
 # "_memory_limit" here is a deliberate exact collision with a runtime

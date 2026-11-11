@@ -342,6 +342,96 @@
           "hawser-standard": "Hawser-agent (standard)",
           "hawser-edge": "Hawser-agent (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Kjørende containere"
+      },
+      "containers_stopped": {
+        "name": "Stoppede containere"
+      },
+      "containers_paused": {
+        "name": "Pausede containere"
+      },
+      "containers_restarting": {
+        "name": "Containere som starter på nytt"
+      },
+      "containers_unhealthy": {
+        "name": "Usunne containere"
+      },
+      "stacks_running": {
+        "name": "Kjørende stacker"
+      },
+      "stacks_partial": {
+        "name": "Delvis kjørende stacker"
+      },
+      "stacks_stopped": {
+        "name": "Stoppede stacker"
+      },
+      "pending_updates": {
+        "name": "Ventende oppdateringer"
+      },
+      "installable_updates": {
+        "name": "Installerbare oppdateringer"
+      },
+      "system_updates": {
+        "name": "Oppdateringer for systemcontainere"
+      },
+      "version_tag_updates": {
+        "name": "Nyere versjonstagger"
+      },
+      "pinned_digest_updates": {
+        "name": "Oppdateringer for låste digester"
+      },
+      "held_updates": {
+        "name": "Tilbakeholdte oppdateringer"
+      },
+      "memory_used": {
+        "name": "Brukt minne"
+      },
+      "memory_total": {
+        "name": "Totalt minne"
+      },
+      "disk_usage_images": {
+        "name": "Diskbruk for images"
+      },
+      "disk_usage_containers": {
+        "name": "Diskbruk for containere"
+      },
+      "disk_usage_volumes": {
+        "name": "Diskbruk for volumer"
+      },
+      "disk_usage_build_cache": {
+        "name": "Diskbruk for byggebuffer"
+      },
+      "activity_events_today": {
+        "name": "Aktivitetshendelser i dag"
+      },
+      "vulnerabilities_critical": {
+        "name": "Kritiske sårbarheter"
+      },
+      "vulnerabilities_high": {
+        "name": "Høye sårbarheter"
+      },
+      "vulnerabilities_medium": {
+        "name": "Middels sårbarheter"
+      },
+      "vulnerabilities_low": {
+        "name": "Lave sårbarheter"
+      },
+      "images_scanned": {
+        "name": "Skannede images"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser sist sett"
+      },
+      "container_memory_cache": {
+        "name": "Minnebuffer"
+      },
+      "stack_running_containers": {
+        "name": "Kjørende containere"
+      },
+      "stack_pending_updates": {
+        "name": "Ventende oppdateringer"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype og Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Innsamling av hendelser",
+        "state": {
+          "stream": "Strøm",
+          "poll": "Avspørring"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Avspørringsintervall for hendelser",
+        "state": {
+          "30": "30 sekunder",
+          "60": "60 sekunder",
+          "120": "120 sekunder",
+          "300": "300 sekunder"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Minnegrense tilbakestilt automatisk for {container}",
       "description": "Container \"{container}\" sluttet å kjøre kort tid etter at minnegrensen ble senket, noe som kan skje når den nye grensen er lavere enn containerens faktiske bruk og kjernen håndhever den umiddelbart. Minnegrensen er automatisk tilbakestilt til forrige verdi ({memory_bytes} bytes). Sjekk containerens logger og gjeldende helsetilstand i Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand spør etter Docker-hendelser",
+      "description": "Dockhand samler inn Docker-hendelser ved å spørre hvert {interval}. sekund i stedet for å strømme dem. For {environments} kan sanntidsoppdateringer og Docker-hendelsesentiteter komme opptil {interval} sekunder for sent, og med et intervall over 30 sekunder kommer noen hendelser aldri: hver avspørring leser bare de siste 30 sekundene. For å strømme dem, sett Innsamling av hendelser på Dockhand-enheten til Strøm (i Dockhand: Settings → General → Activity event collection mode). Hvis du foretrekker avspørring, ignorer dette problemet: det kommer bare tilbake etter et bytte til Strøm og tilbake til Avspørring."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Sårbarhetsskanning",
         "activity_events": "Aktivitetshendelser",
+        "activity_events_today": "Aktivitetshendelser i dag",
         "disk_usage": "Diskbruk",
+        "disk_usage_images": "Diskbruk for images",
+        "disk_usage_containers": "Diskbruk for containere",
+        "disk_usage_volumes": "Diskbruk for volumer",
+        "disk_usage_build_cache": "Diskbruk for byggebuffer",
         "vulnerabilities": "Sårbarheter",
+        "vulnerabilities_critical": "Kritiske sårbarheter",
+        "vulnerabilities_high": "Høye sårbarheter",
+        "vulnerabilities_medium": "Middels sårbarheter",
+        "vulnerabilities_low": "Lave sårbarheter",
+        "images_scanned": "Skannede images",
+        "pinned_digest_updates": "Oppdateringer for låste digester",
+        "held_updates": "Tilbakeholdte oppdateringer",
         "hawser_agent_version": "Hawser-agentversjon",
+        "hawser_last_seen": "Hawser sist sett",
         "host_docker_version": "Docker-versjon",
         "host_platform": "Vertsplattform",
         "uptime": "Oppetid"

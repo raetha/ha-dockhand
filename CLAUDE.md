@@ -62,6 +62,8 @@ short version.
 - Config-schema changes bump the entry's minor version only; downgrades must keep working back one
   schema version. Migrations only cover transitions between released versions, never churn within
   an unreleased cycle (§4).
+- Values that change are their own entities, not attributes; attributes are always present and
+  never churn; no `name` attributes (architecture §12, Home Assistant's "State and attributes").
 - Feature-detect Dockhand capabilities rather than parsing versions, and prefer Dockhand's own API
   values over computing equivalents, so numbers match Dockhand.
 - Information must be visible in Home Assistant itself (entities, attributes, HA's own UI), not only

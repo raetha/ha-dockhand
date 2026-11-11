@@ -342,6 +342,96 @@
           "hawser-standard": "Hawser-agent (standaard)",
           "hawser-edge": "Hawser-agent (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Actieve containers"
+      },
+      "containers_stopped": {
+        "name": "Gestopte containers"
+      },
+      "containers_paused": {
+        "name": "Gepauzeerde containers"
+      },
+      "containers_restarting": {
+        "name": "Herstartende containers"
+      },
+      "containers_unhealthy": {
+        "name": "Ongezonde containers"
+      },
+      "stacks_running": {
+        "name": "Actieve stacks"
+      },
+      "stacks_partial": {
+        "name": "Gedeeltelijk actieve stacks"
+      },
+      "stacks_stopped": {
+        "name": "Gestopte stacks"
+      },
+      "pending_updates": {
+        "name": "Openstaande updates"
+      },
+      "installable_updates": {
+        "name": "Installeerbare updates"
+      },
+      "system_updates": {
+        "name": "Updates voor systeemcontainers"
+      },
+      "version_tag_updates": {
+        "name": "Nieuwere versietags"
+      },
+      "pinned_digest_updates": {
+        "name": "Updates voor vastgezette digests"
+      },
+      "held_updates": {
+        "name": "Tegengehouden updates"
+      },
+      "memory_used": {
+        "name": "Gebruikt geheugen"
+      },
+      "memory_total": {
+        "name": "Totaal geheugen"
+      },
+      "disk_usage_images": {
+        "name": "Schijfgebruik images"
+      },
+      "disk_usage_containers": {
+        "name": "Schijfgebruik containers"
+      },
+      "disk_usage_volumes": {
+        "name": "Schijfgebruik volumes"
+      },
+      "disk_usage_build_cache": {
+        "name": "Schijfgebruik buildcache"
+      },
+      "activity_events_today": {
+        "name": "Activiteitsgebeurtenissen vandaag"
+      },
+      "vulnerabilities_critical": {
+        "name": "Kritieke kwetsbaarheden"
+      },
+      "vulnerabilities_high": {
+        "name": "Hoge kwetsbaarheden"
+      },
+      "vulnerabilities_medium": {
+        "name": "Gemiddelde kwetsbaarheden"
+      },
+      "vulnerabilities_low": {
+        "name": "Lage kwetsbaarheden"
+      },
+      "images_scanned": {
+        "name": "Gescande images"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser laatst gezien"
+      },
+      "container_memory_cache": {
+        "name": "Geheugencache"
+      },
+      "stack_running_containers": {
+        "name": "Actieve containers"
+      },
+      "stack_pending_updates": {
+        "name": "Openstaande updates"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype en Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Verzamelen van gebeurtenissen",
+        "state": {
+          "stream": "Stream",
+          "poll": "Polling"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Pollinterval voor gebeurtenissen",
+        "state": {
+          "30": "30 seconden",
+          "60": "60 seconden",
+          "120": "120 seconden",
+          "300": "300 seconden"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Geheugenlimiet automatisch teruggezet voor {container}",
       "description": "Container \"{container}\" stopte kort na het verlagen van de geheugenlimiet, wat kan gebeuren wanneer de nieuwe limiet lager is dan het werkelijke gebruik van de container en de kernel deze onmiddellijk afdwingt. De geheugenlimiet is automatisch teruggezet naar de vorige waarde ({memory_bytes} bytes). Controleer de logboeken en huidige status van de container in Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand pollt Docker-gebeurtenissen",
+      "description": "Dockhand verzamelt Docker-gebeurtenissen door elke {interval} seconden te pollen in plaats van ze te streamen. Voor {environments} kunnen live updates en Docker-gebeurtenisentiteiten tot {interval} seconden te laat zijn, en bij een interval van meer dan 30 seconden komen sommige gebeurtenissen nooit aan: elke poll leest alleen de laatste 30 seconden. Zet Verzamelen van gebeurtenissen op het Dockhand-apparaat op Stream om ze te streamen (in Dockhand: Settings → General → Activity event collection mode). Geef je de voorkeur aan pollen, negeer dit probleem dan: het komt pas terug na een wissel naar Stream en terug naar Polling."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Kwetsbaarheidsscan",
         "activity_events": "Activiteitsgebeurtenissen",
+        "activity_events_today": "Activiteitsgebeurtenissen vandaag",
         "disk_usage": "Schijfgebruik",
+        "disk_usage_images": "Schijfgebruik images",
+        "disk_usage_containers": "Schijfgebruik containers",
+        "disk_usage_volumes": "Schijfgebruik volumes",
+        "disk_usage_build_cache": "Schijfgebruik buildcache",
         "vulnerabilities": "Kwetsbaarheden",
+        "vulnerabilities_critical": "Kritieke kwetsbaarheden",
+        "vulnerabilities_high": "Hoge kwetsbaarheden",
+        "vulnerabilities_medium": "Gemiddelde kwetsbaarheden",
+        "vulnerabilities_low": "Lage kwetsbaarheden",
+        "images_scanned": "Gescande images",
+        "pinned_digest_updates": "Updates voor vastgezette digests",
+        "held_updates": "Tegengehouden updates",
         "hawser_agent_version": "Hawser-agentversie",
+        "hawser_last_seen": "Hawser laatst gezien",
         "host_docker_version": "Docker-versie",
         "host_platform": "Hostplatform",
         "uptime": "Uptime"

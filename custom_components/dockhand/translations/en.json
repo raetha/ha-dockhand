@@ -342,6 +342,96 @@
           "hawser-standard": "Hawser agent (standard)",
           "hawser-edge": "Hawser agent (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Running containers"
+      },
+      "containers_stopped": {
+        "name": "Stopped containers"
+      },
+      "containers_paused": {
+        "name": "Paused containers"
+      },
+      "containers_restarting": {
+        "name": "Restarting containers"
+      },
+      "containers_unhealthy": {
+        "name": "Unhealthy containers"
+      },
+      "stacks_running": {
+        "name": "Running stacks"
+      },
+      "stacks_partial": {
+        "name": "Partially running stacks"
+      },
+      "stacks_stopped": {
+        "name": "Stopped stacks"
+      },
+      "pending_updates": {
+        "name": "Pending updates"
+      },
+      "installable_updates": {
+        "name": "Installable updates"
+      },
+      "system_updates": {
+        "name": "System container updates"
+      },
+      "version_tag_updates": {
+        "name": "Newer version tags"
+      },
+      "pinned_digest_updates": {
+        "name": "Pinned digest updates"
+      },
+      "held_updates": {
+        "name": "Held updates"
+      },
+      "memory_used": {
+        "name": "Memory used"
+      },
+      "memory_total": {
+        "name": "Memory total"
+      },
+      "disk_usage_images": {
+        "name": "Images disk usage"
+      },
+      "disk_usage_containers": {
+        "name": "Containers disk usage"
+      },
+      "disk_usage_volumes": {
+        "name": "Volumes disk usage"
+      },
+      "disk_usage_build_cache": {
+        "name": "Build cache disk usage"
+      },
+      "activity_events_today": {
+        "name": "Activity events today"
+      },
+      "vulnerabilities_critical": {
+        "name": "Critical vulnerabilities"
+      },
+      "vulnerabilities_high": {
+        "name": "High vulnerabilities"
+      },
+      "vulnerabilities_medium": {
+        "name": "Medium vulnerabilities"
+      },
+      "vulnerabilities_low": {
+        "name": "Low vulnerabilities"
+      },
+      "images_scanned": {
+        "name": "Scanned images"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser last seen"
+      },
+      "container_memory_cache": {
+        "name": "Memory cache"
+      },
+      "stack_running_containers": {
+        "name": "Running containers"
+      },
+      "stack_pending_updates": {
+        "name": "Pending updates"
       }
     },
     "binary_sensor": {
@@ -463,6 +553,22 @@
           "trivy": "Trivy",
           "both": "Grype and Trivy"
         }
+      },
+      "event_collection_mode": {
+        "name": "Event collection mode",
+        "state": {
+          "stream": "Stream",
+          "poll": "Poll"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Event poll interval",
+        "state": {
+          "30": "30 seconds",
+          "60": "60 seconds",
+          "120": "120 seconds",
+          "300": "300 seconds"
+        }
       }
     },
     "event": {
@@ -531,6 +637,10 @@
     "runtime_memory_reverted": {
       "title": "Memory limit auto-reverted for {container}",
       "description": "Container \"{container}\" stopped running shortly after its memory limit was lowered, which can happen when the new limit is below the container's actual usage and the kernel enforces it immediately. The memory limit has been automatically reverted to its previous value ({memory_bytes} bytes). Check the container's logs and current health in Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand polls for Docker events",
+      "description": "Dockhand is set to collect Docker events by polling every {interval} seconds instead of streaming them. For {environments}, live updates and Docker event entities can be up to {interval} seconds late, and with an interval over 30 seconds some events never arrive: each poll reads only the last 30 seconds. To stream them, set Event collection mode on the Dockhand device to Stream (in Dockhand: Settings → General → Activity event collection mode). If you prefer polling, ignore this issue: it comes back only after a switch to Stream and back to Poll."
     }
   },
   "services": {
@@ -580,9 +690,22 @@
       "options": {
         "vulnerability_scanning": "Vulnerability scanning",
         "activity_events": "Activity events",
+        "activity_events_today": "Activity events today",
         "disk_usage": "Disk usage",
+        "disk_usage_images": "Images disk usage",
+        "disk_usage_containers": "Containers disk usage",
+        "disk_usage_volumes": "Volumes disk usage",
+        "disk_usage_build_cache": "Build cache disk usage",
         "vulnerabilities": "Vulnerabilities",
+        "vulnerabilities_critical": "Critical vulnerabilities",
+        "vulnerabilities_high": "High vulnerabilities",
+        "vulnerabilities_medium": "Medium vulnerabilities",
+        "vulnerabilities_low": "Low vulnerabilities",
+        "images_scanned": "Scanned images",
+        "pinned_digest_updates": "Pinned digest updates",
+        "held_updates": "Held updates",
         "hawser_agent_version": "Hawser agent version",
+        "hawser_last_seen": "Hawser last seen",
         "host_docker_version": "Docker version",
         "host_platform": "Host platform",
         "uptime": "Uptime"

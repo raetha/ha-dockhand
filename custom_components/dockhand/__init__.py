@@ -98,6 +98,9 @@ _GIT_STACK_SUFFIXES = (
 # entities these can't rely purely on device cascade either.
 _CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update", "pause", "resume")
 _STACK_ACTION_SUFFIXES = ("running", "restart")
+# The stack's Updates available binary sensor and update count sensor:
+# present only where Dockhand reports a stack's updates (1.0.37+).
+_STACK_UPDATE_SUFFIXES = ("_updates_available", "_update_count")
 
 # Exact, full unique_id suffixes for standalone env-level entities that are NOT
 # conditionally-suppressed and rely purely on device-removal cascade (i.e. they
@@ -560,6 +563,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     Returns a dict with keys:
         env_ids                  set[int]   — environments currently in fast data
         online_env_ids           set[int]   — environments with online=True (or unknown)
+        hawser_edge_env_ids      set[int]   — environments connected by Hawser Edge
         containers               set[str]   — live device identifiers
                                               (container_<env_id>_<name>)
         stacks                   set[str]   — live device identifiers
@@ -834,9 +838,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                         f"{entry.entry_id}_{env_id}_stack_{stack_name}_deploy"
                     )
                 if "updatesAvailable" in s:
-                    stack_updates_available_uids.add(
-                        f"{entry.entry_id}_{env_id}_stack_{stack_name}_updates_available"
-                    )
+                    for suffix in _STACK_UPDATE_SUFFIXES:
+                        stack_updates_available_uids.add(
+                            f"{entry.entry_id}_{env_id}_stack_{stack_name}{suffix}"
+                        )
                 if container_stats_enabled and stack_stats_supported:
                     for suffix in STACK_STATS_SUFFIXES:
                         stack_stats_uids.add(
@@ -850,6 +855,11 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         env_id
         for env_id, env_data in fast_data.items()
         if (env_data.get("stats") or {}).get("online", True)
+    }
+    hawser_edge_env_ids: set[int] = {
+        env_id
+        for env_id, env_data in fast_data.items()
+        if (env_data.get("stats") or {}).get("connectionType") == "hawser-edge"
     }
 
     # Slow-coordinator-derived sets — only meaningful when slow data is valid.
@@ -957,6 +967,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     return {
         "env_ids": env_ids,
         "online_env_ids": online_env_ids,
+        "hawser_edge_env_ids": hawser_edge_env_ids,
         "containers": containers,
         "stacks": stacks,
         "containers_group_env_ids": containers_group_env_ids,
@@ -1350,6 +1361,17 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale volume entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
+        elif uid.endswith("_hawser_last_seen"):
+            # Only for Hawser Edge environments: removed when the
+            # environment connects another way.
+            env_id = uid_env_id
+            if env_id not in live["env_ids"] or (
+                env_id in live["online_env_ids"]
+                and env_id not in live["hawser_edge_env_ids"]
+            ):
+                _LOGGER.debug("Dockhand: removing stale Hawser last seen %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+
         elif uid_type == "update":
             env_id = uid_env_id
             # Tier 1 is entirely fast-data-derived, specifically from the
@@ -1482,7 +1504,7 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale git stack entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
-        elif uid_type == "stack" and uid.endswith(CONTAINER_STATS_SUFFIXES):
+        elif uid_type == "stack" and uid.endswith(STACK_STATS_SUFFIXES):
             # Dockhand's stack totals — removed when the container stats
             # option is off or Dockhand no longer has the endpoint, but
             # never because of a failed stack stats fetch.
@@ -1511,8 +1533,9 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale stack action entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
-        elif uid_type == "stack" and uid.endswith("_updates_available"):
-            # Stack updates-available binary sensor. Feature-detected
+        elif uid_type == "stack" and uid.endswith(_STACK_UPDATE_SUFFIXES):
+            # Stack updates-available binary sensor and update count sensor.
+            # Feature-detected
             # (Dockhand 1.0.37+) — same fast-data reliability as the
             # other stack-scoped entities above; no slow_valid guard
             # needed since this comes from /api/stacks, not a
