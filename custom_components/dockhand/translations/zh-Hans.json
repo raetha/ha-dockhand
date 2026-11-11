@@ -113,9 +113,11 @@
             "name": "环境实体",
             "description": "默认关闭的实体，为每个环境开启，包括以后添加的环境。",
             "data": {
+              "all": "全部",
               "enabled": "为每个环境开启"
             },
             "data_description": {
+              "all": "勾选以开启此处的所有类型；取消勾选以全部关闭。",
               "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
             }
           },
@@ -123,9 +125,11 @@
             "name": "容器实体",
             "description": "默认关闭的实体，为每个容器开启，包括以后添加的容器。",
             "data": {
+              "all": "全部",
               "enabled": "为每个容器开启"
             },
             "data_description": {
+              "all": "勾选以开启此处的所有类型；取消勾选以全部关闭。",
               "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "漏洞扫描",
         "activity_events": "活动事件",
-        "activity_events_today": "今日活动事件",
         "disk_usage": "磁盘使用情况",
-        "disk_usage_images": "镜像磁盘用量",
-        "disk_usage_containers": "容器磁盘用量",
-        "disk_usage_volumes": "卷磁盘用量",
-        "disk_usage_build_cache": "构建缓存磁盘用量",
         "vulnerabilities": "漏洞",
-        "vulnerabilities_critical": "严重漏洞",
-        "vulnerabilities_high": "高危漏洞",
-        "vulnerabilities_medium": "中危漏洞",
-        "vulnerabilities_low": "低危漏洞",
-        "images_scanned": "已扫描镜像",
         "pinned_digest_updates": "固定摘要更新",
         "held_updates": "暂缓的更新",
         "hawser_agent_version": "Hawser 代理版本",

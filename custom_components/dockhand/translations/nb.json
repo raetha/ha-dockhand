@@ -113,9 +113,11 @@
             "name": "Miljøentiteter",
             "description": "Entiteter som er av som standard, slått på for hvert miljø, også de som legges til senere.",
             "data": {
+              "all": "Alle disse",
               "enabled": "Slå på for hvert miljø"
             },
             "data_description": {
+              "all": "Kryss av for å slå på alle typene her; fjern krysset for å slå av alle.",
               "enabled": "Å krysse av en type slår den på overalt, unntatt der du har slått den av selv. Å fjerne krysset slår den av overalt igjen, også der du slo den på manuelt."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Containerentiteter",
             "description": "Entiteter som er av som standard, slått på for hver container, også de som legges til senere.",
             "data": {
+              "all": "Alle disse",
               "enabled": "Slå på for hver container"
             },
             "data_description": {
+              "all": "Kryss av for å slå på alle typene her; fjern krysset for å slå av alle.",
               "enabled": "Å krysse av en type slår den på overalt, unntatt der du har slått den av selv. Å fjerne krysset slår den av overalt igjen, også der du slo den på manuelt."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Sårbarhetsskanning",
         "activity_events": "Aktivitetshendelser",
-        "activity_events_today": "Aktivitetshendelser i dag",
         "disk_usage": "Diskbruk",
-        "disk_usage_images": "Diskbruk for images",
-        "disk_usage_containers": "Diskbruk for containere",
-        "disk_usage_volumes": "Diskbruk for volumer",
-        "disk_usage_build_cache": "Diskbruk for byggebuffer",
         "vulnerabilities": "Sårbarheter",
-        "vulnerabilities_critical": "Kritiske sårbarheter",
-        "vulnerabilities_high": "Høye sårbarheter",
-        "vulnerabilities_medium": "Middels sårbarheter",
-        "vulnerabilities_low": "Lave sårbarheter",
-        "images_scanned": "Skannede images",
         "pinned_digest_updates": "Oppdateringer for låste digester",
         "held_updates": "Tilbakeholdte oppdateringer",
         "hawser_agent_version": "Hawser-agentversjon",

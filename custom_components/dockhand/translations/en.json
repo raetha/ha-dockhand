@@ -113,9 +113,11 @@
             "name": "Environment entities",
             "description": "Entities that are off by default, turned on for every environment, including ones added later.",
             "data": {
+              "all": "All of these",
               "enabled": "Turn on for every environment"
             },
             "data_description": {
+              "all": "Check to turn every type here on; uncheck to turn them all off.",
               "enabled": "Checking a type turns it on everywhere, except where you turned it off yourself. Unchecking it turns it off everywhere again, including any you turned on by hand."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Container entities",
             "description": "Entities that are off by default, turned on for every container, including ones added later.",
             "data": {
+              "all": "All of these",
               "enabled": "Turn on for every container"
             },
             "data_description": {
+              "all": "Check to turn every type here on; uncheck to turn them all off.",
               "enabled": "Checking a type turns it on everywhere, except where you turned it off yourself. Unchecking it turns it off everywhere again, including any you turned on by hand."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Vulnerability scanning",
         "activity_events": "Activity events",
-        "activity_events_today": "Activity events today",
         "disk_usage": "Disk usage",
-        "disk_usage_images": "Images disk usage",
-        "disk_usage_containers": "Containers disk usage",
-        "disk_usage_volumes": "Volumes disk usage",
-        "disk_usage_build_cache": "Build cache disk usage",
         "vulnerabilities": "Vulnerabilities",
-        "vulnerabilities_critical": "Critical vulnerabilities",
-        "vulnerabilities_high": "High vulnerabilities",
-        "vulnerabilities_medium": "Medium vulnerabilities",
-        "vulnerabilities_low": "Low vulnerabilities",
-        "images_scanned": "Scanned images",
         "pinned_digest_updates": "Pinned digest updates",
         "held_updates": "Held updates",
         "hawser_agent_version": "Hawser agent version",

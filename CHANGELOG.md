@@ -227,6 +227,8 @@
   disabled by default. Checking one turns it on everywhere, including on
   devices added later, except where you turned it off yourself; unchecking
   it turns it off everywhere again, including any you turned on by hand.
+  **All of these** checks or unchecks a whole section. Vulnerabilities,
+  Disk usage and Activity events bring the sensors that break them down.
 - **Test builds** — upcoming changes are now published as test builds
   (pre-releases such as `v1.11.3-dev.42`) that HACS can install once
   Dockhand's **Pre-release** switch is turned on; the README's new "Test

@@ -2,10 +2,10 @@
 kind from the options (docs/architecture.md §10).
 
 Choosing a type there creates it enabled on every new device, and enables
-the existing ones the integration had disabled; one you disabled yourself
-stays off. Clearing it disables every one of that type again, including
-any you enabled by hand: Home Assistant only records who disabled an
-entity, not who enabled it.
+the existing ones the integration had disabled, on the choice and again at
+every setup; one you disabled yourself stays off. Clearing it disables
+every one of that type again, including any you enabled by hand: Home
+Assistant only records who disabled an entity, not who enabled it.
 """
 
 from __future__ import annotations
@@ -34,18 +34,8 @@ OPTIONAL_ENTITIES: dict[str, tuple[str, ...]] = {
     "environment": (
         "vulnerability_scanning",
         "activity_events",
-        "activity_events_today",
         "disk_usage",
-        "disk_usage_images",
-        "disk_usage_containers",
-        "disk_usage_volumes",
-        "disk_usage_build_cache",
         "vulnerabilities",
-        "vulnerabilities_critical",
-        "vulnerabilities_high",
-        "vulnerabilities_medium",
-        "vulnerabilities_low",
-        "images_scanned",
         "pinned_digest_updates",
         "held_updates",
         "hawser_agent_version",
@@ -63,16 +53,45 @@ OPTIONAL_ENTITIES: dict[str, tuple[str, ...]] = {
     "stack": ("git_stack_auto_deploy",),
 }
 
+# A choice that also turns on the sensors breaking that entity down, which
+# show nothing useful without it (the cards read them together).
+_PARTS: dict[str, tuple[str, ...]] = {
+    "activity_events": ("activity_events_today",),
+    "disk_usage": (
+        "disk_usage_images",
+        "disk_usage_containers",
+        "disk_usage_volumes",
+        "disk_usage_build_cache",
+    ),
+    "vulnerabilities": (
+        "vulnerabilities_critical",
+        "vulnerabilities_high",
+        "vulnerabilities_medium",
+        "vulnerabilities_low",
+        "images_scanned",
+    ),
+}
+
 # Device identifier word → kind (helpers._device_id_env and the rest).
 _KINDS = {"env": "environment", "container": "container", "stack": "stack"}
 
 
 def chosen(options: Mapping[str, Any]) -> dict[str, set[str]]:
-    """The entity types turned on for every device, by kind."""
+    """The entity types chosen for every device, by kind, as the options
+    list them."""
     stored = options.get(CONF_ENABLED_ENTITIES) or {}
     return {
         kind: set(stored.get(kind) or ()) & set(keys)
         for kind, keys in OPTIONAL_ENTITIES.items()
+    }
+
+
+def _with_parts(choice: dict[str, set[str]]) -> dict[str, set[str]]:
+    """The translation keys a choice turns on: each chosen type and its
+    parts."""
+    return {
+        kind: keys.union(*(_PARTS.get(key, ()) for key in keys))
+        for kind, keys in choice.items()
     }
 
 
@@ -88,7 +107,7 @@ def enabling_chosen(
     entry_id: str, options: Mapping[str, Any], add: AddEntitiesCallback
 ) -> AddEntitiesCallback:
     """`add`, creating the chosen types enabled."""
-    turned_on = chosen(options)
+    turned_on = _with_parts(chosen(options))
 
     def _add(new_entities: Iterable[Entity], update_before_add: bool = False) -> None:
         entities = list(new_entities)
@@ -110,7 +129,7 @@ def async_apply_choice(
 ) -> None:
     """Enable or disable the existing entities of the types whose choice
     changed between options `old` and `new`."""
-    before, after = chosen(old), chosen(new)
+    before, after = _with_parts(chosen(old)), _with_parts(chosen(new))
     turn_on = {kind: after[kind] - before[kind] for kind in after}
     turn_off = {kind: before[kind] - after[kind] for kind in after}
     if not any(turn_on.values()) and not any(turn_off.values()):
@@ -132,6 +151,14 @@ def async_apply_choice(
                 entity.entity_id,
                 disabled_by=er.RegistryEntryDisabler.INTEGRATION,
             )
+
+
+@callback
+def async_enable_chosen(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """At setup, enable the integration-disabled entities of the chosen
+    types: ones created before a type joined a choice (a new part), or
+    while the choice was off."""
+    async_apply_choice(hass, entry.entry_id, {}, entry.options)
 
 
 # Runtime controls exist only while their option is on, which is the choice

@@ -113,9 +113,11 @@
             "name": "Encje środowisk",
             "description": "Encje domyślnie wyłączone, włączone dla każdego środowiska, także dodanych później.",
             "data": {
+              "all": "Wszystkie",
               "enabled": "Włącz dla każdego środowiska"
             },
             "data_description": {
+              "all": "Zaznacz, aby włączyć wszystkie typy tutaj; odznacz, aby wyłączyć je wszystkie.",
               "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Encje kontenerów",
             "description": "Encje domyślnie wyłączone, włączone dla każdego kontenera, także dodanych później.",
             "data": {
+              "all": "Wszystkie",
               "enabled": "Włącz dla każdego kontenera"
             },
             "data_description": {
+              "all": "Zaznacz, aby włączyć wszystkie typy tutaj; odznacz, aby wyłączyć je wszystkie.",
               "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Skanowanie podatności",
         "activity_events": "Zdarzenia aktywności",
-        "activity_events_today": "Zdarzenia aktywności dzisiaj",
         "disk_usage": "Wykorzystanie dysku",
-        "disk_usage_images": "Miejsce na dysku: obrazy",
-        "disk_usage_containers": "Miejsce na dysku: kontenery",
-        "disk_usage_volumes": "Miejsce na dysku: wolumeny",
-        "disk_usage_build_cache": "Miejsce na dysku: pamięć podręczna buildów",
         "vulnerabilities": "Podatności",
-        "vulnerabilities_critical": "Krytyczne podatności",
-        "vulnerabilities_high": "Wysokie podatności",
-        "vulnerabilities_medium": "Średnie podatności",
-        "vulnerabilities_low": "Niskie podatności",
-        "images_scanned": "Przeskanowane obrazy",
         "pinned_digest_updates": "Aktualizacje przypiętych digestów",
         "held_updates": "Wstrzymane aktualizacje",
         "hawser_agent_version": "Wersja agenta Hawser",
