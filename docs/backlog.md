@@ -120,21 +120,11 @@ the reasoning first and only revisit if the stated condition has changed.
   its owning environment's Schedules group like any other env-scoped
   schedule.
 
-- **Group `enable_update_entities`/`enable_precise_updates`/`poll_interval_precise_updates`
-  visually via HA's `section()` helper in the Configure form.** Tried twice in the
-  unreleased 1.8.1 dev cycle (once with the three fields' `strings.json` labels
-  nested under the section's own key, once flat at the top level) — both times the
-  section's own header (name/description) rendered correctly, but the fields
-  *inside* it showed as raw snake_case config keys with no label or help text in a
-  live HA instance. The actual cause was never confirmed: frontend-source research
-  strongly suggested the flat structure should be right, but it wasn't, and there's
-  no way to render/verify HA's actual frontend from this environment. Reverted
-  rather than keep fighting it blind — `_options_schema()` is back to fully flat
-  fields, and its brief config entry migration was deleted outright (nothing
-  shipped with it; 1.11.0's schema 2.2 is an unrelated, real rename). Revisit only with
-  a way to actually verify rendering — e.g. a confirmed-working real HA integration
-  using `section()` to copy the exact translation structure from, or some way to
-  render/test the actual frontend rather than guessing from source reading.
+- **Group `enable_update_entities`/`enable_precise_updates` with HA's `section()`.**
+  Tried twice in the 1.8.1 cycle: the fields inside showed raw keys. The cause is now known (HA
+  2026.8 frontend, `show-dialog-options-flow.ts`): a field inside a section is labelled from
+  `options.step.<step>.sections.<section>.data.<field>`, neither of the places tried. The entity
+  sections (architecture §10) use that. Revisit the grouping if the flat form gets crowded.
 
 - **Runtime controls: Block I/O (`Blkio*`) fields.** Left out of the
   first pass — low value for home-lab use, and real complexity (per-device

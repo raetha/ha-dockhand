@@ -107,6 +107,38 @@
           "enable_resource_stats": "Skapar sensorer för CPU, minne, nätverk och disk-I/O för varje container, plus totaler för varje stack. Av som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar också bort redan skapade.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
           "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Miljöentiteter",
+            "description": "Entiteter som är avstängda som standard, påslagna för varje miljö, även sådana som läggs till senare.",
+            "data": {
+              "enabled": "Slå på för varje miljö"
+            },
+            "data_description": {
+              "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
+            }
+          },
+          "container_entities": {
+            "name": "Containerentiteter",
+            "description": "Entiteter som är avstängda som standard, påslagna för varje container, även sådana som läggs till senare.",
+            "data": {
+              "enabled": "Slå på för varje container"
+            },
+            "data_description": {
+              "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
+            }
+          },
+          "stack_entities": {
+            "name": "Stack-entiteter",
+            "description": "Entiteter som är avstängda som standard, påslagna för varje stack, även sådana som läggs till senare.",
+            "data": {
+              "enabled": "Slå på för varje stack"
+            },
+            "data_description": {
+              "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Images",
         "volumes": "Oanvända volymer",
         "networks": "Oanvända nätverk"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Aktivitetsinsamling",
+        "metrics_collection": "Metrikinsamling",
+        "vulnerability_scanning": "Sårbarhetsgenomsökning",
+        "update_checks": "Uppdateringskontroller",
+        "auto_update": "Automatisk uppdatering",
+        "image_pruning": "Rensning av images",
+        "activity_events": "Aktivitetshändelser",
+        "disk_usage": "Diskanvändning",
+        "vulnerabilities": "Sårbarheter",
+        "hawser_agent_version": "Hawser-agentversion",
+        "host_docker_version": "Docker-version",
+        "host_platform": "Värdplattform",
+        "uptime": "Drifttid"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker-händelse",
+        "pause": "Pausa",
+        "resume": "Återuppta",
+        "container_auto_update": "Automatisk uppdatering",
+        "container_cpu_limit": "CPU-gräns",
+        "container_memory_limit": "Minnesgräns",
+        "container_pids_limit": "Processgräns",
+        "container_restart_policy": "Omstartspolicy"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatisk distribution"
       }
     }
   },

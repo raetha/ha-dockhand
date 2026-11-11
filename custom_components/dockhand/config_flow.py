@@ -4,8 +4,12 @@ from typing import Any, override
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -24,6 +28,7 @@ from .const import (
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_UPDATE_ENTITIES,
     CONF_ENABLE_VOLUMES,
+    CONF_ENABLED_ENTITIES,
     CONF_VERIFY_SSL,
     DEFAULT_ENABLE_IMAGES,
     DEFAULT_ENABLE_NETWORKS,
@@ -37,6 +42,7 @@ from .const import (
     SCHEMA_MINOR_VERSION,
     SCHEMA_VERSION,
 )
+from .entity_defaults import OPTIONAL_ENTITIES, async_apply_choice, chosen
 from .helpers import ha_schema
 
 DEFAULT_VERIFY_SSL = True
@@ -88,6 +94,34 @@ def _token_schema() -> vol.Schema:
             ),
         }
     )
+
+
+def _entity_sections(options: Mapping[str, Any]) -> dict[Any, Any]:
+    """One collapsed section per device kind: the disabled-by-default entity
+    types to turn on for every device of that kind (entity_defaults.py)."""
+    current = chosen(options)
+    return {
+        vol.Optional(f"{kind}_entities"): section(
+            _form(
+                vol.Schema(
+                    {
+                        vol.Optional(
+                            "enabled", default=[k for k in keys if k in current[kind]]
+                        ): SelectSelector(
+                            SelectSelectorConfig(
+                                options=list(keys),
+                                multiple=True,
+                                mode=SelectSelectorMode.LIST,
+                                translation_key=f"{kind}_entities",
+                            )
+                        )
+                    }
+                )
+            ),
+            {"collapsed": True},
+        )
+        for kind, keys in OPTIONAL_ENTITIES.items()
+    }
 
 
 def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -394,8 +428,19 @@ class DockhandOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            options = dict(user_input)
+            options[CONF_ENABLED_ENTITIES] = {
+                kind: list(options.pop(f"{kind}_entities", {}).get("enabled") or [])
+                for kind in OPTIONAL_ENTITIES
+            }
+            async_apply_choice(
+                self.hass, self._entry.entry_id, self._entry.options, options
+            )
+            return self.async_create_entry(title="", data=options)
         defaults = dict(self._entry.options)
         return self.async_show_form(
-            step_id="init", data_schema=_form(_options_schema(defaults))
+            step_id="init",
+            data_schema=_form(
+                _options_schema(defaults).extend(_entity_sections(defaults))
+            ),
         )

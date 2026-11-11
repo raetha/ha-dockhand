@@ -107,6 +107,38 @@
           "enable_resource_stats": "Erstellt CPU-, Speicher-, Netzwerk- und Festplatten-I/O-Sensoren pro Container sowie Summen pro Stack. Standardmäßig deaktiviert, da es sich um viele Entitäten handelt, die die meisten Nutzer nicht benötigen; das Deaktivieren entfernt auch bereits erstellte Sensoren.",
           "enable_update_entities": "Erstellt eine Home-Assistant-Update-Entität für jeden Container. Deaktivieren Sie dies, wenn Sie Updates auf andere Weise verwalten und Dockhands Container nicht in HAs eigener Update-Verwaltung sehen möchten. Blendet auch die Schaltfläche „Alle aktualisieren“ aus; „Nach Updates suchen“ funktioniert trotzdem weiter.",
           "enable_precise_updates": "Aktualisiert Update-Entitäten so, dass sie über regelmäßige Registry-Abfragen präzise Versionsnummern (Image-Digests) anzeigen, statt nur eines Image-Tags. Außerdem die einzige Möglichkeit, den Update-Status von Dockhands eigenen geschützten Containern (es selbst und Hawser) zu sehen – Dockhand gibt deren Update-Status nie über die regulären zwischengespeicherten Update-Check-Daten preis. Erfordert „Update-Entitäten aktivieren“ oben."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Umgebungs-Entitäten",
+            "description": "Standardmäßig deaktivierte Entitäten, für jede Umgebung aktiviert, auch für später hinzugefügte.",
+            "data": {
+              "enabled": "Für jede Umgebung aktivieren"
+            },
+            "data_description": {
+              "enabled": "Ein angehakter Typ wird überall aktiviert, außer wo du ihn selbst deaktiviert hast. Wird der Haken entfernt, wird er überall wieder deaktiviert, auch dort, wo du ihn von Hand aktiviert hast."
+            }
+          },
+          "container_entities": {
+            "name": "Container-Entitäten",
+            "description": "Standardmäßig deaktivierte Entitäten, für jeden Container aktiviert, auch für später hinzugefügte.",
+            "data": {
+              "enabled": "Für jeden Container aktivieren"
+            },
+            "data_description": {
+              "enabled": "Ein angehakter Typ wird überall aktiviert, außer wo du ihn selbst deaktiviert hast. Wird der Haken entfernt, wird er überall wieder deaktiviert, auch dort, wo du ihn von Hand aktiviert hast."
+            }
+          },
+          "stack_entities": {
+            "name": "Stack-Entitäten",
+            "description": "Standardmäßig deaktivierte Entitäten, für jeden Stack aktiviert, auch für später hinzugefügte.",
+            "data": {
+              "enabled": "Für jeden Stack aktivieren"
+            },
+            "data_description": {
+              "enabled": "Ein angehakter Typ wird überall aktiviert, außer wo du ihn selbst deaktiviert hast. Wird der Haken entfernt, wird er überall wieder deaktiviert, auch dort, wo du ihn von Hand aktiviert hast."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Images",
         "volumes": "Ungenutzte Volumes",
         "networks": "Ungenutzte Netzwerke"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Aktivitätserfassung",
+        "metrics_collection": "Metrikenerfassung",
+        "vulnerability_scanning": "Schwachstellen-Scan",
+        "update_checks": "Update-Prüfungen",
+        "auto_update": "Automatisches Update",
+        "image_pruning": "Image-Bereinigung",
+        "activity_events": "Aktivitätsereignisse",
+        "disk_usage": "Speicherplatznutzung",
+        "vulnerabilities": "Schwachstellen",
+        "hawser_agent_version": "Hawser-Agent-Version",
+        "host_docker_version": "Docker-Version",
+        "host_platform": "Host-Plattform",
+        "uptime": "Betriebszeit"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker-Ereignis",
+        "pause": "Pausieren",
+        "resume": "Fortsetzen",
+        "container_auto_update": "Automatische Aktualisierung",
+        "container_cpu_limit": "CPU-Limit",
+        "container_memory_limit": "Speicherlimit",
+        "container_pids_limit": "Prozesslimit",
+        "container_restart_policy": "Neustartrichtlinie"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatische Bereitstellung"
       }
     }
   },

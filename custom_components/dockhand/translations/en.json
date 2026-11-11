@@ -107,6 +107,38 @@
           "enable_resource_stats": "Creates CPU, memory, network, and disk I/O sensors for each container, plus totals for each stack. Off by default since it's a lot of entities most people don't need; turning it off also removes any already-created ones.",
           "enable_update_entities": "Creates a Home Assistant update entity for every container. Turn this off if you manage updates another way and don't want Dockhand's containers in HA's own update management. Also hides the 'Update all' button; 'Check for updates' keeps working either way.",
           "enable_precise_updates": "Upgrades update entities to show precise version numbers (image digests) via periodic registry queries, instead of just an image tag. Also the only way to see update status for Dockhand's own protected containers (itself and Hawser) — Dockhand never exposes their update status through its regular cached update-check data. Requires 'Enable update entities' above."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Environment entities",
+            "description": "Entities that are off by default, turned on for every environment, including ones added later.",
+            "data": {
+              "enabled": "Turn on for every environment"
+            },
+            "data_description": {
+              "enabled": "Checking a type turns it on everywhere, except where you turned it off yourself. Unchecking it turns it off everywhere again, including any you turned on by hand."
+            }
+          },
+          "container_entities": {
+            "name": "Container entities",
+            "description": "Entities that are off by default, turned on for every container, including ones added later.",
+            "data": {
+              "enabled": "Turn on for every container"
+            },
+            "data_description": {
+              "enabled": "Checking a type turns it on everywhere, except where you turned it off yourself. Unchecking it turns it off everywhere again, including any you turned on by hand."
+            }
+          },
+          "stack_entities": {
+            "name": "Stack entities",
+            "description": "Entities that are off by default, turned on for every stack, including ones added later.",
+            "data": {
+              "enabled": "Turn on for every stack"
+            },
+            "data_description": {
+              "enabled": "Checking a type turns it on everywhere, except where you turned it off yourself. Unchecking it turns it off everywhere again, including any you turned on by hand."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Images",
         "volumes": "Unused volumes",
         "networks": "Unused networks"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Activity collection",
+        "metrics_collection": "Metrics collection",
+        "vulnerability_scanning": "Vulnerability scanning",
+        "update_checks": "Update checks",
+        "auto_update": "Auto update",
+        "image_pruning": "Image pruning",
+        "activity_events": "Activity events",
+        "disk_usage": "Disk usage",
+        "vulnerabilities": "Vulnerabilities",
+        "hawser_agent_version": "Hawser agent version",
+        "host_docker_version": "Docker version",
+        "host_platform": "Host platform",
+        "uptime": "Uptime"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker event",
+        "pause": "Pause",
+        "resume": "Resume",
+        "container_auto_update": "Auto update",
+        "container_cpu_limit": "CPU limit",
+        "container_memory_limit": "Memory limit",
+        "container_pids_limit": "Process limit",
+        "container_restart_policy": "Restart policy"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Auto deploy"
       }
     }
   },

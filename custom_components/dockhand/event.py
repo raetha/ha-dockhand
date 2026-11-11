@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from . import DockhandConfigEntry
 from .const import CONF_API_URL, CONTAINER_EVENT_TYPES
 from .entity import DockhandContainerEntity
+from .entity_defaults import enabling_chosen
 from .events import container_event_signal, env_sends_events
 from .helpers import _all_envs, _coordinator_env, already_registered
 
@@ -22,6 +23,9 @@ async def async_setup_entry(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    async_add_entities = enabling_chosen(
+        entry.entry_id, entry.options, async_add_entities
+    )
     fast = entry.runtime_data.fast_coordinator
     base_url: str = entry.data.get(CONF_API_URL, "")
     known_ids = entry.runtime_data.known_entity_ids

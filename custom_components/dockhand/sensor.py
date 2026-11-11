@@ -36,6 +36,7 @@ from .entity import (
     DockhandScheduleEntity,
     DockhandStackEntity,
 )
+from .entity_defaults import enabling_chosen
 from .helpers import (
     _actionable_pending_update_container_ids,
     _all_envs,
@@ -92,6 +93,9 @@ async def async_setup_entry(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    async_add_entities = enabling_chosen(
+        entry.entry_id, entry.options, async_add_entities
+    )
     fast: DockhandFastCoordinator = entry.runtime_data.fast_coordinator
     slow: DockhandSlowCoordinator = entry.runtime_data.slow_coordinator
     update_coordinator: DockhandUpdateCoordinator | None = (

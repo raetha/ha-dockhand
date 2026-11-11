@@ -107,6 +107,38 @@
           "enable_resource_stats": "Crea sensori di CPU, memoria, rete e I/O del disco per ogni container, più i totali di ogni stack. Disattivato per impostazione predefinita perché sono molte entità che la maggior parte delle persone non usa; disattivandolo vengono rimosse anche quelle già create.",
           "enable_update_entities": "Crea un'entità di aggiornamento di Home Assistant per ogni container. Disattiva questa opzione se gestisci gli aggiornamenti in un altro modo e non vuoi che i container di Dockhand appaiano nella gestione aggiornamenti di HA. Nasconde anche il pulsante \"Aggiorna tutto\"; \"Controlla aggiornamenti\" continua comunque a funzionare.",
           "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. È anche l'unico modo per vedere lo stato di aggiornamento dei contenitori protetti di Dockhand stesso (Dockhand e Hawser) — Dockhand non espone mai il loro stato di aggiornamento tramite i normali dati di controllo aggiornamenti in cache. Richiede \"Abilita entità di aggiornamento\" sopra."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Entità degli ambienti",
+            "description": "Entità disattivate per impostazione predefinita, attivate per ogni ambiente, compresi quelli aggiunti in seguito.",
+            "data": {
+              "enabled": "Attiva per ogni ambiente"
+            },
+            "data_description": {
+              "enabled": "Selezionare un tipo lo attiva ovunque, tranne dove l'hai disattivato tu. Deselezionarlo lo disattiva di nuovo ovunque, compresi quelli che avevi attivato a mano."
+            }
+          },
+          "container_entities": {
+            "name": "Entità dei container",
+            "description": "Entità disattivate per impostazione predefinita, attivate per ogni container, compresi quelli aggiunti in seguito.",
+            "data": {
+              "enabled": "Attiva per ogni container"
+            },
+            "data_description": {
+              "enabled": "Selezionare un tipo lo attiva ovunque, tranne dove l'hai disattivato tu. Deselezionarlo lo disattiva di nuovo ovunque, compresi quelli che avevi attivato a mano."
+            }
+          },
+          "stack_entities": {
+            "name": "Entità degli stack",
+            "description": "Entità disattivate per impostazione predefinita, attivate per ogni stack, compresi quelli aggiunti in seguito.",
+            "data": {
+              "enabled": "Attiva per ogni stack"
+            },
+            "data_description": {
+              "enabled": "Selezionare un tipo lo attiva ovunque, tranne dove l'hai disattivato tu. Deselezionarlo lo disattiva di nuovo ovunque, compresi quelli che avevi attivato a mano."
+            }
+          }
         }
       }
     }
@@ -517,6 +549,40 @@
         "images": "Immagini",
         "volumes": "Volumi inutilizzati",
         "networks": "Reti inutilizzate"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "activity_logging": "Raccolta attività",
+        "metrics_collection": "Raccolta metriche",
+        "vulnerability_scanning": "Scansione vulnerabilità",
+        "update_checks": "Controllo aggiornamenti",
+        "auto_update": "Aggiornamento automatico",
+        "image_pruning": "Pulizia immagini",
+        "activity_events": "Eventi di attività",
+        "disk_usage": "Utilizzo del disco",
+        "vulnerabilities": "Vulnerabilità",
+        "hawser_agent_version": "Versione agente Hawser",
+        "host_docker_version": "Versione Docker",
+        "host_platform": "Piattaforma host",
+        "uptime": "Tempo di attività"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Evento Docker",
+        "pause": "Metti in pausa",
+        "resume": "Riprendi",
+        "container_auto_update": "Aggiornamento automatico",
+        "container_cpu_limit": "Limite CPU",
+        "container_memory_limit": "Limite di memoria",
+        "container_pids_limit": "Limite processi",
+        "container_restart_policy": "Criterio di riavvio"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Distribuzione automatica"
       }
     }
   },

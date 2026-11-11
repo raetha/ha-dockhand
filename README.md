@@ -96,6 +96,8 @@ The following can be changed at any time via the **Configure** button on the int
 | **Enable runtime controls** | Create `number`/`select` entities to change a stack-less container's memory limit, CPU limit, process limit, and restart policy live, without recreating it. Not available for Compose-managed containers. Costs one extra API call per stack-less container per slow poll | off |
 | **Enable container and stack stats** | Create the per-container CPU, memory, network, and block I/O sensors, plus Dockhand's totals for each stack (Dockhand 1.0.52+) — not created at all until this is on, same as Images/Volumes/Networks below. Also gates the underlying stats API call itself, not just entity creation. Off since it's a lot of entities most people don't need | off |
 
+Below these, three collapsed sections, **Environment entities**, **Container entities** and **Stack entities**, list the entities that are disabled by default (Pause and Resume, Docker event, runtime controls, disk usage, uptime and so on). Checking one turns it on for every environment, container or stack, including ones added later, except where you turned it off yourself. Unchecking it turns it off everywhere again, including any you turned on by hand.
+
 ### Reconfigure (change URL, SSL, or API token)
 
 Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, **Verify SSL** setting, or **API Token**. The token field is pre-populated and masked — clear it to disable authentication (you will be re-prompted if the server still requires it), or enter a new value to rotate credentials. The integration re-probes the server on save.
