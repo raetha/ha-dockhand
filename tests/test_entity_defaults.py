@@ -16,6 +16,7 @@ from custom_components.dockhand.const import CONF_ENABLED_ENTITIES, DOMAIN
 from custom_components.dockhand.entity_defaults import (
     OPTIONAL_ENTITIES,
     async_apply_choice,
+    async_enable_runtime_controls,
     chosen,
     enabling_chosen,
 )
@@ -191,3 +192,37 @@ async def test_options_flow_stores_the_choice_and_applies_it(hass: HomeAssistant
     )
     [enabled] = container.schema.schema
     assert enabled.default() == ["docker_event"]
+
+
+async def test_runtime_controls_follow_their_option(hass: HomeAssistant):
+    entry = MockConfigEntry(
+        domain=DOMAIN, data={}, options={"enable_runtime_controls": True}
+    )
+    entry.add_to_hass(hass)
+    restored = _entity(
+        hass, entry, "container_1_web", "number", "container_memory_limit"
+    )
+    mine = _entity(
+        hass,
+        entry,
+        "container_1_web",
+        "select",
+        "container_restart_policy",
+        disabled_by=Disabler.USER,
+    )
+    other = _entity(hass, entry, "container_1_web", "button", "pause")
+    async_enable_runtime_controls(hass, entry)
+    assert _disabled_by(hass, restored) is None
+    assert _disabled_by(hass, mine) is Disabler.USER
+    assert _disabled_by(hass, other) is Disabler.INTEGRATION
+
+    # Option off, or new entities kept disabled: nothing changes.
+    for options, pref in (({}, False), ({"enable_runtime_controls": True}, True)):
+        er.async_get(hass).async_update_entity(
+            restored, disabled_by=Disabler.INTEGRATION
+        )
+        hass.config_entries.async_update_entry(
+            entry, options=options, pref_disable_new_entities=pref
+        )
+        async_enable_runtime_controls(hass, entry)
+        assert _disabled_by(hass, restored) is Disabler.INTEGRATION

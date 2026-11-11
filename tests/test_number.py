@@ -414,10 +414,11 @@ async def test_no_warnings_no_repair_issue():
 # ---------------------------------------------------------------------------
 
 
-def test_entities_disabled_by_default():
-    assert not _make_memory_entity()._attr_entity_registry_enabled_default
-    assert not _make_cpu_entity()._attr_entity_registry_enabled_default
-    assert not _make_pids_entity()._attr_entity_registry_enabled_default
+def test_entities_enabled_by_default():
+    # Their option is the choice to use them.
+    assert _make_memory_entity().entity_registry_enabled_default
+    assert _make_cpu_entity().entity_registry_enabled_default
+    assert _make_pids_entity().entity_registry_enabled_default
 
 
 def test_unique_id_format():

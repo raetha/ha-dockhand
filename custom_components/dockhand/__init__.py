@@ -47,6 +47,7 @@ from .coordinator import (
     DockhandUpdateCoordinator,
     DockhandVersionCoordinator,
 )
+from .entity_defaults import async_enable_runtime_controls
 from .events import DockhandEventStream
 from .helpers import (
     CONTAINER_STATS_SUFFIXES,
@@ -460,6 +461,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async_enable_runtime_controls(hass, entry)
 
     entry.runtime_data.event_stream.async_setup()
 

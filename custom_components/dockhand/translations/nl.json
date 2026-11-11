@@ -573,11 +573,7 @@
         "docker_event": "Docker-gebeurtenis",
         "pause": "Pauzeren",
         "resume": "Hervatten",
-        "container_auto_update": "Automatisch bijwerken",
-        "container_cpu_limit": "CPU-limiet",
-        "container_memory_limit": "Geheugenlimiet",
-        "container_pids_limit": "Proceslimiet",
-        "container_restart_policy": "Herstartbeleid"
+        "container_auto_update": "Automatisch bijwerken"
       }
     },
     "stack_entities": {
