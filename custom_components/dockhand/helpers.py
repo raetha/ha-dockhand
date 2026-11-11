@@ -11,6 +11,7 @@ import math
 from collections.abc import Awaitable
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -427,17 +428,26 @@ def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def instance_host(base_url: str) -> str | None:
+    """Host (and port, when given) of Dockhand's URL: what tells instances
+    apart, as the cards label them."""
+    parsed = urlparse(base_url)
+    if not parsed.hostname:
+        return None
+    return f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
+
+
 def _instance_device(entry_id: str, base_url: str, version: str | None) -> DeviceInfo:
     """The Dockhand server itself, parent of its environments.
 
-    Named "Dockhand" rather than after the entry, whose title is its API
-    URL; a second instance is told apart by its configuration URL, and can
-    be renamed. Registered in async_setup_entry before any other device
-    and never removed while the entry is loaded.
+    Named after its host rather than the entry's title, which is the whole
+    API URL. Registered in async_setup_entry before any other device and
+    never removed while the entry is loaded.
     """
+    host = instance_host(base_url)
     info = DeviceInfo(
         identifiers={(DOMAIN, _device_id_instance(entry_id))},
-        name="Dockhand",
+        name=f"Dockhand ({host})" if host else "Dockhand",
         manufacturer="Dockhand",
         model="Dockhand",
         entry_type=DeviceEntryType.SERVICE,

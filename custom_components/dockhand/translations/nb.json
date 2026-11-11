@@ -339,6 +339,14 @@
       },
       "stack_updates_available": {
         "name": "Oppdateringer tilgjengelig"
+      },
+      "live_updates": {
+        "name": "Direkteoppdateringer",
+        "state_attributes": {
+          "in_use": {
+            "name": "I bruk"
+          }
+        }
       }
     },
     "switch": {

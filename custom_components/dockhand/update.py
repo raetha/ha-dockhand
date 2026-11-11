@@ -207,13 +207,18 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
 from .const import CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES, DOMAIN
-from .coordinator import DockhandFastCoordinator, DockhandUpdateCoordinator
+from .coordinator import (
+    DockhandFastCoordinator,
+    DockhandUpdateCoordinator,
+    DockhandVersionCoordinator,
+)
 from .helpers import (
     _all_envs,
     _container_installed_version,
     _container_update_status,
     _coordinator_env,
     _device_id_container,
+    _device_id_instance,
     _find_container,
     _is_update_disabled_by_label,
     _short_digest,
@@ -256,6 +261,10 @@ async def async_setup_entry(
     offline" (which must never trigger cleanup), so update entities
     reuse that same safety logic rather than duplicating it.
     """
+    version = entry.runtime_data.version_coordinator
+    if version.self_update_allowed:
+        async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
+
     if not entry.options.get(
         CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES
     ):
@@ -307,6 +316,62 @@ async def async_setup_entry(
     # Re-run on each fast-coordinator update to pick up new containers or
     # environments.
     entry.async_on_unload(fast_coordinator.async_add_listener(_add_new_entities))
+
+
+class DockhandSelfUpdateEntity(
+    CoordinatorEntity[DockhandVersionCoordinator], UpdateEntity
+):
+    """Dockhand itself, on its device: Dockhand's own check for a newer
+    release (Settings → About), which also covers installs Dockhand can't
+    inspect as a container. Where Dockhand runs in an environment it
+    manages, its container has an update entity of its own too: that one
+    follows the image, this one the release. No Install: Dockhand's
+    self-update replaces its own container, which is better started from
+    Dockhand."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_release_url = "https://github.com/Finsys/dockhand/releases"
+
+    def __init__(self, coordinator: DockhandVersionCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_instance_update"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, _device_id_instance(entry_id))}
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        return (
+            super().available
+            and self.coordinator.self_update_allowed
+            and self.coordinator.self_update is not None
+        )
+
+    @property
+    @override
+    def installed_version(self) -> str | None:
+        check = self.coordinator.self_update or {}
+        return self.coordinator.data or check.get("currentVersion")
+
+    @property
+    @override
+    def latest_version(self) -> str | None:
+        check = self.coordinator.self_update or {}
+        installed = self.installed_version
+        if not check.get("updateAvailable"):
+            # A failed check says nothing either way.
+            return None if check.get("error") else installed
+        if check.get("latestVersion"):
+            return str(check["latestVersion"])
+        # A moving tag (latest) has a newer image rather than a version.
+        digest = str(check.get("newDigest") or "")
+        return digest.removeprefix("sha256:")[:12] or None
+
+    @override
+    def version_is_newer(self, latest_version: str, installed_version: str) -> bool:
+        return bool((self.coordinator.self_update or {}).get("updateAvailable"))
 
 
 class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEntity):

@@ -7,17 +7,19 @@ from homeassistant.components.binary_sensor import (  # type: ignore[attr-define
     BinarySensorEntity,
 )
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
-from .const import CONF_API_URL
+from .const import CONF_API_URL, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
+from .events import DockhandEventStream
 from .helpers import (
     _all_envs,
     _coordinator_env,
+    _device_id_instance,
     _env_device,
     _find_git_stack,
     _find_stack,
@@ -127,6 +129,13 @@ async def async_setup_entry(
                     new.append(git_sensor)
         return new
 
+    async_add_entities(
+        [
+            DockhandLiveUpdatesBinarySensor(
+                entry.runtime_data.event_stream, entry.entry_id
+            )
+        ]
+    )
     async_add_entities(_build_fast_entities())
     async_add_entities(_build_slow_entities())
     entry.async_on_unload(
@@ -135,6 +144,45 @@ async def async_setup_entry(
     entry.async_on_unload(
         slow.async_add_listener(lambda: async_add_entities(_build_slow_entities()))
     )
+
+
+class DockhandLiveUpdatesBinarySensor(BinarySensorEntity):
+    """Whether Dockhand's activity feed is open, on the Dockhand device.
+    Off also while no environment sends events, when there's nothing to
+    receive (in_use says which)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "live_updates"
+    _attr_device_class = BinarySensorDeviceClass.CONNECTIVITY
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_should_poll = False
+
+    def __init__(self, stream: DockhandEventStream, entry_id: str) -> None:
+        self._stream = stream
+        self._attr_unique_id = f"{entry_id}_instance_live_updates"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, _device_id_instance(entry_id))}
+        )
+
+    @override
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(self._stream.async_add_listener(self.async_write_ha_state))
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        # Nothing is keyed on entity_id: rename in place (HA 2026.11+), as
+        # event.py explains.
+        super().async_entity_id_changed(old_entity_id)  # type: ignore[misc, unused-ignore]
+
+    @property
+    @override
+    def is_on(self) -> bool:
+        return self._stream.connected
+
+    @property
+    @override
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"in_use": self._stream.running}
 
 
 class BaseEnvBinarySensor(

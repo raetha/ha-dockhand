@@ -9,6 +9,7 @@ import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import (
@@ -30,6 +31,8 @@ from custom_components.dockhand.diagnostics import (
 from custom_components.dockhand.helpers import (
     _device_by_identifier,
     _ensure_hub_devices,
+    _instance_device,
+    instance_host,
 )
 
 from .conftest import make_mock_client
@@ -106,7 +109,7 @@ async def test_instance_device_parents_the_environments(
     hass: HomeAssistant, loaded_entry: MockConfigEntry
 ):
     instance = _instance(hass, loaded_entry)
-    assert instance.name == "Dockhand"
+    assert instance.name == "Dockhand (dh.test:3000)"
     assert instance.sw_version == "1.0.57"
     assert instance.configuration_url == "http://dh.test:3000"
     env = _device_by_identifier(
@@ -227,3 +230,119 @@ async def test_system_health_shows_the_live_feed(
     diagnostics = await async_get_config_entry_diagnostics(hass, loaded_entry)
     assert diagnostics["live_events"] == {"running": True, "connected": connected}
     stream._task = None
+
+
+def test_instance_host_falls_back_to_dockhand():
+    assert instance_host("https://dockhand.example.com") == "dockhand.example.com"
+    assert _instance_device("e", "", None)["name"] == "Dockhand"
+
+
+def _entity_id(hass: HomeAssistant, platform: str, unique_id: str) -> str:
+    entity_id = er.async_get(hass).async_get_entity_id(platform, DOMAIN, unique_id)
+    assert entity_id is not None
+    return entity_id
+
+
+async def test_dockhand_update_entity(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry
+):
+    entity_id = _entity_id(hass, "update", f"{loaded_entry.entry_id}_instance_update")
+    assert entity_id == "update.dockhand_dh_test_3000"
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    assert state.attributes["installed_version"] == "1.0.57"
+    assert state.attributes["latest_version"] == "1.0.57"
+    assert state.attributes["supported_features"] == 0
+
+    version = loaded_entry.runtime_data.version_coordinator
+    cases = [
+        ({"updateAvailable": True, "latestVersion": "1.0.58"}, "on", "1.0.58"),
+        (
+            {"updateAvailable": True, "newDigest": "sha256:abcdef0123456789"},
+            "on",
+            "abcdef012345",
+        ),
+        ({"updateAvailable": False, "error": "no Docker"}, "unknown", None),
+    ]
+    for check, expected, latest in cases:
+        version.self_update = check
+        version.async_set_updated_data("1.0.57")
+        await hass.async_block_till_done()
+        state = hass.states.get(entity_id)
+        assert state.state == expected
+        assert state.attributes["latest_version"] == latest
+
+    # A failed check is unavailable; a refused one too, and not created again.
+    version.self_update = None
+    version.async_set_updated_data("1.0.57")
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unavailable"
+
+
+async def test_dockhand_update_check_is_feature_detected(hass: HomeAssistant):
+    from custom_components.dockhand.api import (
+        DockhandNotFoundError,
+        DockhandPermissionError,
+    )
+
+    for error, allowed in (
+        (DockhandPermissionError("403"), False),
+        (DockhandNotFoundError("404"), False),
+        (OSError("down"), True),
+    ):
+        client = MagicMock()
+        client.async_get_dockhand_version = AsyncMock(return_value="1.0.57")
+        client.async_check_self_update = AsyncMock(side_effect=error)
+        coordinator = DockhandVersionCoordinator(hass, client)
+        assert await coordinator._async_update_data() == "1.0.57"
+        assert coordinator.self_update is None
+        assert coordinator.self_update_allowed is allowed
+        # Once refused, it isn't asked again.
+        await coordinator._async_update_data()
+        assert client.async_check_self_update.await_count == (1 if not allowed else 2)
+
+
+async def test_no_update_entity_without_permission(hass: HomeAssistant):
+    from custom_components.dockhand.api import DockhandPermissionError
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="t",
+        data={"api_url": "http://dh.test:3000", "api_token": "t"},
+        options={},
+    )
+    entry.add_to_hass(hass)
+    client = make_mock_client()
+    client.async_check_self_update = AsyncMock(side_effect=DockhandPermissionError())
+    client.async_get_pending_updates = AsyncMock(return_value=[])
+    client.async_get_stack_stats = AsyncMock(return_value=[])
+    with (
+        patch("custom_components.dockhand.async_get_clientsession"),
+        patch("custom_components.dockhand.DockhandClient", return_value=client),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert (
+        er.async_get(hass).async_get_entity_id(
+            "update", DOMAIN, f"{entry.entry_id}_instance_update"
+        )
+        is None
+    )
+
+
+async def test_live_updates_sensor(hass: HomeAssistant, loaded_entry: MockConfigEntry):
+    entity_id = _entity_id(
+        hass, "binary_sensor", f"{loaded_entry.entry_id}_instance_live_updates"
+    )
+    stream = loaded_entry.runtime_data.event_stream
+    assert hass.states.get(entity_id).state == "off"
+    stream.connected = True
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "on"
+    # No change, no write.
+    stream.connected = True
+    stream.async_stop()
+    await hass.async_block_till_done()
+    state = hass.states.get(entity_id)
+    assert state.state == "off"
+    assert state.attributes["in_use"] is False

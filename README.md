@@ -167,8 +167,9 @@ Anything the token can't read shows as unavailable (with a repair issue saying w
 The integration uses a **grouped device hierarchy** that keeps the device list manageable regardless of how many containers and stacks you have.
 
 ```
-Dockhand                                    ← Dockhand device: the server itself, showing its version;
-                                              environments and the Schedules hub connect through it
+Dockhand (dockhand.example.com)             ← Dockhand device: the server itself, showing its version;
+├── update                                    environments and the Schedules hub connect through it
+└── binary_sensor.Live updates  (diagnostic)
 
 myenv                                       ← Environment device
 ├── myenv – Containers                      ← Group device (freestanding containers only)
@@ -223,6 +224,12 @@ If you're also running the Portainer integration, note that this integration use
 ---
 
 ## Entities reference
+
+### Dockhand
+| Entity | Type | Notes |
+|---|---|---|
+| (the device's name) | update | Whether a newer Dockhand release exists, from Dockhand's own check (**Settings → About** in Dockhand), every 6 hours. Read only: update Dockhand from Dockhand. Needs an admin token when Dockhand's authentication is on; without one there's no entity. Where Dockhand runs in an environment it manages, its container's own update entity can show the same update, from the image's side |
+| Live updates | binary_sensor | Diagnostic, connectivity: whether Dockhand's live feed is connected. `in_use` is false while no environment sends events, when there's nothing to receive |
 
 ### Environment (always on, 60 s)
 | Entity | Type | Notes |
@@ -466,7 +473,7 @@ Dockhand uses four polling coordinators, each on a fixed schedule, and a live fe
 **Update coordinator** (once a day) — only active when **Enable precise update versions** is turned on. Update entities themselves exist for every container as long as **Enable update entities** is on (default on), and this coordinator is purely additive for them — it only upgrades their version display from an image tag to a precise digest, never gates whether they exist. It has nothing to do with the env-level **Check for updates** button's own existence — that button always exists and always calls Dockhand's real check-updates API directly, whether or not this coordinator is running; if this coordinator *is* running, the button's result also updates it:
 - Per-environment image update availability via `POST /api/containers/check-updates`, which performs real registry queries against each container's image source. Kept infrequent to avoid unnecessary load on the Docker host. The **Check for updates** button on every environment device (always present, regardless of any option) triggers an immediate check on demand — and, if **Enable update entities** is on, its result also refreshes the cheap Tier 1 status immediately rather than waiting for the next 60-second poll.
 
-**Version coordinator** (every 6 hours) reads Dockhand's own version for the Dockhand device, from its changelog (the only place Dockhand reports it). It's also read again whenever the live feed reconnects, which is when an upgraded Dockhand comes back.
+**Version coordinator** (every 6 hours) reads Dockhand's own version for the Dockhand device, from its changelog (the only place Dockhand reports it), and runs Dockhand's own update check for its update entity. It's also read again whenever the live feed reconnects, which is when an upgraded Dockhand comes back.
 
 Entities update automatically when their coordinator refreshes. If a whole poll fails (Dockhand unreachable, say), that coordinator's entities become unavailable until the next successful one; the failure is logged once, and so is the recovery. If only part of a poll fails — one environment, or one optional fetch — only the entities that depend on that part become unavailable, and devices are never removed because of a failed fetch. All three coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
 

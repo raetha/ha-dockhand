@@ -52,9 +52,13 @@
   updated, or its health check passes, fails or starts, for automations.
   It comes from the live feed, so it's only available for environments
   Dockhand sends events for. Disabled by default.
-- **Dockhand device** — a device named **Dockhand** for the Dockhand server
-  itself, showing its version (updated after an upgrade). Environments and
-  the Schedules hub now appear connected through it.
+- **Dockhand device** — a device for the Dockhand server itself, named
+  **Dockhand (*host*)**, showing its version (updated after an upgrade).
+  Environments and the Schedules hub now appear connected through it. It
+  has an **update** entity saying whether a newer Dockhand release exists
+  (from Dockhand's own check; needs an admin token when authentication is
+  on) and a diagnostic **Live updates** sensor showing whether Dockhand's
+  live feed is connected.
 - **Dockhand on the System information page** (Settings → System →
   Repairs → ⋮ → System information): whether Dockhand answers, its
   version and how many environments it has, with a **Manage** link to the
@@ -104,6 +108,8 @@
 
 ### Fixed
 
+- **An offline environment's Online sensor kept the online icon** — it now
+  shows the Wi-Fi-off icon.
 - **Stacks and images could disappear while Docker was briefly
   unreachable** — Dockhand reports an empty list rather than an error when
   it can't reach Docker, so a short outage could remove an environment's

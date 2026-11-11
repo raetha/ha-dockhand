@@ -77,7 +77,11 @@ call.
 in `async_setup_entry` before any other device and is never removed while the entry is loaded
 (`async_remove_config_entry_device` refuses it), so `_ensure_env_devices()` and
 `_ensure_hub_devices()` parent environments and the Schedules hub to it with `via_device_id`.
-Only registration sets that: entity `device_info` omits it, which leaves it unchanged. (HA
+Only registration sets that: entity `device_info` omits it, which leaves it unchanged. It's named
+"Dockhand (*host*)" (`instance_host()`, the host as the cards label an instance), not after
+the entry, whose title is the API URL. Its entities' unique IDs are `{entry_id}_instance_{what}`
+(`instance_update`, `instance_live_updates`): no env_id, so the cleanup pass's type dispatch skips
+them, and they're never removed while the entry is loaded. (HA
 2026.10 deprecates `via_device` in `DeviceInfo` in favor of `via_device_id`, which needs the
 registry id, hence the lookup.)
 

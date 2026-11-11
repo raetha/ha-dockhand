@@ -74,11 +74,36 @@ class DockhandEventStream:
         # Per environment, when its latest event arrived (event-loop time).
         self._last_event: dict[int, float] = {}
         self._started = False
-        self.connected = False
+        self._connected = False
+        self._listeners: list[CALLBACK_TYPE] = []
 
     @property
     def running(self) -> bool:
         return self._task is not None
+
+    @property
+    def connected(self) -> bool:
+        return self._connected
+
+    @connected.setter
+    def connected(self, value: bool) -> None:
+        if value != self._connected:
+            self._connected = value
+            self._notify()
+
+    def _notify(self) -> None:
+        for listener in list(self._listeners):
+            listener()
+
+    @callback
+    def async_add_listener(self, listener: CALLBACK_TYPE) -> CALLBACK_TYPE:
+        """Call `listener` whenever the feed connects or drops."""
+        self._listeners.append(listener)
+
+        def _remove() -> None:
+            self._listeners.remove(listener)
+
+        return _remove
 
     @callback
     def async_setup(self) -> None:
@@ -105,6 +130,7 @@ class DockhandEventStream:
             self._task = self._entry.async_create_background_task(
                 self._hass, self._async_run(), "dockhand activity feed"
             )
+            self._notify()
         elif not wanted and self._task is not None:
             self.async_stop()
 
@@ -113,6 +139,7 @@ class DockhandEventStream:
         if self._task is not None:
             self._task.cancel()
             self._task = None
+            self._notify()
         self.connected = False
         for cancel in self._pending.values():
             cancel()

@@ -76,10 +76,17 @@ def test_memory_limit_number_hook_calls_super():
 def test_update_and_event_hooks_call_super():
     from unittest.mock import patch
 
+    from custom_components.dockhand.binary_sensor import (
+        DockhandLiveUpdatesBinarySensor,
+    )
     from custom_components.dockhand.event import DockhandContainerEventEntity
     from custom_components.dockhand.update import ContainerUpdateEntity
 
-    for cls in (ContainerUpdateEntity, DockhandContainerEventEntity):
+    for cls in (
+        ContainerUpdateEntity,
+        DockhandContainerEventEntity,
+        DockhandLiveUpdatesBinarySensor,
+    ):
         entity = cls.__new__(cls)
         base = cls.__mro__[1]
         with patch.object(base, "async_entity_id_changed", create=True) as parent:

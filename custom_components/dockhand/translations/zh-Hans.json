@@ -339,6 +339,14 @@
       },
       "stack_updates_available": {
         "name": "有可用更新"
+      },
+      "live_updates": {
+        "name": "实时更新",
+        "state_attributes": {
+          "in_use": {
+            "name": "使用中"
+          }
+        }
       }
     },
     "switch": {
