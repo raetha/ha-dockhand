@@ -113,9 +113,11 @@
             "name": "Entités d'environnement",
             "description": "Entités désactivées par défaut, activées pour chaque environnement, y compris ceux ajoutés plus tard.",
             "data": {
+              "all": "Tous",
               "enabled": "Activer pour chaque environnement"
             },
             "data_description": {
+              "all": "Cochez pour activer tous les types ici ; décochez pour tous les désactiver.",
               "enabled": "Cocher un type l'active partout, sauf là où vous l'avez désactivé vous-même. Le décocher le désactive à nouveau partout, y compris là où vous l'aviez activé à la main."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Entités de conteneur",
             "description": "Entités désactivées par défaut, activées pour chaque conteneur, y compris ceux ajoutés plus tard.",
             "data": {
+              "all": "Tous",
               "enabled": "Activer pour chaque conteneur"
             },
             "data_description": {
+              "all": "Cochez pour activer tous les types ici ; décochez pour tous les désactiver.",
               "enabled": "Cocher un type l'active partout, sauf là où vous l'avez désactivé vous-même. Le décocher le désactive à nouveau partout, y compris là où vous l'aviez activé à la main."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Analyse des vulnérabilités",
         "activity_events": "Événements d'activité",
-        "activity_events_today": "Événements d'activité aujourd'hui",
         "disk_usage": "Utilisation du disque",
-        "disk_usage_images": "Espace disque des images",
-        "disk_usage_containers": "Espace disque des conteneurs",
-        "disk_usage_volumes": "Espace disque des volumes",
-        "disk_usage_build_cache": "Espace disque du cache de build",
         "vulnerabilities": "Vulnérabilités",
-        "vulnerabilities_critical": "Vulnérabilités critiques",
-        "vulnerabilities_high": "Vulnérabilités élevées",
-        "vulnerabilities_medium": "Vulnérabilités moyennes",
-        "vulnerabilities_low": "Vulnérabilités faibles",
-        "images_scanned": "Images analysées",
         "pinned_digest_updates": "Mises à jour de digest épinglé",
         "held_updates": "Mises à jour retenues",
         "hawser_agent_version": "Version de l'agent Hawser",

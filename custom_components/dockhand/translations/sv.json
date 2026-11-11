@@ -113,9 +113,11 @@
             "name": "Miljöentiteter",
             "description": "Entiteter som är avstängda som standard, påslagna för varje miljö, även sådana som läggs till senare.",
             "data": {
+              "all": "Alla dessa",
               "enabled": "Slå på för varje miljö"
             },
             "data_description": {
+              "all": "Markera för att slå på alla typer här; avmarkera för att stänga av alla.",
               "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Containerentiteter",
             "description": "Entiteter som är avstängda som standard, påslagna för varje container, även sådana som läggs till senare.",
             "data": {
+              "all": "Alla dessa",
               "enabled": "Slå på för varje container"
             },
             "data_description": {
+              "all": "Markera för att slå på alla typer här; avmarkera för att stänga av alla.",
               "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Sårbarhetsgenomsökning",
         "activity_events": "Aktivitetshändelser",
-        "activity_events_today": "Aktivitetshändelser i dag",
         "disk_usage": "Diskanvändning",
-        "disk_usage_images": "Diskanvändning för images",
-        "disk_usage_containers": "Diskanvändning för containrar",
-        "disk_usage_volumes": "Diskanvändning för volymer",
-        "disk_usage_build_cache": "Diskanvändning för byggcache",
         "vulnerabilities": "Sårbarheter",
-        "vulnerabilities_critical": "Kritiska sårbarheter",
-        "vulnerabilities_high": "Höga sårbarheter",
-        "vulnerabilities_medium": "Medelhöga sårbarheter",
-        "vulnerabilities_low": "Låga sårbarheter",
-        "images_scanned": "Skannade images",
         "pinned_digest_updates": "Uppdateringar för låsta digester",
         "held_updates": "Tillbakahållna uppdateringar",
         "hawser_agent_version": "Hawser-agentversion",

@@ -190,8 +190,41 @@ async def test_options_flow_stores_the_choice_and_applies_it(hass: HomeAssistant
         for key, value in result["data_schema"].schema.items()
         if getattr(key, "schema", None) == "container_entities"
     )
-    [enabled] = container.schema.schema
+    all_box, enabled = container.schema.schema
+    assert all_box.default() is False
     assert enabled.default() == ["docker_event"]
+    stack = next(
+        value
+        for key, value in result["data_schema"].schema.items()
+        if getattr(key, "schema", None) == "stack_entities"
+    )
+    # One type: no "All".
+    assert [str(k) for k in stack.schema.schema] == ["enabled"]
+
+
+def test_all_checkbox_wins_when_changed():
+    from custom_components.dockhand.config_flow import _chosen_in_section
+
+    keys = ("a", "b", "c")
+    # Checked: every type, whatever the list says.
+    assert _chosen_in_section({"all": True, "enabled": ["a"]}, keys, {"a"}) == [
+        "a",
+        "b",
+        "c",
+    ]
+    # Unchecked after everything was on: none.
+    assert (
+        _chosen_in_section({"all": False, "enabled": ["a", "b", "c"]}, keys, set(keys))
+        == []
+    )
+    # Unchanged: the list decides, both ways.
+    assert _chosen_in_section({"all": False, "enabled": ["b"]}, keys, {"a"}) == ["b"]
+    assert _chosen_in_section(
+        {"all": True, "enabled": ["a", "b"]}, keys, set(keys)
+    ) == ["a", "b"]
+    # No "All" (one type) or nothing answered.
+    assert _chosen_in_section({"enabled": ["a"]}, keys, set()) == ["a"]
+    assert _chosen_in_section({}, keys, set()) == []
 
 
 async def test_runtime_controls_follow_their_option(hass: HomeAssistant):
@@ -228,3 +261,40 @@ async def test_runtime_controls_follow_their_option(hass: HomeAssistant):
         )
         async_enable_runtime_controls(hass, entry)
         assert _disabled_by(hass, restored) is Disabler.INTEGRATION
+
+
+async def test_a_choice_includes_the_sensors_that_break_it_down(hass: HomeAssistant):
+    entry = MockConfigEntry(domain=DOMAIN, entry_id="e1")
+    entry.add_to_hass(hass)
+    total = _entity(hass, entry, "env_1", "sensor", "vulnerabilities")
+    critical = _entity(hass, entry, "env_1", "sensor", "vulnerabilities_critical")
+    scanned = _entity(hass, entry, "env_1", "sensor", "images_scanned")
+    mine = _entity(hass, entry, "env_1", "sensor", "vulnerabilities_low", Disabler.USER)
+    today = _entity(hass, entry, "env_1", "sensor", "activity_events_today")
+    choice = {CONF_ENABLED_ENTITIES: {"environment": ["vulnerabilities"]}}
+
+    async_apply_choice(hass, "e1", {}, choice)
+    assert _disabled_by(hass, total) is None
+    assert _disabled_by(hass, critical) is None
+    assert _disabled_by(hass, scanned) is None
+    assert _disabled_by(hass, mine) is Disabler.USER
+    assert _disabled_by(hass, today) is Disabler.INTEGRATION
+
+    async_apply_choice(hass, "e1", choice, {})
+    assert _disabled_by(hass, critical) is Disabler.INTEGRATION
+
+
+async def test_setup_enables_the_parts_of_a_type_chosen_earlier(hass: HomeAssistant):
+    """A part added to a choice after it was made (or created disabled while
+    it was off) is enabled at the next setup."""
+    from custom_components.dockhand.entity_defaults import async_enable_chosen
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        entry_id="e1",
+        options={CONF_ENABLED_ENTITIES: {"environment": ["disk_usage"]}},
+    )
+    entry.add_to_hass(hass)
+    part = _entity(hass, entry, "env_1", "sensor", "disk_usage_images")
+    async_enable_chosen(hass, entry)
+    assert _disabled_by(hass, part) is None

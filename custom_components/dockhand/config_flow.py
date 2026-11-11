@@ -98,13 +98,24 @@ def _token_schema() -> vol.Schema:
 
 def _entity_sections(options: Mapping[str, Any]) -> dict[Any, Any]:
     """One collapsed section per device kind: the disabled-by-default entity
-    types to turn on for every device of that kind (entity_defaults.py)."""
+    types to turn on for every device of that kind (entity_defaults.py),
+    with an "All" box where there's more than one, since Home Assistant's
+    checkbox list has no select all."""
     current = chosen(options)
     return {
         vol.Optional(f"{kind}_entities"): section(
             _form(
                 vol.Schema(
                     {
+                        **(
+                            {
+                                vol.Optional(
+                                    "all", default=current[kind] == set(keys)
+                                ): bool
+                            }
+                            if len(keys) > 1
+                            else {}
+                        ),
                         vol.Optional(
                             "enabled", default=[k for k in keys if k in current[kind]]
                         ): SelectSelector(
@@ -114,7 +125,7 @@ def _entity_sections(options: Mapping[str, Any]) -> dict[Any, Any]:
                                 mode=SelectSelectorMode.LIST,
                                 translation_key=f"{kind}_entities",
                             )
-                        )
+                        ),
                     }
                 )
             ),
@@ -420,6 +431,17 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         return self.async_abort(reason="reconfigure_successful")
 
 
+def _chosen_in_section(
+    answer: Mapping[str, Any], keys: tuple[str, ...], before: set[str]
+) -> list[str]:
+    """The types chosen in one section. Changing "All" wins over the list:
+    checked, every type; unchecked, none. Otherwise the list decides."""
+    was_all = before == set(keys)
+    if "all" in answer and answer["all"] != was_all:
+        return list(keys) if answer["all"] else []
+    return list(answer.get("enabled") or [])
+
+
 class DockhandOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: DockhandConfigEntry) -> None:
         self._entry = config_entry
@@ -429,9 +451,12 @@ class DockhandOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
             options = dict(user_input)
+            before = chosen(self._entry.options)
             options[CONF_ENABLED_ENTITIES] = {
-                kind: list(options.pop(f"{kind}_entities", {}).get("enabled") or [])
-                for kind in OPTIONAL_ENTITIES
+                kind: _chosen_in_section(
+                    options.pop(f"{kind}_entities", {}), keys, before[kind]
+                )
+                for kind, keys in OPTIONAL_ENTITIES.items()
             }
             async_apply_choice(
                 self.hass, self._entry.entry_id, self._entry.options, options

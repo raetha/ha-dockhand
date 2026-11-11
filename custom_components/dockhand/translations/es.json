@@ -113,9 +113,11 @@
             "name": "Entidades de entorno",
             "description": "Entidades desactivadas por defecto, activadas para cada entorno, incluidos los que se añadan después.",
             "data": {
+              "all": "Todos",
               "enabled": "Activar para cada entorno"
             },
             "data_description": {
+              "all": "Márcala para activar todos los tipos de aquí; desmárcala para desactivarlos todos.",
               "enabled": "Marcar un tipo lo activa en todas partes, salvo donde lo desactivaste tú. Desmarcarlo lo vuelve a desactivar en todas partes, incluidos los que activaste a mano."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Entidades de contenedor",
             "description": "Entidades desactivadas por defecto, activadas para cada contenedor, incluidos los que se añadan después.",
             "data": {
+              "all": "Todos",
               "enabled": "Activar para cada contenedor"
             },
             "data_description": {
+              "all": "Márcala para activar todos los tipos de aquí; desmárcala para desactivarlos todos.",
               "enabled": "Marcar un tipo lo activa en todas partes, salvo donde lo desactivaste tú. Desmarcarlo lo vuelve a desactivar en todas partes, incluidos los que activaste a mano."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Análisis de vulnerabilidades",
         "activity_events": "Eventos de actividad",
-        "activity_events_today": "Eventos de actividad hoy",
         "disk_usage": "Uso de disco",
-        "disk_usage_images": "Uso de disco de imágenes",
-        "disk_usage_containers": "Uso de disco de contenedores",
-        "disk_usage_volumes": "Uso de disco de volúmenes",
-        "disk_usage_build_cache": "Uso de disco de caché de compilación",
         "vulnerabilities": "Vulnerabilidades",
-        "vulnerabilities_critical": "Vulnerabilidades críticas",
-        "vulnerabilities_high": "Vulnerabilidades altas",
-        "vulnerabilities_medium": "Vulnerabilidades medias",
-        "vulnerabilities_low": "Vulnerabilidades bajas",
-        "images_scanned": "Imágenes escaneadas",
         "pinned_digest_updates": "Actualizaciones de digest fijado",
         "held_updates": "Actualizaciones retenidas",
         "hawser_agent_version": "Versión del agente Hawser",

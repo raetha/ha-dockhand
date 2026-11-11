@@ -113,9 +113,11 @@
             "name": "Umgebungs-Entitäten",
             "description": "Standardmäßig deaktivierte Entitäten, für jede Umgebung aktiviert, auch für später hinzugefügte.",
             "data": {
+              "all": "Alle davon",
               "enabled": "Für jede Umgebung aktivieren"
             },
             "data_description": {
+              "all": "Aktivieren, um alle Typen hier einzuschalten; deaktivieren, um alle auszuschalten.",
               "enabled": "Ein angehakter Typ wird überall aktiviert, außer wo du ihn selbst deaktiviert hast. Wird der Haken entfernt, wird er überall wieder deaktiviert, auch dort, wo du ihn von Hand aktiviert hast."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Container-Entitäten",
             "description": "Standardmäßig deaktivierte Entitäten, für jeden Container aktiviert, auch für später hinzugefügte.",
             "data": {
+              "all": "Alle davon",
               "enabled": "Für jeden Container aktivieren"
             },
             "data_description": {
+              "all": "Aktivieren, um alle Typen hier einzuschalten; deaktivieren, um alle auszuschalten.",
               "enabled": "Ein angehakter Typ wird überall aktiviert, außer wo du ihn selbst deaktiviert hast. Wird der Haken entfernt, wird er überall wieder deaktiviert, auch dort, wo du ihn von Hand aktiviert hast."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Schwachstellen-Scan",
         "activity_events": "Aktivitätsereignisse",
-        "activity_events_today": "Aktivitätsereignisse heute",
         "disk_usage": "Speicherplatznutzung",
-        "disk_usage_images": "Speicherplatz Images",
-        "disk_usage_containers": "Speicherplatz Container",
-        "disk_usage_volumes": "Speicherplatz Volumes",
-        "disk_usage_build_cache": "Speicherplatz Build-Cache",
         "vulnerabilities": "Schwachstellen",
-        "vulnerabilities_critical": "Kritische Schwachstellen",
-        "vulnerabilities_high": "Hohe Schwachstellen",
-        "vulnerabilities_medium": "Mittlere Schwachstellen",
-        "vulnerabilities_low": "Niedrige Schwachstellen",
-        "images_scanned": "Gescannte Images",
         "pinned_digest_updates": "Updates für gepinnte Digests",
         "held_updates": "Zurückgehaltene Updates",
         "hawser_agent_version": "Hawser-Agent-Version",

@@ -113,9 +113,11 @@
             "name": "Omgevingsentiteiten",
             "description": "Entiteiten die standaard uit staan, ingeschakeld voor elke omgeving, ook later toegevoegde.",
             "data": {
+              "all": "Al deze",
               "enabled": "Inschakelen voor elke omgeving"
             },
             "data_description": {
+              "all": "Vink aan om alle typen hier in te schakelen; vink uit om ze allemaal uit te schakelen.",
               "enabled": "Een type aanvinken schakelt het overal in, behalve waar je het zelf hebt uitgeschakeld. Het uitvinken schakelt het overal weer uit, ook waar je het met de hand had ingeschakeld."
             }
           },
@@ -123,9 +125,11 @@
             "name": "Containerentiteiten",
             "description": "Entiteiten die standaard uit staan, ingeschakeld voor elke container, ook later toegevoegde.",
             "data": {
+              "all": "Al deze",
               "enabled": "Inschakelen voor elke container"
             },
             "data_description": {
+              "all": "Vink aan om alle typen hier in te schakelen; vink uit om ze allemaal uit te schakelen.",
               "enabled": "Een type aanvinken schakelt het overal in, behalve waar je het zelf hebt uitgeschakeld. Het uitvinken schakelt het overal weer uit, ook waar je het met de hand had ingeschakeld."
             }
           },
@@ -690,18 +694,8 @@
       "options": {
         "vulnerability_scanning": "Kwetsbaarheidsscan",
         "activity_events": "Activiteitsgebeurtenissen",
-        "activity_events_today": "Activiteitsgebeurtenissen vandaag",
         "disk_usage": "Schijfgebruik",
-        "disk_usage_images": "Schijfgebruik images",
-        "disk_usage_containers": "Schijfgebruik containers",
-        "disk_usage_volumes": "Schijfgebruik volumes",
-        "disk_usage_build_cache": "Schijfgebruik buildcache",
         "vulnerabilities": "Kwetsbaarheden",
-        "vulnerabilities_critical": "Kritieke kwetsbaarheden",
-        "vulnerabilities_high": "Hoge kwetsbaarheden",
-        "vulnerabilities_medium": "Gemiddelde kwetsbaarheden",
-        "vulnerabilities_low": "Lage kwetsbaarheden",
-        "images_scanned": "Gescande images",
         "pinned_digest_updates": "Updates voor vastgezette digests",
         "held_updates": "Tegengehouden updates",
         "hawser_agent_version": "Hawser-agentversie",
