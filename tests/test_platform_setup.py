@@ -235,7 +235,7 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
     updates = [
         e
         for e in er.async_entries_for_config_entry(ent_reg, loaded_entry.entry_id)
-        if e.domain == "update"
+        if e.domain == "update" and "_instance_" not in e.unique_id
     ]
     assert len(updates) == 3  # my-app, web, dockhand — not the unnamed one
     assert f"{loaded_entry.entry_id}_sched_7_system_next_run" in uids

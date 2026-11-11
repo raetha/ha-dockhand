@@ -11,7 +11,12 @@ from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from . import tags
-from .api import DockhandAuthError, DockhandClient, DockhandNotFoundError
+from .api import (
+    DockhandAuthError,
+    DockhandClient,
+    DockhandNotFoundError,
+    DockhandPermissionError,
+)
 from .const import (
     CONF_ENABLE_IMAGES,
     CONF_ENABLE_NETWORKS,
@@ -1597,6 +1602,11 @@ class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
         entry: ConfigEntry | None = None,
     ) -> None:
         self.client = client
+        # Dockhand's own update check: None until read, or while it fails;
+        # self_update_allowed turns False once the token is refused (it
+        # needs an admin when authentication is on) or Dockhand lacks it.
+        self.self_update: dict[str, Any] | None = None
+        self.self_update_allowed = True
         super().__init__(
             hass,
             _LOGGER,
@@ -1608,6 +1618,16 @@ class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
     @override
     async def _async_update_data(self) -> str | None:
         try:
-            return await self.client.async_get_dockhand_version()
+            version = await self.client.async_get_dockhand_version()
         except Exception as err:
             raise UpdateFailed(f"Version error: {err}") from err
+        if self.self_update_allowed:
+            try:
+                self.self_update = await self.client.async_check_self_update()
+            except DockhandPermissionError, DockhandNotFoundError:
+                self.self_update_allowed = False
+                self.self_update = None
+            except Exception as err:  # noqa: BLE001 - the version still counts
+                _LOGGER.debug("Dockhand: update check failed: %s", err)
+                self.self_update = None
+        return version

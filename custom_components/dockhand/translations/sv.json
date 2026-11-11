@@ -339,6 +339,14 @@
       },
       "stack_updates_available": {
         "name": "Uppdateringar tillgängliga"
+      },
+      "live_updates": {
+        "name": "Liveuppdateringar",
+        "state_attributes": {
+          "in_use": {
+            "name": "Används"
+          }
+        }
       }
     },
     "switch": {

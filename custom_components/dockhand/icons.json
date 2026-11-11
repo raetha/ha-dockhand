@@ -143,8 +143,8 @@
       "online": {
         "default": "mdi:wifi",
         "state": {
-          "true": "mdi:wifi",
-          "false": "mdi:wifi-off"
+          "on": "mdi:wifi",
+          "off": "mdi:wifi-off"
         }
       },
       "activity_logging": {
@@ -170,6 +170,12 @@
       },
       "stack_updates_available": {
         "default": "mdi:package-up"
+      },
+      "live_updates": {
+        "default": "mdi:access-point-network",
+        "state": {
+          "off": "mdi:access-point-network-off"
+        }
       }
     },
     "switch": {
