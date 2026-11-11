@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Rensning av images"
-      },
-      "disk_warning": {
-        "name": "Varning om diskutrymme"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Processgräns"
-      },
-      "disk_warning_threshold": {
-        "name": "Tröskel för varning om diskutrymme"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Tröskel för varning om diskutrymme (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "Alla oanvända images"
         }
       },
-      "disk_warning_mode": {
-        "name": "Läge för varning om diskutrymme",
+      "default_vulnerability_scanner": {
+        "name": "Standardskanner för sårbarheter",
         "state": {
-          "percentage": "Procent använt",
-          "absolute": "Ledigt utrymme"
+          "none": "Ingen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype och Trivy"
         }
       }
     },

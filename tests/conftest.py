@@ -230,14 +230,6 @@ def make_mock_client(
             "pruneMode": "dangling",
         }
     )
-    client.async_get_disk_warning_settings = AsyncMock(
-        return_value={
-            "enabled": False,
-            "mode": "absolute",
-            "threshold": 80,
-            "thresholdGb": 50,
-        }
-    )
     client.async_get_scanner_setting = AsyncMock(return_value="grype")
     client.async_check_self_update = AsyncMock(
         return_value={"updateAvailable": False, "currentVersion": "1.0.57"}

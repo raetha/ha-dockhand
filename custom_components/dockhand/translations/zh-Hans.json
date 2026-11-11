@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "镜像清理"
-      },
-      "disk_warning": {
-        "name": "磁盘空间警告"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "进程数限制"
-      },
-      "disk_warning_threshold": {
-        "name": "磁盘空间警告阈值"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "磁盘空间警告阈值 (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "所有未使用的镜像"
         }
       },
-      "disk_warning_mode": {
-        "name": "磁盘空间警告模式",
+      "default_vulnerability_scanner": {
+        "name": "默认漏洞扫描器",
         "state": {
-          "percentage": "已用百分比",
-          "absolute": "剩余空间"
+          "none": "无",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype 和 Trivy"
         }
       }
     },

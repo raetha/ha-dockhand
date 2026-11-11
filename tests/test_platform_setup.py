@@ -30,6 +30,7 @@ STATS = {
     "updateCheckEnabled": True,
     "collectActivity": True,
     "collectMetrics": False,
+    "updateCheckAutoUpdate": False,
     "metrics": {"cpuPercent": 5.0, "memoryPercent": 40.0},
     "containers": {"total": 5, "running": 4},
 }
@@ -111,20 +112,14 @@ SLOW_DATA = {
             "auto_update_settings": {},
             "env_meta": {},
             "settings": {
-                "update_check": {"enabled": True, "autoUpdate": False},
                 "image_prune": {"enabled": True, "pruneMode": "all"},
-                "disk_warning": {
-                    "enabled": False,
-                    "mode": "percentage",
-                    "threshold": 85,
-                    "thresholdGb": 20,
-                },
                 "scanner": "trivy",
             },
             "fetch_failures": set(),
         }
     },
     "schedules": [SCHEDULE, SCHEDULE_NO_ID, PRUNE_SCHEDULE, REPORT_SCHEDULE],
+    "scanner_default": "grype",
     "fetch_failures": set(),
 }
 UPDATE_DATA = {"environments": {ENV_ID: {}}}
@@ -145,7 +140,6 @@ ENABLED_UP_FRONT = (
     ("switch", "image_prune_enabled"),
     ("switch", "collect_activity"),
     ("select", "vulnerability_scanner"),
-    ("number", "disk_warning_threshold"),
     ("binary_sensor", "stack_gitapp_git_sync_error"),
     ("switch", "stack_gitapp_git_auto_deploy"),
 )
@@ -232,12 +226,9 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
         f"{p}_collect_metrics",
         f"{p}_update_check_enabled",
         f"{p}_auto_update",
-        f"{p}_disk_warning_enabled",
         f"{p}_vulnerability_scanner",
         f"{p}_prune_mode",
-        f"{p}_disk_warning_mode",
-        f"{p}_disk_warning_threshold",
-        f"{p}_disk_warning_threshold_gb",
+        f"{loaded_entry.entry_id}_instance_vulnerability_scanner",
     }
     missing = expected - uids
     assert not missing, missing
@@ -299,11 +290,7 @@ async def test_git_stack_and_env_meta_entities_have_states(
     assert state("switch", "image_prune_enabled") == "on"
     assert state("switch", "update_check_enabled") == "on"
     assert state("switch", "auto_update") == "off"
-    assert state("switch", "disk_warning_enabled") == "off"
     assert state("select", "vulnerability_scanner") == "trivy"
     assert state("select", "prune_mode") == "all"
-    assert state("select", "disk_warning_mode") == "percentage"
-    assert state("number", "disk_warning_threshold") == "85.0"
-    assert state("number", "disk_warning_threshold_gb") == "20.0"
     assert state("binary_sensor", "stack_gitapp_git_sync_error") == "off"
     assert state("switch", "stack_gitapp_git_auto_deploy") == "off"

@@ -1,13 +1,13 @@
-"""An environment's own settings as switch, select and number entities
-(docs/architecture.md §11): activity logging and metrics collection,
-update checks and auto-update, image pruning, the disk-space warning and
-the vulnerability scanner.
+"""An environment's own settings as switch and select entities
+(docs/architecture.md §11): activity and metrics collection, update checks
+and auto-update, image pruning and its mode, and the vulnerability scanner.
 
 They're Dockhand's settings, changed through its API, so each entity reads
 the saved value from a coordinator and, after a change, reads it back from
-Dockhand rather than assuming it. An entity is created only once its
-setting could be read: a token that can't see a setting gets no control
-for it.
+Dockhand rather than assuming it. Four of them read the flags Dockhand's
+dashboard stats already carry (the fast poll); image pruning and the
+scanner need their own endpoints, read on the slow poll. An entity is
+created only once its setting could be read.
 """
 
 from dataclasses import dataclass
@@ -33,26 +33,32 @@ from .helpers import (
     async_dockhand_action,
 )
 
-# Where each setting lives in Dockhand. "environment" is the environment
-# record itself (read from the fast coordinator's dashboard stats); the
-# rest come from their own endpoints, read on the slow poll.
-ENVIRONMENT = "environment"
-UPDATE_CHECK = "update_check"
+# Where a setting is read: the dashboard stats' flags (fast poll), or the
+# slow poll's per-environment `settings`.
+STATS = "stats"
 IMAGE_PRUNE = "image_prune"
-DISK_WARNING = "disk_warning"
 SCANNER = "scanner"
+
+# Where a setting is written.
+ENVIRONMENT = "environment"  # PUT /api/environments/{id}, partial
+UPDATE_CHECK = "update_check"  # POST …/update-check, replaces every field
 
 
 @dataclass(frozen=True, kw_only=True)
 class EnvSettingDescription:
-    """`key` is the translation key; `section`/`field` say where the value
-    is; `unique_suffix` ends the unique ID. A suffix's first word must not
-    be one the registry cleanup dispatches on (image, update, …) unless
+    """`key` is the translation key. `read`/`field` say where the value is,
+    `write`/`write_field` where it's saved (the same unless given);
+    `requires` names a stats flag that must be on for the setting to apply.
+    `unique_suffix` ends the unique ID: its first word must not be one the
+    registry cleanup dispatches on (image, update, …) unless
     __init__._TYPE_COLLISION_EXCLUDED_SUFFIXES lists it."""
 
     key: str
-    section: str
+    read: str
     field: str = ""
+    write: str = ""
+    write_field: str = ""
+    requires: str = ""
     unique_suffix: str
 
 
@@ -63,12 +69,12 @@ def setting_value(
     description: EnvSettingDescription,
 ) -> Any:
     """The saved value, or None while it can't be read."""
-    if description.section == ENVIRONMENT:
+    if description.read == STATS:
         stats = _coordinator_env(fast.data, env_id).get("stats") or {}
         return stats.get(description.field)
     settings = _coordinator_env(slow.data, env_id).get("settings") or {}
-    value = settings.get(description.section)
-    if description.section == SCANNER:
+    value = settings.get(description.read)
+    if description.read == SCANNER:
         return value
     return value.get(description.field) if isinstance(value, dict) else None
 
@@ -82,36 +88,34 @@ async def async_save_setting(
     value: Any,
 ) -> None:
     """Save one setting in Dockhand, then read it back."""
-    section, field = description.section, description.field
-    if section == ENVIRONMENT:
+    target = description.write or description.read
+    field = description.write_field or description.field
+    if target == ENVIRONMENT:
         await async_dockhand_action(
             client.async_update_environment(env_id, **{field: value})
         )
-        await fast.async_request_refresh()
-        return
-    if section == UPDATE_CHECK:
+    elif target == UPDATE_CHECK:
         # The endpoint replaces every setting: start from Dockhand's
-        # current ones, not ours, which may be up to a poll old.
+        # current ones, not ours.
         current = await async_dockhand_action(
             client.async_get_update_check_settings(env_id)
         )
         await async_dockhand_action(
             client.async_set_update_check_settings(env_id, {**current, field: value})
         )
-    elif section == IMAGE_PRUNE:
+    elif target == IMAGE_PRUNE:
         current = await async_dockhand_action(
             client.async_get_image_prune_settings(env_id)
         )
         await async_dockhand_action(
             client.async_set_image_prune_settings(env_id, {**current, field: value})
         )
-    elif section == DISK_WARNING:
-        await async_dockhand_action(
-            client.async_set_disk_warning_settings(env_id, **{field: value})
-        )
     else:
         await async_dockhand_action(client.async_set_scanner(env_id, value))
-    await slow.async_refresh_env_settings(env_id)
+    if description.read == STATS:
+        await fast.async_request_refresh()
+    else:
+        await slow.async_refresh_env_settings(env_id)
 
 
 class DockhandEnvSettingEntity(CoordinatorEntity[DataUpdateCoordinator[Any]]):
@@ -131,7 +135,7 @@ class DockhandEnvSettingEntity(CoordinatorEntity[DataUpdateCoordinator[Any]]):
         base_url: str,
         description: EnvSettingDescription,
     ) -> None:
-        super().__init__(fast if description.section == ENVIRONMENT else slow)
+        super().__init__(fast if description.read == STATS else slow)
         self._setting = description
         self._attr_translation_key = description.key
         self._fast = fast
@@ -153,7 +157,14 @@ class DockhandEnvSettingEntity(CoordinatorEntity[DataUpdateCoordinator[Any]]):
     @property
     @override
     def available(self) -> bool:
-        return super().available and self._value is not None
+        if not super().available or self._value is None:
+            return False
+        if self._setting.requires:
+            # Auto-update only applies while update checks are on, and
+            # Dockhand reports it off whenever they aren't.
+            stats = _coordinator_env(self._fast.data, self._env_id).get("stats") or {}
+            return bool(stats.get(self._setting.requires))
+        return True
 
     async def _save(self, value: Any) -> None:
         await async_save_setting(

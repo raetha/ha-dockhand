@@ -172,10 +172,10 @@
 ### Added
 
 - **Change an environment's settings from Home Assistant** — switches for
-  activity and metrics collection, update checks, auto-update, image pruning
-  and the disk-space warning; selects for the vulnerability scanner, the
-  image prune mode and the disk-space warning mode; and numbers for the
-  warning's thresholds. Each appears when the token can read the setting.
+  activity and metrics collection, update checks, auto-update and image
+  pruning, and selects for the vulnerability scanner and the image prune
+  mode. The Dockhand device gets a select for the default vulnerability
+  scanner. Each appears once the token can read the setting.
 - **Turn on an entity type for every environment, container or stack** —
   **Configure** has collapsed **Environment entities**, **Container
   entities** and **Stack entities** sections listing the entities that are

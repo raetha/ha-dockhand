@@ -190,12 +190,6 @@
       },
       "image_pruning": {
         "default": "mdi:broom"
-      },
-      "disk_warning": {
-        "default": "mdi:harddisk",
-        "state": {
-          "off": "mdi:harddisk-remove"
-        }
       }
     },
     "button": {
@@ -233,12 +227,6 @@
       },
       "container_pids_limit": {
         "default": "mdi:sitemap-outline"
-      },
-      "disk_warning_threshold": {
-        "default": "mdi:harddisk"
-      },
-      "disk_warning_threshold_gb": {
-        "default": "mdi:harddisk"
       }
     },
     "select": {
@@ -251,8 +239,8 @@
       "image_prune_mode": {
         "default": "mdi:broom"
       },
-      "disk_warning_mode": {
-        "default": "mdi:harddisk"
+      "default_vulnerability_scanner": {
+        "default": "mdi:shield-search"
       }
     },
     "event": {

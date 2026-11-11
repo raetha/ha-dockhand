@@ -88,10 +88,9 @@ Parent: none (root device). Entity ID prefix: `<platform>.{env}`
 | Hawser agent version | sensor | — | — | — | — | Slow coordinator. Attributes: agent_name, agent_id, last_seen |
 | Vulnerability scanning | binary_sensor | — | — | — | — | Whether a scanner is set |
 | Activity collection, Metrics collection | switch | — | — | — | — | Config. Environment record (fast coordinator's stats) |
-| Update checks, Auto update, Image pruning, Disk space warning | switch | — | — | — | — | Config. Slow coordinator's `settings` |
-| Vulnerability scanner, Image prune mode, Disk space warning mode | select | — | — | — | — | Config |
-| Disk space warning threshold | number | — | — | % | — | Config, 1–100 |
-| Disk space warning threshold (GB) | number | — | — | GB | — | Config, 1–100000 |
+| Update checks, Auto update | switch | — | — | — | — | Config. Dashboard stats (fast coordinator) |
+| Image pruning | switch | — | — | — | — | Config. Slow coordinator's `settings` |
+| Vulnerability scanner, Image prune mode | select | — | — | — | — | Config. Slow coordinator's `settings` |
 | Check for updates | button | — | — | — | ✓ | Triggers immediate update check. Only present when updates are enabled |
 
 ---

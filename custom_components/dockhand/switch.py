@@ -18,9 +18,9 @@ from .entity import (
 )
 from .entity_defaults import enabling_chosen
 from .env_settings import (
-    DISK_WARNING,
     ENVIRONMENT,
     IMAGE_PRUNE,
+    STATS,
     UPDATE_CHECK,
     DockhandEnvSettingEntity,
     EnvSettingDescription,
@@ -224,39 +224,40 @@ async def async_setup_entry(
 ENV_SETTING_SWITCHES = (
     EnvSettingDescription(
         key="activity_logging",
-        section=ENVIRONMENT,
+        read=STATS,
         field="collectActivity",
+        write=ENVIRONMENT,
         unique_suffix="collect_activity",
     ),
     EnvSettingDescription(
         key="metrics_collection",
-        section=ENVIRONMENT,
+        read=STATS,
         field="collectMetrics",
+        write=ENVIRONMENT,
         unique_suffix="collect_metrics",
     ),
     EnvSettingDescription(
         key="update_checks",
-        section=UPDATE_CHECK,
-        field="enabled",
+        read=STATS,
+        field="updateCheckEnabled",
+        write=UPDATE_CHECK,
+        write_field="enabled",
         unique_suffix="update_check_enabled",
     ),
     EnvSettingDescription(
         key="auto_update",
-        section=UPDATE_CHECK,
-        field="autoUpdate",
+        read=STATS,
+        field="updateCheckAutoUpdate",
+        write=UPDATE_CHECK,
+        write_field="autoUpdate",
+        requires="updateCheckEnabled",
         unique_suffix="auto_update",
     ),
     EnvSettingDescription(
         key="image_pruning",
-        section=IMAGE_PRUNE,
+        read=IMAGE_PRUNE,
         field="enabled",
         unique_suffix="image_prune_enabled",
-    ),
-    EnvSettingDescription(
-        key="disk_warning",
-        section=DISK_WARNING,
-        field="enabled",
-        unique_suffix="disk_warning_enabled",
     ),
 )
 

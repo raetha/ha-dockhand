@@ -25,7 +25,6 @@ from .const import CONF_ENABLE_RUNTIME_CONTROLS, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .entity_defaults import enabling_chosen
 from .env_settings import (
-    DISK_WARNING,
     IMAGE_PRUNE,
     SCANNER,
     DockhandEnvSettingEntity,
@@ -37,6 +36,7 @@ from .helpers import (
     _compose_project,
     _coordinator_env,
     _device_id_container,
+    _device_id_instance,
     _find_container,
     already_registered,
     async_dockhand_action,
@@ -67,6 +67,21 @@ async def async_setup_entry(
     _add_settings()
     entry.async_on_unload(data.fast_coordinator.async_add_listener(_add_settings))
     entry.async_on_unload(data.slow_coordinator.async_add_listener(_add_settings))
+
+    # Dockhand's default scanner, once it can be read.
+    default_added: list[bool] = []
+
+    def _add_default() -> None:
+        slow = data.slow_coordinator
+        if default_added or (slow.data or {}).get("scanner_default") is None:
+            return
+        default_added.append(True)
+        async_add_entities(
+            [DockhandDefaultScannerSelect(slow, data.client, entry.entry_id)]
+        )
+
+    _add_default()
+    entry.async_on_unload(data.slow_coordinator.async_add_listener(_add_default))
 
     def _opt(key: str, default: Any) -> Any:
         return entry.options.get(key, default)
@@ -218,6 +233,9 @@ class DockhandContainerRestartPolicySelect(
         self.async_write_ha_state()
 
 
+SCANNERS = ["none", "grype", "trivy", "both"]
+
+
 @dataclass(frozen=True, kw_only=True)
 class EnvSettingSelectDescription(EnvSettingDescription):
     options: list[str]
@@ -226,23 +244,16 @@ class EnvSettingSelectDescription(EnvSettingDescription):
 ENV_SETTING_SELECTS = (
     EnvSettingSelectDescription(
         key="vulnerability_scanner",
-        section=SCANNER,
+        read=SCANNER,
         unique_suffix="vulnerability_scanner",
-        options=["none", "grype", "trivy", "both"],
+        options=SCANNERS,
     ),
     EnvSettingSelectDescription(
         key="image_prune_mode",
-        section=IMAGE_PRUNE,
+        read=IMAGE_PRUNE,
         field="pruneMode",
         unique_suffix="prune_mode",
         options=["dangling", "all"],
-    ),
-    EnvSettingSelectDescription(
-        key="disk_warning_mode",
-        section=DISK_WARNING,
-        field="mode",
-        unique_suffix="disk_warning_mode",
-        options=["percentage", "absolute"],
     ),
 )
 
@@ -266,3 +277,45 @@ class DockhandEnvSettingSelect(DockhandEnvSettingEntity, SelectEntity):
     @override
     async def async_select_option(self, option: str) -> None:
         await self._save(option)
+
+
+class DockhandDefaultScannerSelect(
+    CoordinatorEntity[DockhandSlowCoordinator], SelectEntity
+):
+    """Dockhand's default vulnerability scanner, on the Dockhand device:
+    the one every environment without its own uses."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_translation_key = "default_vulnerability_scanner"
+    _attr_options = SCANNERS
+
+    def __init__(
+        self, coordinator: DockhandSlowCoordinator, client: Any, entry_id: str
+    ) -> None:
+        super().__init__(coordinator)
+        self._client = client
+        self._attr_unique_id = f"{entry_id}_instance_vulnerability_scanner"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, _device_id_instance(entry_id))}
+        )
+
+    @property
+    def _value(self) -> str | None:
+        return (self.coordinator.data or {}).get("scanner_default")
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._value is not None
+
+    @property
+    @override
+    def current_option(self) -> str | None:
+        value = self._value
+        return value if value in SCANNERS else None
+
+    @override
+    async def async_select_option(self, option: str) -> None:
+        await async_dockhand_action(self._client.async_set_scanner(None, option))
+        await self.coordinator.async_refresh_scanner_default()

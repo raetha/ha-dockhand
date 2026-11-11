@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Élagage des images"
-      },
-      "disk_warning": {
-        "name": "Alerte d’espace disque"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Limite de processus"
-      },
-      "disk_warning_threshold": {
-        "name": "Seuil de l’alerte d’espace disque"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Seuil de l’alerte d’espace disque (Go)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "Toutes les images inutilisées"
         }
       },
-      "disk_warning_mode": {
-        "name": "Mode de l’alerte d’espace disque",
+      "default_vulnerability_scanner": {
+        "name": "Analyseur de vulnérabilités par défaut",
         "state": {
-          "percentage": "Pourcentage utilisé",
-          "absolute": "Espace libre"
+          "none": "Aucun",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype et Trivy"
         }
       }
     },

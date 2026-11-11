@@ -99,6 +99,8 @@ async def test_setup_entry_skips_when_disabled():
     entry = MagicMock()
     entry.options = {}
     entry.data = {"enable_runtime_controls": False}
+    # No settings readable either.
+    entry.runtime_data.slow_coordinator.data = {}
     add_entities = MagicMock()
     await async_setup_entry(MagicMock(), entry, add_entities)
     add_entities.assert_not_called()

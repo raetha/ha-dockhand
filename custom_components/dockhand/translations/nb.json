@@ -390,9 +390,6 @@
       },
       "image_pruning": {
         "name": "Rydding av images"
-      },
-      "disk_warning": {
-        "name": "Varsel om diskplass"
       }
     },
     "button": {
@@ -430,12 +427,6 @@
       },
       "container_pids_limit": {
         "name": "Prosessgrense"
-      },
-      "disk_warning_threshold": {
-        "name": "Terskel for varsel om diskplass"
-      },
-      "disk_warning_threshold_gb": {
-        "name": "Terskel for varsel om diskplass (GB)"
       }
     },
     "select": {
@@ -464,11 +455,13 @@
           "all": "Alle ubrukte images"
         }
       },
-      "disk_warning_mode": {
-        "name": "Modus for varsel om diskplass",
+      "default_vulnerability_scanner": {
+        "name": "Standard sårbarhetsskanner",
         "state": {
-          "percentage": "Prosent brukt",
-          "absolute": "Ledig plass"
+          "none": "Ingen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype og Trivy"
         }
       }
     },
