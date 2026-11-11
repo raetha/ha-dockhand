@@ -348,23 +348,8 @@
       "online": {
         "name": "在线"
       },
-      "activity_logging": {
-        "name": "活动收集"
-      },
-      "metrics_collection": {
-        "name": "指标收集"
-      },
       "vulnerability_scanning": {
         "name": "漏洞扫描"
-      },
-      "update_checks": {
-        "name": "更新检查"
-      },
-      "auto_update": {
-        "name": "自动更新"
-      },
-      "image_pruning": {
-        "name": "镜像清理"
       },
       "git_stack_sync_error": {
         "name": "同步错误"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "已启用"
+      },
+      "activity_logging": {
+        "name": "活动收集"
+      },
+      "metrics_collection": {
+        "name": "指标收集"
+      },
+      "update_checks": {
+        "name": "更新检查"
+      },
+      "auto_update": {
+        "name": "自动更新"
+      },
+      "image_pruning": {
+        "name": "镜像清理"
+      },
+      "disk_warning": {
+        "name": "磁盘空间警告"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "进程数限制"
+      },
+      "disk_warning_threshold": {
+        "name": "磁盘空间警告阈值"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "磁盘空间警告阈值 (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "总是",
           "unless-stopped": "除非手动停止",
           "on-failure": "失败时"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "漏洞扫描器",
+        "state": {
+          "none": "无",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype 和 Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "镜像清理模式",
+        "state": {
+          "dangling": "仅悬空镜像",
+          "all": "所有未使用的镜像"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "磁盘空间警告模式",
+        "state": {
+          "percentage": "已用百分比",
+          "absolute": "剩余空间"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "活动收集",
-        "metrics_collection": "指标收集",
         "vulnerability_scanning": "漏洞扫描",
-        "update_checks": "更新检查",
-        "auto_update": "自动更新",
-        "image_pruning": "镜像清理",
         "activity_events": "活动事件",
         "disk_usage": "磁盘使用情况",
         "vulnerabilities": "漏洞",

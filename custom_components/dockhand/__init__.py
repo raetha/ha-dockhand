@@ -120,6 +120,19 @@ _TYPE_COLLISION_EXCLUDED_SUFFIXES = (
 )
 
 
+# Environment settings that were binary sensors before 2.0.0 and are now
+# switches (env_settings.py), by unique ID suffix.
+_RETIRED_ENV_BINARY_SENSORS = frozenset(
+    {
+        "collect_activity",
+        "collect_metrics",
+        "update_check_enabled",
+        "auto_update",
+        "image_prune_enabled",
+    }
+)
+
+
 @dataclass
 class DockhandData:
     """Runtime data stored on the config entry."""
@@ -1280,6 +1293,15 @@ def _cleanup_stale_registry(
         except ValueError:
             continue
         uid_type = uid_parts[2]
+
+        if (
+            entity_entry.domain == "binary_sensor"
+            and "_".join(uid_parts[2:]) in _RETIRED_ENV_BINARY_SENSORS
+        ):
+            # Replaced by switches with the same unique ID (2.0.0).
+            _LOGGER.debug("Dockhand: removing retired binary sensor %s", uid)
+            ent_registry.async_remove(entity_entry.entity_id)
+            continue
 
         if any(uid.endswith(sfx) for sfx in _TYPE_COLLISION_EXCLUDED_SUFFIXES):
             continue

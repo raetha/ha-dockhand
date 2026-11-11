@@ -42,11 +42,12 @@ warning means part of the request may not have been applied as asked.
 
 import logging
 from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, override
 
 from homeassistant.components.number import NumberEntity, NumberMode
-from homeassistant.const import EntityCategory, UnitOfInformation
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import issue_registry as ir
@@ -59,6 +60,12 @@ from . import DockhandConfigEntry
 from .const import CONF_API_URL, CONF_ENABLE_RUNTIME_CONTROLS, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .entity_defaults import enabling_chosen
+from .env_settings import (
+    DISK_WARNING,
+    DockhandEnvSettingEntity,
+    EnvSettingDescription,
+    build_setting_entities,
+)
 from .helpers import (
     _all_envs,
     _compose_project,
@@ -89,6 +96,15 @@ async def async_setup_entry(
         entry.entry_id, entry.options, async_add_entities
     )
     data = entry.runtime_data
+
+    def _add_settings() -> None:
+        if new := build_setting_entities(
+            hass, entry, "number", ENV_SETTING_NUMBERS, DockhandEnvSettingNumber
+        ):
+            async_add_entities(new)
+
+    _add_settings()
+    entry.async_on_unload(data.slow_coordinator.async_add_listener(_add_settings))
 
     def _opt(key: str, default: Any) -> Any:
         return entry.options.get(key, default)
@@ -441,3 +457,66 @@ class DockhandContainerPidsLimitNumber(_BaseRuntimeControlNumber):
         await self._async_apply("PidsLimit", pids_limit)
         self._optimistic_value = value
         self.async_write_ha_state()
+
+
+@dataclass(frozen=True, kw_only=True)
+class EnvSettingNumberDescription(EnvSettingDescription):
+    native_min_value: float
+    native_max_value: float
+    native_unit_of_measurement: str
+
+
+ENV_SETTING_NUMBERS = (
+    # Dockhand's own limits for each (disk-warning/+server.ts).
+    EnvSettingNumberDescription(
+        key="disk_warning_threshold",
+        section=DISK_WARNING,
+        field="threshold",
+        unique_suffix="disk_warning_threshold",
+        native_min_value=1,
+        native_max_value=100,
+        native_unit_of_measurement=PERCENTAGE,
+    ),
+    EnvSettingNumberDescription(
+        key="disk_warning_threshold_gb",
+        section=DISK_WARNING,
+        field="thresholdGb",
+        unique_suffix="disk_warning_threshold_gb",
+        native_min_value=1,
+        native_max_value=100000,
+        native_unit_of_measurement=UnitOfInformation.GIGABYTES,
+    ),
+)
+
+
+class DockhandEnvSettingNumber(DockhandEnvSettingEntity, NumberEntity):
+    """A whole-number environment setting (env_settings.py)."""
+
+    _setting: EnvSettingNumberDescription
+    _attr_mode = NumberMode.BOX
+    _attr_native_step = 1
+
+    @property
+    @override
+    def native_min_value(self) -> float:
+        return self._setting.native_min_value
+
+    @property
+    @override
+    def native_max_value(self) -> float:
+        return self._setting.native_max_value
+
+    @property
+    @override
+    def native_unit_of_measurement(self) -> str:
+        return self._setting.native_unit_of_measurement
+
+    @property
+    @override
+    def native_value(self) -> float | None:
+        value = self._value
+        return float(value) if isinstance(value, (int, float)) else None
+
+    @override
+    async def async_set_native_value(self, value: float) -> None:
+        await self._save(int(value))

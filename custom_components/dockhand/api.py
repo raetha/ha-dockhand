@@ -649,6 +649,86 @@ class DockhandClient:
         settings = result.get("settings") if isinstance(result, dict) else None
         return settings if isinstance(settings, dict) else {}
 
+    async def async_set_update_check_settings(
+        self, env_id: int, settings: dict[str, Any]
+    ) -> None:
+        """Save an environment's update-check settings.
+
+        POST /api/environments/{id}/update-check replaces every field it
+        knows (a missing one goes back to Dockhand's default), so callers
+        send the current settings with their change.
+        """
+        body = {
+            key: settings[key]
+            for key in ("enabled", "cron", "autoUpdate", "vulnerabilityCriteria")
+            if key in settings
+        }
+        await self._request(
+            "POST", f"/api/environments/{_q(env_id)}/update-check", json=body
+        )
+
+    async def async_update_environment(self, env_id: int, **fields: Any) -> None:
+        """Change some of an environment's own settings (collectActivity,
+        collectMetrics): PUT /api/environments/{id} changes only the fields
+        sent."""
+        await self._request("PUT", f"/api/environments/{_q(env_id)}", json=fields)
+
+    async def async_get_image_prune_settings(self, env_id: int) -> dict[str, Any]:
+        """GET /api/environments/{id}/image-prune: {enabled, cronExpression,
+        pruneMode ("dangling" | "all")}."""
+        result = await self._request(
+            "GET", f"/api/environments/{_q(env_id)}/image-prune"
+        )
+        settings = result.get("settings") if isinstance(result, dict) else None
+        return settings if isinstance(settings, dict) else {}
+
+    async def async_set_image_prune_settings(
+        self, env_id: int, settings: dict[str, Any]
+    ) -> None:
+        """POST /api/environments/{id}/image-prune; like update-check, it
+        replaces every field, so callers send the current ones too."""
+        body = {
+            key: settings[key]
+            for key in ("enabled", "cronExpression", "pruneMode")
+            if key in settings
+        }
+        await self._request(
+            "POST", f"/api/environments/{_q(env_id)}/image-prune", json=body
+        )
+
+    async def async_get_disk_warning_settings(self, env_id: int) -> dict[str, Any]:
+        """GET /api/environments/{id}/disk-warning: {enabled, mode
+        ("percentage" | "absolute"), threshold (%), thresholdGb,
+        percentageSupported, storageDriver}."""
+        result = await self._request(
+            "GET", f"/api/environments/{_q(env_id)}/disk-warning"
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def async_set_disk_warning_settings(self, env_id: int, **fields: Any) -> None:
+        """POST /api/environments/{id}/disk-warning; each field is optional
+        and saved on its own."""
+        await self._request(
+            "POST", f"/api/environments/{_q(env_id)}/disk-warning", json=fields
+        )
+
+    async def async_get_scanner_setting(self, env_id: int) -> str | None:
+        """The environment's vulnerability scanner ("none", "grype",
+        "trivy", "both"), from GET /api/settings/scanner without its
+        Docker checks (settingsOnly)."""
+        result = await self._request(
+            "GET", f"/api/settings/scanner?env={_q(env_id)}&settingsOnly=true"
+        )
+        settings = result.get("settings") if isinstance(result, dict) else None
+        scanner = settings.get("scanner") if isinstance(settings, dict) else None
+        return scanner if isinstance(scanner, str) else None
+
+    async def async_set_scanner(self, env_id: int, scanner: str) -> None:
+        """POST /api/settings/scanner; fields left out keep their values."""
+        await self._request(
+            "POST", "/api/settings/scanner", json={"scanner": scanner, "envId": env_id}
+        )
+
     async def async_get_version_notes(
         self, env_id: int, container_id: str, versions: list[str]
     ) -> dict[str, Any]:

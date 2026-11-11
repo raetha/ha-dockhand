@@ -348,23 +348,8 @@
       "online": {
         "name": "Online"
       },
-      "activity_logging": {
-        "name": "Activity collection"
-      },
-      "metrics_collection": {
-        "name": "Metrics collection"
-      },
       "vulnerability_scanning": {
         "name": "Vulnerability scanning"
-      },
-      "update_checks": {
-        "name": "Update checks"
-      },
-      "auto_update": {
-        "name": "Auto update"
-      },
-      "image_pruning": {
-        "name": "Image pruning"
       },
       "git_stack_sync_error": {
         "name": "Sync error"
@@ -390,6 +375,24 @@
       },
       "schedule_enabled": {
         "name": "Enabled"
+      },
+      "activity_logging": {
+        "name": "Activity collection"
+      },
+      "metrics_collection": {
+        "name": "Metrics collection"
+      },
+      "update_checks": {
+        "name": "Update checks"
+      },
+      "auto_update": {
+        "name": "Auto update"
+      },
+      "image_pruning": {
+        "name": "Image pruning"
+      },
+      "disk_warning": {
+        "name": "Disk space warning"
       }
     },
     "button": {
@@ -427,6 +430,12 @@
       },
       "container_pids_limit": {
         "name": "Process limit"
+      },
+      "disk_warning_threshold": {
+        "name": "Disk space warning threshold"
+      },
+      "disk_warning_threshold_gb": {
+        "name": "Disk space warning threshold (GB)"
       }
     },
     "select": {
@@ -437,6 +446,29 @@
           "always": "Always",
           "unless-stopped": "Unless stopped",
           "on-failure": "On failure"
+        }
+      },
+      "vulnerability_scanner": {
+        "name": "Vulnerability scanner",
+        "state": {
+          "none": "None",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype and Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Image prune mode",
+        "state": {
+          "dangling": "Dangling images only",
+          "all": "All unused images"
+        }
+      },
+      "disk_warning_mode": {
+        "name": "Disk space warning mode",
+        "state": {
+          "percentage": "Percentage used",
+          "absolute": "Space free"
         }
       }
     },
@@ -553,12 +585,7 @@
     },
     "environment_entities": {
       "options": {
-        "activity_logging": "Activity collection",
-        "metrics_collection": "Metrics collection",
         "vulnerability_scanning": "Vulnerability scanning",
-        "update_checks": "Update checks",
-        "auto_update": "Auto update",
-        "image_pruning": "Image pruning",
         "activity_events": "Activity events",
         "disk_usage": "Disk usage",
         "vulnerabilities": "Vulnerabilities",

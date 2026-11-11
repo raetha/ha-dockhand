@@ -154,6 +154,7 @@ A token acts as the Dockhand user who created it. In Dockhand's free edition eve
 | Stack switch, Restart, Redeploy, git stack Deploy | `stacks: start`, `stop`, `restart` |
 | Install, Update all, runtime controls, `dockhand.recreate_container` | `containers: create` |
 | Auto update and git stack Auto deploy switches | `schedules: edit`, `stacks: edit` |
+| Environment settings (activity and metrics collection, update checks, pruning, disk warning) | `environments: edit`; the vulnerability scanner: `settings: edit` |
 | Schedule Run now / Enabled | `schedules: run` / `schedules: edit` (built-in cleanups: `settings: edit`; a container start/stop schedule also needs `containers: start` and `stop`) |
 | `dockhand.prune` | `remove` on each resource type pruned |
 | Updates to Dockhand itself (precise update versions) | an administrator |
@@ -242,8 +243,22 @@ If you're also running the Portainer integration, note that this integration use
 | Memory usage | sensor | %, with used/total bytes attributes |
 | Containers running | sensor | with total/stopped/unhealthy attributes, and update counts: `pending_updates` (installable, excluding system containers), `pending_system_updates`, `pending_version_updates` (newer version tag only), `pending_pinned_digest_updates` (moved digest on a pinned image only), `pending_held_updates` (held for the minimum image age only) and `pending_updates_total` (every container whose update entity is on) |
 | Images | sensor | count of Docker images on the environment |
-| Image pruning | binary_sensor | whether automatic image pruning is enabled for this environment. Disabled by default |
 | Update all | button | Updates every container in the environment with a pending update in one batch (pull, scan if configured, recreate) — matches Dockhand's own "Update all" button exactly. Named "Update all containers" (a static name; Dockhand's own button shows a live "(N)" count, but a changing friendly name on a persistent entity reads as confusing churn in HA's own history, so ours doesn't). "Pending update" considers both the cheap cached check and, if enabled, the precise digest check — a container flagged by either counts. System containers are excluded from the count and from the update, same as Dockhand's own button. Goes through the same queue as Install, so each container's update entity shows its progress. **Only exists while Enable update entities is on**, and is unavailable while nothing is pending, so automations and dashboards can rely on its entity ID — this is the one thing that toggle actually gates besides entity display, since leaving it available with update entities disabled would be a backdoor to triggering real updates from HA |
+
+**Environment settings** (configuration entities), changing the environment's settings in Dockhand. Each appears only if the token can read that setting; changing one needs the permission in the table above.
+
+| Entity | Type | Notes |
+|---|---|---|
+| Activity collection, Metrics collection | switch | Whether Dockhand records container events and CPU/memory metrics for the environment |
+| Update checks, Auto update | switch | The environment's scheduled update check, and whether it installs what it finds |
+| Image pruning | switch | Scheduled removal of unused images |
+| Image prune mode | select | `dangling` (untagged images only) or `all` (every unused image) |
+| Disk space warning | switch | Dockhand's notification when the host runs low on disk space |
+| Disk space warning mode | select | `percentage` (of the disk used) or `absolute` (space left) |
+| Disk space warning threshold, threshold (GB) | number | The level for each mode: 1–100 %, or GB free |
+| Vulnerability scanner | select | `none`, `grype`, `trivy` or `both`; the read-only **Vulnerability scanning** sensor says whether one is set |
+
+The schedules themselves (when update checks and pruning run) stay in Dockhand.
 
 The following are sourced from `GET /api/host` (already polled every slow cycle for the Hawser version sensor — no extra API call) but are **disabled by default**, since they're niche/diagnostic. Enable the ones you want in **Settings → Entities**.
 

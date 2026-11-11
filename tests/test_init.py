@@ -3531,3 +3531,27 @@ async def test_remove_config_entry_device_ignores_other_integrations_identifiers
     device.identifiers = {("other", "e1_env_1"), ("dockhand", "e1_container_1_gone")}
     with patch("custom_components.dockhand._build_live_sets", return_value=_LIVE):
         assert await async_remove_config_entry_device(hass, _removal_entry(), device)
+
+
+def test_removes_the_binary_sensors_settings_switches_replaced(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
+        },
+    )
+    p = f"{entry.entry_id}_1"
+    retired = [
+        _add_entity(hass, entry, f"{p}_{s}", domain="binary_sensor")
+        for s in ("collect_activity", "update_check_enabled", "image_prune_enabled")
+    ]
+    kept = [
+        _add_entity(hass, entry, f"{p}_scanner_enabled", domain="binary_sensor"),
+        _add_entity(hass, entry, f"{p}_image_prune_enabled", domain="switch"),
+        _add_entity(hass, entry, f"{p}_collect_activity", domain="switch"),
+    ]
+    _cleanup_stale_registry(hass, entry)
+    assert not any(_entity_exists(hass, e.entity_id) for e in retired)
+    assert all(_entity_exists(hass, e.entity_id) for e in kept)

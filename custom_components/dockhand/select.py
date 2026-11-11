@@ -8,6 +8,7 @@ auto-revert safety check here — only the shared warnings-to-repair-issue
 handling.
 """
 
+from dataclasses import dataclass
 from typing import Any, override
 
 from homeassistant.components.select import SelectEntity
@@ -23,6 +24,14 @@ from . import DockhandConfigEntry
 from .const import CONF_ENABLE_RUNTIME_CONTROLS, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .entity_defaults import enabling_chosen
+from .env_settings import (
+    DISK_WARNING,
+    IMAGE_PRUNE,
+    SCANNER,
+    DockhandEnvSettingEntity,
+    EnvSettingDescription,
+    build_setting_entities,
+)
 from .helpers import (
     _all_envs,
     _compose_project,
@@ -48,6 +57,16 @@ async def async_setup_entry(
         entry.entry_id, entry.options, async_add_entities
     )
     data = entry.runtime_data
+
+    def _add_settings() -> None:
+        if new := build_setting_entities(
+            hass, entry, "select", ENV_SETTING_SELECTS, DockhandEnvSettingSelect
+        ):
+            async_add_entities(new)
+
+    _add_settings()
+    entry.async_on_unload(data.fast_coordinator.async_add_listener(_add_settings))
+    entry.async_on_unload(data.slow_coordinator.async_add_listener(_add_settings))
 
     def _opt(key: str, default: Any) -> Any:
         return entry.options.get(key, default)
@@ -197,3 +216,53 @@ class DockhandContainerRestartPolicySelect(
 
         self._optimistic_value = option
         self.async_write_ha_state()
+
+
+@dataclass(frozen=True, kw_only=True)
+class EnvSettingSelectDescription(EnvSettingDescription):
+    options: list[str]
+
+
+ENV_SETTING_SELECTS = (
+    EnvSettingSelectDescription(
+        key="vulnerability_scanner",
+        section=SCANNER,
+        unique_suffix="vulnerability_scanner",
+        options=["none", "grype", "trivy", "both"],
+    ),
+    EnvSettingSelectDescription(
+        key="image_prune_mode",
+        section=IMAGE_PRUNE,
+        field="pruneMode",
+        unique_suffix="prune_mode",
+        options=["dangling", "all"],
+    ),
+    EnvSettingSelectDescription(
+        key="disk_warning_mode",
+        section=DISK_WARNING,
+        field="mode",
+        unique_suffix="disk_warning_mode",
+        options=["percentage", "absolute"],
+    ),
+)
+
+
+class DockhandEnvSettingSelect(DockhandEnvSettingEntity, SelectEntity):
+    """An environment setting with a few choices (env_settings.py)."""
+
+    _setting: EnvSettingSelectDescription
+
+    @property
+    @override
+    def options(self) -> list[str]:
+        return self._setting.options
+
+    @property
+    @override
+    def current_option(self) -> str | None:
+        value = self._value
+        return value if value in self._setting.options else None
+
+    @override
+    async def async_select_option(self, option: str) -> None:
+        await self._save(option)

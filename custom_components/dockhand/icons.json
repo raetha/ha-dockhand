@@ -147,23 +147,8 @@
           "off": "mdi:wifi-off"
         }
       },
-      "activity_logging": {
-        "default": "mdi:pulse"
-      },
-      "metrics_collection": {
-        "default": "mdi:cpu-64-bit"
-      },
       "vulnerability_scanning": {
         "default": "mdi:shield-check"
-      },
-      "update_checks": {
-        "default": "mdi:arrow-up-circle-outline"
-      },
-      "auto_update": {
-        "default": "mdi:arrow-up-circle"
-      },
-      "image_pruning": {
-        "default": "mdi:broom"
       },
       "git_stack_sync_error": {
         "default": "mdi:source-branch-remove"
@@ -189,6 +174,27 @@
         "default": "mdi:calendar-clock",
         "state": {
           "off": "mdi:calendar-remove"
+        }
+      },
+      "activity_logging": {
+        "default": "mdi:pulse"
+      },
+      "metrics_collection": {
+        "default": "mdi:cpu-64-bit"
+      },
+      "update_checks": {
+        "default": "mdi:arrow-up-circle-outline"
+      },
+      "auto_update": {
+        "default": "mdi:arrow-up-circle"
+      },
+      "image_pruning": {
+        "default": "mdi:broom"
+      },
+      "disk_warning": {
+        "default": "mdi:harddisk",
+        "state": {
+          "off": "mdi:harddisk-remove"
         }
       }
     },
@@ -227,11 +233,26 @@
       },
       "container_pids_limit": {
         "default": "mdi:sitemap-outline"
+      },
+      "disk_warning_threshold": {
+        "default": "mdi:harddisk"
+      },
+      "disk_warning_threshold_gb": {
+        "default": "mdi:harddisk"
       }
     },
     "select": {
       "container_restart_policy": {
         "default": "mdi:restart-alert"
+      },
+      "vulnerability_scanner": {
+        "default": "mdi:shield-search"
+      },
+      "image_prune_mode": {
+        "default": "mdi:broom"
+      },
+      "disk_warning_mode": {
+        "default": "mdi:harddisk"
       }
     },
     "event": {

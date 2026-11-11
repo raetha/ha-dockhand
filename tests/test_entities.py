@@ -237,12 +237,8 @@ def _sensor_classes():
 
 def _bs_classes():
     from custom_components.dockhand.binary_sensor import (
-        DockhandEnvAutoUpdateSensor,
-        DockhandEnvCollectActivitySensor,
-        DockhandEnvCollectMetricsSensor,
         DockhandEnvOnlineSensor,
         DockhandEnvScannerEnabledSensor,
-        DockhandEnvUpdateCheckSensor,
         DockhandStackUpdatesAvailableBinarySensor,
     )
 
@@ -1969,36 +1965,14 @@ def test_stack_updates_available_device_reflects_source_type():
     assert sensor.device_info["model"] == "Git Stack"
 
 
-def test_binary_collect_activity_true():
-    assert _make_binary("DockhandEnvCollectActivitySensor").is_on
-
-
-def test_binary_collect_metrics_true():
-    assert _make_binary("DockhandEnvCollectMetricsSensor").is_on
-
-
 def test_binary_scanner_disabled():
     assert not _make_binary("DockhandEnvScannerEnabledSensor").is_on
-
-
-def test_binary_update_checks_enabled():
-    assert _make_binary("DockhandEnvUpdateCheckSensor").is_on
-
-
-def test_binary_auto_update_disabled():
-    assert not _make_binary("DockhandEnvAutoUpdateSensor").is_on
 
 
 def test_binary_config_sensors_disabled_by_default():
     bs = _bs_classes()
     coord = _fast_coord()
-    for cls_name in [
-        "DockhandEnvCollectActivitySensor",
-        "DockhandEnvCollectMetricsSensor",
-        "DockhandEnvScannerEnabledSensor",
-        "DockhandEnvUpdateCheckSensor",
-        "DockhandEnvAutoUpdateSensor",
-    ]:
+    for cls_name in ["DockhandEnvScannerEnabledSensor"]:
         s = bs[cls_name](coord, ENTRY_ID, ENV_ID, BASE_URL)
         assert not s._attr_entity_registry_enabled_default, (
             f"{cls_name} should be disabled by default"
