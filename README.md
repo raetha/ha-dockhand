@@ -495,6 +495,8 @@ Entities update automatically when their coordinator refreshes. If a whole poll 
 
 **Live updates.** Dockhand watches Docker's events for every environment that collects activity or metrics (both are environment settings in Dockhand; metrics are on by default), and Hawser Edge agents always send theirs. While at least one environment does, the integration keeps Dockhand's activity feed open, and a change there (a container stopping, starting, turning unhealthy, being recreated) refreshes that environment's containers and stacks within a couple of seconds, instead of at the next poll. An environment going offline or coming back triggers a full refresh. The feed only speeds things up: polling carries on as before and catches anything missed. If the connection drops (Dockhand restarting, its host losing power), it's retried after 5 seconds, backing off to 5 minutes, and everything is refreshed once it's back. Without the `activity: view` permission, or with environments that collect neither, there's no feed and changes show on the next poll, so within a minute. **Settings → System → Repairs → ⋮ → System information** shows whether the feed is connected.
 
+Leave Dockhand's **Settings → General → Activity event collection mode** on **Stream**, its default. In **Poll** mode Dockhand reads Docker's events only once per interval (60 seconds by default), so the live feed and the Docker event entities lag by up to that interval, and with an interval over 30 seconds some events never arrive: each poll reads only the last 30 seconds. Hawser Edge environments aren't affected; their agents send events themselves.
+
 An action taken from Home Assistant (a switch, a button, Install) refreshes that environment straight away. Actions on many containers at once (one `switch.turn_off` on ten containers, say) share those refreshes rather than making one each.
 
 ### Controlling when data refreshes
@@ -559,6 +561,7 @@ Both follow what Dockhand's own Schedules page offers. Environment reports and s
 ## Known limitations
 
 - **Live updates need Dockhand to watch an environment's Docker events.** Environments that collect neither activity nor metrics, or a token without `activity: view`, only change on the next poll (see [Data Updates](#data-updates)). Totals such as an environment's running-container count also come from the poll.
+- **Dockhand's Poll event collection mode delays and drops events.** Keep it on Stream (see [Data Updates](#data-updates)).
 - **Some schedules can't be paused or run from here.** Dockhand can't run scheduled reports or stack deploys on demand, and can't pause backup-repository maintenance without it disappearing from its schedule list, so those get no Run now or Enabled entity.
 - **No build-cache pruning.** Dockhand's API has no build-cache prune, so `dockhand.prune` can't do it either.
 - **Runtime controls only for stand-alone containers.** Memory, CPU and process limits and the restart policy can't be changed live for a Compose-managed container, since the stack's own compose file would put them back.

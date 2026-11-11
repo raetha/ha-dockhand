@@ -150,6 +150,7 @@
 
 ### Internal
 
+- README: recommends Dockhand's Stream event collection mode, since Poll mode delays and drops the events live updates and the Docker event entities rely on.
 - Docs: installing through Home Assistant's Marketplace (2026.11+), with HACS
   for older versions.
 - The generated Dockhand API index (`docs/dockhand-api.md`) and its
