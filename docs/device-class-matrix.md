@@ -1,7 +1,6 @@
 # Dockhand — Device & Entity Reference
 
-This document describes every device type and entity exposed by the integration,
-including HA platform, device class, state class, unit, and current behavior.
+This document describes every device type and entity exposed by the integration, including HA platform, device class, state class, unit, and current behavior.
 
 ---
 
@@ -97,8 +96,7 @@ Parent: none (root device). Entity ID prefix: `<platform>.{env}`
 
 ## Container device
 
-Parent: `<env> – Containers` group (freestanding), or `<env> – Stacks – <stack>` (Compose-managed)
-Entity ID prefix: `<platform>.{env}_containers_{name}`
+Parent: `<env> – Containers` group (freestanding), or `<env> – Stacks – <stack>` (Compose-managed) Entity ID prefix: `<platform>.{env}_containers_{name}`
 
 | Entity | Platform | Device class | State class | Unit | Enabled | Notes |
 |---|---|---|---|---|---|---|
@@ -125,9 +123,7 @@ Parent: `<env> – Stacks` group device. Entity ID prefix: `<platform>.{env}_sta
 
 ## Image entities
 
-Parent: `<env> – Images` group device. Optional — enable in setup.
-One entity per image, no individual image sub-devices.
-Entity ID prefix: `sensor.{env}_images_{repo}`
+Parent: `<env> – Images` group device. Optional — enable in setup. One entity per image, no individual image sub-devices. Entity ID prefix: `sensor.{env}_images_{repo}`
 
 | Entity | Platform | Device class | State class | Unit | Notes |
 |---|---|---|---|---|---|
@@ -137,9 +133,7 @@ Entity ID prefix: `sensor.{env}_images_{repo}`
 
 ## Network entities
 
-Parent: `<env> – Networks` group device. Optional — enable in setup.
-One entity per network, no individual network sub-devices.
-Entity ID prefix: `sensor.{env}_networks_{name}`
+Parent: `<env> – Networks` group device. Optional — enable in setup. One entity per network, no individual network sub-devices. Entity ID prefix: `sensor.{env}_networks_{name}`
 
 | Entity | Platform | Device class | State class | Unit | Notes |
 |---|---|---|---|---|---|
@@ -149,9 +143,7 @@ Entity ID prefix: `sensor.{env}_networks_{name}`
 
 ## Volume entities
 
-Parent: `<env> – Volumes` group device. Optional — enable in setup.
-One entity per volume, no individual volume sub-devices.
-Entity ID prefix: `sensor.{env}_volumes_{name}`
+Parent: `<env> – Volumes` group device. Optional — enable in setup. One entity per volume, no individual volume sub-devices. Entity ID prefix: `sensor.{env}_volumes_{name}`
 
 | Entity | Platform | Device class | State class | Unit | Notes |
 |---|---|---|---|---|---|
@@ -161,8 +153,7 @@ Entity ID prefix: `sensor.{env}_volumes_{name}`
 
 ## Schedule device
 
-Parent: `Dockhand – Schedules` hub device. Optional — enable in setup.
-Entity ID prefix: `sensor.dockhand_schedules_{task_name}`
+Parent: `Dockhand – Schedules` hub device. Optional — enable in setup. Entity ID prefix: `sensor.dockhand_schedules_{task_name}`
 
 | Entity | Platform | Device class | State class | Unit | Enabled | Notes |
 |---|---|---|---|---|---|---|

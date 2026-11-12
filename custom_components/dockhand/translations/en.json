@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "Run now"
+      },
+      "prune_images": {
+        "name": "Prune unused images"
+      },
+      "prune_containers": {
+        "name": "Prune stopped containers"
+      },
+      "prune_networks": {
+        "name": "Prune unused networks"
+      },
+      "prune_volumes": {
+        "name": "Prune unused volumes"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "Activity events",
         "disk_usage": "Disk usage",
         "vulnerabilities": "Vulnerabilities",
+        "prune_images": "Prune unused images",
+        "prune_containers": "Prune stopped containers",
+        "prune_networks": "Prune unused networks",
+        "prune_volumes": "Prune unused volumes",
         "pinned_digest_updates": "Pinned digest updates",
         "held_updates": "Held updates",
         "hawser_agent_version": "Hawser agent version",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "Auto deploy"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "Reach Dockhand server",
-      "environments": "Environments",
-      "live_events": "Live events",
-      "version": "Dockhand version"
     }
   }
 }

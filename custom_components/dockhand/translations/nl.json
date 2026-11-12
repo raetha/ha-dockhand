@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "Nu uitvoeren"
+      },
+      "prune_images": {
+        "name": "Ongebruikte images opschonen"
+      },
+      "prune_containers": {
+        "name": "Gestopte containers opschonen"
+      },
+      "prune_networks": {
+        "name": "Ongebruikte netwerken opschonen"
+      },
+      "prune_volumes": {
+        "name": "Ongebruikte volumes opschonen"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "Activiteitsgebeurtenissen",
         "disk_usage": "Schijfgebruik",
         "vulnerabilities": "Kwetsbaarheden",
+        "prune_images": "Ongebruikte images opschonen",
+        "prune_containers": "Gestopte containers opschonen",
+        "prune_networks": "Ongebruikte netwerken opschonen",
+        "prune_volumes": "Ongebruikte volumes opschonen",
         "pinned_digest_updates": "Updates voor vastgezette digests",
         "held_updates": "Tegengehouden updates",
         "hawser_agent_version": "Hawser-agentversie",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "Automatisch implementeren"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "Dockhand-server bereikbaar",
-      "environments": "Omgevingen",
-      "live_events": "Live-gebeurtenissen",
-      "version": "Dockhand-versie"
     }
   }
 }

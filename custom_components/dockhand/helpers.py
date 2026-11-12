@@ -8,7 +8,7 @@ must never be imported by __init__.py or by each other.
 
 import inspect
 import math
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Iterable
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
@@ -1427,3 +1427,33 @@ def _ensure_env_devices(
                     environment_name=env_name,
                 ),
             )
+
+
+# Docker's prune report field for each resource's deleted items.
+PRUNE_RESOURCES: dict[str, str] = {
+    "containers": "ContainersDeleted",
+    "images": "ImagesDeleted",
+    "volumes": "VolumesDeleted",
+    "networks": "NetworksDeleted",
+}
+
+
+async def async_prune_environment(
+    data: Any, env_id: int, resources: Iterable[str], all_images: bool
+) -> dict[str, int]:
+    """Prune `resources` in one environment (the dockhand.prune action and the
+    Prune buttons), then re-read what it changed. Returns the space freed and
+    how many of each resource were deleted."""
+    wanted = set(resources)
+    response = {"space_reclaimed": 0}
+    for resource, field in PRUNE_RESOURCES.items():
+        if resource not in wanted:
+            continue
+        report = await async_dockhand_action(
+            data.client.async_prune(env_id, resource, all_images=all_images)
+        )
+        response[f"{resource}_deleted"] = len(report.get(field) or [])
+        response["space_reclaimed"] += int(report.get("SpaceReclaimed") or 0)
+    await data.fast_coordinator.async_refresh_environment(env_id)
+    await data.slow_coordinator.async_refresh()
+    return response

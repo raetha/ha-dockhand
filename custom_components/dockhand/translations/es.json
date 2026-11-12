@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "Ejecutar ahora"
+      },
+      "prune_images": {
+        "name": "Eliminar imágenes sin usar"
+      },
+      "prune_containers": {
+        "name": "Eliminar contenedores detenidos"
+      },
+      "prune_networks": {
+        "name": "Eliminar redes sin usar"
+      },
+      "prune_volumes": {
+        "name": "Eliminar volúmenes sin usar"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "Eventos de actividad",
         "disk_usage": "Uso de disco",
         "vulnerabilities": "Vulnerabilidades",
+        "prune_images": "Eliminar imágenes sin usar",
+        "prune_containers": "Eliminar contenedores detenidos",
+        "prune_networks": "Eliminar redes sin usar",
+        "prune_volumes": "Eliminar volúmenes sin usar",
         "pinned_digest_updates": "Actualizaciones de digest fijado",
         "held_updates": "Actualizaciones retenidas",
         "hawser_agent_version": "Versión del agente Hawser",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "Despliegue automático"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "Acceso al servidor de Dockhand",
-      "environments": "Entornos",
-      "live_events": "Eventos en directo",
-      "version": "Versión de Dockhand"
     }
   }
 }

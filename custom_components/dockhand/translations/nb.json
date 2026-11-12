@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "Kjør nå"
+      },
+      "prune_images": {
+        "name": "Rydd ubrukte images"
+      },
+      "prune_containers": {
+        "name": "Rydd stoppede containere"
+      },
+      "prune_networks": {
+        "name": "Rydd ubrukte nettverk"
+      },
+      "prune_volumes": {
+        "name": "Rydd ubrukte volumer"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "Aktivitetshendelser",
         "disk_usage": "Diskbruk",
         "vulnerabilities": "Sårbarheter",
+        "prune_images": "Rydd ubrukte images",
+        "prune_containers": "Rydd stoppede containere",
+        "prune_networks": "Rydd ubrukte nettverk",
+        "prune_volumes": "Rydd ubrukte volumer",
         "pinned_digest_updates": "Oppdateringer for låste digester",
         "held_updates": "Tilbakeholdte oppdateringer",
         "hawser_agent_version": "Hawser-agentversjon",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "Automatisk distribusjon"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "Nå Dockhand-serveren",
-      "environments": "Miljøer",
-      "live_events": "Direktehendelser",
-      "version": "Dockhand-versjon"
     }
   }
 }

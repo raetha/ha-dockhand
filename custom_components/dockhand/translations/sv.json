@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "Kör nu"
+      },
+      "prune_images": {
+        "name": "Rensa oanvända images"
+      },
+      "prune_containers": {
+        "name": "Rensa stoppade containrar"
+      },
+      "prune_networks": {
+        "name": "Rensa oanvända nätverk"
+      },
+      "prune_volumes": {
+        "name": "Rensa oanvända volymer"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "Aktivitetshändelser",
         "disk_usage": "Diskanvändning",
         "vulnerabilities": "Sårbarheter",
+        "prune_images": "Rensa oanvända images",
+        "prune_containers": "Rensa stoppade containrar",
+        "prune_networks": "Rensa oanvända nätverk",
+        "prune_volumes": "Rensa oanvända volymer",
         "pinned_digest_updates": "Uppdateringar för låsta digester",
         "held_updates": "Tillbakahållna uppdateringar",
         "hawser_agent_version": "Hawser-agentversion",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "Automatisk distribution"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "Nå Dockhand-servern",
-      "environments": "Miljöer",
-      "live_events": "Livehändelser",
-      "version": "Dockhand-version"
     }
   }
 }

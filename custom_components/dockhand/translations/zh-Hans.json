@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "立即运行"
+      },
+      "prune_images": {
+        "name": "清理未使用的镜像"
+      },
+      "prune_containers": {
+        "name": "清理已停止的容器"
+      },
+      "prune_networks": {
+        "name": "清理未使用的网络"
+      },
+      "prune_volumes": {
+        "name": "清理未使用的卷"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "活动事件",
         "disk_usage": "磁盘使用情况",
         "vulnerabilities": "漏洞",
+        "prune_images": "清理未使用的镜像",
+        "prune_containers": "清理已停止的容器",
+        "prune_networks": "清理未使用的网络",
+        "prune_volumes": "清理未使用的卷",
         "pinned_digest_updates": "固定摘要更新",
         "held_updates": "暂缓的更新",
         "hawser_agent_version": "Hawser 代理版本",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "自动部署"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "访问 Dockhand 服务器",
-      "environments": "环境",
-      "live_events": "实时事件",
-      "version": "Dockhand 版本"
     }
   }
 }

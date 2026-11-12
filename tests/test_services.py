@@ -222,3 +222,40 @@ async def test_actions_need_a_loaded_entry(hass: HomeAssistant, entry: MockConfi
             blocking=True,
         )
     assert err.value.translation_key == "entry_not_loaded"
+
+
+async def test_prune_buttons_follow_the_image_prune_mode():
+    from unittest.mock import AsyncMock, MagicMock
+
+    from custom_components.dockhand.button import DockhandEnvPruneButton
+
+    data = MagicMock()
+    data.client.async_prune = AsyncMock(
+        return_value={"ImagesDeleted": [{}, {}], "SpaceReclaimed": 2048}
+    )
+    data.fast_coordinator.async_refresh_environment = AsyncMock()
+    data.slow_coordinator.async_refresh = AsyncMock()
+    slow = MagicMock()
+    slow.data = {
+        "environments": {1: {"settings": {"image_prune": {"pruneMode": "all"}}}}
+    }
+
+    def button(resource: str) -> DockhandEnvPruneButton:
+        return DockhandEnvPruneButton(
+            MagicMock(), slow, data, "entry", 1, "local", "http://dh", resource
+        )
+
+    images = button("images")
+    assert images.unique_id == "entry_1_prune_images"
+    assert images.translation_key == "prune_images"
+    assert not images.entity_registry_enabled_default
+    await images.async_press()
+    data.client.async_prune.assert_awaited_once_with(1, "images", all_images=True)
+    data.fast_coordinator.async_refresh_environment.assert_awaited_once_with(1)
+    data.slow_coordinator.async_refresh.assert_awaited_once()
+
+    # Without a readable mode, dangling images only, as Dockhand defaults.
+    slow.data = {"environments": {1: {}}}
+    data.client.async_prune.reset_mock()
+    await button("volumes").async_press()
+    data.client.async_prune.assert_awaited_once_with(1, "volumes", all_images=False)

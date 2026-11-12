@@ -24,9 +24,11 @@ from homeassistant.helpers.service import async_register_admin_service
 
 from .const import DOMAIN
 from .helpers import (
+    PRUNE_RESOURCES,
     _device_id_env,
     _find_container,
     async_dockhand_action,
+    async_prune_environment,
     ha_schema,
 )
 
@@ -44,14 +46,6 @@ class DockhandServiceArgument(StrEnum):
     ALL_IMAGES = "all_images"
     PULL = "pull"
 
-
-# Docker's prune report field for each resource's deleted items.
-PRUNE_RESOURCES: dict[str, str] = {
-    "containers": "ContainersDeleted",
-    "images": "ImagesDeleted",
-    "volumes": "VolumesDeleted",
-    "networks": "NetworksDeleted",
-}
 
 PRUNE_SCHEMA = vol.Schema(
     {
@@ -135,25 +129,13 @@ def _container(
 
 async def _async_prune(call: ServiceCall) -> ServiceResponse:
     entry, env_id = _environment(call.hass, call.data[ATTR_DEVICE_ID])
-    data = entry.runtime_data
-    response: dict[str, Any] = {"space_reclaimed": 0}
-    for resource in PRUNE_RESOURCES:
-        if resource not in call.data[DockhandServiceArgument.RESOURCES]:
-            continue
-        report = await async_dockhand_action(
-            data.client.async_prune(
-                env_id,
-                resource,
-                all_images=call.data[DockhandServiceArgument.ALL_IMAGES],
-            )
-        )
-        response[f"{resource}_deleted"] = len(
-            report.get(PRUNE_RESOURCES[resource]) or []
-        )
-        response["space_reclaimed"] += int(report.get("SpaceReclaimed") or 0)
-    await data.fast_coordinator.async_refresh_environment(env_id)
-    await data.slow_coordinator.async_refresh()
-    return response
+    report = await async_prune_environment(
+        entry.runtime_data,
+        env_id,
+        call.data[DockhandServiceArgument.RESOURCES],
+        call.data[DockhandServiceArgument.ALL_IMAGES],
+    )
+    return dict(report)
 
 
 async def _async_recreate_container(call: ServiceCall) -> None:
