@@ -54,6 +54,7 @@ from .helpers import (
     STACK_STATS_SUFFIXES,
     _all_envs,
     _compose_project,
+    _container_device_version,
     _container_has_healthcheck,
     _coordinator_env,
     _device_by_identifier,
@@ -441,6 +442,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         )
     )
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
+    entry.async_on_unload(
+        fast_coordinator.async_add_listener(
+            lambda: _update_container_versions(hass, entry)
+        )
+    )
 
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
@@ -494,6 +500,27 @@ def _update_instance_version(hass: HomeAssistant, entry: DockhandConfigEntry) ->
     )
     if version and device is not None and device.sw_version != version:
         registry.async_update_device(device.id, sw_version=version)
+
+
+def _update_container_versions(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
+    """Keep each container device's version on its image's, which changes
+    when the container is recreated on a new image. Devices are registered
+    by their entities, so a container seen before its device is skipped
+    until the next poll."""
+    registry = dr.async_get(hass)
+    for env_id, env in _all_envs(entry.runtime_data.fast_coordinator.data).items():
+        for container in env.get("containers") or []:
+            name = container.get("name")
+            if not name:
+                continue
+            device = _device_by_identifier(
+                registry,
+                (DOMAIN, _device_id_container(entry.entry_id, env_id, name)),
+                entry.entry_id,
+            )
+            version = _container_device_version(container)
+            if device is not None and device.sw_version != version:
+                registry.async_update_device(device.id, sw_version=version)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 """Release helpers for CI (.github/workflows/build.yml) and release pull requests.
 
-python3 scripts/release.py check [--release]
+python3 scripts/release.py check [--release] [--released-from <changelog>]
     CHANGELOG.md has [Unreleased]; with --release (pull requests into and pushes
-    to main), also a dated section for manifest.json's version.
+    to main), also a dated section for manifest.json's version; with
+    --released-from (main's CHANGELOG.md), every section released there is
+    unchanged here.
 python3 scripts/release.py version
     manifest.json's version.
 python3 scripts/release.py dev-version <run> <tagged>
@@ -61,7 +63,12 @@ def sections(changelog: str) -> dict[str, str]:
     return out
 
 
-def check(changelog: str, version: str, release: bool = False) -> list[str]:
+def check(
+    changelog: str,
+    version: str,
+    release: bool = False,
+    released_from: str | None = None,
+) -> list[str]:
     """Return the problems that should fail CI.
 
     On dev, manifest.json holds the expected next version, which has no section
@@ -78,6 +85,15 @@ def check(changelog: str, version: str, release: bool = False) -> list[str]:
             f"CHANGELOG.md has no dated section for version {version}: "
             "date it in the release pull request"
         )
+    if released_from is not None:
+        # Released notes are frozen: an entry meant for Unreleased that
+        # lands under the release below it would otherwise go unnoticed.
+        for name, text in sections(released_from).items():
+            if name != "Unreleased" and found.get(name) != text:
+                problems.append(
+                    f"CHANGELOG.md changes the released [{name}] section: "
+                    "new entries go under [Unreleased]"
+                )
     return problems
 
 
@@ -148,6 +164,7 @@ def main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     chk = sub.add_parser("check")
     chk.add_argument("--release", action="store_true")
+    chk.add_argument("--released-from", type=Path)
     sub.add_parser("version")
     dev = sub.add_parser("dev-version")
     dev.add_argument("run", type=int)
@@ -163,7 +180,12 @@ def main(argv: list[str]) -> int:
     changelog = CHANGELOG.read_text(encoding="utf-8")
     version = json.loads(MANIFEST.read_text(encoding="utf-8"))["version"]
     if args.cmd == "check":
-        problems = check(changelog, version, args.release)
+        released = (
+            args.released_from.read_text(encoding="utf-8")
+            if args.released_from
+            else None
+        )
+        problems = check(changelog, version, args.release, released)
         for problem in problems:
             print(f"::error file=CHANGELOG.md::{problem}", file=sys.stderr)
         if problems:

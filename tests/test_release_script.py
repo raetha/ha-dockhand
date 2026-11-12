@@ -52,6 +52,20 @@ def test_check_requires_a_dated_section_only_for_a_release():
     assert len(release.check(CHANGELOG.replace("## [Unreleased]", ""), "1.1.0")) == 1
 
 
+def test_check_keeps_released_sections_frozen(tmp_path):
+    # The same released sections, with a new Unreleased entry: fine.
+    dev = CHANGELOG.replace("## [Unreleased]", "## [Unreleased]\n\n- New.")
+    assert release.check(dev, "1.2.0", released_from=CHANGELOG) == []
+    # An entry added under a released section instead.
+    edited = CHANGELOG.replace("- First.", "- First.\n- Slipped in.")
+    [problem] = release.check(edited, "1.2.0", released_from=CHANGELOG)
+    assert "[1.0.0]" in problem
+    # From the command line, against a file.
+    main_changelog = tmp_path / "main.md"
+    main_changelog.write_text(release.CHANGELOG.read_text(encoding="utf-8"))
+    assert release.main(["check", "--released-from", str(main_changelog)]) == 0
+
+
 def test_dev_version_sorts_above_the_installed_release():
     assert release.dev_version("1.11.2", 12, tagged=True) == "1.11.3-dev.12"
     assert release.dev_version("1.12.0", 13, tagged=False) == "1.12.0-dev.13"

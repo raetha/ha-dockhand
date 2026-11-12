@@ -67,10 +67,12 @@ jobs:
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          git fetch --quiet --depth=1 origin main
+          git show FETCH_HEAD:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
           if [ "$BASE_REF" = main ] || [ "$GITHUB_REF" = refs/heads/main ]; then
-            python3 scripts/release.py check --release
+            python3 scripts/release.py check --release --released-from "$RUNNER_TEMP/main-changelog.md"
           else
-            python3 scripts/release.py check
+            python3 scripts/release.py check --released-from "$RUNNER_TEMP/main-changelog.md"
           fi
 
       - name: Install ruff (the version pinned in requirements_test.txt)

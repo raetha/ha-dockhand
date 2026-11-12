@@ -274,8 +274,13 @@ A few formatting rules to keep in mind:
 `CHANGELOG.md`'s `[Unreleased]` section is release notes for end users, not
 a development log. A few rules that keep it that way:
 
+- **Open with a summary.** A few sentences under the version heading, before the first `###`
+  section, saying why the release matters: its aims or highlights, and what to do before
+  upgrading if anything is breaking. The sections below it carry the details. It's part of the
+  release notes CI publishes, so keep it for people installing, and rewrite it as the release
+  takes shape; a small release may need only a sentence.
 - **Never edit an already-released section** (anything with a version
-  number and date above `[Unreleased]`). Those entries describe how that
+  number and date below `[Unreleased]`); CI compares them with `main`'s. Those entries describe how that
   version worked at the time; a later change gets its own new entry in
   `[Unreleased]`, not a retroactive edit to history.
 - **Describe the net difference for a user, not the journey.** If a bug

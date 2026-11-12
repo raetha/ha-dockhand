@@ -141,6 +141,40 @@ async def test_an_upgrade_updates_the_software_version(
     assert _instance(hass, loaded_entry).sw_version == "1.0.58"
 
 
+async def test_a_container_device_carries_its_image_version(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry
+):
+    fast = loaded_entry.runtime_data.fast_coordinator
+    env_id, env = next(iter(fast.data["environments"].items()))
+    container = env["containers"][0]
+    identifier = (
+        DOMAIN,
+        f"{loaded_entry.entry_id}_container_{env_id}_{container['name']}",
+    )
+    registry = dr.async_get(hass)
+
+    container["image"] = "nginx:1.27"
+    container["labels"] = {}
+    fast.async_set_updated_data(fast.data)
+    assert (
+        _device_by_identifier(registry, identifier, loaded_entry.entry_id).sw_version
+        == "1.27"
+    )
+
+    # Recreated on a newer image.
+    container["labels"] = {"org.opencontainers.image.version": "1.28.0"}
+    fast.async_set_updated_data(fast.data)
+    assert (
+        _device_by_identifier(registry, identifier, loaded_entry.entry_id).sw_version
+        == "1.28.0"
+    )
+
+    # A container whose device isn't registered yet, or without a name, is skipped.
+    env["containers"].append({"name": "brand_new", "image": "x:1"})
+    env["containers"].append({"image": "y:1"})
+    fast.async_set_updated_data(fast.data)
+
+
 async def test_the_instance_device_cant_be_deleted_while_loaded(
     hass: HomeAssistant, loaded_entry: MockConfigEntry
 ):
@@ -327,7 +361,15 @@ async def test_dockhand_update_entity_waits_for_a_working_check(hass: HomeAssist
     version.async_set_updated_data("1.0.57")
     await hass.async_block_till_done()
 
-    # Once it has worked, it's set up again even while the check can't tell.
+    # A check that fails after that leaves it unavailable until the next.
+    version.self_update = {"updateAvailable": False, "error": "down"}
+    version.async_set_updated_data("1.0.57")
+    await hass.async_block_till_done()
+    assert hass.states.get(entity_id).state == "unavailable"
+
+    # One that doesn't work at setup isn't kept, rather than unavailable for
+    # good (an entity left by an earlier release, or Dockhand moved to a
+    # host it can't inspect itself on).
     client.async_check_self_update = AsyncMock(
         return_value={"updateAvailable": False, "error": "down"}
     )
@@ -335,7 +377,8 @@ async def test_dockhand_update_entity_waits_for_a_working_check(hass: HomeAssist
     with session, dockhand:
         assert await hass.config_entries.async_reload(entry.entry_id)
         await hass.async_block_till_done()
-    assert hass.states.get(entity_id).state == "unavailable"
+    assert registry.async_get_entity_id("update", DOMAIN, unique_id) is None
+    assert hass.states.get(entity_id) is None
 
 
 async def test_dockhand_update_check_is_feature_detected(hass: HomeAssistant):

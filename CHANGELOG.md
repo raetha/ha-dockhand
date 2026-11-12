@@ -2,47 +2,60 @@
 
 ## [Unreleased]
 
+Dockhand for Home Assistant 2.0 has two aims. It **follows Home Assistant's
+standards more closely**: counts and sizes become sensors with history and
+long-term statistics, polling follows Home Assistant's rules, states are
+translated, and nothing writes to the database on every poll without
+reason. And it **puts more of Dockhand in your hands**: an environment's
+settings, schedules, pausing containers, pruning and recreating, and
+Dockhand's own event collection can all be controlled from Home
+Assistant. Container changes now show within seconds through Dockhand's
+live feed, with fewer requests to Dockhand overall.
+
+Some changes are breaking: read **Removed** before upgrading, check
+automations and dashboards that use attributes, and update
+[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0
+at the same time. Home Assistant 2026.8 or later is required.
+
 ### Removed
+
 - **Breaking: counts and sizes are sensors now, not attributes** — Home
   Assistant keeps history and long-term statistics, and offers automation
   triggers, for entity states only, so values that change are their own
-  sensors, as its guidance asks. New sensors: running, stopped, paused,
-  restarting and unhealthy containers; running, partially running and
-  stopped stacks; pending, installable, system container and newer
-  version tag updates (pinned digest and held updates too, disabled by
-  default); memory used and total; each part of disk usage, activity
-  events today, critical, high, medium and low vulnerabilities, scanned
-  images and Hawser last seen (disabled by default); a container's memory
-  cache; a stack's pending updates and running containers. The attributes
-  they replace are gone: `running`, `stopped`, `paused`, `restarting`,
-  `unhealthy` and the `pending_*` counts on Containers; `running`,
-  `partial` and `stopped` on Stacks; `memory_used_bytes` and
-  `memory_total_bytes` on Memory usage; `total_size_bytes` on Images and
-  Volumes; the `*_size_bytes` parts of Disk usage; `today` on Activity
-  events; the severity counts, `images_scanned` and `total_images` on
-  Vulnerabilities; `memory_cache_bytes` on a container's Memory usage;
-  `running_containers` on the stack stats; `update_count` on a stack's
-  Updates available; `last_seen` on Hawser agent version. Update
-  templates and automations that read them. **ha-dockhand-cards 2.0.0 is
-  needed**: earlier cards read these attributes.
-- **Breaking: no more `name` attributes** on the environment's Online
-  sensor, a container's State sensor and update entity, a stack's Status
-  sensor and a schedule's Last status: the device carries the name.
-- **Breaking: a container's State sensor no longer has Docker's `status`
-  text** ("Up 3 hours"), which changed every minute and wrote a new state
-  to the database each time; a stack's Status no longer repeats its
-  `container_count` and `container_names`, which its Containers sensor
-  has.
+  sensors, as its guidance asks:
+  - New sensors: running, stopped, paused, restarting and unhealthy
+    containers; running, partially running and stopped stacks; pending,
+    installable, system container and newer version tag updates; memory
+    used and total; a container's memory cache; a stack's pending updates
+    and running containers. Disabled by default: pinned digest and held
+    updates, Hawser last seen, and the sensors that come with
+    Vulnerabilities, Disk usage and Activity events (each severity and
+    scanned images, each part of disk usage, today's events).
+  - The attributes they replace are gone: `running`, `stopped`, `paused`,
+    `restarting`, `unhealthy` and the `pending_*` counts on Containers;
+    `running`, `partial` and `stopped` on Stacks; `memory_used_bytes` and
+    `memory_total_bytes` on Memory usage; `total_size_bytes` on Images and
+    Volumes; the `*_size_bytes` parts of Disk usage; `today` on Activity
+    events; the severity counts, `images_scanned` and `total_images` on
+    Vulnerabilities; `memory_cache_bytes` on a container's Memory usage;
+    `running_containers` on the stack stats; `update_count` on a stack's
+    Updates available; `last_seen` on Hawser agent version.
+  - No more `name` attributes (environment Online, container State and
+    update entity, stack Status, schedule Last status): the device carries
+    the name. A container's `image_version` is now its device's version.
+  - A container's State no longer has Docker's `status` text ("Up 3
+    hours"), which changed every minute and wrote a new state to the
+    database each time; a stack's Status no longer repeats the
+    `container_count` and `container_names` its Containers sensor has.
+
+  Update templates and automations that read them. **ha-dockhand-cards
+  2.0.0 is needed**: earlier cards read these attributes.
 - **Breaking: the environment's Activity collection, Metrics collection,
   Update checks, Auto update and Image pruning binary sensors are now
   switches**, enabled by default, so their entity IDs change from
   `binary_sensor.…` to `switch.…`: update automations and dashboards that
   use them. The old entities are removed. Vulnerability scanning stays a
   sensor.
-- **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3).
-  HACS and the Marketplace won't install this release on older versions;
-  1.11.3 keeps working there.
-
 - **Breaking: polling intervals can no longer be set.** Home Assistant
   doesn't allow integrations to offer polling-interval settings, so the
   Fast poll interval, Slow poll interval and Precise update check interval
@@ -53,19 +66,17 @@
   see "Controlling when data refreshes" in the README to turn polling off
   and refresh from an automation on your own schedule instead.
   Downgrading to 1.11.x still works and keeps the intervals you'd set.
+- **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3).
+  HACS and the Marketplace won't install this release on older versions;
+  1.11.3 keeps working there.
 
 ### Added
-- **Event collection mode on the Dockhand device** — a repair while
-  Dockhand polls for Docker events instead of streaming them, since live
-  updates and Docker event entities then arrive late, and some never do.
-  Ignore it if you prefer polling: it comes back only if the mode changes.
-  **Event collection mode** and **Event poll interval** selects change the
-  setting from Home Assistant. Needs `settings: view` on Dockhand
-  Enterprise to appear, and `settings: edit` to change.
-- **Which containers and stacks are Dockhand's own** — a `system_container`
-  attribute (`true` for Dockhand's own container and Hawser agents) on the
-  container State and stack Status sensors.
 
+- **Change an environment's settings from Home Assistant** — switches for
+  activity and metrics collection, update checks, auto-update and image
+  pruning, and selects for the vulnerability scanner and the image prune
+  mode. The Dockhand device gets a select for the default vulnerability
+  scanner. Each appears once the token can read the setting.
 - **Run schedules now, and pause them** — each schedule gets a **Run now**
   button and, where Dockhand allows it, an **Enabled** switch, so
   schedules are no longer read-only in Home Assistant. While a run is
@@ -85,10 +96,6 @@
   and catches anything missed; the feed reconnects on its own after
   Dockhand restarts or its host loses power. Needs the `activity: view`
   permission on Dockhand Enterprise.
-- **Dockhand tags** (Dockhand 1.0.49+) on the container State and stack
-  Status sensors: `tags` (names, for automations and templates) and
-  `tag_colors`, from tags assigned in Dockhand and from containers'
-  `dockhand.tags` labels, merged the way Dockhand's own lists show them.
 - **Docker event entity per container**, like Home Assistant's Portainer
   integration: fires when a container starts, stops, dies (with its exit
   code), is killed, runs out of memory, restarts, pauses, resumes, is
@@ -98,58 +105,71 @@
 - **Dockhand device** — a device for the Dockhand server itself, named
   **Dockhand (*host*)**, showing its version (updated after an upgrade).
   Environments and the Schedules hub now appear connected through it. It
-  has an **update** entity saying whether a newer Dockhand release exists
-  (from Dockhand's own check, created once that check works: it needs an
-  admin token when authentication is on, and Docker access to Dockhand's
-  own container, which Hawser-only setups don't give it) and a diagnostic **Live updates** sensor showing whether Dockhand's
-  live feed is connected.
+  has:
+  - an **update** entity saying whether a newer Dockhand release exists,
+    from Dockhand's own check. It's there only while that check works: it
+    needs an admin token when authentication is on, and Docker access to
+    Dockhand's own container, which Hawser-only setups don't give it.
+  - a diagnostic **Live updates** sensor showing whether Dockhand's live
+    feed is connected.
+  - **Event collection mode** and **Event poll interval** selects. While
+    Dockhand polls for Docker events instead of streaming them, live
+    updates and Docker event entities arrive late and some never do, so a
+    repair says so; ignore it if you prefer polling, and it comes back
+    only if the mode changes. Needs `settings: view` on Dockhand
+    Enterprise to appear, and `settings: edit` to change.
 - **Dockhand on the System information page** (Settings → System →
   Repairs → ⋮ → System information): whether Dockhand answers, its
   version and how many environments it has, with a **Manage** link to the
   integration.
-- **Container `exit_code` and `image_version` attributes** on the State
-  sensor: the exit code while a container is stopped, and the version from
-  its image's `org.opencontainers.image.version` label.
+- **A container's version on its device** — the image's
+  `org.opencontainers.image.version` label, or its tag, shown where a
+  device shows its firmware, and kept up to date when the container moves
+  to a new image.
+- **New container and stack attributes** — `system_container` (`true`
+  for Dockhand's own container and Hawser agents) on the container State
+  and stack Status sensors; Dockhand's tags (1.0.49+) there too, as `tags`
+  and `tag_colors`, from tags assigned in Dockhand and from containers'
+  `dockhand.tags` labels, merged the way Dockhand's own lists show them;
+  and `exit_code` on a stopped container's State.
+- **Turn on an entity type for every environment, container or stack** —
+  **Configure** has collapsed **Environment entities**, **Container
+  entities** and **Stack entities** sections listing the entities that are
+  disabled by default. Checking one turns it on everywhere, including on
+  devices added later, except where you turned it off yourself; unchecking
+  it turns it off everywhere again, including any you turned on by hand.
+  **All of these** checks or unchecks a whole section.
 - **Repair issues go with the integration** — on Home Assistant 2026.11
   and later, removing a Dockhand entry also removes its repair issues.
 - **README: which Dockhand Enterprise permissions each feature needs**,
-  and what a Docker socket proxy in front of Dockhand has to allow.
+  what a Docker socket proxy in front of Dockhand has to allow, and why
+  Dockhand's event collection should stay on Stream.
 
 ### Changed
-- **Attributes no longer come and go** — an image's version, vendor,
-  title and source, a schedule's last-run details, the Hawser agent's name
-  and ID and the host's architecture are always there, empty when there's
-  nothing to show.
+
+- **Fewer requests to Dockhand** — an action re-reads only its own
+  environment, actions on several containers at once share their
+  refreshes, and the live feed skips a refresh a poll has already made.
+  Installs that start together (Home Assistant's "update all", the cards'
+  Update all, a script) go to Dockhand as one update job, followed by one
+  precise update check instead of one per container. Scripts acting on
+  several containers finish sooner and Dockhand does less work. Each
+  update entity still shows its own progress and result, and Update all
+  now shows progress on each container's update entity too.
+- **States are translated and listed** — container State and Health,
+  stack Status and schedule Last status offer their states in automation
+  editors and history, in your language; the schedule type attribute is
+  translated too. A state Docker or Dockhand adds later shows as unknown
+  until the integration knows it.
+- **Attributes are always there** — an image's version, vendor, title and
+  source, a schedule's last-run details, the Hawser agent's name and ID
+  and the host's architecture are present even when empty, rather than
+  coming and going. A container's `restart_count` is empty unless it's
+  restarting, since Dockhand only counts restarts then; it used to read 0.
 - **Runtime controls are enabled when you turn their option on** — the
   memory, CPU and process limits and the restart policy were created
   disabled even with **Enable runtime controls** on. Ones you disabled
   yourself stay off.
-- **Stack Status and schedule Last status list their states**, translated,
-  so Home Assistant offers them in automations and shows them in your
-  language; the schedule type attribute is translated too. A status Dockhand
-  adds later shows as unknown until the integration knows it.
-
-- **Actions refresh only their own environment** — after a button, switch
-  or Install, only that environment's containers and stacks are re-read
-  rather than every environment, so a script that restarts several
-  containers finishes sooner and asks less of Dockhand.
-- **Container State and Health are translated** and offer their states
-  in automation editors and history, as Docker's fixed list (running,
-  exited, paused and so on). A state Docker might add later shows as
-  unknown rather than as untranslated text.
-- **Container `restart_count` attribute only while restarting** — Dockhand
-  only counts restarts for a container that's restarting, so the attribute
-  always read 0 otherwise; it's now empty then.
-- **Updating several containers at once is one Dockhand job** — Installs
-  that start together (Home Assistant's "update all", the cards' Update
-  all, a script) go to Dockhand as a single update job instead of one each,
-  and the environment's precise update check runs once afterwards instead
-  of once per container: ten updates used to mean ten registry checks of
-  the whole environment. Each update entity still shows its own progress
-  and result, and Update all now shows progress on each container's update
-  entity too.
-- **Actions on many containers at once share refreshes** — one action on
-  ten containers refreshes their environment twice rather than ten times.
 - **Update all is always there while update entities are on** —
   unavailable while nothing is pending, rather than appearing and
   disappearing, so automations and dashboards can rely on its entity ID.
@@ -194,9 +214,8 @@
 
 ### Internal
 
-- README: recommends Dockhand's Stream event collection mode, since Poll mode delays and drops the events live updates and the Docker event entities rely on.
-- Docs: installing through Home Assistant's Marketplace (2026.11+), with HACS
-  for older versions.
+- Docs: installing through Home Assistant's Marketplace (2026.11+), with
+  HACS for older versions.
 - The generated Dockhand API index (`docs/dockhand-api.md`) and its
   generator are gone: Dockhand now publishes `static/openapi.json`, and
   upstream reviews diff that between release tags.
@@ -208,27 +227,16 @@
 - Dead code found by CodeQL removed; ruff 0.17.4.
 - Fallbacks for Home Assistant before 2026.8's device registry calls removed.
 - Two tag tests no longer move the event loop's clock, which made one fail at random.
-- The live feed skips its refresh when an action's refresh or a poll that
-  started after the event already shows it, saving an API round per action.
-
+- CI checks that released changelog sections are unchanged from `main`: two
+  2.0.0 entries had landed in 1.11.3's section on `dev`, and are back
+  under Unreleased.
+- The full review checks the entity model against Home Assistant's
+  current guidance (`docs/audits.md`, architecture §12).
 
 ## [1.11.3] - 2026-11-03
 
 ### Added
 
-- **Change an environment's settings from Home Assistant** — switches for
-  activity and metrics collection, update checks, auto-update and image
-  pruning, and selects for the vulnerability scanner and the image prune
-  mode. The Dockhand device gets a select for the default vulnerability
-  scanner. Each appears once the token can read the setting.
-- **Turn on an entity type for every environment, container or stack** —
-  **Configure** has collapsed **Environment entities**, **Container
-  entities** and **Stack entities** sections listing the entities that are
-  disabled by default. Checking one turns it on everywhere, including on
-  devices added later, except where you turned it off yourself; unchecking
-  it turns it off everywhere again, including any you turned on by hand.
-  **All of these** checks or unchecks a whole section. Vulnerabilities,
-  Disk usage and Activity events bring the sensors that break them down.
 - **Test builds** — upcoming changes are now published as test builds
   (pre-releases such as `v1.11.3-dev.42`) that HACS can install once
   Dockhand's **Pre-release** switch is turned on; the README's new "Test
