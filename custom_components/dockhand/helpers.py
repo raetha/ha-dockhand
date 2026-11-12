@@ -1156,6 +1156,20 @@ def _short_digest(digest: str) -> str:
     return sha_part[:12] if sha_part else str(digest)
 
 
+def _container_device_version(container: dict | None) -> str | None:
+    """The version on a container's device, as firmware is on a physical
+    one: the image's OCI version label when set, else its tag ("1.27",
+    "latest"). None for an image pinned by digest alone."""
+    version = _image_version_label((container or {}).get("labels"))
+    if version:
+        return version
+    image = str((container or {}).get("image") or "")
+    if not image or "@" in image:
+        return None
+    name, _, tag = image.rpartition(":")
+    return tag if name and "/" not in tag else "latest"
+
+
 def _container_installed_version(
     container: dict | None, update_item: dict | None
 ) -> str | None:

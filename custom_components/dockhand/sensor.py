@@ -52,7 +52,6 @@ from .helpers import (
     _find_git_stack,
     _image_display_name,
     _image_group_device,
-    _image_version_label,
     _network_group_device,
     _stack_device,
     _stack_has_system_container,
@@ -1271,7 +1270,6 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
         # on its own, and would write a new state to the database each time.
         return {
             "image": c.get("image"),
-            "image_version": _image_version_label(c.get("labels")),
             # Dockhand only counts restarts for a container restarting now.
             "restart_count": c.get("restartCount") if restarting else None,
             "exit_code": c.get("exitCode") if c.get("state") == "exited" else None,

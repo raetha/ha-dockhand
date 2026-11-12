@@ -62,15 +62,17 @@ jobs:
           python-version: "3.14"
 
       # On dev the version is the expected next one, undated until the release pull request;
-      # into and on main it must have its dated section.
+      # into and on main it must have its dated section. Released sections must match main's.
       - name: Check the changelog
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          git fetch --quiet --depth=1 origin main
+          git show FETCH_HEAD:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
           if [ "$BASE_REF" = main ] || [ "$GITHUB_REF" = refs/heads/main ]; then
-            python3 scripts/release.py check --release
+            python3 scripts/release.py check --release --released-from "$RUNNER_TEMP/main-changelog.md"
           else
-            python3 scripts/release.py check
+            python3 scripts/release.py check --released-from "$RUNNER_TEMP/main-changelog.md"
           fi
 
       - name: Install ruff (the version pinned in requirements_test.txt)

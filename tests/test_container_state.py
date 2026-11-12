@@ -59,7 +59,7 @@ def test_state_attributes_for_an_exited_container():
     )
     attrs = sensor.extra_state_attributes
     assert attrs["exit_code"] == 137
-    assert attrs["image_version"] == "1.27.3"
+    assert "image_version" not in attrs
     assert attrs["restart_count"] is None
 
 
@@ -71,4 +71,17 @@ def test_state_attributes_while_restarting():
     attrs = sensor.extra_state_attributes
     assert attrs["restart_count"] == 4
     assert attrs["exit_code"] is None
-    assert attrs["image_version"] is None
+
+
+def test_container_device_version():
+    from custom_components.dockhand.helpers import _container_device_version
+
+    oci = {"org.opencontainers.image.version": "3.1.0"}
+    assert _container_device_version({"image": "x:latest", "labels": oci}) == "3.1.0"
+    assert _container_device_version({"image": "nginx:1.27"}) == "1.27"
+    assert _container_device_version({"image": "ghcr.io/a/b:2.0"}) == "2.0"
+    assert _container_device_version({"image": "nginx"}) == "latest"
+    assert _container_device_version({"image": "localhost:5000/app"}) == "latest"
+    assert _container_device_version({"image": "nginx@sha256:abc"}) is None
+    assert _container_device_version({}) is None
+    assert _container_device_version(None) is None

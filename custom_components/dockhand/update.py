@@ -323,17 +323,24 @@ def _async_add_self_update_entity(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Add Dockhand's update entity once its check works, or straight away
-    if it has before (it stays, unavailable while the check can't tell).
-    The check runs every 6 hours whatever happens, so a setup that starts
-    working later (Dockhand given Docker access to its own container)
-    gets the entity then, without a reload."""
+    """Add Dockhand's update entity only while its check works. Where it
+    doesn't at setup (Dockhand can't inspect its own container, as with
+    Hawser-only installs, or the token isn't an admin's), one registered
+    earlier is removed rather than left unavailable for good. The check
+    runs every 6 hours whatever happens, so a setup that starts working
+    later (Dockhand given Docker access to its own container) gets the
+    entity then, without a reload; a check that fails only now and then
+    after that leaves it unavailable until the next."""
     version = entry.runtime_data.version_coordinator
-    unique_id = f"{entry.entry_id}_instance_update"
-    seen = er.async_get(hass).async_get_entity_id("update", DOMAIN, unique_id)
-    if seen or version.self_update_usable:
+    if version.self_update_usable:
         async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
         return
+    registry = er.async_get(hass)
+    stale = registry.async_get_entity_id(
+        "update", DOMAIN, f"{entry.entry_id}_instance_update"
+    )
+    if stale:
+        registry.async_remove(stale)
 
     listening: list[CALLBACK_TYPE] = []
 
