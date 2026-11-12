@@ -171,11 +171,6 @@ class DockhandClient:
     # Read endpoints
     # ------------------------------------------------------------------ #
 
-    async def async_check_health(self) -> None:
-        """Raise unless Dockhand answers its liveness check, which needs no
-        token, within 5 seconds."""
-        await self._request("GET", "/api/health", timeout_seconds=5)
-
     async def async_get_dockhand_version(self) -> str | None:
         """The running Dockhand's version.
 

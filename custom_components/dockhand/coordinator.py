@@ -1719,7 +1719,7 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
 class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
     """Dockhand's own version, for the instance device's software version
-    and system health.
+    and its update entity.
 
     Separate from the fast and slow coordinators because it changes only
     when Dockhand is upgraded, while its source is a large response.

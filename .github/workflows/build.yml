@@ -75,6 +75,10 @@ jobs:
             python3 scripts/release.py check --released-from "$RUNNER_TEMP/main-changelog.md"
           fi
 
+      # One line per paragraph or list item, so renderers wrap them (scripts/markdown.py).
+      - name: Check Markdown line breaks
+        run: python3 scripts/markdown.py --check $(git ls-files '*.md')
+
       - name: Install ruff (the version pinned in requirements_test.txt)
         run: pip install "$(grep -E '^ruff==' requirements_test.txt)"
 

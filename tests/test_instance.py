@@ -12,16 +12,12 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.update_coordinator import UpdateFailed
 from homeassistant.setup import async_setup_component
-from pytest_homeassistant_custom_component.common import (
-    MockConfigEntry,
-    get_system_health_info,
-)
+from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand import (
     _update_instance_version,
     async_remove_config_entry_device,
 )
-from custom_components.dockhand import system_health
 from custom_components.dockhand.api import DockhandClient
 from custom_components.dockhand.const import DOMAIN
 from custom_components.dockhand.coordinator import DockhandVersionCoordinator
@@ -85,7 +81,6 @@ async def loaded_entry(hass: HomeAssistant):
     )
     entry.add_to_hass(hass)
     client = make_mock_client()
-    client.async_check_health = AsyncMock()
     client.async_get_pending_updates = AsyncMock(return_value=[])
     client.async_get_stack_stats = AsyncMock(return_value=[])
     with (
@@ -190,53 +185,6 @@ async def test_diagnostics_include_the_version(
     assert result["dockhand_version"] == "1.0.57"
 
 
-def test_system_health_links_to_the_integration():
-    register = MagicMock()
-    system_health.async_register(MagicMock(), register)
-    assert register.async_register_info.call_args.args[1] == (
-        "/config/integrations/integration/dockhand"
-    )
-
-
-async def test_system_health(hass: HomeAssistant, loaded_entry: MockConfigEntry):
-    assert await async_setup_component(hass, "system_health", {})
-    await hass.async_block_till_done()
-    info = await get_system_health_info(hass, DOMAIN)
-    info["can_reach_server"] = await info["can_reach_server"]
-    assert info == {
-        "can_reach_server": "ok",
-        "version": "1.0.57",
-        "environments": 1,
-    }
-
-
-@pytest.mark.parametrize(
-    ("error", "expected"),
-    [
-        (TimeoutError(), {"type": "failed", "error": "timeout"}),
-        (OSError("refused"), {"type": "failed", "error": "unreachable"}),
-    ],
-)
-async def test_system_health_when_dockhand_doesnt_answer(
-    hass: HomeAssistant, loaded_entry: MockConfigEntry, error, expected
-):
-    loaded_entry.runtime_data.client.async_check_health = AsyncMock(side_effect=error)
-    loaded_entry.runtime_data.version_coordinator.data = None
-    assert await async_setup_component(hass, "system_health", {})
-    await hass.async_block_till_done()
-    info = await get_system_health_info(hass, DOMAIN)
-    assert await info["can_reach_server"] == expected
-    assert "version" not in info
-
-
-async def test_health_check_calls_the_public_liveness_route():
-    client = _client_returning({"status": "ok"})
-    await client.async_check_health()
-    args = client._session.request.call_args
-    assert args.args[1].endswith("/api/health")
-    assert args.kwargs["timeout"].total == 5
-
-
 async def test_unloading_stops_the_version_poll(
     hass: HomeAssistant, loaded_entry: MockConfigEntry
 ):
@@ -244,26 +192,6 @@ async def test_unloading_stops_the_version_poll(
     assert await hass.config_entries.async_unload(loaded_entry.entry_id)
     assert loaded_entry.state is ConfigEntryState.NOT_LOADED
     assert not version._listeners
-
-
-@pytest.mark.parametrize(
-    ("connected", "expected"),
-    [(True, "ok"), (False, {"type": "failed", "error": "disconnected"})],
-)
-async def test_system_health_shows_the_live_feed(
-    hass: HomeAssistant, loaded_entry: MockConfigEntry, connected, expected
-):
-    stream = loaded_entry.runtime_data.event_stream
-    stream._task = MagicMock()
-    stream.connected = connected
-    assert await async_setup_component(hass, "system_health", {})
-    await hass.async_block_till_done()
-    info = await get_system_health_info(hass, DOMAIN)
-    await info["can_reach_server"]
-    assert info["live_events"] == expected
-    diagnostics = await async_get_config_entry_diagnostics(hass, loaded_entry)
-    assert diagnostics["live_events"] == {"running": True, "connected": connected}
-    stream._task = None
 
 
 def test_instance_host_falls_back_to_dockhand():

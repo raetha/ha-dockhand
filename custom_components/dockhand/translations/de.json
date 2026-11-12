@@ -510,6 +510,18 @@
       },
       "schedule_run": {
         "name": "Jetzt ausführen"
+      },
+      "prune_images": {
+        "name": "Ungenutzte Images bereinigen"
+      },
+      "prune_containers": {
+        "name": "Gestoppte Container bereinigen"
+      },
+      "prune_networks": {
+        "name": "Ungenutzte Netzwerke bereinigen"
+      },
+      "prune_volumes": {
+        "name": "Ungenutzte Volumes bereinigen"
       }
     },
     "number": {
@@ -696,6 +708,10 @@
         "activity_events": "Aktivitätsereignisse",
         "disk_usage": "Speicherplatznutzung",
         "vulnerabilities": "Schwachstellen",
+        "prune_images": "Ungenutzte Images bereinigen",
+        "prune_containers": "Gestoppte Container bereinigen",
+        "prune_networks": "Ungenutzte Netzwerke bereinigen",
+        "prune_volumes": "Ungenutzte Volumes bereinigen",
         "pinned_digest_updates": "Updates für gepinnte Digests",
         "held_updates": "Zurückgehaltene Updates",
         "hawser_agent_version": "Hawser-Agent-Version",
@@ -717,14 +733,6 @@
       "options": {
         "git_stack_auto_deploy": "Automatische Bereitstellung"
       }
-    }
-  },
-  "system_health": {
-    "info": {
-      "can_reach_server": "Dockhand-Server erreichbar",
-      "environments": "Umgebungen",
-      "live_events": "Live-Ereignisse",
-      "version": "Dockhand-Version"
     }
   }
 }

@@ -27,6 +27,7 @@ from .entity import (
 )
 from .entity_defaults import enabling_chosen
 from .helpers import (
+    PRUNE_RESOURCES,
     _actionable_pending_update_container_ids,
     _all_envs,
     _coordinator_env,
@@ -37,6 +38,7 @@ from .helpers import (
     _stack_has_system_container,
     already_registered,
     async_dockhand_action,
+    async_prune_environment,
 )
 from .installs import DockhandInstaller, summarize_failures
 
@@ -100,6 +102,27 @@ async def async_setup_entry(
                 pending_readd_ids=pending_readd_ids,
             ):
                 new.append(check_updates_button)
+
+            # Prune buttons, disabled by default: pruning deletes things.
+            for resource in PRUNE_RESOURCES:
+                prune = DockhandEnvPruneButton(
+                    fast,
+                    slow,
+                    entry.runtime_data,
+                    entry.entry_id,
+                    env_id,
+                    env_name,
+                    base_url,
+                    resource,
+                )
+                if not already_registered(
+                    hass,
+                    known_ids,
+                    "button",
+                    prune.unique_id,
+                    pending_readd_ids=pending_readd_ids,
+                ):
+                    new.append(prune)
 
             # Bulk "Update all" button: present while update entities are
             # on, available only while something can be updated (Dockhand's
@@ -682,6 +705,47 @@ class DockhandCheckUpdatesButton(
             # periodic 60s poll applies to pending-updates. See this
             # button's own docstring above.
             self.coordinator.async_merge_pending_updates_from_check(self._env_id, items)
+
+
+class DockhandEnvPruneButton(CoordinatorEntity[DockhandFastCoordinator], ButtonEntity):
+    """Prune one kind of unused resource in the environment, as the
+    dockhand.prune action does: stopped containers, images, networks or
+    volumes. Images follow the environment's Image prune mode (dangling
+    unless it's set to all), so the button does what Dockhand's own image
+    prune schedule would. Disabled by default, since pruning deletes:
+    volumes especially, with whatever data they hold."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        fast_coordinator: DockhandFastCoordinator,
+        slow_coordinator: DockhandSlowCoordinator,
+        data: Any,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        resource: str,
+    ) -> None:
+        super().__init__(fast_coordinator)
+        self._slow = slow_coordinator
+        self._data = data
+        self._env_id = env_id
+        self._resource = resource
+        self._attr_translation_key = f"prune_{resource}"
+        self._attr_unique_id = f"{entry_id}_{env_id}_prune_{resource}"
+        self._attr_device_info = _env_device(entry_id, env_id, env_name, base_url)
+
+    @override
+    async def async_press(self) -> None:
+        settings = _coordinator_env(self._slow.data, self._env_id).get("settings") or {}
+        mode = (settings.get("image_prune") or {}).get("pruneMode")
+        await async_prune_environment(
+            self._data, self._env_id, [self._resource], all_images=mode == "all"
+        )
 
 
 class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], ButtonEntity):

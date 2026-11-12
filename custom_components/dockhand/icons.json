@@ -306,6 +306,18 @@
       },
       "schedule_run": {
         "default": "mdi:play-circle-outline"
+      },
+      "prune_images": {
+        "default": "mdi:image-remove"
+      },
+      "prune_containers": {
+        "default": "mdi:delete-sweep"
+      },
+      "prune_networks": {
+        "default": "mdi:lan-disconnect"
+      },
+      "prune_volumes": {
+        "default": "mdi:database-remove"
       }
     },
     "number": {
