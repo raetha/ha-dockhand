@@ -28,7 +28,7 @@ Assistant 2026.11 (it grew out of HACS, and uses the same catalog).
 2. Find **Dockhand** and install it
 3. Restart Home Assistant
 
-[![Open your Home Assistant instance and show Dockhand in the Marketplace.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=raetha&repository=ha-dockhand&category=integration)
+[![Open your Home Assistant instance and show Dockhand in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=raetha&repository=ha-dockhand&category=integration)
 
 **Home Assistant 2026.10 and older** have no Marketplace: install [HACS](https://hacs.xyz)
 yourself, then the steps are the same in HACS (**HACS → Integrations**, find Dockhand,

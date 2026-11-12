@@ -215,7 +215,7 @@ at the same time. Home Assistant 2026.8 or later is required.
 ### Internal
 
 - Docs: installing through Home Assistant's Marketplace (2026.11+), with
-  HACS for older versions.
+  its install link, and HACS for older versions.
 - The generated Dockhand API index (`docs/dockhand-api.md`) and its
   generator are gone: Dockhand now publishes `static/openapi.json`, and
   upstream reviews diff that between release tags.
