@@ -62,7 +62,7 @@ jobs:
           python-version: "3.14"
 
       # On dev the version is the expected next one, undated until the release pull request;
-      # into and on main it must have its dated section.
+      # into and on main it must have its dated section. Released sections must match main's.
       - name: Check the changelog
         env:
           BASE_REF: ${{ github.base_ref }}
