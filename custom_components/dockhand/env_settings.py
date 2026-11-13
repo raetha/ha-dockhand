@@ -114,8 +114,13 @@ async def async_save_setting(
         await async_dockhand_action(client.async_set_scanner(env_id, value))
     if description.read == STATS:
         await fast.async_request_refresh()
-    else:
-        await slow.async_refresh_env_settings(env_id)
+        return
+    await slow.async_refresh_env_settings(env_id)
+    if description.read == SCANNER:
+        # Whether scanning is on (the Vulnerability scanning sensor, and
+        # the vulnerability counts it gates) comes from the dashboard
+        # stats, which Dockhand recomputes from the scanner.
+        await fast.async_request_refresh()
 
 
 class DockhandEnvSettingEntity(CoordinatorEntity[DataUpdateCoordinator[Any]]):

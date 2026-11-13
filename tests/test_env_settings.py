@@ -177,6 +177,8 @@ async def test_selects():
     await scanner.async_select_option("both")
     client.async_set_scanner.assert_awaited_once_with(ENV_ID, "both")
     slow.async_refresh_env_settings.assert_awaited_with(ENV_ID)
+    # Scanning on or off is in the dashboard stats: read them again too.
+    fast.async_request_refresh.assert_awaited_once()
 
     mode = _entity(
         DockhandEnvSettingSelect,

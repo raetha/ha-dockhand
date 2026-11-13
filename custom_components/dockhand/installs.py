@@ -64,6 +64,8 @@ class _Batch:
     container_ids: dict[str, None] = field(default_factory=dict)
     # container id -> None (updated) or the exception to raise for it.
     outcomes: dict[str, Exception | None] = field(default_factory=dict)
+    # container id -> the name Dockhand reported it under, for the log.
+    names: dict[str, str] = field(default_factory=dict)
     task: asyncio.Task[None] | None = None
 
 
@@ -167,6 +169,7 @@ class DockhandInstaller:
                     )
                 for cid in ids:
                     batch.outcomes.setdefault(cid, error)
+            self._log_not_updated(env_id, batch)
             try:
                 await self._fast.async_refresh_environment(env_id)
             except Exception as err:  # the next poll catches up
@@ -190,8 +193,12 @@ class DockhandInstaller:
             self._read_lines(env_id, job.get("lines") or [], batch)
             status = job.get("status")
             if status == "done":
+                # Dockhand reports every container it handles, so one it
+                # never mentioned wasn't updated.
                 for cid in ids:
-                    batch.outcomes.setdefault(cid, None)
+                    batch.outcomes.setdefault(
+                        cid, _failed("Dockhand finished without updating it")
+                    )
                 return
             if status == "error":
                 result = job.get("result") or {}
@@ -210,6 +217,8 @@ class DockhandInstaller:
             cid = data.get("containerId")
             if cid not in batch.container_ids:
                 continue
+            if name := data.get("containerName"):
+                batch.names[cid] = str(name)
             step = data.get("step")
             pct = STEP_PERCENTAGES.get(step) if isinstance(step, str) else None
             key = (env_id, cid)
@@ -217,7 +226,9 @@ class DockhandInstaller:
                 self._progress[key] = pct
                 changed = True
             event_type = data.get("type")
-            if event_type == "blocked":
+            if event_type == "progress" and step == "done":
+                batch.outcomes.setdefault(cid, None)
+            elif event_type == "blocked":
                 reason = data.get("blockReason", "vulnerability findings")
                 batch.outcomes.setdefault(cid, _failed(f"Update blocked: {reason}"))
             elif event_type == "progress" and step == "failed":
@@ -231,6 +242,20 @@ class DockhandInstaller:
                 )
         if changed:
             self._async_notify(env_id)
+
+    @staticmethod
+    def _log_not_updated(env_id: int, batch: _Batch) -> None:
+        """Log each container the job didn't update: Install's error only
+        reaches whoever started it (a toast, a script), and is gone by the
+        time anyone looks."""
+        for cid, outcome in batch.outcomes.items():
+            if outcome is not None:
+                _LOGGER.warning(
+                    "Dockhand did not update %s in environment %s: %s",
+                    batch.names.get(cid, cid),
+                    env_id,
+                    _message(outcome),
+                )
 
     async def _vulnerability_criteria(self, env_id: int) -> str | None:
         """The environment's vulnerability blocking policy; on failure,
