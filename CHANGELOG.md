@@ -36,6 +36,7 @@ Some changes are breaking: read **Removed** before upgrading, check automations 
 - **New container and stack attributes** — `system_container` (`true` for Dockhand's own container and Hawser agents) on the container State and stack Status sensors; Dockhand's tags (1.0.49+) there too, as `tags` and `tag_colors`, from tags assigned in Dockhand and from containers' `dockhand.tags` labels, merged the way Dockhand's own lists show them; and `exit_code` on a stopped container's State.
 - **Turn on an entity type for every environment, container or stack** — **Configure** has collapsed **Environment entities**, **Container entities** and **Stack entities** sections listing the entities that are disabled by default. Checking one turns it on everywhere, including on devices added later, except where you turned it off yourself; unchecking it turns it off everywhere again, including any you turned on by hand. **All of these** checks or unchecks a whole section.
 - **Repair issues go with the integration** — on Home Assistant 2026.11 and later, removing a Dockhand entry also removes its repair issues.
+- **README: the cards' Dockhand dashboard**, which lays out every environment, stack and container without placing a card.
 - **README: which Dockhand Enterprise permissions each feature needs**, what a Docker socket proxy in front of Dockhand has to allow, and why Dockhand's event collection should stay on Stream.
 
 ### Changed

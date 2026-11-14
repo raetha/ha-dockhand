@@ -10,7 +10,7 @@ Monitor and control your Docker environments through **[Dockhand](https://dockha
 
 No cloud services are used. Supports **API token authentication** and works with Dockhand instances where authentication is disabled.
 
-Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards)** — nine Lovelace cards modeled on Dockhand's own UI (environments, stacks, containers, pending updates, vulnerabilities, schedules, and a whole-dashboard overview), built on top of the entities this integration provides.
+Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards)** — nine Lovelace cards modeled on Dockhand's own UI (environments, stacks, containers, pending updates, vulnerabilities, schedules, and a whole-dashboard overview), built on top of the entities this integration provides, and a ready-made **[Dockhand dashboard](https://github.com/raetha/ha-dockhand-cards#dockhand-dashboard)** that lays them out for you, with a page for every environment and its stacks and containers.
 
 ---
 
@@ -418,7 +418,7 @@ automation:
 - **Fix the common cases automatically.** Restart a container that has been unhealthy for a few minutes, or start one that a host reboot left stopped.
 - **Keep on top of updates.** See pending image updates next to Home Assistant's own updates, install them from there, or get a weekly reminder of stacks with updates waiting.
 - **Watch resources.** Chart a host's or a container's CPU and memory over time with Home Assistant's history, and alert when a stack's memory use creeps up.
-- **Put your Docker hosts on a dashboard.** The companion [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) show environments, stacks, containers, updates and vulnerabilities the way Dockhand does.
+- **Put your Docker hosts on a dashboard.** The companion [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) show environments, stacks, containers, updates and vulnerabilities the way Dockhand does; add their **Dockhand dashboard** (Add dashboard → Community dashboards) for all of it at once, without placing a card.
 
 ## Example automations
 
