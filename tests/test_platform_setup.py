@@ -262,7 +262,8 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
     assert f"{sched}_7_system_enabled" not in uids  # can't be paused
     assert f"{sched}_9_env_report_run" not in uids  # can't be run on demand
     assert f"{sched}_None_system_run" not in uids
-    assert {f"{p}_container_my-app_pause", f"{p}_container_my-app_resume"} <= uids
+    assert f"{p}_container_my-app_pause" in uids
+    assert f"{p}_container_my-app_resume" not in uids
     assert f"{p}_container_dockhand_pause" not in uids
 
 

@@ -505,9 +505,6 @@
       "pause": {
         "name": "Pausa"
       },
-      "resume": {
-        "name": "Återuppta"
-      },
       "schedule_run": {
         "name": "Kör nu"
       },
@@ -733,7 +730,6 @@
       "options": {
         "docker_event": "Docker-händelse",
         "pause": "Pausa",
-        "resume": "Återuppta",
         "container_auto_update": "Automatisk uppdatering"
       }
     },
