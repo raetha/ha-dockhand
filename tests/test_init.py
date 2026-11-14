@@ -3552,7 +3552,12 @@ def test_removes_the_binary_sensors_settings_switches_replaced(hass: HomeAssista
         _add_entity(hass, entry, f"{p}_image_prune_enabled", domain="switch"),
         _add_entity(hass, entry, f"{p}_collect_activity", domain="switch"),
     ]
-    _cleanup_stale_registry(hass, entry)
+    with patch("custom_components.dockhand.async_check_retired_entities") as check:
+        _cleanup_stale_registry(hass, entry)
+        # Removed after Home Assistant started: the repair is checked again.
+        check.assert_called_once_with(hass, entry.entry_id)
+        _cleanup_stale_registry(hass, entry)
+        check.assert_called_once()
     assert not any(_entity_exists(hass, e.entity_id) for e in retired)
     assert all(_entity_exists(hass, e.entity_id) for e in kept)
 
