@@ -657,6 +657,10 @@
     "event_collection_poll": {
       "title": "O Dockhand consulta os eventos do Docker",
       "description": "O Dockhand recolhe os eventos do Docker com uma consulta a cada {interval} segundos em vez de os receber em stream. Para {environments}, as atualizações em direto e as entidades de eventos do Docker podem chegar até {interval} segundos atrasadas e, com um intervalo superior a 30 segundos, alguns eventos nunca chegam: cada consulta só lê os últimos 30 segundos. Para os receber em stream, defina Modo de recolha de eventos do dispositivo Dockhand como Stream (no Dockhand: Settings → General → Activity event collection mode). Se preferir a consulta, ignore este problema: só volta após uma mudança para Stream e de novo para Consulta."
+    },
+    "retired_entities": {
+      "title": "Automações ou scripts usam entidades do Dockhand substituídas",
+      "description": "O Dockhand substituiu algumas das suas entidades por novas, e estas automações ou scripts ainda usam as antigas (entidade antiga → entidade nova: onde é usada):\n\n{entities}\n\nEdite-os para usarem as novas entidades. Esta reparação desaparece quando nenhum deles usar uma entidade antiga. Modelos e painéis não são verificados, por isso reveja-os também."
     }
   },
   "services": {

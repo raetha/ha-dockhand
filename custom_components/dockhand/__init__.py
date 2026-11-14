@@ -3,13 +3,15 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from homeassistant.components.automation import EVENT_AUTOMATION_RELOADED
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
 
 from .api import DockhandClient
@@ -71,6 +73,7 @@ from .helpers import (
 )
 from .installs import DockhandInstaller
 from .migration import async_run_migrations
+from .retired import async_check_retired_entities, retired_entity
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
@@ -121,19 +124,6 @@ _STACK_UPDATE_SUFFIXES = ("_updates_available", "_update_count")
 _TYPE_COLLISION_EXCLUDED_SUFFIXES = (
     "_update_check_enabled",
     "_image_prune_enabled",
-)
-
-
-# Environment settings that were binary sensors before 2.0.0 and are now
-# switches (env_settings.py), by unique ID suffix.
-_RETIRED_ENV_BINARY_SENSORS = frozenset(
-    {
-        "collect_activity",
-        "collect_metrics",
-        "update_check_enabled",
-        "auto_update",
-        "image_prune_enabled",
-    }
 )
 
 
@@ -453,6 +443,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     # Without this, entities pruned between reloads persist in the registry
     # and cause _2/_3/etc suffixes when new entities with the same name register.
     _cleanup_stale_registry(hass, entry)
+
+    # Automations and scripts load after integrations, so whether they still
+    # use a retired entity is only known once Home Assistant has started.
+    @callback
+    def _check_retired(_: HomeAssistant | Event) -> None:
+        async_check_retired_entities(hass, entry.entry_id)
+
+    entry.async_on_unload(async_at_started(hass, _check_retired))
+    entry.async_on_unload(
+        hass.bus.async_listen(EVENT_AUTOMATION_RELOADED, _check_retired)
+    )
 
     # All three coordinators share the same cleanup listener — guard logic is
     # handled inside _cleanup_stale_registry.
@@ -1318,6 +1319,7 @@ def _cleanup_stale_registry(
     # (depends on update entities being enabled), runtime controls (depends on
     # the feature being enabled), and git stack entities (depends on
     # Dockhand still classifying the stack as git-tracked).
+    retired_removed = False
     for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
         uid = entity_entry.unique_id or ""
 
@@ -1333,13 +1335,10 @@ def _cleanup_stale_registry(
             continue
         uid_type = uid_parts[2]
 
-        if (
-            entity_entry.domain == "binary_sensor"
-            and "_".join(uid_parts[2:]) in _RETIRED_ENV_BINARY_SENSORS
-        ):
-            # Replaced by switches with the same unique ID (2.0.0).
-            _LOGGER.debug("Dockhand: removing retired binary sensor %s", uid)
+        if retired_entity(entity_entry.domain, uid) is not None:
+            _LOGGER.debug("Dockhand: removing retired entity %s", uid)
             ent_registry.async_remove(entity_entry.entity_id)
+            retired_removed = True
             continue
 
         if any(uid.endswith(sfx) for sfx in _TYPE_COLLISION_EXCLUDED_SUFFIXES):
@@ -1601,6 +1600,11 @@ def _cleanup_stale_registry(
             ):
                 _LOGGER.debug("Dockhand: removing stale stack deploy entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
+
+    # Removed after Home Assistant started (a first poll that came late):
+    # the check made at start didn't see them.
+    if retired_removed and hass.is_running:
+        async_check_retired_entities(hass, entry.entry_id)
 
 
 async def async_remove_config_entry_device(

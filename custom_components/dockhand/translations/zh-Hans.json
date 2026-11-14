@@ -657,6 +657,10 @@
     "event_collection_poll": {
       "title": "Dockhand 正在轮询 Docker 事件",
       "description": "Dockhand 设置为每 {interval} 秒轮询一次 Docker 事件，而不是以流式接收。对于 {environments}，实时更新和 Docker 事件实体最多可能延迟 {interval} 秒；间隔超过 30 秒时，部分事件永远不会到达：每次轮询只读取最近 30 秒。要以流式接收，请将 Dockhand 设备上的“事件收集模式”设为“流式”（在 Dockhand 中：Settings → General → Activity event collection mode）。如果你更喜欢轮询，请忽略此问题：只有在切换到“流式”再切回“轮询”后才会再次出现。"
+    },
+    "retired_entities": {
+      "title": "自动化或脚本使用了已被替换的 Dockhand 实体",
+      "description": "Dockhand 已将部分实体替换为新实体，而以下自动化或脚本仍在使用旧实体（旧实体 → 新实体：使用位置）：\n\n{entities}\n\n请编辑它们，改用新实体。当它们都不再使用旧实体时，此修复项会自动消失。模板和仪表盘不会被检查，请一并检查。"
     }
   },
   "services": {

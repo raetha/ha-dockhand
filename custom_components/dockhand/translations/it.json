@@ -657,6 +657,10 @@
     "event_collection_poll": {
       "title": "Dockhand interroga gli eventi Docker",
       "description": "Dockhand raccoglie gli eventi Docker con un polling ogni {interval} secondi invece di riceverli in stream. Per {environments}, gli aggiornamenti in tempo reale e le entità degli eventi Docker possono arrivare fino a {interval} secondi in ritardo e, con un intervallo superiore a 30 secondi, alcuni eventi non arrivano mai: ogni polling legge solo gli ultimi 30 secondi. Per riceverli in stream, imposta Modalità di raccolta eventi del dispositivo Dockhand su Stream (in Dockhand: Settings → General → Activity event collection mode). Se preferisci il polling, ignora questo problema: torna solo dopo un passaggio a Stream e di nuovo a Polling."
+    },
+    "retired_entities": {
+      "title": "Automazioni o script usano entità Dockhand sostituite",
+      "description": "Dockhand ha sostituito alcune delle sue entità con entità nuove, e queste automazioni o script usano ancora quelle vecchie (entità vecchia → entità nuova: dove è usata):\n\n{entities}\n\nModificali in modo che usino le nuove entità. Questa riparazione scompare quando nessuno di essi usa più un'entità vecchia. I template e le dashboard non vengono controllati, quindi verifica anche quelli."
     }
   },
   "services": {

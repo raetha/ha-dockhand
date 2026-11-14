@@ -657,6 +657,10 @@
     "event_collection_poll": {
       "title": "Dockhand fragt Docker-Ereignisse ab",
       "description": "Dockhand erfasst Docker-Ereignisse per Abfrage alle {interval} Sekunden statt als Stream. Für {environments} können Live-Updates und Docker-Ereignis-Entitäten bis zu {interval} Sekunden verspätet sein, und bei einem Intervall über 30 Sekunden kommen manche Ereignisse nie an: Jede Abfrage liest nur die letzten 30 Sekunden. Für einen Stream setze Ereigniserfassung am Dockhand-Gerät auf Stream (in Dockhand: Settings → General → Activity event collection mode). Wenn du die Abfrage bevorzugst, ignoriere dieses Problem: Es erscheint erst wieder nach einem Wechsel zu Stream und zurück zu Abfrage."
+    },
+    "retired_entities": {
+      "title": "Automationen oder Skripte nutzen ersetzte Dockhand-Entitäten",
+      "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und diese Automationen oder Skripte nutzen noch die alten (alte Entität → neue Entität: wo sie genutzt wird):\n\n{entities}\n\nBearbeite sie so, dass sie die neuen Entitäten nutzen. Diese Reparatur verschwindet, sobald keine von ihnen mehr eine alte Entität nutzt. Templates und Dashboards werden nicht geprüft, sieh dir diese also ebenfalls an."
     }
   },
   "services": {
