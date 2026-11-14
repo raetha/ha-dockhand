@@ -660,7 +660,7 @@
     },
     "retired_entities": {
       "title": "Automationer eller skript använder ersatta Dockhand-entiteter",
-      "description": "Dockhand har ersatt några av sina entiteter med nya, och dessa automationer eller skript använder fortfarande de gamla (gammal entitet → ny entitet: var den används):\n\n{entities}\n\nRedigera dem så att de använder de nya entiteterna. Den här reparationen försvinner när ingen av dem längre använder en gammal entitet. Mallar och instrumentpaneler kontrolleras inte, så se över dem också."
+      "description": "Dockhand har ersatt några av sina entiteter med nya, och dessa automationer eller skript använder fortfarande de gamla (gammal entitet → ny entitet):\n\n{entities}\n\nRedigera var och en så att den använder de nya entiteterna. Den här reparationen försvinner när ingen av dem längre använder en gammal entitet. Instrumentpaneler och mallentiteter kontrolleras inte, så se över dem också."
     }
   },
   "services": {

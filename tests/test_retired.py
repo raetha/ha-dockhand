@@ -3,6 +3,7 @@ scripts still use them (retired.py)."""
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from homeassistant.components.automation import EVENT_AUTOMATION_RELOADED
@@ -20,8 +21,24 @@ from custom_components.dockhand.retired import (
 
 from .test_config_flow import LEGACY_ENTRY_DATA, _patch_full_setup
 
-USERS = "custom_components.dockhand.retired.automations_with_entity"
-SCRIPTS = "custom_components.dockhand.retired.scripts_with_entity"
+
+def _user(
+    entity_id: str,
+    unique_id: str | None = None,
+    refs: tuple[str, ...] = (),
+    raw: dict | None = None,
+) -> SimpleNamespace:
+    """A stand-in automation or script entity."""
+    return SimpleNamespace(
+        entity_id=entity_id,
+        unique_id=unique_id,
+        referenced_entities=set(refs),
+        raw_config=raw,
+    )
+
+
+def _install(hass: HomeAssistant, domain: str, *entities: SimpleNamespace) -> None:
+    hass.data[domain] = SimpleNamespace(entities=list(entities))
 
 
 def _entry(hass: HomeAssistant, entry_id: str = "ENTRY") -> MockConfigEntry:
@@ -62,68 +79,80 @@ def test_no_retired_entities_past_their_schema_major():
     assert [r for r in RETIRED_ENTITIES if r.from_major < SCHEMA_VERSION - 1] == []
 
 
-async def test_repair_lists_users_with_the_replacement(hass: HomeAssistant):
+async def test_repair_lists_each_user_with_a_link_and_the_replacements(
+    hass: HomeAssistant,
+):
     entry = _entry(hass)
     old = _retire(hass, entry, "collect_activity")
-    switch = (
-        er.async_get(hass)
-        .async_get_or_create(
-            "switch", DOMAIN, f"{entry.entry_id}_1_collect_activity", config_entry=entry
-        )
-        .entity_id
+    registry = er.async_get(hass)
+    old_registry_id = next(
+        d.id for d in registry.deleted_entities.values() if d.entity_id == old
     )
-    unused = _retire(hass, entry, "auto_update")
-    with (
-        patch(USERS, side_effect=lambda h, e: ["automation.b"] if e == old else []),
-        patch(SCRIPTS, side_effect=lambda h, e: ["script.a"] if e == old else []),
-    ):
-        async_check_retired_entities(hass, entry.entry_id)
+    switch = registry.async_get_or_create(
+        "switch", DOMAIN, f"{entry.entry_id}_1_collect_activity", config_entry=entry
+    ).entity_id
+    other = _retire(hass, entry, "auto_update")
+    _retire(hass, entry, "image_prune_enabled")
+    hass.states.async_set("automation.named", "on", {"friendly_name": "Named [x]"})
+    _install(
+        hass,
+        "automation",
+        # Referenced directly, with an id: linked to its editor.
+        _user("automation.named", "1700", refs=(old, other)),
+        # Only by registry ID (a device trigger), and without an id.
+        _user("automation.device", raw={"triggers": [{"entity_id": old_registry_id}]}),
+        # A longer entity ID that starts with the old one isn't a use.
+        _user("automation.longer", "1701", raw={"t": f"{{{{ is_state('{old}_2') }}}}"}),
+        _user("automation.none", "1702"),
+    )
+    _install(
+        hass,
+        "script",
+        # Only inside a template.
+        _user("script.tmpl", "tmpl", raw={"v": f"{{{{ is_state('{old}', 'on') }}}}"}),
+    )
+    async_check_retired_entities(hass, entry.entry_id)
 
     issue = _issue(hass)
     assert issue is not None
     assert issue.translation_key == "retired_entities"
     assert issue.severity == ir.IssueSeverity.WARNING
-    entities = issue.translation_placeholders["entities"]
-    assert entities == f"- `{old}` → `{switch}`: `automation.b`, `script.a`"
-    assert unused not in entities
-
-
-async def test_repair_without_a_replacement_names_only_the_old_entity(
-    hass: HomeAssistant,
-):
-    entry = _entry(hass)
-    old = _retire(hass, entry, "collect_metrics")
-    with patch(USERS, return_value=["automation.a"]), patch(SCRIPTS, return_value=[]):
-        async_check_retired_entities(hass, entry.entry_id)
-    issue = _issue(hass)
-    assert issue is not None
-    assert issue.translation_placeholders["entities"] == f"- `{old}`: `automation.a`"
+    assert issue.translation_placeholders["entities"] == "\n".join(
+        [
+            f"- automation.device (`automation.device`): `{old}` → `{switch}`",
+            f"- [Named \\[x\\]](/config/automation/edit/1700): `{other}`, `{old}` → `{switch}`",
+            f"- [script.tmpl](/config/script/edit/tmpl): `{old}` → `{switch}`",
+        ]
+    )
 
 
 async def test_repair_clears_once_nothing_uses_them(hass: HomeAssistant):
     entry = _entry(hass)
-    _retire(hass, entry, "collect_activity")
-    with patch(USERS, return_value=["automation.a"]), patch(SCRIPTS, return_value=[]):
-        async_check_retired_entities(hass, entry.entry_id)
+    old = _retire(hass, entry, "collect_activity")
+    user = _user("automation.a", "1", refs=(old,))
+    _install(hass, "automation", user)
+    async_check_retired_entities(hass, entry.entry_id)
     assert _issue(hass) is not None
-    with patch(USERS, return_value=[]), patch(SCRIPTS, return_value=[]):
-        async_check_retired_entities(hass, entry.entry_id)
+    user.referenced_entities = set()
+    async_check_retired_entities(hass, entry.entry_id)
     assert _issue(hass) is None
 
 
 async def test_repair_ignores_other_entries_and_entities(hass: HomeAssistant):
     entry = _entry(hass)
     other = _entry(hass, "OTHER")
-    _retire(hass, other, "collect_activity")
-    _retire(hass, entry, "collect_activity", domain="switch")
-    _retire(hass, entry, "scanner_enabled")
+    used = [
+        _retire(hass, other, "collect_activity"),
+        _retire(hass, entry, "collect_activity", domain="switch"),
+        _retire(hass, entry, "scanner_enabled"),
+    ]
     registry = er.async_get(hass)
     foreign = registry.async_get_or_create(
         "binary_sensor", "other", f"{entry.entry_id}_1_collect_activity"
     ).entity_id
     registry.async_remove(foreign)
-    with patch(USERS, return_value=["automation.a"]), patch(SCRIPTS, return_value=[]):
-        async_check_retired_entities(hass, entry.entry_id)
+    _install(hass, "automation", _user("automation.a", "1", refs=(*used, foreign)))
+    async_check_retired_entities(hass, entry.entry_id)
     assert _issue(hass) is None
     assert _issue(hass, "OTHER") is None
 

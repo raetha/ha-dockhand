@@ -660,7 +660,7 @@
     },
     "retired_entities": {
       "title": "Automationen oder Skripte nutzen ersetzte Dockhand-Entitäten",
-      "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und diese Automationen oder Skripte nutzen noch die alten (alte Entität → neue Entität: wo sie genutzt wird):\n\n{entities}\n\nBearbeite sie so, dass sie die neuen Entitäten nutzen. Diese Reparatur verschwindet, sobald keine von ihnen mehr eine alte Entität nutzt. Templates und Dashboards werden nicht geprüft, sieh dir diese also ebenfalls an."
+      "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und diese Automationen oder Skripte nutzen noch die alten (alte Entität → neue Entität):\n\n{entities}\n\nBearbeite jede davon so, dass sie die neuen Entitäten nutzt. Diese Reparatur verschwindet, sobald keine von ihnen mehr eine alte Entität nutzt. Dashboards und Template-Entitäten werden nicht geprüft, sieh dir diese also ebenfalls an."
     }
   },
   "services": {

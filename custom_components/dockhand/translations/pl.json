@@ -660,7 +660,7 @@
     },
     "retired_entities": {
       "title": "Automatyzacje lub skrypty używają zastąpionych encji Dockhand",
-      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a te automatyzacje lub skrypty nadal używają starych (stara encja → nowa encja: gdzie jest używana):\n\n{entities}\n\nZmień je tak, aby używały nowych encji. Ta naprawa zniknie, gdy żadna z nich nie będzie już używać starej encji. Szablony i dashboardy nie są sprawdzane, więc przejrzyj także je."
+      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a te automatyzacje lub skrypty nadal używają starych (stara encja → nowa encja):\n\n{entities}\n\nZmień każdą z nich tak, aby używała nowych encji. Ta naprawa zniknie, gdy żadna z nich nie będzie już używać starej encji. Dashboardy i encje szablonów nie są sprawdzane, więc przejrzyj także je."
     }
   },
   "services": {
