@@ -658,9 +658,13 @@
       "title": "Dockhand frågar efter Docker-händelser",
       "description": "Dockhand samlar in Docker-händelser genom att fråga var {interval}:e sekund i stället för att strömma dem. För {environments} kan liveuppdateringar och Docker-händelseentiteter komma upp till {interval} sekunder för sent, och med ett intervall över 30 sekunder kommer vissa händelser aldrig fram: varje avfrågning läser bara de senaste 30 sekunderna. Ställ in Insamling av händelser på Dockhand-enheten på Ström för att strömma dem (i Dockhand: Settings → General → Activity event collection mode). Om du föredrar avfrågning, ignorera det här problemet: det kommer bara tillbaka efter ett byte till Ström och tillbaka till Avfrågning."
     },
-    "retired_entities": {
-      "title": "Automationer eller skript använder ersatta Dockhand-entiteter",
-      "description": "Dockhand har ersatt några av sina entiteter med nya, och dessa automationer eller skript använder fortfarande de gamla (gammal entitet → ny entitet):\n\n{entities}\n\nRedigera var och en så att den använder de nya entiteterna. Den här reparationen försvinner när ingen av dem längre använder en gammal entitet. Instrumentpaneler och mallentiteter kontrolleras inte, så se över dem också."
+    "retired_entities_automation": {
+      "title": "{name} använder ersatta Dockhand-entiteter",
+      "description": "Dockhand har ersatt några av sina entiteter med nya, och automationen {link} använder fortfarande gamla. Redigera den så att den använder de nya entiteterna (gammal entitet → ny entitet):\n\n{entities}\n\nDen här reparationen försvinner när den inte längre använder dem."
+    },
+    "retired_entities_script": {
+      "title": "{name} använder ersatta Dockhand-entiteter",
+      "description": "Dockhand har ersatt några av sina entiteter med nya, och skriptet {link} använder fortfarande gamla. Redigera det så att det använder de nya entiteterna (gammal entitet → ny entitet):\n\n{entities}\n\nDen här reparationen försvinner när det inte längre använder dem."
     }
   },
   "services": {

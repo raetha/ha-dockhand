@@ -658,9 +658,13 @@
       "title": "Dockhand interroge les événements Docker",
       "description": "Dockhand collecte les événements Docker en interrogeant toutes les {interval} secondes au lieu de les recevoir en stream. Pour {environments}, les mises à jour en direct et les entités d'événements Docker peuvent avoir jusqu'à {interval} secondes de retard, et avec un intervalle de plus de 30 secondes certains événements n'arrivent jamais : chaque interrogation ne lit que les 30 dernières secondes. Pour les recevoir en stream, réglez Mode de collecte des événements de l'appareil Dockhand sur Stream (dans Dockhand : Settings → General → Activity event collection mode). Si vous préférez l'interrogation, ignorez ce problème : il ne revient qu'après un passage à Stream puis de nouveau à Interrogation."
     },
-    "retired_entities": {
-      "title": "Des automatisations ou des scripts utilisent des entités Dockhand remplacées",
-      "description": "Dockhand a remplacé certaines de ses entités par de nouvelles, et ces automatisations ou scripts utilisent encore les anciennes (ancienne entité → nouvelle entité) :\n\n{entities}\n\nModifiez chacun pour qu'il utilise les nouvelles entités. Cette réparation disparaît dès qu'aucun d'eux n'utilise plus d'ancienne entité. Les tableaux de bord et les entités modèles ne sont pas vérifiés : vérifiez-les aussi."
+    "retired_entities_automation": {
+      "title": "{name} utilise des entités Dockhand remplacées",
+      "description": "Dockhand a remplacé certaines de ses entités par de nouvelles, et l’automatisation {link} utilise encore d’anciennes entités. Modifiez-la pour qu’elle utilise les nouvelles (ancienne entité → nouvelle entité) :\n\n{entities}\n\nCette réparation disparaît dès qu’elle ne les utilise plus."
+    },
+    "retired_entities_script": {
+      "title": "{name} utilise des entités Dockhand remplacées",
+      "description": "Dockhand a remplacé certaines de ses entités par de nouvelles, et le script {link} utilise encore d’anciennes entités. Modifiez-le pour qu’il utilise les nouvelles (ancienne entité → nouvelle entité) :\n\n{entities}\n\nCette réparation disparaît dès qu’il ne les utilise plus."
     }
   },
   "services": {
