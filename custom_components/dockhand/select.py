@@ -349,7 +349,7 @@ class DockhandEventCollectionSelect(
 ):
     """How Dockhand collects Docker's events, on the Dockhand device: Stream
     as they happen, or Poll at an interval. Live updates and the Docker
-    event entities depend on it (README → Data Updates)."""
+    event entities depend on it (docs/data-updates.md)."""
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG

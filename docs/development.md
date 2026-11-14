@@ -12,6 +12,7 @@ The canonical guide for working on this repo. How the integration works and why 
 | `scripts/release.py` | Changelog check, release notes, test-build versions and the `dockhand.zip` HACS installs, used by CI |
 | `scripts/bump_version.sh` | Prepares a release pull request (version, dated changelog section, compare links) |
 | `scripts/check_quality_scale.py` | Compares `quality_scale.yaml` with Home Assistant's current rule list |
+| `docs/configuration.md`, `entities.md`, `automations.md`, `data-updates.md`, `troubleshooting.md` | User docs. The README keeps installation, setup and use cases and links here with full `main` URLs, since the Marketplace shows only the README |
 | `docs/` | This guide, architecture, backlog, semver policy, quality scale, the runtime-controls design notes, audits |
 | `.github/workflows/build.yml` | All of CI: checks, releases, test builds (see "What CI does"); `stale.yml` marks inactive issues |
 
@@ -159,7 +160,7 @@ Part of every release pull request (not needed for everyday pull requests):
 - Every entity `translation_key` used in code has both a `strings.json` and an `icons.json` entry, and vice versa (no orphans)
 - `CHANGELOG.md`: compare-link references at the bottom are correct; re-read the whole release section per "Changelog" above
 - Quality scale review, per `docs/quality-scale.md` "Release review": `run_tests.sh --full` already checks the rule list against Home Assistant's current one, strict typing and 100% line coverage; the review covers what those can't — rule requirements that changed, rules this release's additions touch, and `quality_scale.yaml` comments the release made stale. Add a line to that page's review log
-- `README.md` matches the current entity list and behavior
+- `README.md` and the user docs it links to (`docs/configuration.md`, `entities.md`, `automations.md`, `data-updates.md`, `troubleshooting.md`) match the current entities and behavior
 - Config flow `CREATE_ENTRY` tests are preceded by whatever `setup_options`/options step they depend on
 
 ### What CI does
