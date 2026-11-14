@@ -14,6 +14,14 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 8. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
 9. **Record it:** a dated section below, and changelog lines for anything users notice.
 
+## 2026-11-14: review before releasing 2.0.0
+
+- Open pull requests: none. PHCC 0.13.375 (HA 2026.10.4) is still the newest; no Dockhand release since 1.0.57. `pip-audit`: only pillow, test-only as before.
+- CodeQL (Python): no security findings; the notes are the same unused-looking imports and `_LEGACY_CONF_*` names as yesterday.
+- Changes since the 2026-11-13 review checked: the retired-entity repairs (one per automation or script; the editor link now URL-encodes the automation's id, so an id with spaces or brackets can't break it, with a test), the Resume button's removal, and the README split into `docs/`. Tests, ruff, mypy, quality scale rules: pass, 100% coverage.
+- Changelog re-read as release notes: two lines still pointed at README sections that moved to `docs/`.
+- `docs/automations.md` lists pausing and resuming a container; `docs/backlog.md` tracks Finsys/dockhand#1501 (the new image's version for floating-tag updates).
+
 ## 2026-11-13: full review
 
 - Open pull requests: none. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.4 → 0.17.5. PHCC 0.13.375 (HA 2026.10.4) is still the newest; no Dockhand release since 1.0.57 (main's three commits since don't touch the routes used here), and HA 2026.11.1 was reviewed on 2026-11-09.

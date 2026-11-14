@@ -40,6 +40,8 @@ automation:
 | Start a stopped stack | Turn **Stack** switch **on** |
 | Stop a running stack | Turn **Stack** switch **off** |
 | Restart a container or stack | Press **Restart** button |
+| Pause a running container | Press **Pause** button (disabled by default) |
+| Resume a paused container | Turn **Container** switch **on** |
 
 **Restart** works whatever state the container or stack is in, as in Dockhand: a stopped one is simply started.
 

@@ -216,3 +216,12 @@ async def test_clears_only_this_entrys_retired_repairs(hass: HomeAssistant):
         issue_id for domain, issue_id in ir.async_get(hass).issues if domain == DOMAIN
     }
     assert remaining == {"ENTRY_event_collection_poll", "OTHER_retired_automation.a"}
+
+
+async def test_repair_link_encodes_the_automation_id(hass: HomeAssistant):
+    entry = _entry(hass)
+    old = _retire(hass, entry, "collect_activity")
+    _install(hass, "automation", _user("automation.odd", "a b)", refs=(old,)))
+    async_check_retired_entities(hass, entry.entry_id)
+    link = _issues(hass)["automation.odd"].translation_placeholders["link"]
+    assert link == "[automation.odd](/config/automation/edit/a%20b%29)"

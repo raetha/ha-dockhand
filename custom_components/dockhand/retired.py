@@ -26,6 +26,7 @@ import json
 import re
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote
 
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
@@ -146,8 +147,11 @@ def async_check_retired_entities(hass: HomeAssistant, entry_id: str) -> None:
                 state = hass.states.get(entity.entity_id)
                 name = state.name if state else entity.entity_id
                 # An automation without an `id` can't be edited in the UI.
+                editor = (
+                    f"/config/{domain}/edit/{quote(entity.unique_id or '', safe='')}"
+                )
                 link = (
-                    f"[{_markdown_text(name)}](/config/{domain}/edit/{entity.unique_id})"
+                    f"[{_markdown_text(name)}]({editor})"
                     if entity.unique_id
                     else f"{_markdown_text(name)} (`{entity.entity_id}`)"
                 )
