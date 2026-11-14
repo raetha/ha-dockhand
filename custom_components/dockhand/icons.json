@@ -301,9 +301,6 @@
       "pause": {
         "default": "mdi:pause"
       },
-      "resume": {
-        "default": "mdi:play"
-      },
       "schedule_run": {
         "default": "mdi:play-circle-outline"
       },

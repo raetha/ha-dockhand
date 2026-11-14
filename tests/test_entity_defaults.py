@@ -94,7 +94,6 @@ async def test_choosing_a_type_enables_and_clearing_it_disables(hass: HomeAssist
         hass, entry, "env_2", "sensor", "disk_usage", disabled_by=Disabler.USER
     )
     pause = _entity(hass, entry, "container_1_web", "button", "pause")
-    resume = _entity(hass, entry, "container_1_web", "button", "resume")
     git = _entity(hass, entry, "stack_1_core", "switch", "git_stack_auto_deploy")
     # Same key on a device that isn't a stack: left alone.
     group = _entity(hass, entry, "env_1_Stacks", "switch", "git_stack_auto_deploy")
@@ -105,7 +104,6 @@ async def test_choosing_a_type_enables_and_clearing_it_disables(hass: HomeAssist
     assert _disabled_by(hass, disk) is None
     assert _disabled_by(hass, mine_off) is Disabler.USER
     assert _disabled_by(hass, pause) is None
-    assert _disabled_by(hass, resume) is Disabler.INTEGRATION
     assert _disabled_by(hass, git) is Disabler.INTEGRATION
     assert _disabled_by(hass, group) is Disabler.INTEGRATION
     assert _disabled_by(hass, unrelated) is Disabler.INTEGRATION

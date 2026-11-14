@@ -1,4 +1,4 @@
-"""Pause and resume, schedule Run now and Enabled, and the paused case of
+"""Pause, schedule Run now and Enabled, and the paused case of
 the Container switch."""
 
 from __future__ import annotations
@@ -11,7 +11,6 @@ from homeassistant.exceptions import HomeAssistantError
 from custom_components.dockhand.api import DockhandPermissionError
 from custom_components.dockhand.button import (
     DockhandContainerPauseButton,
-    DockhandContainerResumeButton,
     DockhandScheduleRunButton,
 )
 from custom_components.dockhand.helpers import (
@@ -77,41 +76,30 @@ def _container_button(cls, container: dict | None, client=None):
         (DockhandContainerPauseButton, "running", True),
         (DockhandContainerPauseButton, "paused", False),
         (DockhandContainerPauseButton, "exited", False),
-        (DockhandContainerResumeButton, "paused", True),
-        (DockhandContainerResumeButton, "running", False),
     ],
 )
-def test_pause_and_resume_only_in_their_state(cls, state: str, available: bool):
+def test_pause_only_while_running(cls, state: str, available: bool):
     button = _container_button(cls, {**RUNNING, "state": state})
     assert button.available is available
 
 
-def test_pause_and_resume_are_unavailable_once_the_container_is_gone():
+def test_pause_is_unavailable_once_the_container_is_gone():
     button = _container_button(DockhandContainerPauseButton, None)
     assert button.available is False
 
 
-def test_pause_and_resume_are_off_by_default_with_their_own_ids():
+def test_pause_is_off_by_default_with_its_own_id():
     pause = _container_button(DockhandContainerPauseButton, RUNNING)
-    resume = _container_button(DockhandContainerResumeButton, PAUSED)
     assert pause.entity_registry_enabled_default is False
     assert pause.unique_id == f"{ENTRY_ID}_{ENV_ID}_container_web_pause"
-    assert resume.unique_id == f"{ENTRY_ID}_{ENV_ID}_container_web_resume"
 
 
-@pytest.mark.parametrize(
-    ("cls", "container", "call"),
-    [
-        (DockhandContainerPauseButton, RUNNING, "async_pause_container"),
-        (DockhandContainerResumeButton, PAUSED, "async_unpause_container"),
-    ],
-)
-async def test_pause_and_resume_press(cls, container: dict, call: str):
+async def test_pause_press():
     client = MagicMock()
-    setattr(client, call, AsyncMock())
-    button = _container_button(cls, container, client)
+    client.async_pause_container = AsyncMock()
+    button = _container_button(DockhandContainerPauseButton, RUNNING, client)
     await button.async_press()
-    getattr(client, call).assert_awaited_once_with(ENV_ID, "c1")
+    client.async_pause_container.assert_awaited_once_with(ENV_ID, "c1")
     button.coordinator.async_refresh_environment.assert_awaited_once_with(ENV_ID)
 
 

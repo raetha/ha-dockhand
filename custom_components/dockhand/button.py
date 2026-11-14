@@ -170,15 +170,6 @@ async def async_setup_entry(
                         base_url,
                         container,
                     ),
-                    DockhandContainerResumeButton(
-                        fast,
-                        client,
-                        entry.entry_id,
-                        env_id,
-                        env_name,
-                        base_url,
-                        container,
-                    ),
                 ):
                     if not already_registered(
                         hass,
@@ -356,30 +347,26 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
         await self.coordinator.async_refresh_environment(self._env_id)
 
 
-class _ContainerStateButton(_BaseFastContainerButton):
-    """Pause or resume: only offered in the state it applies to, and off by
-    default, since most people never pause a container."""
+class DockhandContainerPauseButton(_BaseFastContainerButton):
+    """Freeze a running container's processes: offered only while it runs,
+    and off by default, since most people never pause a container. Turning
+    the container's switch on resumes it, so there's no Resume button."""
 
     _attr_entity_category = EntityCategory.CONFIG
     _attr_entity_registry_enabled_default = False
-    _from_state: str
-    _suffix: str
-    _client_call: str
+    _attr_translation_key = "pause"
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._attr_unique_id = (
-            f"{self._entry_id}_{self._env_id}_container_"
-            f"{self._container_name}_{self._suffix}"
+            f"{self._entry_id}_{self._env_id}_container_{self._container_name}_pause"
         )
 
     @property
     @override
     def available(self) -> bool:
         c = self._container()
-        return (
-            super().available and c is not None and c.get("state") == self._from_state
-        )
+        return super().available and c is not None and c.get("state") == "running"
 
     @override
     async def async_press(self) -> None:
@@ -389,27 +376,10 @@ class _ContainerStateButton(_BaseFastContainerButton):
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        call = getattr(self._client, self._client_call)
-        await async_dockhand_action(call(self._env_id, c["id"]))
+        await async_dockhand_action(
+            self._client.async_pause_container(self._env_id, c["id"])
+        )
         await self.coordinator.async_refresh_environment(self._env_id)
-
-
-class DockhandContainerPauseButton(_ContainerStateButton):
-    """Freeze a running container's processes."""
-
-    _attr_translation_key = "pause"
-    _from_state = "running"
-    _suffix = "pause"
-    _client_call = "async_pause_container"
-
-
-class DockhandContainerResumeButton(_ContainerStateButton):
-    """Let a paused container's processes run again."""
-
-    _attr_translation_key = "resume"
-    _from_state = "paused"
-    _suffix = "resume"
-    _client_call = "async_unpause_container"
 
 
 class DockhandStackRestartButton(_BaseFastStackButton):

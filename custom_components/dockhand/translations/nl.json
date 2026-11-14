@@ -505,9 +505,6 @@
       "pause": {
         "name": "Pauzeren"
       },
-      "resume": {
-        "name": "Hervatten"
-      },
       "schedule_run": {
         "name": "Nu uitvoeren"
       },
@@ -733,7 +730,6 @@
       "options": {
         "docker_event": "Docker-gebeurtenis",
         "pause": "Pauzeren",
-        "resume": "Hervatten",
         "container_auto_update": "Automatisch bijwerken"
       }
     },

@@ -100,7 +100,7 @@ _GIT_STACK_SUFFIXES = (
 # Running switch + restart button + auto-update switch — suppressed for
 # system containers/stacks containing one, so unlike most container/stack
 # entities these can't rely purely on device cascade either.
-_CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update", "pause", "resume")
+_CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update", "pause")
 _STACK_ACTION_SUFFIXES = ("running", "restart")
 # The stack's Updates available binary sensor and update count sensor:
 # present only where Dockhand reports a stack's updates (1.0.37+).

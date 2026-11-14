@@ -505,9 +505,6 @@
       "pause": {
         "name": "Wstrzymaj"
       },
-      "resume": {
-        "name": "Wznów"
-      },
       "schedule_run": {
         "name": "Uruchom teraz"
       },
@@ -733,7 +730,6 @@
       "options": {
         "docker_event": "Zdarzenie Dockera",
         "pause": "Wstrzymaj",
-        "resume": "Wznów",
         "container_auto_update": "Automatyczna aktualizacja"
       }
     },

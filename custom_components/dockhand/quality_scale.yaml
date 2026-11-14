@@ -168,7 +168,7 @@ rules:
     status: done
     comment: >
       The two service actions and every platform action (buttons: restart,
-      pause, resume, redeploy, git deploy, check for updates, update all,
+      pause, redeploy, git deploy, check for updates, update all,
       schedule run; switches: container and stack running, auto update, git
       auto deploy, schedule enabled; numbers and the select; update install)
       go through helpers.async_dockhand_action, which raises
