@@ -658,9 +658,13 @@
       "title": "O Dockhand consulta os eventos do Docker",
       "description": "O Dockhand recolhe os eventos do Docker com uma consulta a cada {interval} segundos em vez de os receber em stream. Para {environments}, as atualizações em direto e as entidades de eventos do Docker podem chegar até {interval} segundos atrasadas e, com um intervalo superior a 30 segundos, alguns eventos nunca chegam: cada consulta só lê os últimos 30 segundos. Para os receber em stream, defina Modo de recolha de eventos do dispositivo Dockhand como Stream (no Dockhand: Settings → General → Activity event collection mode). Se preferir a consulta, ignore este problema: só volta após uma mudança para Stream e de novo para Consulta."
     },
-    "retired_entities": {
-      "title": "Automações ou scripts usam entidades do Dockhand substituídas",
-      "description": "O Dockhand substituiu algumas das suas entidades por novas, e estas automações ou scripts ainda usam as antigas (entidade antiga → entidade nova):\n\n{entities}\n\nEdite cada uma para usar as novas entidades. Esta reparação desaparece quando nenhuma delas usar uma entidade antiga. Painéis e entidades de modelo não são verificados, por isso reveja-os também."
+    "retired_entities_automation": {
+      "title": "{name} usa entidades do Dockhand substituídas",
+      "description": "O Dockhand substituiu algumas das suas entidades por novas, e a automação {link} ainda usa entidades antigas. Edite-a para usar as novas entidades (entidade antiga → entidade nova):\n\n{entities}\n\nEsta reparação desaparece quando deixar de as usar."
+    },
+    "retired_entities_script": {
+      "title": "{name} usa entidades do Dockhand substituídas",
+      "description": "O Dockhand substituiu algumas das suas entidades por novas, e o script {link} ainda usa entidades antigas. Edite-o para usar as novas entidades (entidade antiga → entidade nova):\n\n{entities}\n\nEsta reparação desaparece quando deixar de as usar."
     }
   },
   "services": {

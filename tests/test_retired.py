@@ -59,8 +59,14 @@ def _retire(
     return entity_id
 
 
-def _issue(hass: HomeAssistant, entry_id: str = "ENTRY") -> ir.IssueEntry | None:
-    return ir.async_get(hass).async_get_issue(DOMAIN, f"{entry_id}_retired_entities")
+def _issues(hass: HomeAssistant, entry_id: str = "ENTRY") -> dict[str, ir.IssueEntry]:
+    """This entry's retired-entity repairs, by the automation or script."""
+    prefix = f"{entry_id}_retired_"
+    return {
+        issue_id.removeprefix(prefix): issue
+        for (domain, issue_id), issue in ir.async_get(hass).issues.items()
+        if domain == DOMAIN and issue_id.startswith(prefix)
+    }
 
 
 def test_retired_entity_matches_domain_and_key():
@@ -113,17 +119,27 @@ async def test_repair_lists_each_user_with_a_link_and_the_replacements(
     )
     async_check_retired_entities(hass, entry.entry_id)
 
-    issue = _issue(hass)
-    assert issue is not None
-    assert issue.translation_key == "retired_entities"
-    assert issue.severity == ir.IssueSeverity.WARNING
-    assert issue.translation_placeholders["entities"] == "\n".join(
-        [
-            f"- automation.device (`automation.device`): `{old}` → `{switch}`",
-            f"- [Named \\[x\\]](/config/automation/edit/1700): `{other}`, `{old}` → `{switch}`",
-            f"- [script.tmpl](/config/script/edit/tmpl): `{old}` → `{switch}`",
-        ]
+    issues = _issues(hass)
+    assert sorted(issues) == ["automation.device", "automation.named", "script.tmpl"]
+    assert all(i.severity == ir.IssueSeverity.WARNING for i in issues.values())
+    named = issues["automation.named"]
+    assert named.translation_key == "retired_entities_automation"
+    assert named.translation_placeholders == {
+        "name": "Named [x]",
+        "link": "[Named \\[x\\]](/config/automation/edit/1700)",
+        "entities": f"- `{other}`\n- `{old}` → `{switch}`",
+    }
+    # Without an id, an automation can't be opened in the editor.
+    assert issues["automation.device"].translation_placeholders["link"] == (
+        "automation.device (`automation.device`)"
     )
+    script = issues["script.tmpl"]
+    assert script.translation_key == "retired_entities_script"
+    assert (
+        script.translation_placeholders["link"]
+        == "[script.tmpl](/config/script/edit/tmpl)"
+    )
+    assert script.translation_placeholders["entities"] == f"- `{old}` → `{switch}`"
 
 
 async def test_repair_clears_once_nothing_uses_them(hass: HomeAssistant):
@@ -132,10 +148,10 @@ async def test_repair_clears_once_nothing_uses_them(hass: HomeAssistant):
     user = _user("automation.a", "1", refs=(old,))
     _install(hass, "automation", user)
     async_check_retired_entities(hass, entry.entry_id)
-    assert _issue(hass) is not None
+    assert list(_issues(hass)) == ["automation.a"]
     user.referenced_entities = set()
     async_check_retired_entities(hass, entry.entry_id)
-    assert _issue(hass) is None
+    assert _issues(hass) == {}
 
 
 async def test_repair_ignores_other_entries_and_entities(hass: HomeAssistant):
@@ -153,8 +169,8 @@ async def test_repair_ignores_other_entries_and_entities(hass: HomeAssistant):
     registry.async_remove(foreign)
     _install(hass, "automation", _user("automation.a", "1", refs=(*used, foreign)))
     async_check_retired_entities(hass, entry.entry_id)
-    assert _issue(hass) is None
-    assert _issue(hass, "OTHER") is None
+    assert _issues(hass) == {}
+    assert _issues(hass, "OTHER") == {}
 
 
 async def test_checked_at_start_and_on_automation_reload(hass: HomeAssistant):
@@ -176,3 +192,27 @@ async def test_checked_at_start_and_on_automation_reload(hass: HomeAssistant):
         hass.bus.async_fire(EVENT_AUTOMATION_RELOADED)
         await hass.async_block_till_done()
         assert check.call_count == 2
+
+
+async def test_clears_only_this_entrys_retired_repairs(hass: HomeAssistant):
+    """Including the single repair earlier test builds raised, and none of
+    the entry's other repairs."""
+    entry = _entry(hass)
+    for issue_id in (
+        "ENTRY_retired_entities",
+        "ENTRY_event_collection_poll",
+        "OTHER_retired_automation.a",
+    ):
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            issue_id,
+            is_fixable=False,
+            severity=ir.IssueSeverity.WARNING,
+            translation_key="x",
+        )
+    async_check_retired_entities(hass, entry.entry_id)
+    remaining = {
+        issue_id for domain, issue_id in ir.async_get(hass).issues if domain == DOMAIN
+    }
+    assert remaining == {"ENTRY_event_collection_poll", "OTHER_retired_automation.a"}

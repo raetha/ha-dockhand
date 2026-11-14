@@ -658,9 +658,13 @@
       "title": "Dockhand sondea los eventos de Docker",
       "description": "Dockhand recoge los eventos de Docker con un sondeo cada {interval} segundos en lugar de recibirlos en stream. Para {environments}, las actualizaciones en directo y las entidades de eventos de Docker pueden llegar hasta {interval} segundos tarde, y con un intervalo de más de 30 segundos algunos eventos nunca llegan: cada sondeo solo lee los últimos 30 segundos. Para recibirlos en stream, pon Modo de recogida de eventos del dispositivo Dockhand en Stream (en Dockhand: Settings → General → Activity event collection mode). Si prefieres el sondeo, ignora este problema: solo vuelve tras cambiar a Stream y de nuevo a Sondeo."
     },
-    "retired_entities": {
-      "title": "Automatizaciones o scripts usan entidades de Dockhand reemplazadas",
-      "description": "Dockhand reemplazó algunas de sus entidades por otras nuevas, y estas automatizaciones o scripts todavía usan las antiguas (entidad antigua → entidad nueva):\n\n{entities}\n\nEdita cada una para que use las entidades nuevas. Esta reparación desaparece cuando ninguna de ellas usa ya una entidad antigua. Los paneles y las entidades de plantilla no se comprueban, así que revísalos también."
+    "retired_entities_automation": {
+      "title": "{name} usa entidades de Dockhand reemplazadas",
+      "description": "Dockhand reemplazó algunas de sus entidades por otras nuevas, y la automatización {link} todavía usa entidades antiguas. Edítala para que use las entidades nuevas (entidad antigua → entidad nueva):\n\n{entities}\n\nEsta reparación desaparece cuando ya no las use."
+    },
+    "retired_entities_script": {
+      "title": "{name} usa entidades de Dockhand reemplazadas",
+      "description": "Dockhand reemplazó algunas de sus entidades por otras nuevas, y el script {link} todavía usa entidades antiguas. Edítalo para que use las entidades nuevas (entidad antigua → entidad nueva):\n\n{entities}\n\nEsta reparación desaparece cuando ya no las use."
     }
   },
   "services": {

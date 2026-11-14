@@ -70,8 +70,8 @@ def retired_entity(domain: str, unique_id: str) -> RetiredEntity | None:
     return None
 
 
-def _issue_id(entry_id: str) -> str:
-    return f"{entry_id}_retired_entities"
+def _issue_prefix(entry_id: str) -> str:
+    return f"{entry_id}_retired_"
 
 
 @dataclass(frozen=True)
@@ -127,10 +127,12 @@ def _markdown_text(text: str) -> str:
 
 @callback
 def async_check_retired_entities(hass: HomeAssistant, entry_id: str) -> None:
-    """Raise, update or clear the repair listing the automations and
-    scripts that still use an entity this integration retired."""
+    """Raise, update or clear a repair for each automation or script that
+    still uses an entity this integration retired, as Spook raises one per
+    automation for entities it can't find."""
     olds = _retired_gone(er.async_get(hass), entry_id)
-    lines: list[tuple[str, str, str]] = []
+    prefix = _issue_prefix(entry_id)
+    raised: set[str] = set()
     if olds:
         for domain in ("automation", "script"):
             # The automation and script components keep their entities here;
@@ -142,31 +144,37 @@ def async_check_retired_entities(hass: HomeAssistant, entry_id: str) -> None:
                 if not used:
                     continue
                 state = hass.states.get(entity.entity_id)
-                name = _markdown_text(state.name if state else entity.entity_id)
+                name = state.name if state else entity.entity_id
                 # An automation without an `id` can't be edited in the UI.
-                label = (
-                    f"[{name}](/config/{domain}/edit/{entity.unique_id})"
+                link = (
+                    f"[{_markdown_text(name)}](/config/{domain}/edit/{entity.unique_id})"
                     if entity.unique_id
-                    else f"{name} (`{entity.entity_id}`)"
+                    else f"{_markdown_text(name)} (`{entity.entity_id}`)"
                 )
-                changes = ", ".join(
-                    f"`{old.entity_id}`"
+                changes = "\n".join(
+                    f"- `{old.entity_id}`"
                     + (f" → `{old.new_entity_id}`" if old.new_entity_id else "")
                     for old in sorted(used, key=lambda o: o.entity_id)
                 )
-                lines.append((domain, name.casefold(), f"- {label}: {changes}"))
+                issue_id = f"{prefix}{entity.entity_id}"
+                raised.add(issue_id)
+                create_issue(
+                    hass,
+                    entry_id,
+                    issue_id,
+                    is_fixable=False,
+                    severity=ir.IssueSeverity.WARNING,
+                    translation_key=f"retired_entities_{domain}",
+                    translation_placeholders={
+                        "name": name,
+                        "link": link,
+                        "entities": changes,
+                    },
+                )
 
-    if not lines:
-        ir.async_delete_issue(hass, DOMAIN, _issue_id(entry_id))
-        return
-    create_issue(
-        hass,
-        entry_id,
-        _issue_id(entry_id),
-        is_fixable=False,
-        severity=ir.IssueSeverity.WARNING,
-        translation_key="retired_entities",
-        translation_placeholders={
-            "entities": "\n".join(line for *_, line in sorted(lines))
-        },
-    )
+    # Clear the repairs for automations and scripts that no longer use one,
+    # or are gone.
+    issues = ir.async_get(hass).issues
+    for domain, issue_id in list(issues):
+        if domain == DOMAIN and issue_id.startswith(prefix) and issue_id not in raised:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)

@@ -658,9 +658,13 @@
       "title": "Dockhand fragt Docker-Ereignisse ab",
       "description": "Dockhand erfasst Docker-Ereignisse per Abfrage alle {interval} Sekunden statt als Stream. Für {environments} können Live-Updates und Docker-Ereignis-Entitäten bis zu {interval} Sekunden verspätet sein, und bei einem Intervall über 30 Sekunden kommen manche Ereignisse nie an: Jede Abfrage liest nur die letzten 30 Sekunden. Für einen Stream setze Ereigniserfassung am Dockhand-Gerät auf Stream (in Dockhand: Settings → General → Activity event collection mode). Wenn du die Abfrage bevorzugst, ignoriere dieses Problem: Es erscheint erst wieder nach einem Wechsel zu Stream und zurück zu Abfrage."
     },
-    "retired_entities": {
-      "title": "Automationen oder Skripte nutzen ersetzte Dockhand-Entitäten",
-      "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und diese Automationen oder Skripte nutzen noch die alten (alte Entität → neue Entität):\n\n{entities}\n\nBearbeite jede davon so, dass sie die neuen Entitäten nutzt. Diese Reparatur verschwindet, sobald keine von ihnen mehr eine alte Entität nutzt. Dashboards und Template-Entitäten werden nicht geprüft, sieh dir diese also ebenfalls an."
+    "retired_entities_automation": {
+      "title": "{name} nutzt ersetzte Dockhand-Entitäten",
+      "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und die Automation {link} nutzt noch alte. Bearbeite sie so, dass sie die neuen Entitäten nutzt (alte Entität → neue Entität):\n\n{entities}\n\nDiese Reparatur verschwindet, sobald sie sie nicht mehr nutzt."
+    },
+    "retired_entities_script": {
+      "title": "{name} nutzt ersetzte Dockhand-Entitäten",
+      "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und das Skript {link} nutzt noch alte. Bearbeite es so, dass es die neuen Entitäten nutzt (alte Entität → neue Entität):\n\n{entities}\n\nDiese Reparatur verschwindet, sobald es sie nicht mehr nutzt."
     }
   },
   "services": {

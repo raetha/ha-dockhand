@@ -658,9 +658,13 @@
       "title": "Dockhand pollt Docker-gebeurtenissen",
       "description": "Dockhand verzamelt Docker-gebeurtenissen door elke {interval} seconden te pollen in plaats van ze te streamen. Voor {environments} kunnen live updates en Docker-gebeurtenisentiteiten tot {interval} seconden te laat zijn, en bij een interval van meer dan 30 seconden komen sommige gebeurtenissen nooit aan: elke poll leest alleen de laatste 30 seconden. Zet Verzamelen van gebeurtenissen op het Dockhand-apparaat op Stream om ze te streamen (in Dockhand: Settings → General → Activity event collection mode). Geef je de voorkeur aan pollen, negeer dit probleem dan: het komt pas terug na een wissel naar Stream en terug naar Polling."
     },
-    "retired_entities": {
-      "title": "Automatiseringen of scripts gebruiken vervangen Dockhand-entiteiten",
-      "description": "Dockhand heeft enkele van zijn entiteiten vervangen door nieuwe, en deze automatiseringen of scripts gebruiken nog de oude (oude entiteit → nieuwe entiteit):\n\n{entities}\n\nBewerk elk ervan zodat het de nieuwe entiteiten gebruikt. Deze reparatie verdwijnt zodra geen ervan nog een oude entiteit gebruikt. Dashboards en template-entiteiten worden niet gecontroleerd, dus kijk die ook na."
+    "retired_entities_automation": {
+      "title": "{name} gebruikt vervangen Dockhand-entiteiten",
+      "description": "Dockhand heeft enkele van zijn entiteiten vervangen door nieuwe, en de automatisering {link} gebruikt nog oude. Bewerk deze zodat de nieuwe entiteiten worden gebruikt (oude entiteit → nieuwe entiteit):\n\n{entities}\n\nDeze reparatie verdwijnt zodra ze niet meer worden gebruikt."
+    },
+    "retired_entities_script": {
+      "title": "{name} gebruikt vervangen Dockhand-entiteiten",
+      "description": "Dockhand heeft enkele van zijn entiteiten vervangen door nieuwe, en het script {link} gebruikt nog oude. Bewerk deze zodat de nieuwe entiteiten worden gebruikt (oude entiteit → nieuwe entiteit):\n\n{entities}\n\nDeze reparatie verdwijnt zodra ze niet meer worden gebruikt."
     }
   },
   "services": {

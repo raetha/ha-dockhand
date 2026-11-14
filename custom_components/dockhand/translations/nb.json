@@ -658,9 +658,13 @@
       "title": "Dockhand spør etter Docker-hendelser",
       "description": "Dockhand samler inn Docker-hendelser ved å spørre hvert {interval}. sekund i stedet for å strømme dem. For {environments} kan sanntidsoppdateringer og Docker-hendelsesentiteter komme opptil {interval} sekunder for sent, og med et intervall over 30 sekunder kommer noen hendelser aldri: hver avspørring leser bare de siste 30 sekundene. For å strømme dem, sett Innsamling av hendelser på Dockhand-enheten til Strøm (i Dockhand: Settings → General → Activity event collection mode). Hvis du foretrekker avspørring, ignorer dette problemet: det kommer bare tilbake etter et bytte til Strøm og tilbake til Avspørring."
     },
-    "retired_entities": {
-      "title": "Automatiseringer eller skript bruker erstattede Dockhand-entiteter",
-      "description": "Dockhand har erstattet noen av entitetene sine med nye, og disse automatiseringene eller skriptene bruker fortsatt de gamle (gammel entitet → ny entitet):\n\n{entities}\n\nRediger hver av dem slik at de bruker de nye entitetene. Denne reparasjonen forsvinner når ingen av dem lenger bruker en gammel entitet. Dashbord og malentiteter blir ikke sjekket, så se over dem også."
+    "retired_entities_automation": {
+      "title": "{name} bruker erstattede Dockhand-entiteter",
+      "description": "Dockhand har erstattet noen av entitetene sine med nye, og automatiseringen {link} bruker fortsatt gamle. Rediger den slik at den bruker de nye entitetene (gammel entitet → ny entitet):\n\n{entities}\n\nDenne reparasjonen forsvinner når den ikke lenger bruker dem."
+    },
+    "retired_entities_script": {
+      "title": "{name} bruker erstattede Dockhand-entiteter",
+      "description": "Dockhand har erstattet noen av entitetene sine med nye, og skriptet {link} bruker fortsatt gamle. Rediger det slik at det bruker de nye entitetene (gammel entitet → ny entitet):\n\n{entities}\n\nDenne reparasjonen forsvinner når det ikke lenger bruker dem."
     }
   },
   "services": {

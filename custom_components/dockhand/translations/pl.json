@@ -658,9 +658,13 @@
       "title": "Dockhand odpytuje o zdarzenia Dockera",
       "description": "Dockhand zbiera zdarzenia Dockera, odpytując co {interval} sekund, zamiast odbierać je strumieniowo. Dla {environments} aktualizacje na żywo i encje zdarzeń Dockera mogą się spóźniać nawet o {interval} sekund, a przy interwale powyżej 30 sekund niektóre zdarzenia nigdy nie docierają: każde odpytanie czyta tylko ostatnie 30 sekund. Aby odbierać je strumieniowo, ustaw Tryb zbierania zdarzeń urządzenia Dockhand na Strumień (w Dockhand: Settings → General → Activity event collection mode). Jeśli wolisz odpytywanie, zignoruj ten problem: wróci dopiero po przełączeniu na Strumień i z powrotem na Odpytywanie."
     },
-    "retired_entities": {
-      "title": "Automatyzacje lub skrypty używają zastąpionych encji Dockhand",
-      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a te automatyzacje lub skrypty nadal używają starych (stara encja → nowa encja):\n\n{entities}\n\nZmień każdą z nich tak, aby używała nowych encji. Ta naprawa zniknie, gdy żadna z nich nie będzie już używać starej encji. Dashboardy i encje szablonów nie są sprawdzane, więc przejrzyj także je."
+    "retired_entities_automation": {
+      "title": "{name} używa zastąpionych encji Dockhand",
+      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a automatyzacja {link} nadal używa starych. Zmień ją tak, aby używała nowych encji (stara encja → nowa encja):\n\n{entities}\n\nTa naprawa zniknie, gdy przestanie ich używać."
+    },
+    "retired_entities_script": {
+      "title": "{name} używa zastąpionych encji Dockhand",
+      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a skrypt {link} nadal używa starych. Zmień go tak, aby używał nowych encji (stara encja → nowa encja):\n\n{entities}\n\nTa naprawa zniknie, gdy przestanie ich używać."
     }
   },
   "services": {
