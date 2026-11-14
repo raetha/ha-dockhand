@@ -74,9 +74,9 @@ rules:
   docs-actions:
     status: done
     comment: >
-      README "Actions" documents both actions, their fields, the prune
-      response and an example automation; services.yaml and strings.json
-      describe every field.
+      docs/automations.md "Actions" documents both actions, their fields,
+      the prune response and an example automation; services.yaml and
+      strings.json describe every field.
 
   docs-conditions:
     status: exempt
@@ -187,7 +187,7 @@ rules:
   docs-configuration-parameters:
     status: done
     comment: >
-      README "Configuration parameters" documents every setup field (API URL,
+      docs/configuration.md documents every setup field (API URL,
       SSL verification, API token) and every option (the
       schedules/images/volumes/networks switches, update entities, precise
       update versions, runtime controls, container and stack stats), plus what
@@ -296,8 +296,9 @@ rules:
   docs-data-update:
     status: done
     comment: >
-      README "Data Updates" explains the three coordinators (what each fetches,
-      and their fixed intervals), how to refresh on your own schedule with
+      docs/data-updates.md explains the four coordinators and the live feed
+      (what each fetches, and their fixed intervals), how to refresh on your
+      own schedule with
       polling off and homeassistant.update_entity, what becomes unavailable
       when all or part of a poll fails, and how token errors surface as
       re-authentication.
@@ -305,21 +306,23 @@ rules:
   docs-examples:
     status: done
     comment: >
-      README "Example automations" has several ready-to-adapt YAML examples:
+      docs/automations.md "Example automations" has ready-to-adapt YAML examples:
       notify when a container stops, restart a container that stays unhealthy,
       and notify when a Docker host goes offline.
 
   docs-known-limitations:
     status: done
     comment: >
-      README "Known limitations" lists what the integration can't do and why:
-      polling only, read-only schedules, restart needing a running container,
-      runtime controls only for stand-alone containers, no controls for system
+      docs/troubleshooting.md "Known limitations" lists what the integration
+      can't do and why: live updates needing Dockhand to watch events, Poll
+      event collection, schedules that can't be paused or run, no build-cache
+      pruning, runtime controls only for stand-alone containers, pinned
+      Dockhand and Hawser images, no controls for system
       containers, Install not moving to a newer version tag, no updates for
       digest-pinned images, git stack deploy
       following the stack's own repull setting, stats only for running
-      containers, and hidden containers. "Requirements" covers which features
-      need which Dockhand version.
+      containers, and hidden containers. README "Requirements" covers which
+      features need which Dockhand version.
 
   docs-supported-devices:
     status: done
@@ -331,17 +334,18 @@ rules:
   docs-supported-functions:
     status: done
     comment: >
-      README includes a comprehensive entity reference table covering all
+      docs/entities.md has an entity reference table covering all
       platforms and entity categories, with notes on which are disabled by
       default.
 
   docs-troubleshooting:
     status: done
     comment: >
-      README "Troubleshooting" covers connection errors, entity IDs with a
+      docs/troubleshooting.md covers connection errors, entity IDs with a
       suffix after an update, no entities after setup, leftover devices and
-      how to delete them, and why schedules have no run button. Authentication
-      problems are covered under "Re-authentication".
+      how to delete them, missing Dockhand and Hawser updates, and why some
+      schedules have no run button. Authentication problems are covered in
+      docs/configuration.md "Re-authentication".
 
   docs-use-cases:
     status: done
