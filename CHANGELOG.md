@@ -74,6 +74,7 @@ Some changes are breaking: read **Removed** before upgrading, check automations 
 - CI checks that released changelog sections are unchanged from `main`: two 2.0.0 entries had landed in 1.11.3's section on `dev`, and are back under Unreleased.
 - The full review checks the entity model against Home Assistant's current guidance (`docs/audits.md`, architecture §12).
 - `docs/architecture.md` and `docs/development.md` rewritten to state each rule and its reason without the development history (architecture from about 90 KB to 40 KB); the stale device class matrix, duplicated by the README's entity tables, is gone. The README names the **Check for image updates** button and the count sensors as Home Assistant shows them.
+- `docs/backlog.md` has a "Waiting on Dockhand" section: the requests filed with Dockhand, and what to change here when each is accepted or turned down.
 
 ## [1.11.3] - 2026-11-03
 
