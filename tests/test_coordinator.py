@@ -39,7 +39,15 @@ CONTAINER1 = {"id": "abc", "name": "web", "state": "running", "labels": {}}
 STACK1 = {"name": "myapp", "status": "running", "containers": 2}
 IMAGE1 = {"id": "sha256:deadbeef", "size": 104857600}
 NETWORK1 = {"id": "net1", "name": "bridge", "containers": {}}
-VOLUME1 = {"Name": "mydata", "UsageData": {"Size": 10485760}}
+VOLUME1 = {
+    "name": "mydata",
+    "driver": "local",
+    "mountpoint": "/var/lib/docker/volumes/mydata/_data",
+    "scope": "local",
+    "created": "2026-01-02T03:04:05Z",
+    "labels": {},
+    "usedBy": [],
+}
 
 
 def _make_client(

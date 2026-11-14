@@ -55,14 +55,12 @@ STATS = {
     "networks": {"total": 3},
     "containersSize": 524288000,
     "buildCacheSize": 104857600,
-    "activityEvents": 10,
-    "hawserVersion": None,
+    "events": {"total": 120, "today": 10},
     "collectActivity": True,
     "collectMetrics": True,
     "scannerEnabled": False,
     "updateCheckEnabled": True,
-    "autoUpdate": False,
-    "imagePrune": True,
+    "updateCheckAutoUpdate": False,
 }
 
 CONTAINER = {

@@ -974,7 +974,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             if "volumes" not in env_failures:
                 volumes_fetch_ok_env_ids.add(env_id)
                 for vol in env_data.get("volumes") or []:
-                    vname = vol.get("name") or vol.get("Name", "")
+                    vname = vol.get("name", "")
                     volume_uids.add(f"{entry.entry_id}_{env_id}_volume_{vname}")
                     volumes_group_env_ids.add(env_id)
             # Git stack entities — always fetched (not config-gated), live

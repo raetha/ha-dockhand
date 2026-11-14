@@ -871,7 +871,7 @@ def test_ensure_env_devices_creates_volumes_group_when_enabled(hass):
         "http://dh.test:3000",
         1,
         "myenv",
-        volumes=[{"Name": "mydata"}],
+        volumes=[{"name": "mydata", "usedBy": []}],
         enable_volumes=True,
     )
     assert "env_1_Volumes" in _device_ids(hass, entry)
