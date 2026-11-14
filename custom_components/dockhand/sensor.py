@@ -2390,6 +2390,7 @@ class DockhandImageSensor(BaseSlowEnvSensor):
             try:
                 created_iso = dt_util.utc_from_timestamp(created_ts).isoformat()
             except OverflowError, OSError, ValueError:
+                # Out of range for this platform: no creation date.
                 pass
 
         return {

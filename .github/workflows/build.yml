@@ -8,8 +8,9 @@ name: Build
 # GitHub release (the changelog section as notes, dockhand.zip attached: HACS installs from it,
 # per hacs.json's zip_release), delete the test builds, then reset `dev` to `main` when they
 # hold the same files.
-# Push to dev: publish a test build as a GitHub pre-release (`<next patch>-dev.<run>`, with that
-# version stamped into its zip's manifest.json), which HACS offers once the repository's
+# Push to dev: publish a test build as a GitHub pre-release (`<version>-dev.<run>`, or the next
+# patch's while `dev` still holds the released version; that version is stamped into its zip's
+# manifest.json), which HACS offers once the repository's
 # Pre-release switch is on; older test builds are deleted.
 
 on:

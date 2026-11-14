@@ -12,106 +12,37 @@ The canonical guide for working on this repo. How the integration works and why 
 | `scripts/release.py` | Changelog check, release notes, test-build versions and the `dockhand.zip` HACS installs, used by CI |
 | `scripts/bump_version.sh` | Prepares a release pull request (version, dated changelog section, compare links) |
 | `scripts/check_quality_scale.py` | Compares `quality_scale.yaml` with Home Assistant's current rule list |
-| `docs/` | This guide, architecture, backlog, semver policy, quality scale, Dockhand API index, design notes, audits |
+| `docs/` | This guide, architecture, backlog, semver policy, quality scale, the runtime-controls design notes, audits |
 | `.github/workflows/build.yml` | All of CI: checks, releases, test builds (see "What CI does"); `stale.yml` marks inactive issues |
 
 ## Testing
 
-The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHCC), which provides the same testing infrastructure as Home Assistant core. It requires **Python 3.14.2+** and pins to a specific HA release.
-
-### Using the test script
-
-A unified `scripts/run_tests.sh` handles both lint-only and the full PHCC suite, with each mode using an isolated venv created automatically on first run:
+The suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHCC): Home Assistant core's own test tooling, pinned to one HA release. Every test imports the integration, which imports `homeassistant`, so all tests need Python 3.14.2+ with PHCC; there's no HA-free subset.
 
 ```bash
-# Lint + AST only (any Python 3.x — no homeassistant required)
-bash scripts/run_tests.sh
-
-# Full: ruff + AST + mypy (strict) + quality scale rule check + all pytest
-# tests via PHCC with a 100% line coverage gate (requires Python 3.14.2+; the rule
-# check fetches Home Assistant's rule list from GitHub)
-bash scripts/run_tests.sh --full
-
-# Full suite in a specific venv path
-bash scripts/run_tests.sh --full --venv .my-venv
-
-# Additional pytest flags pass through
-bash scripts/run_tests.sh --full -v         # verbose
-bash scripts/run_tests.sh --full -x         # stop on first failure
-bash scripts/run_tests.sh --full -k "coord" # filter by name
+bash scripts/run_tests.sh                    # ruff, ruff format, AST check (any Python 3; .venv-sandbox)
+bash scripts/run_tests.sh --full             # also mypy (strict), the quality scale rule check (fetches HA's rule list) and pytest with 100% coverage (.venv-full)
+bash scripts/run_tests.sh --full --venv .venv  # in a given venv
+bash scripts/run_tests.sh --full -x -k coord # extra flags go to pytest
 ```
 
-Default mode (no flags) runs ruff check, ruff format, and AST syntax check in a lightweight `.venv-sandbox` venv. It does **not** run pytest because every test file imports from `custom_components.dockhand`, which imports `homeassistant` at module level — pytest cannot collect any tests without a real homeassistant install.
+- **Coverage:** every line of the integration is covered and CI fails on one no test runs (`--cov-fail-under=100`). Add the test with the code. A line that can't be reached can usually be removed; `# pragma: no cover` is for one that must stay, with a comment saying why. `tests/test_platform_setup.py` runs the real setup with every option on and one environment holding a bit of everything: add data there when a new entity's creation path needs covering.
+- **PHCC pin:** `requirements_test.txt` tracks the latest stable HA release (Dependabot proposes bumps; find the PHCC version for an HA release on its [releases page](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component/releases)), so tests run against what most users have. The minimum supported HA version is separate, in `hacs.json`.
+- **Lint and format:** `.ruff.toml`; CI runs `ruff check` and `ruff format --check` on `custom_components/`, `tests/` and `scripts/`. Tests have a few per-file exemptions (docstrings, annotations, `assert`) and are otherwise held to the same standard.
 
-`--full` uses `.venv-full` (created with Python 3.14.2+, PHCC installed from `requirements_test.txt`) and runs all pytest tests.
+### Claude sessions
 
-### Manual pytest (if PHCC is installed)
-
-```bash
-# One-time venv setup
-python3.14 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements_test.txt
-
-# Run everything
-pytest tests/
-
-# Run a specific file
-pytest tests/test_coordinator.py -v
-
-# Run a specific test
-pytest tests/test_api.py -v
-```
-
-### PHCC version ↔ HA version
-
-PHCC patch versions increment with each HA release. The pin in `requirements_test.txt` tracks the latest stable HA release (Dependabot proposes bumps), so the suite runs against what most users have installed; the minimum supported HA version (currently 2026.3) is declared separately in `hacs.json`.
-
-| PHCC version | HA version  |
-|--------------|-------------|
-| 0.13.372     | 2026.10.1   |
-| 0.13.317+    | Requires Python 3.14.2+ |
-
-To update the pin after a new HA release: find the PHCC version corresponding to the new HA release on the [PHCC releases page](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component/releases) and update `requirements_test.txt`.
-
-### Testing approach
-
-The test suite uses [pytest-homeassistant-custom-component](https://github.com/MatthewFlamm/pytest-homeassistant-custom-component) (PHCC), which provides the same testing infrastructure as Home Assistant core. Tests run against real HA internals pinned to a specific release (see `requirements_test.txt`).
-
-All test files import from `custom_components.dockhand`, which loads `homeassistant` at module level. As a result, **all tests require Python 3.14.2+ with PHCC installed** — there is no HA-free subset.
-
-CI runs the full suite on every push and pull request. **Every line of the integration is covered, and CI fails if a change adds one no test runs** (`--cov-fail-under=100`). Add the test with the code. If a line truly can't be reached, that usually means it can be removed; `# pragma: no cover` is for the rare line that must stay but genuinely can't run under test, with a comment saying why. `tests/test_platform_setup.py` runs the real setup with every option on and one environment containing a bit of everything, which is the place to add data when a new entity's creation path needs covering.
-
-### Claude sandbox
-
-The Claude development sandbox does not have Python 3.14 preinstalled, and building CPython from source takes too long to redo every session. Instead, Claude uses [`uv`](https://github.com/astral-sh/uv) to fetch a prebuilt CPython from the [python-build-standalone](https://github.com/astral-sh/python-build-standalone) project's GitHub release assets — this works within the sandbox's network allowlist (`release-assets.githubusercontent.com`) and takes seconds instead of tens of minutes:
+Sessions have no Python 3.14 and building it takes too long, so `uv` fetches a prebuilt one. The preinstalled `uv` is too old (it resolves 3.14 to a release candidate); the upgraded one at `/usr/local/bin/uv` takes precedence:
 
 ```bash
-pip install --upgrade uv --break-system-packages   # upgrade from sandbox's stale uv (≥0.12.x needed for 3.14.x)
-uv python install 3.14        # fetches a prebuilt 3.14.x (e.g. 3.14.7), no compiling
-uv venv --python 3.14 .venv
-uv pip install -r requirements_test.txt --python .venv/bin/python
+pip install --upgrade uv --break-system-packages
+/usr/local/bin/uv python install 3.14
+/usr/local/bin/uv venv --python 3.14 .venv
+/usr/local/bin/uv pip install -r requirements_test.txt --python .venv/bin/python
 bash scripts/run_tests.sh --full --venv .venv
 ```
 
-**Important:** The sandbox ships an outdated `uv` (e.g. v0.8.x) at `/root/.local/bin/uv` that only resolves `3.14` to a release candidate. The `pip install --upgrade uv` step installs a current uv at `/usr/local/bin/uv` which takes precedence and fetches the final 3.14.x release. Skip this step and you'll get rc2 instead of the real thing.
-
-This gives Claude a real, working Python 3.14.x with PHCC installed, so the full pytest suite (not just ruff + AST) can run in-sandbox routinely. Docker is not viable in this sandbox: no `docker` binary is available, and the egress proxy blocks all container registries (confirmed via a direct `403 host_not_allowed` from Docker Hub), so it isn't a usable fallback either. The venv doesn't persist between sessions, but the `uv` install is cheap enough to redo every time without a second thought. CI remains authoritative for test counts and results regardless.
-
-### Lint and format
-
-```bash
-# Lint
-ruff check custom_components/ tests/ scripts/
-
-# Format check (does not modify files)
-ruff format --check custom_components/ tests/ scripts/
-
-# Fix formatting in-place
-ruff format custom_components/ tests/ scripts/
-```
-
-Ruff config is in `.ruff.toml` at the repo root. CI runs both `ruff check` and `ruff format --check` on `custom_components/`, `tests/` and `scripts/` — test files get a handful of per-file rule exemptions (no docstring/annotation requirements, `assert` allowed, etc.) but are otherwise held to the same standard as the integration code.
+Docker isn't available (no binary, and the proxy blocks container registries).
 
 ## Upstream compatibility
 
@@ -126,19 +57,16 @@ Update this table after each review session. For the API side of a Dockhand revi
 
 ## Code style
 
-Comments should explain **why**, not what or how — a non-obvious constraint, a tradeoff, a reason something isn't the "obvious" approach. They shouldn't restate what the code already says, narrate how a bug was found, or preserve historical context about a previous version's behavior (that belongs in `CHANGELOG.md` git history, not a comment that will outlive its relevance). Before adding a comment, ask: would someone competent in Python/Home Assistant need this to understand the code, or is it documenting the journey to get here?
-
-**Don't duplicate logic across platform files — extract it to `helpers.py` instead, even for something small.** Six platform files (`sensor.py`/`binary_sensor.py`/`button.py`/`number.py`/`select.py`/ `switch.py`/`update.py`) each having their own small per-container/ per-stack lookup, their own copy of an entity-registry "have I already created this" check, etc. is exactly how a real bug shipped in 1.9.0: one copy of the same idea quietly drifted from the others (different variable name, then different implementation entirely), so a fix applied to the "obvious" copies missed it. `helpers.py` already has real precedent for this — `_coordinator_env()` itself replaced two near-identical `_fast_env`/`_slow_env` functions for the same reason (see its own docstring), and `already_registered()`/`_find_container()`/`_find_stack()` are the same move applied again. This isn't about naming consistency for its own sake — a full pass to make every variable name uniform across the codebase would be high-risk churn for low value, and isn't the actual fix. It's specifically about *logic* that exists in more than one place: if you're about to write a loop/lookup/check that another platform file already has a version of, that's the signal to add a shared helper instead of a fourth (or eighth) copy, not a naming convention to follow more carefully.
+- **Comments explain why:** a non-obvious constraint, a tradeoff, why not the obvious approach. Not what the code says, not how a bug was found, not how an earlier version behaved (that's the changelog and git history).
+- **Logic shared by platform files goes in `helpers.py`, never a second copy,** however small. Copies drift: a fix applied to the obvious copies misses the one written differently. `_coordinator_env()`, `already_registered()`, `_find_container()` and `_find_stack()` are that move. This is about logic, not naming: renaming variables for uniformity is churn.
 
 ## Translations
 
-If a change adds any new user-facing string (a new entity name, a config option, an error message), add a machine-translated entry for that key to all locale files in the same change — don't leave it for a follow-up. `strings.json` and `translations/en.json` must stay byte-for-byte identical, and every other locale file must have exactly the same set of keys (no missing, no extra) with the sole exception of `api_url`, which stays in English everywhere.
+Every new user-facing string (an entity name, an option, an error) gets a machine-translated entry in every locale in the same change. `strings.json` and `translations/en.json` stay byte-for-byte identical, and every locale has exactly the same keys except `api_url`, which stays English everywhere.
 
-**This is enforced by `test_config_flow.py`'s whole-tree translation tests** (`test_strings_json_has_no_empty_leaf_values`, `test_translations_en_json_matches_strings_json_exactly`, `test_every_locale_covers_every_strings_json_key_with_non_empty_value`), not just this checklist — they walk every single leaf value anywhere in `strings.json`, so a new key added anywhere is covered automatically with no test changes required. A real bug slipped past this exact checklist item and was only caught by installing and looking at the actual first-time-setup screen: `config.step.setup_options` (which reuses the same options schema as the later Configure screen) had been stale since before the 1.8.0 rename — missing `enable_runtime_controls`/ `enable_container_stats` entirely and still showing the pre-rename `enable_updates` key — undetected for that whole time because nothing checked it against the schema. `test_options_schema_fields_have_non_empty_translations` and `test_options_schema_fields_have_data_description` close that specific gap by walking the actual voluptuous schema and cross-checking both `config.step.setup_options` and `options.step.init` against it, since they're both driven by the same `_options_schema()` function and need their own full copy of the translations.
+`test_config_flow.py` enforces this over the whole tree: no empty values, `en.json` identical to `strings.json`, every locale covering every key, and every field of the options schema (`_options_schema()`, used by both `config.step.setup_options` and `options.step.init`) labelled and described in both places. What tests can't show is how the frontend renders a form: an attempt to group options with `section()` once showed raw keys in a real HA under two translation layouts, though the tests passed (see backlog.md). Layout changes to a form need a look in a real Home Assistant.
 
-**What none of these tests can do is confirm the *rendered shape* in HA's frontend** — a key existing with a non-empty value doesn't guarantee HA resolves it to the right place on screen. This bit twice in the same 1.8.1 cycle: an attempt to visually group `enable_update_entities`/`enable_precise_updates`/`poll_interval_updates` (now `poll_interval_precise_updates`) via HA's `section()` helper kept showing those fields' labels as raw config keys with no help text in a live instance, under two different translation-JSON structures, and the actual cause was never confirmed — these tests passed both times regardless, since the values existed and were non-empty at the paths tried. Reverted rather than kept fighting it; see docs/backlog.md. Any future attempt at `section()` grouping (or other structural form changes) needs an actual install-and-look pass before merging — these tests are necessary but not sufficient for anything involving how fields are visually laid out, only for whether the underlying strings exist at all.
-
-The integration ships with machine-generated translations for the following languages:
+The integration ships machine-generated translations:
 
 | Code | Language |
 |---|---|
@@ -226,10 +154,8 @@ No tags are pushed by hand: a version is released exactly once, when its tag doe
 
 Part of every release pull request (not needed for everyday pull requests):
 
-- `bash scripts/run_tests.sh --full`: ruff check/format on both `custom_components/` and `tests/`, mypy (strict), the quality scale rule check, and the full test suite with its 100% coverage gate — this now includes `test_config_flow.py`'s whole-tree translation coverage tests (see "Translations"), so a missing/empty key or a locale that's drifted out of sync will already show up as a test failure here, not just at this checklist step
+- `bash scripts/run_tests.sh --full` passes (it covers the translation rules in "Translations")
 - `manifest.json`: field order correct (`domain`, `name`, then alphabetical)
-- `strings.json` and `translations/en.json` are byte-for-byte identical
-- Every locale in `translations/` has exactly the same keys as `en.json` (no missing, no extra) — except `api_url`, which stays English everywhere
 - Every entity `translation_key` used in code has both a `strings.json` and an `icons.json` entry, and vice versa (no orphans)
 - `CHANGELOG.md`: compare-link references at the bottom are correct; re-read the whole release section per "Changelog" above
 - Quality scale review, per `docs/quality-scale.md` "Release review": `run_tests.sh --full` already checks the rule list against Home Assistant's current one, strict typing and 100% line coverage; the review covers what those can't — rule requirements that changed, rules this release's additions touch, and `quality_scale.yaml` comments the release made stale. Add a line to that page's review log
@@ -252,7 +178,7 @@ Then, on a push to `main`, the release and sync-dev jobs; on a push to `dev`, th
 
 ### Test builds
 
-Every push to `dev` publishes a GitHub pre-release tagged `v<expected next version>-dev.<run>` (for example `1.12.0-dev.43` while `dev` holds 1.12.0; right after a release, before `dev` moves on, `<next patch>-dev.<run>`), so it sorts above the installed release. Its notes are the `[Unreleased]` section, and its `dockhand.zip` has that version stamped into `manifest.json`, so Home Assistant and diagnostics show a test build as one (for example `1.11.3-dev.42`). Older test builds are deleted, so there's only ever one.
+Every push to `dev` publishes a GitHub pre-release tagged `<expected next version>-dev.<run>` (for example `2.0.0-dev.85` while `dev` holds 2.0.0; right after a release, before `dev` moves on, `<next patch>-dev.<run>`), so it sorts above the installed release. Its notes are the `[Unreleased]` section, and its `dockhand.zip` has that version stamped into `manifest.json`, so Home Assistant and diagnostics show a test build as one. Older test builds are deleted, so there's only ever one.
 
 To install one: turn on pre-releases for Dockhand, from its **⋮** menu in the Marketplace or with the **Pre-release** switch entity the Marketplace (or HACS) adds for each repository, disabled by default (enable it under Settings → Entities; HACS on 2026.10 and older has only the switch). It then offers the test build as an update. To go back, turn pre-releases off and redownload the latest release (⋮ → Redownload).
 
@@ -267,7 +193,7 @@ The owner sets these (sessions can't read most of them):
 
 ## Dependencies
 
-Dependabot proposes updates weekly into `dev` (`.github/dependabot.yml`): GitHub Actions (pinned to full commit SHAs, version in a comment) and the pip pins in `requirements_test.txt`. The integration itself has no runtime requirements. `pytest-homeassistant-custom-component` pins an exact Home Assistant release (see "PHCC version ↔ HA version"); `mypy` follows Home Assistant core's own pin.
+Dependabot proposes updates weekly into `dev` (`.github/dependabot.yml`): GitHub Actions (pinned to full commit SHAs, version in a comment) and the pip pins in `requirements_test.txt`. The integration itself has no runtime requirements. `pytest-homeassistant-custom-component` pins an exact Home Assistant release (see "Testing"); `mypy` follows Home Assistant core's own pin.
 
 ## Audits
 

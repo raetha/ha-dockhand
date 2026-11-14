@@ -14,6 +14,14 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 8. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
 9. **Record it:** a dated section below, and changelog lines for anything users notice.
 
+## 2026-11-13: full review
+
+- Open pull requests: none. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.4 → 0.17.5. PHCC 0.13.375 (HA 2026.10.4) is still the newest; no Dockhand release since 1.0.57 (main's three commits since don't touch the routes used here), and HA 2026.11.1 was reviewed on 2026-11-09.
+- `pip-audit`: only pillow (test-only, through Home Assistant's pin). CodeQL 2.27.4 (Python, Actions): no security findings. Its notes are imports and names it can't see used (tests, `_LEGACY_CONF_*`) and two empty `except` blocks, which now say why they're empty.
+- Workflows: top-level `contents: read` (`permissions: {}` for stale), write only on release, sync-dev and test-build, no credentials kept on checkouts outside sync-dev, `CI passed` covering every check job. The header comment's test-build version was out of date.
+- Tests, ruff, mypy, quality scale rules: pass, 100% coverage. The entity model still matches §12 (list attributes unrecorded, nothing churning).
+- Documentation: `architecture.md` rewritten from about 90 KB to 40 KB, keeping every rule and its reason without the history; two stale claims fixed (vulnerability counts are sensors, not attributes; the "Check for updates" button is always present). `development.md`'s testing and translation sections rewritten (a stale PHCC table and minimum HA version, duplicated paragraphs). `device-class-matrix.md` deleted: unlinked and missing most entities, which the README tables cover. The README names the Check for image updates button and the count sensors as Home Assistant shows them.
+
 ## 2026-11-09: full review before testing 2.0.0
 
 - Open pull requests: none. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.3 → 0.17.4. PHCC 0.13.375 (HA 2026.10.4) is still the newest.

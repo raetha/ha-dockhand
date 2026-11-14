@@ -80,6 +80,7 @@ class DockhandClient:
             try:
                 body_text = await resp.text()
             except Exception:
+                # Only for the log line; the 401 is raised either way.
                 pass
             _LOGGER.warning(
                 "Dockhand: 401 Unauthorized on %s %s%s",
