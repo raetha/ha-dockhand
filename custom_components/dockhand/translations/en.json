@@ -660,7 +660,7 @@
     },
     "retired_entities": {
       "title": "Automations or scripts use replaced Dockhand entities",
-      "description": "Dockhand replaced some of its entities with new ones, and these automations or scripts still use the old ones (old entity → new entity: where it's used):\n\n{entities}\n\nEdit them to use the new entities. This repair goes away once none of them uses an old entity. Templates and dashboards aren't checked, so look at those too."
+      "description": "Dockhand replaced some of its entities with new ones, and these automations or scripts still use the old ones (old entity → new entity):\n\n{entities}\n\nEdit each to use the new entities. This repair goes away once none of them uses an old entity. Dashboards and template entities aren't checked, so look at those too."
     }
   },
   "services": {

@@ -660,7 +660,7 @@
     },
     "retired_entities": {
       "title": "Automatizaciones o scripts usan entidades de Dockhand reemplazadas",
-      "description": "Dockhand reemplazó algunas de sus entidades por otras nuevas, y estas automatizaciones o scripts todavía usan las antiguas (entidad antigua → entidad nueva: dónde se usa):\n\n{entities}\n\nEdítalos para que usen las entidades nuevas. Esta reparación desaparece cuando ninguno de ellos usa ya una entidad antigua. Las plantillas y los paneles no se comprueban, así que revísalos también."
+      "description": "Dockhand reemplazó algunas de sus entidades por otras nuevas, y estas automatizaciones o scripts todavía usan las antiguas (entidad antigua → entidad nueva):\n\n{entities}\n\nEdita cada una para que use las entidades nuevas. Esta reparación desaparece cuando ninguna de ellas usa ya una entidad antigua. Los paneles y las entidades de plantilla no se comprueban, así que revísalos también."
     }
   },
   "services": {

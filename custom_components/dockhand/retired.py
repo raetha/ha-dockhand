@@ -8,8 +8,13 @@ entry exists, so the old entity IDs are found there and nothing needs
 storing here. The repair is checked once Home Assistant has started
 (automations and scripts load after integrations) and again whenever
 automations are reloaded, which includes saving one in the editor, so it
-clears itself once nothing uses an old entity. Templates and dashboards
-can't be checked; the changelog has to cover them.
+clears itself once nothing uses an old entity. Each automation or script
+links to its editor. Templates inside automations and scripts are found by
+searching their configuration's text; dashboards and template entities
+aren't checked (Home Assistant offers no way to read every one), so the
+changelog still has to cover them. Fixing automations for the user isn't
+offered: YAML ones can't be edited from here, and a device trigger or a
+template comparing states may need more than a new entity ID.
 
 To retire an entity: add a `RetiredEntity`. Like a registry migration
 (`migration.py`), it records the config schema major of the releases that
@@ -17,10 +22,11 @@ had the old entity, and stays while an entry from them can still be
 upgraded; tests/test_retired.py fails once one is past that.
 """
 
+import json
+import re
 from dataclasses import dataclass
+from typing import Any
 
-from homeassistant.components.automation import automations_with_entity
-from homeassistant.components.script import scripts_with_entity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
@@ -68,30 +74,87 @@ def _issue_id(entry_id: str) -> str:
     return f"{entry_id}_retired_entities"
 
 
-@callback
-def async_check_retired_entities(hass: HomeAssistant, entry_id: str) -> None:
-    """Raise, update or clear the repair listing automations and scripts
-    that still use an entity this integration retired."""
-    registry = er.async_get(hass)
-    lines: list[str] = []
+@dataclass(frozen=True)
+class _Old:
+    """A retired entity that's gone, and what replaced it."""
+
+    entity_id: str
+    registry_id: str
+    new_entity_id: str | None
+    pattern: re.Pattern[str]
+
+
+def _retired_gone(registry: er.EntityRegistry, entry_id: str) -> list[_Old]:
+    olds: list[_Old] = []
     for deleted in list(registry.deleted_entities.values()):
         if deleted.platform != DOMAIN or deleted.config_entry_id != entry_id:
             continue
         retired = retired_entity(deleted.domain, deleted.unique_id)
         if retired is None:
             continue
-        users = sorted(
-            automations_with_entity(hass, deleted.entity_id)
-            + scripts_with_entity(hass, deleted.entity_id)
-        )
-        if not users:
-            continue
         prefix = deleted.unique_id[: -len(retired.key)]
         new_id = registry.async_get_entity_id(
             retired.new_domain, DOMAIN, prefix + (retired.new_key or retired.key)
         )
-        old = f"`{deleted.entity_id}`" + (f" → `{new_id}`" if new_id else "")
-        lines.append(f"- {old}: " + ", ".join(f"`{u}`" for u in users))
+        olds.append(
+            _Old(
+                deleted.entity_id,
+                deleted.id,
+                new_id,
+                # The entity ID as a whole word, so `…_checks_2` isn't a match.
+                re.compile(rf"(?<!\w){re.escape(deleted.entity_id)}(?!\w)"),
+            )
+        )
+    return olds
+
+
+def _uses(entity: Any, old: _Old) -> bool:
+    """Whether an automation or script uses `old`: as an entity it
+    references, in a template (only in its configuration's text), or by
+    entity registry ID (device triggers and conditions)."""
+    if old.entity_id in entity.referenced_entities:
+        return True
+    raw = getattr(entity, "raw_config", None)
+    if not raw:
+        return False
+    text = json.dumps(raw, default=str)
+    return bool(old.pattern.search(text)) or old.registry_id in text
+
+
+def _markdown_text(text: str) -> str:
+    return re.sub(r"([\\`*_\[\]<>])", r"\\\1", text)
+
+
+@callback
+def async_check_retired_entities(hass: HomeAssistant, entry_id: str) -> None:
+    """Raise, update or clear the repair listing the automations and
+    scripts that still use an entity this integration retired."""
+    olds = _retired_gone(er.async_get(hass), entry_id)
+    lines: list[tuple[str, str, str]] = []
+    if olds:
+        for domain in ("automation", "script"):
+            # The automation and script components keep their entities here;
+            # automations_with_entity() reads the same, but only sees
+            # entities they reference outside templates.
+            component = hass.data.get(domain)
+            for entity in list(getattr(component, "entities", ())):
+                used = [old for old in olds if _uses(entity, old)]
+                if not used:
+                    continue
+                state = hass.states.get(entity.entity_id)
+                name = _markdown_text(state.name if state else entity.entity_id)
+                # An automation without an `id` can't be edited in the UI.
+                label = (
+                    f"[{name}](/config/{domain}/edit/{entity.unique_id})"
+                    if entity.unique_id
+                    else f"{name} (`{entity.entity_id}`)"
+                )
+                changes = ", ".join(
+                    f"`{old.entity_id}`"
+                    + (f" → `{old.new_entity_id}`" if old.new_entity_id else "")
+                    for old in sorted(used, key=lambda o: o.entity_id)
+                )
+                lines.append((domain, name.casefold(), f"- {label}: {changes}"))
 
     if not lines:
         ir.async_delete_issue(hass, DOMAIN, _issue_id(entry_id))
@@ -103,5 +166,7 @@ def async_check_retired_entities(hass: HomeAssistant, entry_id: str) -> None:
         is_fixable=False,
         severity=ir.IssueSeverity.WARNING,
         translation_key="retired_entities",
-        translation_placeholders={"entities": "\n".join(sorted(lines))},
+        translation_placeholders={
+            "entities": "\n".join(line for *_, line in sorted(lines))
+        },
     )
