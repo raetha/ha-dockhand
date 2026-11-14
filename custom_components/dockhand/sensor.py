@@ -2518,15 +2518,13 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         volume: dict,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
-        self._volume_name: str = volume.get("name") or volume.get("Name") or "unknown"
+        self._volume_name: str = volume.get("name") or "unknown"
         self._attr_unique_id = f"{self._entry_id}_{env_id}_volume_{self._volume_name}"
         self._attr_name = self._volume_name
 
     def _volume(self) -> dict | None:
         for v in self._env_data().get("volumes") or []:
-            if (v.get("name") or v.get("Name")) == self._volume_name and isinstance(
-                v, dict
-            ):
+            if isinstance(v, dict) and v.get("name") == self._volume_name:
                 return v
         return None
 
@@ -2537,7 +2535,7 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         v = self._volume()
         if not v:
             return None
-        used_by = v.get("usedBy") or v.get("UsedBy") or []
+        used_by = v.get("usedBy") or []
         return len(used_by)
 
     @property
@@ -2546,10 +2544,10 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         v = self._volume()
         if not v:
             return {}
-        used_by = v.get("usedBy") or v.get("UsedBy") or []
+        used_by = v.get("usedBy") or []
         # created timestamp — parse to ISO string if present
         created_iso: str | None = None
-        raw_created = v.get("created") or v.get("Created")
+        raw_created = v.get("created")
         if raw_created:
             try:
                 parsed = dt_util.parse_datetime(str(raw_created))
@@ -2559,10 +2557,10 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         return {
             "in_use": len(used_by) > 0,
             "containers": used_by,
-            "driver": v.get("driver") or v.get("Driver"),
-            "scope": v.get("scope") or v.get("Scope"),
-            "mountpoint": v.get("mountpoint") or v.get("Mountpoint"),
-            "labels": v.get("labels") or v.get("Labels") or {},
+            "driver": v.get("driver"),
+            "scope": v.get("scope"),
+            "mountpoint": v.get("mountpoint"),
+            "labels": v.get("labels") or {},
             "created": created_iso,
         }
 
