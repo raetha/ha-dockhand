@@ -62,6 +62,7 @@ Some changes are breaking: read **Removed** before upgrading, check automations 
 
 ### Internal
 
+- `docs/backlog.md`: the bulk-update entry, long since built (Update all), is gone.
 - The README is shorter: requirements, installation, setup and use cases, with configuration, devices and entities, actions and automations, data updates, and troubleshooting each on a page of its own under `docs/`.
 - Markdown is written one line per paragraph or list item, so GitHub's release pages and other renderers wrap it instead of breaking lines where the source did; CI checks it.
 - Docs: installing through Home Assistant's Marketplace (2026.11+), with its install link, and HACS for older versions.
