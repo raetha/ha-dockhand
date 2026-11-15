@@ -116,9 +116,7 @@ def _container(
         if not env_part.isdigit():
             continue
         env_id = int(env_part)
-        container = _find_container(
-            entry.runtime_data.fast_coordinator.data, env_id, name
-        )
+        container = _find_container(entry.runtime_data.fast_coordinator, env_id, name)
         if container is None:
             raise ServiceValidationError(
                 translation_domain=DOMAIN, translation_key="container_not_found"

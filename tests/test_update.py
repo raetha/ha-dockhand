@@ -1154,6 +1154,7 @@ def test_handle_coordinator_update_refreshes_features():
     entity = _make_entity(containers=[CONTAINER_NORMAL])
     # Simulate the container becoming system-classified on the next poll.
     entity.coordinator.data["environments"][ENV_ID]["containers"] = [CONTAINER_SYSTEM]
+    entity.coordinator.data = {**entity.coordinator.data}
     with patch.object(entity, "async_write_ha_state"):
         entity._handle_coordinator_update()
     assert UpdateEntityFeature.INSTALL not in entity._attr_supported_features

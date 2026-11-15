@@ -453,9 +453,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         self._update_supported_features()
 
     def _container(self) -> dict | None:
-        return _find_container(
-            self.coordinator.data, self._env_id, self._container_name
-        )
+        return _find_container(self.coordinator, self._env_id, self._container_name)
 
     @property
     @override

@@ -91,7 +91,7 @@ async def async_setup_entry(
                 new.append(running_switch)
 
             for stack in env_data.get("stacks") or []:
-                if _stack_has_system_container(stack, env_data.get("containers") or []):
+                if _stack_has_system_container(fast, env_id, stack):
                     continue
                 stack_switch = DockhandStackRunningSwitch(
                     fast,
@@ -471,7 +471,7 @@ class DockhandContainerAutoUpdateSwitch(
 
     def _container(self) -> dict | None:
         return _find_container(
-            self._fast_coordinator.data, self._env_id, self._container_name
+            self._fast_coordinator, self._env_id, self._container_name
         )
 
     @property
@@ -574,7 +574,7 @@ class DockhandGitStackAutoUpdateSwitch(
         )
 
     def _git_stack(self) -> dict[str, Any] | None:
-        return _find_git_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_git_stack(self.coordinator, self._env_id, self._stack_name)
 
     @override
     def _handle_coordinator_update(self) -> None:

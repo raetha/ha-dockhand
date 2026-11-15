@@ -59,9 +59,7 @@ class DockhandContainerEntity(DockhandEnvScopedEntity):
         self._container_name: str = container.get("name", "")
 
     def _container(self) -> dict[str, Any] | None:
-        return _find_container(
-            self.coordinator.data, self._env_id, self._container_name
-        )
+        return _find_container(self.coordinator, self._env_id, self._container_name)
 
     @property
     @override
@@ -93,7 +91,7 @@ class DockhandStackEntity(DockhandEnvScopedEntity):
         self._stack_name: str = stack.get("name", "")
 
     def _stack(self) -> dict[str, Any] | None:
-        return _find_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override

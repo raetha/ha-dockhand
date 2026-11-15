@@ -39,6 +39,9 @@ from custom_components.dockhand.helpers import (
     _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
+    _find_container,
+    _find_git_stack,
+    _find_stack,
     _env_device,
     _env_settings_url,
     _image_display_name,
@@ -1014,8 +1017,54 @@ def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
 
 
 # ---------------------------------------------------------------------------
+# _find_container, _find_stack, _find_git_stack
+# ---------------------------------------------------------------------------
+
+
+def _lookup_coordinator(env: dict) -> MagicMock:
+    coordinator = MagicMock()
+    coordinator.data = {"environments": {1: env}}
+    return coordinator
+
+
+def test_find_by_name_skips_what_is_not_an_item():
+    web = {"id": "id-web", "name": "web"}
+    coordinator = _lookup_coordinator(
+        {
+            "containers": [None, {"id": "id-anon"}, web],
+            "stacks": ["junk", {"name": "app"}],
+            "git_stacks": [{"stackName": "site"}],
+        }
+    )
+    assert _find_container(coordinator, 1, "web") is web
+    assert _find_stack(coordinator, 1, "app") == {"name": "app"}
+    assert _find_git_stack(coordinator, 1, "site") == {"stackName": "site"}
+    assert _find_container(coordinator, 2, "web") is None
+
+
+def test_find_by_name_takes_the_first_of_a_duplicate_name():
+    first, second = {"id": "a", "name": "web"}, {"id": "b", "name": "web"}
+    coordinator = _lookup_coordinator({"containers": [first, second]})
+    assert _find_container(coordinator, 1, "web") is first
+
+
+def test_find_by_name_follows_a_poll():
+    """A poll replaces the coordinator's data, and the lookup follows it."""
+    coordinator = _lookup_coordinator({"containers": [{"name": "web"}]})
+    assert _find_container(coordinator, 1, "db") is None
+    coordinator.data = {"environments": {1: {"containers": [{"name": "db"}]}}}
+    assert _find_container(coordinator, 1, "db") == {"name": "db"}
+
+
+# ---------------------------------------------------------------------------
 # _stack_has_system_container
 # ---------------------------------------------------------------------------
+
+
+def _stack_check(stack, all_containers) -> bool:
+    coordinator = MagicMock()
+    coordinator.data = {"environments": {1: {"containers": all_containers}}}
+    return _stack_has_system_container(coordinator, 1, stack)
 
 
 def test_stack_has_system_container_true_when_member_is_system():
@@ -1027,7 +1076,7 @@ def test_stack_has_system_container_true_when_member_is_system():
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"},
         {"id": "id-web", "name": "web", "systemContainer": None},
     ]
-    assert _stack_has_system_container(stack, all_containers) is True
+    assert _stack_check(stack, all_containers) is True
 
 
 def test_stack_has_system_container_false_when_no_member_is_system():
@@ -1036,7 +1085,7 @@ def test_stack_has_system_container_false_when_no_member_is_system():
         {"id": "id-web", "name": "web", "systemContainer": None},
         {"id": "id-db", "name": "db", "systemContainer": None},
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 def test_stack_has_system_container_false_for_empty_container_list():
@@ -1044,11 +1093,11 @@ def test_stack_has_system_container_false_for_empty_container_list():
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 def test_stack_has_system_container_false_for_none_stack():
-    assert _stack_has_system_container(None, []) is False
+    assert _stack_check(None, []) is False
 
 
 def test_stack_has_system_container_false_when_ids_dont_match():
@@ -1059,18 +1108,17 @@ def test_stack_has_system_container_false_when_ids_dont_match():
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 def test_stack_has_system_container_ignores_name_collision_with_id():
-    """Regression guard for the exact bug: a container whose NAME
-    happens to equal another container's ID string must not produce a
-    false match — only real id-to-id equality counts."""
+    """A container whose name equals another container's ID string must
+    not match: only ID-to-ID equality counts."""
     stack = {"name": "myapp", "containers": ["dockhand"]}  # looks like a name!
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 # ---------------------------------------------------------------------------

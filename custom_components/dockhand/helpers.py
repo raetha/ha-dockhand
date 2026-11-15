@@ -12,6 +12,7 @@ from collections.abc import Awaitable, Iterable
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
+from weakref import WeakKeyDictionary
 
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -250,44 +251,92 @@ def _coordinator_env(data: dict[str, Any] | None, env_id: int) -> dict[str, Any]
     return _all_envs(data).get(env_id) or {}
 
 
-def _find_container(
-    coordinator_data: dict[str, Any] | None, env_id: int, container_name: str
-) -> dict | None:
-    """Look up one container's current dict by name, from a coordinator's
-    data — name-based since Docker enforces unique container names per
-    host, stable across container recreation (image updates).
+class _EnvIndex:
+    """One environment's containers and stacks keyed for lookup.
 
-    Every platform looks containers up through this, so the lookup can't
-    differ between them.
+    Every entity looks its container or stack up on every poll, so a scan
+    of the environment's list per lookup grows with containers × entities;
+    this is built once per poll and environment instead. The first entry
+    wins on a duplicate name, as a scan would.
     """
-    for c in _coordinator_env(coordinator_data, env_id).get("containers") or []:
-        if isinstance(c, dict) and c.get("name") == container_name:
-            return c
-    return None
+
+    __slots__ = (
+        "container_names",
+        "containers",
+        "git_stacks",
+        "stacks",
+        "system_container_ids",
+    )
+
+    def __init__(self, env: dict[str, Any]) -> None:
+        self.containers: dict[str, dict] = {}
+        self.container_names: dict[str, str] = {}
+        self.system_container_ids: set[str] = set()
+        for c in env.get("containers") or []:
+            if not isinstance(c, dict):
+                continue
+            name = c.get("name")
+            if name is not None:
+                self.containers.setdefault(name, c)
+            if cid := c.get("id"):
+                if isinstance(name, str):
+                    self.container_names.setdefault(cid, name)
+                if c.get("systemContainer"):
+                    self.system_container_ids.add(cid)
+        self.stacks = _by_key(env.get("stacks"), "name")
+        self.git_stacks = _by_key(env.get("git_stacks"), "stackName")
+
+
+def _by_key(items: list | None, key: str) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for item in items or []:
+        if isinstance(item, dict) and (value := item.get(key)) is not None:
+            out.setdefault(value, item)
+    return out
+
+
+# Keyed by coordinator, holding the data object the indexes were built
+# from: coordinators replace their data rather than change it in place,
+# so a different object means a new poll and the indexes are rebuilt.
+_ENV_INDEXES: WeakKeyDictionary[Any, tuple[Any, dict[int, _EnvIndex]]] = (
+    WeakKeyDictionary()
+)
+
+
+def _env_index(coordinator: Any, env_id: int) -> _EnvIndex:
+    """The lookup index for one environment of a coordinator's current data."""
+    data = coordinator.data
+    cached = _ENV_INDEXES.get(coordinator)
+    if cached is None or cached[0] is not data:
+        cached = (data, {})
+        _ENV_INDEXES[coordinator] = cached
+    index = cached[1].get(env_id)
+    if index is None:
+        index = cached[1][env_id] = _EnvIndex(_coordinator_env(data, env_id))
+    return index
+
+
+def _find_container(coordinator: Any, env_id: int, container_name: str) -> dict | None:
+    """One container's current dict by name, from a coordinator's data.
+
+    Name-based since Docker enforces unique container names per host,
+    stable across container recreation (image updates). Every platform
+    looks containers up through this, so the lookup can't differ between
+    them.
+    """
+    return _env_index(coordinator, env_id).containers.get(container_name)
 
 
 def _find_git_stack(
-    coordinator_data: dict[str, Any] | None, env_id: int, stack_name: str
+    coordinator: Any, env_id: int, stack_name: str
 ) -> dict[str, Any] | None:
     """A git stack's current dict (slow coordinator) by its stack name."""
-    for gs in _coordinator_env(coordinator_data, env_id).get("git_stacks") or []:
-        if isinstance(gs, dict) and gs.get("stackName") == stack_name:
-            return gs
-    return None
+    return _env_index(coordinator, env_id).git_stacks.get(stack_name)
 
 
-def _find_stack(
-    coordinator_data: dict[str, Any] | None, env_id: int, stack_name: str
-) -> dict | None:
-    """Look up one stack's current dict by name, from a coordinator's
-    data — same reasoning as _find_container() above, four duplicated
-    copies instead of seven (binary_sensor.py/button.py/sensor.py/
-    switch.py), otherwise identical.
-    """
-    for s in _coordinator_env(coordinator_data, env_id).get("stacks") or []:
-        if isinstance(s, dict) and s.get("name") == stack_name:
-            return s
-    return None
+def _find_stack(coordinator: Any, env_id: int, stack_name: str) -> dict | None:
+    """One stack's current dict by name, from a coordinator's data."""
+    return _env_index(coordinator, env_id).stacks.get(stack_name)
 
 
 # --------------------------------------------------------------------------- #
@@ -818,7 +867,9 @@ def _container_has_healthcheck(container: dict) -> bool:
 _FALSY_LABEL_VALUES = {"false", "no", "0"}
 
 
-def _stack_has_system_container(stack: dict | None, all_containers: list) -> bool:
+def _stack_has_system_container(
+    coordinator: Any, env_id: int, stack: dict | None
+) -> bool:
     """True if any container belonging to this stack is a Dockhand
     system container (dockhand itself, or a Hawser agent).
 
@@ -846,11 +897,8 @@ def _stack_has_system_container(stack: dict | None, all_containers: list) -> boo
     in it, including ones the user may not realize are Dockhand
     infrastructure.
     """
-    stack_container_ids = set((stack or {}).get("containers") or [])
-    return any(
-        c.get("id") in stack_container_ids and c.get("systemContainer")
-        for c in all_containers or []
-    )
+    system_ids = _env_index(coordinator, env_id).system_container_ids
+    return any(cid in system_ids for cid in (stack or {}).get("containers") or [])
 
 
 def _container_has_pending_update(

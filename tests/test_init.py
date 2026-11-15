@@ -3274,6 +3274,27 @@ def test_cleanup_leaves_devices_it_cannot_parse_alone(hass: HomeAssistant):
         assert _device_exists(hass, device.id)
 
 
+def test_cleanup_skips_the_registry_while_nothing_changed(hass: HomeAssistant):
+    """A poll that changes neither the live items nor the entry's devices
+    and entities has nothing new to remove; one that does is checked."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={"environments": {}, "schedules": []},
+    )
+    entry.runtime_data.cleanup_seen = None
+    _cleanup_stale_registry(hass, entry)
+    with patch(
+        "custom_components.dockhand.dr.async_entries_for_config_entry",
+        wraps=dr.async_entries_for_config_entry,
+    ) as listed:
+        _cleanup_stale_registry(hass, entry)
+    assert listed.call_count == 1  # only to see whether anything changed
+    gone = _add_device(hass, entry, f"{entry.entry_id}_stack_1_media")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, gone.id)
+
+
 def test_cleanup_removes_a_deleted_environments_stack_device(hass: HomeAssistant):
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(

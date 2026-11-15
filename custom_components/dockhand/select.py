@@ -188,7 +188,7 @@ class DockhandContainerRestartPolicySelect(
 
     def _container(self) -> dict | None:
         return _find_container(
-            self._fast_coordinator.data, self._env_id, self._container_name
+            self._fast_coordinator, self._env_id, self._container_name
         )
 
     def _runtime_config(self) -> dict:
