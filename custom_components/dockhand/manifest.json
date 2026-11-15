@@ -1,10 +1,16 @@
 {
   "domain": "dockhand",
   "name": "Dockhand",
+  "categories": [
+    "computers_network.nas_servers"
+  ],
   "codeowners": [
     "@raetha"
   ],
   "config_flow": true,
+  "connectivity": [
+    "network"
+  ],
   "dependencies": [],
   "documentation": "https://github.com/raetha/ha-dockhand",
   "integration_type": "hub",
