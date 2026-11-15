@@ -19,6 +19,15 @@ Ideas that came up during development, were deliberately evaluated, and either d
 
 - **`/api/system?env=X` for richer host/Docker info.** Returns `docker{version,apiVersion,os,arch,kernelVersion,serverVersion,connection}`, `host{}` (from Docker's own `/info`, not Node `os.*`), `runtime{}` (Dockhand's own process info), `database{}`, and `stats{}` — deliberately do **not** use `stats`, `/api/dashboard/stats` is more complete. Most of this overlaps what `/api/host` already gives us (platform, arch, Docker version). The two genuinely new fields (`apiVersion`, `kernelVersion`) aren't available anywhere else, but the endpoint is heavy server-side — it also fetches full container/image/volume/network lists just to compute `stats` we'd ignore — and can't replace `/api/host` (missing `hawserVersion`, `uptime`), so using it would be a net-new API call just for those two fields. Revisit if Dockhand ever adds a lighter-weight version of this endpoint, or if it becomes more/less inclusive.
 
+- **Portainer details not carried over** (from the 2026-11-09 comparison with Home Assistant's Portainer integration; the rest of it is in 2.0.0). Each is possible with Dockhand today; none was asked for:
+  - A container's start time, OOM-killed flag and true restart count: Portainer inspects every container on each poll; `GET /api/containers/{id}/inspect` would be one call per container. Only the OOM flag seems worth it, and only on request.
+  - Per-volume size: `GET /api/system/disk` (`Volumes[].UsageData.Size`) runs Docker's `system df`, already the heaviest call (Finsys/dockhand#1885); slow poll at most.
+  - Choosing which environments to include: Portainer has a subentry per environment. Only if users ask.
+
+- **`UpdateFailedUnreachable` once the minimum Home Assistant version reaches 2026.12.** Core added it on 2026-11-13 so a coordinator that can't reach its server logs at info level rather than as an error each time; Portainer uses it for connection errors and timeouts. Ours raise `UpdateFailed`.
+
+- **Specific translated errors instead of `action_failed`'s raw error text.** Home Assistant's guidance prefers an error per case; `action_failed` passes Dockhand's message as a placeholder. Low priority: permission errors already have their own (`permission_denied`).
+
 ## Waiting on Dockhand
 
 Requests filed with Dockhand, and what to change here when each is answered. At each backlog or upstream review, check whether they're still open, released, or turned down (`gh api "search/issues?q=repo:Finsys/dockhand+is:issue+author:raetha"` lists them), and update or remove the entry.

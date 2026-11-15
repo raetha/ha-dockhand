@@ -8,6 +8,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 - **Control Dockhand from Home Assistant**: an environment's settings, running and pausing schedules, pausing containers, pruning, recreating, and Dockhand's own event collection.
 - **Live updates**: container changes show within seconds through Dockhand's live feed, with fewer requests to Dockhand overall.
 - **A Dockhand device** with Dockhand's own update entity, and a Docker event entity for each container.
+- **Checked against Home Assistant's own Portainer integration**: Dockhand now has its live updates, Docker event entities, and pause, prune and recreate, and goes further on updates, vulnerabilities, schedules and Git stacks. What it still lacks is either not offered by Dockhand (killing a container, pruning the build cache) or a smaller detail (a container's start time, per-volume sizes).
 
 **Before you upgrade:** some changes are breaking. Read **Removed**, check automations and dashboards that use attributes or the settings' binary sensors (a repair lists the automations and scripts to change), and update [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0 at the same time. Home Assistant 2026.8 or later is required.
 
@@ -68,6 +69,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Internal
 
+- `docs/backlog.md` records what the Portainer comparison left out (container start time and OOM flag, per-volume sizes, choosing environments), `UpdateFailedUnreachable` for when Home Assistant 2026.12 is the minimum, and specific action errors.
 - Test build notes link the changelog's docs and images on `dev`, where they are until the release puts them on `main`.
 - Release and test build notes say to install from Home Assistant's Marketplace (HACS on older versions) and how to turn on pre-releases there, instead of adding a HACS custom repository.
 - The full review checklist (`docs/audits.md`) covers tests, tooling and comments.
