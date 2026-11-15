@@ -86,6 +86,15 @@ def test_the_repository_changelog_passes_its_own_check():
     assert release.main(["check"]) == 0
 
 
+def test_test_build_notes_link_dev_where_the_release_links_main():
+    link = "[docs](https://github.com/raetha/ha-dockhand/blob/main/docs/x.md)"
+    changelog = CHANGELOG.replace("- A fix.", f"- A fix. {link}")
+    released = release.notes(changelog, "1.1.0")
+    assert "/blob/main/docs/x.md" in released
+    unreleased = changelog.replace("## [Unreleased]\n", f"## [Unreleased]\n\n{link}\n", 1)
+    assert "/blob/dev/docs/x.md" in release.notes(unreleased, "Unreleased", 7)
+
+
 def test_package_puts_files_at_the_zip_root_and_stamps_test_builds(tmp_path):
     source = tmp_path / "dockhand"
     (source / "translations").mkdir(parents=True)

@@ -68,6 +68,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Internal
 
+- Test build notes link the changelog's docs and images on `dev`, where they are until the release puts them on `main`.
 - Release and test build notes say to install from Home Assistant's Marketplace (HACS on older versions) and how to turn on pre-releases there, instead of adding a HACS custom repository.
 - The full review checklist (`docs/audits.md`) covers tests, tooling and comments.
 - Tests share their coordinator, config entry and sample data helpers (`tests/conftest.py`), with sample containers and stacks shaped like Dockhand's own, and their docstrings say what each test protects rather than how bugs were found.

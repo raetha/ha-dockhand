@@ -36,6 +36,12 @@ INTEGRATION = ROOT / "custom_components" / "dockhand"
 MANIFEST = INTEGRATION / "manifest.json"
 CHANGELOG = ROOT / "CHANGELOG.md"
 REPO = "https://github.com/raetha/ha-dockhand"
+# The changelog links docs and images on main, where they land with the
+# release; a test build's notes link dev's, where they are until then.
+_ON_MAIN = re.compile(
+    r"(https://github\.com/raetha/ha-dockhand/blob/|"
+    r"https://raw\.githubusercontent\.com/raetha/ha-dockhand/)main/"
+)
 
 # Older sections use an em dash before the date, newer ones a hyphen: both are read.
 _HEADING = re.compile(r"^## \[([^\]]+)\](?:\s*[-—]\s*\S+)?\s*$")
@@ -126,6 +132,8 @@ def notes(changelog: str, version: str, test_build: int | None = None) -> str:
             "default) and it's offered as an update. The changes since the last "
             "release:"
         )
+    if test_build is not None and body:
+        body = _ON_MAIN.sub(r"\1dev/", body)
     parts += [body or "_No changes listed yet._", install]
     return "\n\n".join(parts) + "\n"
 
