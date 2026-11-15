@@ -15,6 +15,14 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 9. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
 10. **Record it:** a dated section below, and changelog lines for anything users notice.
 
+## 2026-11-15: final review for 2.0.0
+
+- Open pull requests: none. PHCC 0.13.375 (HA 2026.10.4) is still the newest, though Home Assistant 2026.11.1 is out; no Dockhand release since 1.0.57. `pip-audit`: only pillow, test-only as before. CodeQL runs on every pull request; the last ones passed.
+- Changes since the 2026-11-14 review: diagnostics redaction, the real-data fixture and test, a stack's Running containers at 0, the test cleanup (shared helpers, realistic sample data, docstrings), comments, the manifest's category and connectivity, release and test build notes (highlights, Marketplace install text, `dev` links in test builds), and the Portainer comparison's leftovers in the backlog. Tests, ruff, mypy, quality scale rules: pass, 100% coverage.
+- Quality scale release review recorded in `docs/quality-scale.md`; five `quality_scale.yaml` comments were stale.
+- Tests and tooling (the new checklist item): reviewed today with the cleanup; nothing further.
+- Changelog re-read as release notes: an outage removed stacks and images, not "image devices"; the manifest line moved below the features.
+
 ## 2026-11-14: review before releasing 2.0.0
 
 - Open pull requests: none. PHCC 0.13.375 (HA 2026.10.4) is still the newest; no Dockhand release since 1.0.57. `pip-audit`: only pillow, test-only as before.

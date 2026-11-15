@@ -12,7 +12,7 @@ rules:
   appropriate-polling:
     status: done
     comment: >
-      All three coordinators use DataUpdateCoordinator with fixed intervals
+      Every coordinator uses DataUpdateCoordinator with a fixed interval
       (not user-configurable). Fast coordinator every 60 s (stats, containers, stacks,
       container and stack resource stats, pending-update flags); slow coordinator
       every 600 s (images, volumes, networks, schedules, git stacks,
@@ -20,7 +20,10 @@ rules:
       env_meta — the handful of fields only /api/environments has: image-prune
       enabled, Hawser agent identity, configured connection host/port);
       update coordinator (Tier 2 only, optional) every 24 h (registry update checks — deliberately infrequent to avoid
-      unnecessary load on the Docker host). Dashboard stats are fetched in a
+      unnecessary load on the Docker host); version coordinator (Dockhand's
+      own version and its self-update check) every 6 h. Dockhand's live
+      feed refreshes an environment between polls when something changes,
+      skipping a refresh a poll has already made. Dashboard stats are fetched in a
       single API call per fast poll cycle rather than one call per environment.
       Container resource stats are fetched via a single bulk API call per
       environment (GET /api/containers/stats?env=N) rather than one call per
@@ -99,7 +102,7 @@ rules:
     status: done
     comment: >
       README has a Removal section describing how to delete via the HA UI and
-      uninstall via HACS.
+      uninstall via the Marketplace or HACS.
 
   docs-triggers:
     status: exempt
@@ -398,26 +401,18 @@ rules:
   entity-disabled-by-default:
     status: done
     comment: >
-      Niche or verbose entities are disabled by default via
-      _attr_entity_registry_enabled_default = False: disk usage,
-      activity events, Hawser agent version (and its
-      agent_name/agent_id/last_seen attributes, edge-mode only), the
-      config-mirror binary sensors (activity collection, metrics collection,
-      vulnerability scanning, update checks, auto update, image pruning),
-      the host info sensors (platform, Docker version, last
-      boot — all share one base class's flag), the container auto-update
-      switch, and the git stack auto-deploy switch. The
-      container Health sensor is enabled by default — it is only ever
-      created when the container has a Docker healthcheck configured, so
-      it is never permanently unavailable. The container Image sensor was
-      removed in 1.6.0 (image name is an attribute on the State sensor).
-      Note: the container resource stats sensors (CPU usage, memory usage,
-      memory usage %, memory limit, network in, network out, disk read,
-      disk write) are a stronger case than "disabled by default" — they
-      are not created at all unless "Enable container and stack stats" is on, same
-      pattern as enable_images/enable_volumes/enable_networks, so turning
-      the option off removes them via the existing cleanup system rather
-      than just leaving them disabled in the registry.
+      Niche, verbose or destructive entities are disabled by default, all
+      listed in entity_defaults.py's OPTIONAL_ENTITIES by device kind:
+      vulnerability scanning, activity events and disk usage (with their
+      parts), vulnerability counts, the prune buttons, pinned-digest and held
+      update counts, the Hawser and host info sensors, a container's Docker
+      event entity, Pause button and auto-update switch, and a git stack's
+      auto-deploy switch. Configure's bulk sections turn a type on for every
+      device. The container Health sensor is enabled: it only exists when the
+      container has a healthcheck. The container and stack resource stats,
+      images, volumes, networks, schedules and runtime controls go further:
+      they aren't created at all unless their option is on, so turning it off
+      removes them through the cleanup.
 
   entity-translations:
     status: done
@@ -447,14 +442,13 @@ rules:
   icon-translations:
     status: done
     comment: >
-      icons.json provides MDI icons for all sensor, binary_sensor, button,
-      switch, number, and select entities via _attr_translation_key. Includes
-      state-specific icons for container State (running/stopped/paused), Health
-      (healthy/unhealthy/starting), and Stack Status (running/partial/stopped).
-      The update platform intentionally has no icon entry — HA's frontend always
-      displays the integration icon for update entities regardless of icons.json,
-      matching standard HA behavior. Per the quality scale docs, icons should not
-      override the platform default when context is identical.
+      icons.json provides MDI icons for every sensor, binary_sensor, button,
+      switch, number, select and event entity via _attr_translation_key, with
+      state-specific icons where the state changes the meaning (container
+      State and Health, stack Status, Online, connection type, settings
+      switches). The update platform has no icon entry: Home Assistant's
+      frontend shows the integration icon for update entities whatever
+      icons.json says.
 
   reconfiguration-flow:
     status: done
@@ -470,9 +464,13 @@ rules:
       the condition clears): fetch_failed_top_level and fetch_failed_env when
       part of a poll keeps failing (naming the resources affected, so users
       see why some entities are unavailable); runtime_update_warning when
-      Dockhand returns warnings for a live resource-limit change; and
+      Dockhand returns warnings for a live resource-limit change;
       runtime_memory_reverted when lowering a memory limit stopped the
-      container and the integration put the previous limit back.
+      container and the integration put the previous limit back;
+      event_collection_poll while Dockhand polls for Docker events instead of
+      streaming them; and retired_entities_automation and
+      retired_entities_script, one per automation or script still using an
+      entity a release replaced, linking to its editor (retired.py).
 
   stale-devices:
     status: done
