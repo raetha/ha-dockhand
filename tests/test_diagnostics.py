@@ -30,9 +30,22 @@ SECRET_LABELS = {
 
 FAST_DATA = {
     1: {
-        "stats": {"name": "MyHost", "online": True, "connectionType": "local"},
+        "stats": {
+            "name": "MyHost",
+            "host": "myhost.lan",
+            "online": True,
+            "connectionType": "local",
+        },
         "containers": [
-            {"id": "c1", "name": "web", "labels": SECRET_LABELS},
+            {
+                "id": "c1",
+                "name": "web",
+                "labels": SECRET_LABELS,
+                "networks": {"proxy": {"ipAddress": "172.20.0.5"}},
+                "mounts": [
+                    {"type": "bind", "source": "/home/me/web", "destination": "/data"}
+                ],
+            },
             {"id": "c2", "name": "nginx", "labels": {}},
         ],
         "stacks": [{"name": "myapp", "status": "running"}],
@@ -52,9 +65,30 @@ SLOW_DATA = {
             "images": [{"id": "sha256:abc", "labels": {"org.label": "x"}}],
             "networks": [],
             "volumes": [],
+            "host": {
+                "hostname": "myhost",
+                "ipAddress": "192.168.1.5",
+                "platform": "Linux",
+            },
+            "env_meta": {"connectionHost": "myhost.lan", "connectionPort": 2376},
+            "git_stacks": [
+                {
+                    "stackName": "myapp",
+                    "repository": {"url": "https://token@git.example/me/r.git"},
+                }
+            ],
+            "recent_events": [
+                {
+                    "containerName": "web",
+                    "action": "start",
+                    "actorAttributes": SECRET_LABELS,
+                }
+            ],
         }
     },
-    "schedules": [],
+    "schedules": [
+        {"id": 1, "name": "x", "lastExecution": {"logs": "cloning https://token@git"}}
+    ],
 }
 
 
@@ -120,7 +154,8 @@ async def test_api_token_is_redacted(hass: HomeAssistant):
     entry = _make_entry_with_runtime_data()
     result = await async_get_config_entry_diagnostics(hass, entry)
     assert result["config_entry"]["api_token"] == REDACTED
-    assert result["config_entry"]["api_url"] == "http://dh.test:3000"
+    # The host goes; how Home Assistant reaches Dockhand stays.
+    assert result["config_entry"]["api_url"] == f"http://{REDACTED}:3000"
 
 
 async def test_labels_redacted_from_coordinator_data(hass: HomeAssistant):
@@ -134,6 +169,43 @@ async def test_labels_redacted_from_coordinator_data(hass: HomeAssistant):
     slow_dump = result["coordinator"]["slow"]["data"]
     image = slow_dump["environments"][1]["images"][0]
     assert image["labels"] == REDACTED
+    # Docker events carry the same labels as actor attributes.
+    event = slow_dump["environments"][1]["recent_events"][0]
+    assert event["actorAttributes"] == REDACTED
+    assert event["action"] == "start"
+
+
+async def test_addresses_and_credentials_redacted(hass: HomeAssistant):
+    """Diagnostics get attached to public bug reports: the user's hosts,
+    addresses and paths, git URLs and schedule logs stay out."""
+    entry = _make_entry_with_runtime_data()
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    fast_env = result["coordinator"]["fast"]["data"]["environments"][1]
+    assert fast_env["stats"]["host"] == REDACTED
+    container = fast_env["containers"][0]
+    assert container["networks"]["proxy"]["ipAddress"] == REDACTED
+    assert container["mounts"][0]["source"] == REDACTED
+    assert container["mounts"][0]["destination"] == "/data"
+    slow = result["coordinator"]["slow"]["data"]
+    env = slow["environments"][1]
+    assert env["host"]["hostname"] == REDACTED
+    assert env["host"]["ipAddress"] == REDACTED
+    assert env["host"]["platform"] == "Linux"
+    assert env["env_meta"] == {"connectionHost": REDACTED, "connectionPort": 2376}
+    assert env["git_stacks"][0]["repository"]["url"] == REDACTED
+    assert slow["schedules"][0]["lastExecution"]["logs"] == REDACTED
+    # The source data itself is untouched.
+    assert FAST_DATA[1]["stats"]["host"] == "myhost.lan"
+
+
+async def test_api_url_without_a_host_is_redacted_whole(hass: HomeAssistant):
+    entry = _make_entry_with_runtime_data()
+    entry.data = {"api_url": "not a url", "api_token": "x"}
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    assert result["config_entry"]["api_url"] == REDACTED
+    entry.data = {"api_token": "x"}
+    result = await async_get_config_entry_diagnostics(hass, entry)
+    assert result["config_entry"]["api_url"] is None
 
 
 async def test_environment_secrets_redacted_from_coordinator_data(
