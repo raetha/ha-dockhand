@@ -12,8 +12,9 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 6. **Workflows:** `contents: read` at the top, write only on the jobs that release or push; actions pinned to commit SHAs; no `${{ }}` expansions inside `run:` scripts; no secrets used on pull requests (`tests/test_workflows.py` checks the first three).
 7. **Entity model:** re-read Home Assistant's current entity guidance ("State and attributes", the entity naming and category pages on developers.home-assistant.io) and walk every entity against it and [architecture.md](architecture.md) §12: values that change on their own are their own sensors, not attributes; static facts in device info; attributes always present; nothing that changes on every poll in an attribute or a recorded state; names from the device, not a `name` attribute. Note new guidance in §12, and fix or propose what drifted (renaming a `translation_key` breaks the cards, so a conversion changes both repositories together).
 8. **Tests and tooling:** sample data in `tests/` shaped like Dockhand's (checked against Dockhand's source and `tests/fixtures/dockhand_environment.json`, which is refreshed from a new sanitized diagnostics download when Dockhand's responses change); test files use `tests/conftest.py`'s helpers rather than their own; nothing still tests removed behavior; `scripts/` still match the code. Comments in the code, tests and scripts explain why, never history.
-9. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
-10. **Record it:** a dated section below, and changelog lines for anything users notice.
+9. **Performance:** measure, don't just read. `DOCKHAND_BENCH=1 .venv/bin/pytest tests/test_poll_benchmark.py -s --no-cov` times one poll's listeners on a large host (`DOCKHAND_BENCH_COPIES` sets its size) and prints the slowest of the integration's functions; look for work that grows faster than the containers do, and for work every poll repeats that could be skipped. Also the requests per poll and how often each coordinator refreshes.
+10. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
+11. **Record it:** a dated section below, and changelog lines for anything users notice.
 
 ## 2026-11-15: final review for 2.0.0
 
@@ -22,6 +23,7 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 - Quality scale release review recorded in `docs/quality-scale.md`; five `quality_scale.yaml` comments were stale.
 - Tests and tooling (the new checklist item): reviewed today with the cleanup; nothing further.
 - Changelog re-read as release notes: an outage removed stacks and images, not "image devices"; the manifest line moved below the features.
+- Missed, then found through #96: the checklist had no performance item and the review read the code rather than measuring it. Profiling a poll showed each entity scanning its environment's container list (containers × entities per poll) and the registry cleanup walking every device and entity on every poll; both fixed in #97 (0.38 s to 0.18 s per poll at 384 containers). The benchmark is now `tests/test_poll_benchmark.py`, and item 9 above runs it. Still built every poll: entity objects for entities that already exist, about a fifth of what remains, left as is since skipping them needs each platform's unique IDs before building.
 
 ## 2026-11-14: review before releasing 2.0.0
 
