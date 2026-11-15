@@ -84,16 +84,11 @@ def test_section_url_empty_base_returns_none():
 
 
 def test_section_url_strips_leading_and_trailing_whitespace():
-    """Regression test: a base_url with incidental leading/trailing
-    whitespace (e.g. from copy-pasting into the config flow's URL field)
-    used to produce a URL with a literal space embedded right before the
-    path segment (" http://host:3000 /containers") — invalid enough that
-    both new URL() and window.open() reject it outright in a browser,
-    silently breaking every "open in Dockhand" link this integration
-    sets with no visible error anywhere. The config flow now also strips
-    this at entry (see test_config_flow.py), but this defends existing
-    stored config entries that predate that fix too, since every
-    _*_url() helper in this file routes through _section_url."""
+    """A base URL stored with surrounding whitespace still gives valid
+    links: a space before the path breaks every "open in Dockhand" link
+    in the browser. The config flow strips it too (test_config_flow.py);
+    this covers entries saved before that, since every _*_url() helper
+    goes through _section_url."""
     assert (
         _section_url(" http://dh.test:3000 ", "containers")
         == "http://dh.test:3000/containers"
@@ -349,14 +344,8 @@ def test_sched_device_via_schedules_hub(mock_dr):
 
 
 def test_sched_device_env_scoped_name_uses_environment_prefix():
-    """Regression test: shipped bug in initial 1.9.0 device-hierarchy work —
-    via_device was made conditional on environment_id, but name was left
-    hardcoded to always start with "Dockhand", so every env-scoped schedule
-    device showed a misleading name even though it was correctly parented
-    under its own environment's group. Caught after release via a real
-    device name in a live instance; the original tests above never passed
-    environment_id/environment_name at all, so this branch had zero
-    coverage."""
+    """An environment's schedule device is named after the environment,
+    not "Dockhand", and sits under that environment's group."""
     info = _sched_device(
         None,
         ENTRY_ID,
@@ -408,12 +397,8 @@ def test_sched_device_env_scoped_falls_back_when_name_missing():
 
 
 def test_ensure_env_devices_schedule_name_uses_environment_prefix(hass):
-    """Integration-level companion to the _sched_device unit tests above —
-    confirms the fix actually propagates through _ensure_env_devices()
-    (the real call site, not just the factory in isolation). This is the
-    level the original bug shipped at: _sched_device()'s own unit tests
-    never exercised the env-scoped branch, but neither did any test at
-    this level, so the gap was actually two-layers deep."""
+    """The same through _ensure_env_devices(), the call site that
+    registers the devices."""
     entry = _make_entry(hass)
     schedules = [
         {
@@ -661,16 +646,9 @@ def _device_by_id_suffix(hass, entry, id_suffix: str):
 
 
 def test_ensure_env_devices_stack_model_reflects_source_type(hass):
-    """Regression test: _ensure_env_devices() is a SEPARATE device-
-    registration path from _stack_device()/BaseFastStackSensor's
-    device_info — it runs unconditionally on every coordinator update,
-    calling registry.async_get_or_create() directly, rather than going
-    through an entity at all. These two paths drifted out of sync once
-    already (this one kept a hardcoded generic "Stack" after
-    _stack_device() was updated to use sourceType), silently overwriting
-    the correct model within about one poll cycle of every reload — a
-    real bug shipped before being caught. This locks in that both stay
-    in sync."""
+    """_ensure_env_devices() registers stack devices on every update,
+    separately from the entities' device_info (_stack_device()): both
+    must give the same model, or each poll would overwrite the other's."""
     entry = _make_entry(hass)
     stacks = [{"name": "myapp", "sourceType": "git"}]
     _ensure_env_devices(
@@ -705,13 +683,8 @@ def test_ensure_env_devices_stack_model_untracked_when_source_type_absent(hass):
 
 
 def test_ensure_env_devices_stack_model_survives_repeated_calls(hass):
-    """The actual shape of the bug: _ensure_env_devices() is called on
-    every coordinator update (fast AND slow), not just once at entity
-    add time. A second call with the same (correct) data must not
-    regress the model — this is what would have caught the real bug,
-    since the hardcoded "Stack" value would have shown up on the very
-    next call after the first one happened to look right by coincidence
-    of call order."""
+    """_ensure_env_devices() runs on every coordinator update, so a second
+    call with the same data keeps the model the first one set."""
     entry = _make_entry(hass)
     stacks = [{"name": "myapp", "sourceType": "git"}]
     for _ in range(3):
@@ -1046,11 +1019,9 @@ def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
 
 
 def test_stack_has_system_container_true_when_member_is_system():
-    """stack['containers'] is a list of container IDs, not names —
-    confirmed from Dockhand's own source (stacks.ts populates it from a
-    Set matched against container.id). Using names here was a real bug
-    that shipped: this check silently never matched anything, for any
-    stack, ever, since IDs and names never overlap in practice."""
+    """stack['containers'] lists container IDs, not names (Dockhand's
+    stacks.ts fills it from container.id), so membership is checked by
+    ID."""
     stack = {"name": "infra", "containers": ["id-dockhand", "id-web"]}
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"},
@@ -1132,13 +1103,10 @@ def test_container_has_pending_update_false_for_no_container_id():
 
 
 def test_container_has_pending_update_ignores_stale_tier2_entry():
-    """The core staleness fix: a Tier 2 entry keyed under an id the
-    container no longer has (left over from before it was recreated by
-    an update) must not count — looking it up by the container's
-    *current* id makes a stale entry simply invisible, rather than
-    needing to be explicitly detected and discarded. Real bug: this
-    used to be a name-based scan, which kept a resolved update looking
-    pending for up to Tier 2's full poll interval."""
+    """A Tier 2 entry under an ID the container no longer has (from before
+    an update recreated it) doesn't count: looking up the container's
+    current ID leaves it out, where a lookup by name would keep a finished
+    update pending until Tier 2's next poll."""
     container = {"id": "id-web-new"}  # recreated since Tier 2 last ran
     update_env_data = {"id-web-old": {"containerName": "web", "hasUpdate": True}}
     assert _container_has_pending_update(container, set(), update_env_data) is False
@@ -1254,20 +1222,12 @@ def test_actionable_pending_update_container_ids_skips_containers_without_id():
 # explicit null, and a single accessor shared by all three coordinators
 # ---------------------------------------------------------------------------
 #
-# The actual bug (github.com/raetha/ha-dockhand/issues/20, and a live crash
-# reported in this same session): `dict.get(key, default)` only supplies
-# `default` when `key` is *absent*. If Dockhand's API sends that key present
-# with an explicit `null` — which it does for optional/runtime data, not
-# just when a value is omitted — `.get(key, {})` returns that `None`, and
-# the next chained `.get()`/`.items()`/`.values()` call crashes with
-# `AttributeError: 'NoneType' object has no attribute '...'`. These helpers
-# use `or` instead, which correctly substitutes the default for both cases.
-#
-# _coordinator_env and _all_envs were originally two pairs of near-identical
-# functions (_fast_env/_slow_env for the single-environment case) — merged
-# once the fast, slow, and update coordinators all ended up sharing the same
-# {"environments": {env_id: {...}}} top-level shape, since there was nothing
-# left for two separate functions to document that a shared one couldn't.
+# Dockhand sends some keys present but null rather than absent
+# (github.com/raetha/ha-dockhand/issues/20), and `dict.get(key, {})` only
+# supplies the default for an absent key: the next `.get()` would raise
+# AttributeError on None. These helpers use `or` instead, which covers both.
+# The fast, slow and update coordinators share one shape,
+# {"environments": {env_id: {...}}}, so one accessor serves all three.
 
 
 def test_coordinator_env_missing_key_entirely():
@@ -1276,14 +1236,12 @@ def test_coordinator_env_missing_key_entirely():
 
 
 def test_coordinator_env_environments_key_explicitly_null():
-    """The exact shape of the reported bug: "environments" present but
-    null, not absent."""
+    """ "environments" present but null, not absent."""
     assert _coordinator_env({"environments": None}, 1) == {}
 
 
 def test_coordinator_env_specific_env_id_explicitly_null():
-    """The exact shape of the live crash this session: an environment's
-    slice of coordinator data present but null."""
+    """An environment's slice of coordinator data present but null."""
     assert _coordinator_env({"environments": {1: None, 2: {"host": {}}}}, 1) == {}
 
 

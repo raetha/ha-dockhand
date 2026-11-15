@@ -17,6 +17,8 @@ from custom_components.dockhand.sensor import (
     DockhandStackStatusSensor,
 )
 
+from .conftest import container, fast_coordinator
+
 BLUE = tags.TAG_HEX["blue"]
 RED = tags.TAG_HEX["red"]
 SLATE = tags.TAG_HEX["slate"]
@@ -105,12 +107,7 @@ def test_attributes():
 # Read on the slow schedule by the fast coordinator
 # --------------------------------------------------------------------------- #
 
-WEB = {
-    "id": "a",
-    "name": "web",
-    "state": "running",
-    "labels": {"dockhand.tags": "edge:red"},
-}
+WEB = container("web", id="a", labels={"dockhand.tags": "edge:red"})
 STACK = {"name": "app", "status": "running", "containers": ["a"]}
 
 
@@ -189,10 +186,8 @@ async def test_without_tag_support_only_labels_show(hass: HomeAssistant):
 
 
 def _fast_data() -> MagicMock:
-    coord = MagicMock()
-    coord.last_update_success = True
-    coord.data = {
-        "environments": {
+    return fast_coordinator(
+        {
             1: {
                 "stats": {},
                 "containers": [WEB],
@@ -201,8 +196,7 @@ def _fast_data() -> MagicMock:
                 "stack_tags": {"app": [{"name": "critical", "color": RED}]},
             }
         }
-    }
-    return coord
+    )
 
 
 @pytest.mark.parametrize(

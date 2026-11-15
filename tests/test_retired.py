@@ -21,6 +21,8 @@ from custom_components.dockhand.retired import (
 
 from .test_config_flow import LEGACY_ENTRY_DATA, _patch_full_setup
 
+from .conftest import config_entry
+
 
 def _user(
     entity_id: str,
@@ -174,10 +176,11 @@ async def test_repair_ignores_other_entries_and_entities(hass: HomeAssistant):
 
 
 async def test_checked_at_start_and_on_automation_reload(hass: HomeAssistant):
-    entry = MockConfigEntry(
-        domain=DOMAIN, data={**LEGACY_ENTRY_DATA, "api_token": "t"}, title="x"
+    entry = config_entry(
+        hass,
+        data={**LEGACY_ENTRY_DATA, "api_token": "t"},
+        title="x",
     )
-    entry.add_to_hass(hass)
     with (
         _patch_full_setup(),
         patch("custom_components.dockhand.async_check_retired_entities") as check,

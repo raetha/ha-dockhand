@@ -23,6 +23,8 @@ from custom_components.dockhand.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
+from .conftest import fast_coordinator, slow_coordinator, update_coordinator
+
 SECRET_LABELS = {
     "com.docker.compose.project": "myapp",
     "traefik.http.middlewares.auth.basicauth.users": "admin:$apr1$secret",
@@ -56,12 +58,6 @@ FAST_DATA = {
 SLOW_DATA = {
     "environments": {
         1: {
-            "env": {
-                "id": 1,
-                "name": "MyHost",
-                "tlsKey": "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
-                "hawserToken": "hawser_plaintext_secret_token",
-            },
             "images": [{"id": "sha256:abc", "labels": {"org.label": "x"}}],
             "networks": [],
             "volumes": [],
@@ -69,6 +65,12 @@ SLOW_DATA = {
                 "hostname": "myhost",
                 "ipAddress": "192.168.1.5",
                 "platform": "Linux",
+                "environment": {
+                    "id": 1,
+                    "name": "MyHost",
+                    "tlsKey": "-----BEGIN PRIVATE KEY-----\nsecret\n-----END PRIVATE KEY-----",
+                    "hawserToken": "hawser_plaintext_secret_token",
+                },
             },
             "env_meta": {"connectionHost": "myhost.lan", "connectionPort": 2376},
             "git_stacks": [
@@ -97,15 +99,8 @@ def _make_entry_with_runtime_data() -> MagicMock:
     entry.data = {"api_url": "http://dh.test:3000", "api_token": "dh_secret"}
     entry.options = {}
 
-    fast = MagicMock()
-    fast.data = {"environments": FAST_DATA}
-    fast.last_update_success = True
-    fast.last_exception = None
-
-    slow = MagicMock()
-    slow.data = SLOW_DATA
-    slow.last_update_success = True
-    slow.last_exception = None
+    fast = fast_coordinator(FAST_DATA, last_exception=None)
+    slow = slow_coordinator(**SLOW_DATA, attrs={"last_exception": None})
 
     entry.runtime_data.fast_coordinator = fast
     entry.runtime_data.slow_coordinator = slow
@@ -114,17 +109,11 @@ def _make_entry_with_runtime_data() -> MagicMock:
 
 
 def _make_entry_with_update_coordinator() -> MagicMock:
-    """Same as _make_entry_with_runtime_data, but with a real update
-    coordinator present — the update_summary computation had zero test
-    coverage before this, which is exactly how the update coordinator's
-    reshape (wrapping .data in "environments", same as fast/slow) broke
-    it silently: iterating the old flat shape's top level now just
-    iterated a single bogus "environments" key instead of real
-    per-environment data, and nothing caught it."""
+    """Same as _make_entry_with_runtime_data, with the update coordinator's
+    results too, which the update summary adds up per environment."""
     entry = _make_entry_with_runtime_data()
-    update = MagicMock()
-    update.data = {
-        "environments": {
+    update = update_coordinator(
+        {
             1: {
                 "c1": {"containerId": "c1", "hasUpdate": True},
                 "c2": {"containerId": "c2", "hasUpdate": False},
@@ -137,15 +126,14 @@ def _make_entry_with_update_coordinator() -> MagicMock:
                     "newerVersion": {"tag": "v1.0.56", "source": "self-update"},
                 },
             }
-        }
-    }
+        },
+        last_exception=None,
+    )
     update.self_update = {
         "env_id": 1,
         "container_id": "dh",
         "newerVersion": {"tag": "v1.0.56", "source": "self-update"},
     }
-    update.last_update_success = True
-    update.last_exception = None
     entry.runtime_data.update_coordinator = update
     return entry
 
@@ -211,14 +199,15 @@ async def test_api_url_without_a_host_is_redacted_whole(hass: HomeAssistant):
 async def test_environment_secrets_redacted_from_coordinator_data(
     hass: HomeAssistant,
 ):
-    """Dockhand's own GET /api/environments returns tlsKey and hawserToken
-    fully decrypted with no redaction on its side — our slow coordinator
-    stores that response verbatim, so we must redact these ourselves or
-    they'd end up in a diagnostics dump attached to a public bug report."""
+    """Dockhand's GET /api/environments returns tlsKey and hawserToken
+    decrypted, and /api/host carries the environment too: wherever they
+    turn up in coordinator data, diagnostics posted in a public issue must
+    not show them."""
     entry = _make_entry_with_runtime_data()
     result = await async_get_config_entry_diagnostics(hass, entry)
 
-    env = result["coordinator"]["slow"]["data"]["environments"][1]["env"]
+    slow = result["coordinator"]["slow"]["data"]["environments"][1]
+    env = slow["host"]["environment"]
     assert env["tlsKey"] == REDACTED
     assert env["hawserToken"] == REDACTED
     assert env["name"] == "MyHost"  # non-secret fields survive

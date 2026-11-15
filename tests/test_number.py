@@ -36,6 +36,8 @@ from custom_components.dockhand.coordinator import (
     DockhandSlowCoordinator,
 )
 
+from .conftest import container, fast_coordinator, slow_coordinator
+
 ENV_ID = 1
 ENTRY_ID = "test_entry_id_number"
 ENV_NAME = "myenv"
@@ -43,24 +45,13 @@ BASE_URL = "http://dh.test:3000"
 CONTAINER_NAME = "nginx"
 CONTAINER_ID = "abc123"
 
-CONTAINER_STANDALONE = {
-    "id": CONTAINER_ID,
-    "name": CONTAINER_NAME,
-    "state": "running",
-    "labels": {},
-}
-CONTAINER_COMPOSE = {
-    "id": "def456",
-    "name": "compose-web",
-    "state": "running",
-    "labels": {"com.docker.compose.project": "myapp"},
-}
+CONTAINER_STANDALONE = container(CONTAINER_NAME, id=CONTAINER_ID)
+CONTAINER_COMPOSE = container("compose-web", stack="myapp", id="def456")
 
 
 def _make_fast_coord(containers=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {
-        "environments": {
+    coord = fast_coordinator(
+        {
             ENV_ID: {
                 "stats": {"name": ENV_NAME},
                 "containers": containers
@@ -68,25 +59,19 @@ def _make_fast_coord(containers=None) -> MagicMock:
                 else [CONTAINER_STANDALONE],
             }
         }
-    }
-    coord.client = MagicMock()
-    coord.client.async_update_container_runtime = AsyncMock(
-        return_value={"success": True, "warnings": []}
     )
-    coord.last_update_success = True
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
+    coord.client.async_update_container_runtime.return_value = {
+        "success": True,
+        "warnings": [],
+    }
     return coord
 
 
 def _make_slow_coord(runtime_config=None, fetch_failures=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandSlowCoordinator)
     env_data = {"runtime_config": runtime_config or {}}
     if fetch_failures is not None:
         env_data["fetch_failures"] = fetch_failures
-    coord.data = {"environments": {ENV_ID: env_data}}
-    coord.last_update_success = True
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
+    return slow_coordinator({ENV_ID: env_data})
 
 
 def _make_memory_entity(runtime_config=None, containers=None):
@@ -191,11 +176,9 @@ def test_memory_available_when_runtime_config_fetch_succeeded():
 
 
 def test_memory_unavailable_when_runtime_config_fetch_failed():
-    """A swallowed runtime_config fetch failure used to show whatever the
-    last-known limit was (or None) with no indication it might be stale —
-    indistinguishable from a genuinely just-inspected container. Now the
-    entity goes unavailable instead, same reasoning as the vulnerabilities/
-    host sensors in test_entities.py."""
+    """A failed runtime_config fetch makes the limit unavailable rather
+    than showing the last value as if just read (as the vulnerabilities
+    and host sensors do)."""
     fast = _make_fast_coord()
     slow = _make_slow_coord({}, fetch_failures={"runtime_config"})
     entity = DockhandContainerMemoryLimitNumber(

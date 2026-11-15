@@ -25,6 +25,8 @@ from custom_components.dockhand.switch import (
     DockhandEnvSettingSwitch,
 )
 
+from .conftest import fast_coordinator, slow_coordinator
+
 ENV_ID = 1
 STATS = {
     "collectActivity": True,
@@ -45,22 +47,13 @@ SETTINGS = {
 def _coordinators(
     settings: dict[str, Any] | None = None, stats: dict | None = None
 ) -> tuple[MagicMock, MagicMock]:
-    fast = MagicMock()
-    fast.data = {
-        "environments": {ENV_ID: {"stats": dict(STATS if stats is None else stats)}}
-    }
-    fast.last_update_success = True
-    fast.async_request_refresh = AsyncMock()
-    slow = MagicMock()
-    slow.data = {
-        "environments": {
-            ENV_ID: {"settings": SETTINGS if settings is None else settings}
-        },
-        "scanner_default": "trivy",
-    }
-    slow.last_update_success = True
-    slow.async_refresh_env_settings = AsyncMock()
-    slow.async_refresh_scanner_default = AsyncMock()
+    fast = fast_coordinator(
+        {ENV_ID: {"stats": dict(STATS if stats is None else stats)}}
+    )
+    slow = slow_coordinator(
+        {ENV_ID: {"settings": SETTINGS if settings is None else settings}},
+        scanner_default="trivy",
+    )
     return fast, slow
 
 

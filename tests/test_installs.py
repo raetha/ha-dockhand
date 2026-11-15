@@ -20,6 +20,8 @@ from custom_components.dockhand.installs import (
     summarize_failures,
 )
 
+from .conftest import fast_coordinator, update_coordinator
+
 ENV = 1
 
 
@@ -59,11 +61,8 @@ def _installer(hass: HomeAssistant, tier2: bool = True):
     # By default every container in the job is updated.
     client.finished = lambda job_id: _done(*(_line(c, "done") for c in started[job_id]))
     client.async_get_job = AsyncMock(side_effect=client.finished)
-    fast = MagicMock()
-    fast.async_refresh_environment = AsyncMock()
-    update = MagicMock() if tier2 else None
-    if update is not None:
-        update.async_check_environment = AsyncMock()
+    fast = fast_coordinator()
+    update = update_coordinator() if tier2 else None
     return DockhandInstaller(hass, "entry", client, fast, update), client, fast, update
 
 

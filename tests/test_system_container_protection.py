@@ -26,13 +26,15 @@ from custom_components.dockhand.number import async_setup_entry as number_setup
 from custom_components.dockhand.select import async_setup_entry as select_setup
 from custom_components.dockhand.switch import async_setup_entry as switch_setup
 
+from .conftest import container, fast_coordinator, slow_coordinator
+
 ENV_ID = 1
 ENTRY_ID = "test_entry_id_system"
 ENV_NAME = "myenv"
 BASE_URL = "http://dh.test:3000"
 
-CONTAINER_NORMAL = {"name": "web", "id": "abc", "systemContainer": None}
-CONTAINER_SYSTEM = {"name": "dockhand", "id": "def", "systemContainer": "dockhand"}
+CONTAINER_NORMAL = container("web", id="abc")
+CONTAINER_SYSTEM = container("dockhand", id="def", systemContainer="dockhand")
 
 # NOTE: stack["containers"] is a list of container IDs, not names —
 # confirmed from Dockhand's own source. Must match CONTAINER_NORMAL/
@@ -46,21 +48,16 @@ STACK_WITH_SYSTEM = {
 
 
 def _make_entry(containers, stacks) -> MagicMock:
-    fast = MagicMock()
-    fast.data = {
-        "environments": {
+    fast = fast_coordinator(
+        {
             ENV_ID: {
                 "stats": {"name": ENV_NAME},
                 "containers": containers,
                 "stacks": stacks,
             }
         }
-    }
-    fast.async_add_listener = MagicMock(return_value=lambda: None)
-
-    slow = MagicMock()
-    slow.data = {}
-    slow.async_add_listener = MagicMock(return_value=lambda: None)
+    )
+    slow = slow_coordinator()
 
     entry = MagicMock()
     entry.entry_id = ENTRY_ID
@@ -169,21 +166,16 @@ async def test_button_creates_stack_restart_button_for_normal_stack(hass):
 
 
 def _make_runtime_control_entry(containers) -> MagicMock:
-    fast = MagicMock()
-    fast.data = {
-        "environments": {
+    fast = fast_coordinator(
+        {
             ENV_ID: {
                 "stats": {"name": ENV_NAME},
                 "containers": containers,
                 "stacks": [],
             }
         }
-    }
-    fast.async_add_listener = MagicMock(return_value=lambda: None)
-
-    slow = MagicMock()
-    slow.data = {"environments": {ENV_ID: {"host": {}, "runtime_config": {}}}}
-    slow.async_add_listener = MagicMock(return_value=lambda: None)
+    )
+    slow = slow_coordinator({ENV_ID: {"host": {}, "runtime_config": {}}})
 
     entry = MagicMock()
     entry.entry_id = ENTRY_ID

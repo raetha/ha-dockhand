@@ -27,6 +27,8 @@ from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.api import DockhandAuthError
+
+from .conftest import fast_coordinator, patch_setup, slow_coordinator
 from custom_components.dockhand.config_flow import _options_schema
 from custom_components.dockhand.const import SCHEMA_MINOR_VERSION, SCHEMA_VERSION
 
@@ -75,30 +77,18 @@ def _patch_client(probe_side_effect=None):
 
 @contextlib.contextmanager
 def _patch_full_setup(fast_data: dict | None = None, slow_data: dict | None = None):
-    """Patch everything needed for async_setup_entry to succeed without
-    network access, with the coordinators holding the data given."""
-    fast = MagicMock()
+    """Set an entry up without network access, with the coordinators
+    holding the data given (one empty environment by default)."""
+    fast = fast_coordinator()
     fast.data = fast_data or {
         "environments": {
             1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}
         }
     }
-    fast.async_config_entry_first_refresh = AsyncMock()
-    fast.async_add_listener = MagicMock(return_value=lambda: None)
-    slow = MagicMock()
-    slow.data = slow_data or {"environments": {}, "schedules": []}
-    slow.last_update_success = True
-    slow.async_config_entry_first_refresh = AsyncMock()
-    slow.async_add_listener = MagicMock(return_value=lambda: None)
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    slow = slow_coordinator()
+    if slow_data is not None:
+        slow.data = slow_data
+    with patch_setup(fast, slow):
         yield
 
 
@@ -131,11 +121,9 @@ async def test_step_user_no_auth_creates_entry(hass: HomeAssistant):
 
 
 async def test_step_user_strips_whitespace_from_api_url(hass: HomeAssistant):
-    """Regression test: a URL with incidental leading/trailing whitespace
-    (e.g. from copy-pasting) used to get stored verbatim, silently
-    breaking every "open in Dockhand" link this integration ever set —
-    see test_helpers.py's identical regression test for the mechanism.
-    The stored entry, not just the unique_id, needs the clean value."""
+    """A URL pasted with surrounding whitespace is stored without it, in
+    the entry as well as its unique ID: every "open in Dockhand" link is
+    built from it (test_helpers.py covers the links themselves)."""
     result = await hass.config_entries.flow.async_init(
         "dockhand", context={"source": "user"}
     )
@@ -709,25 +697,15 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
 
 # ---------------------------------------------------------------------------
 # strings.json / translations coverage: every schema field must resolve to
-# a real, non-empty label — a missing translation key doesn't error
-# anywhere, it just silently falls back to showing the raw snake_case
-# config key in the UI. These tests can only verify that strings.json has
-# non-empty values at the right JSON paths, not that HA's frontend actually
-# renders them correctly — that distinction mattered for real: an attempt
-# to group the update options
-# via HA's section() helper (briefly, in an unreleased 1.8.1 dev cycle) kept
-# rendering the fields inside the section as raw config keys with no text no
-# matter how the translation JSON was structured, and was reverted — see
-# docs/backlog.md. What these tests reliably do catch is a schema field with
-# no strings.json entry at all, or a locale silently missing/emptying one —
-# which is exactly what caught the second bug below.
+# a real, non-empty label. A missing translation key raises nothing; the
+# form just shows the raw config key. These tests prove the strings exist
+# at the right paths, not that the frontend renders them (fields inside a
+# section() didn't, whatever the strings: see docs/backlog.md), so layout
+# changes still need a look in a real Home Assistant.
 #
-# _options_schema() backs TWO step_ids — config.step.setup_options (first-time
-# setup) and options.step.init (Configure, reused later) — so both need their
-# own full copy of the translations, and both are checked below. They drifted
-# apart for real once already: config.step.setup_options was still showing
-# the pre-1.8.0 "enable_updates" key and was missing enable_runtime_controls/
-# enable_resource_stats entirely, undetected until this test existed.
+# _options_schema() backs two step IDs, config.step.setup_options (first
+# setup) and options.step.init (Configure), each with its own copy of the
+# translations, and both are checked.
 # ---------------------------------------------------------------------------
 
 _OPTIONS_SCHEMA_STEP_PATHS = [

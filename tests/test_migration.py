@@ -540,19 +540,12 @@ def test_container_stats_option_untouched_when_nothing_enabled(hass: HomeAssista
 # migrate_1_8_0_reenable_container_stats_entities
 # ---------------------------------------------------------------------------
 #
-# Real, reported bug: a pre-1.8.0 container-stats entity can come back
-# still disabled once a user turns "Enable container stats" on — not our
-# own bug, but HA's own DeletedRegistryEntry mechanism, which restores a
-# recreated entity's prior disabled_by to preserve deliberate user
-# customizations across reloads/removals. It can't tell "the user
-# disabled this" apart from "this was only ever disabled by the
-# pre-1.8.0 default." The fix only touches entities disabled specifically
-# via RegistryEntryDisabler.INTEGRATION (never a user's own choice,
-# always a default) and leaves RegistryEntryDisabler.USER alone. A
-# genuine one-time migration, not a per-load reconciliation — within
-# 1.8.0's own architecture these entities are only ever created with
-# enabled_default=True, so there's no ongoing source of fresh
-# INTEGRATION-disabled entries to keep checking for.
+# A pre-1.8.0 container stats entity could come back still disabled once
+# "Enable container stats" was turned on: Home Assistant restores a
+# recreated entity's earlier disabled_by, and can't tell a user's choice
+# from the old default. The migration only re-enables entities disabled by
+# RegistryEntryDisabler.INTEGRATION (always a default) and leaves USER
+# alone. It runs once: 1.8.0 and later create these enabled.
 
 
 def test_reenables_container_stats_entity_disabled_by_integration(hass: HomeAssistant):
@@ -657,12 +650,9 @@ def test_container_stats_option_ignores_unrelated_entity(hass: HomeAssistant):
 
 
 def test_removes_retired_containers_size_entity(hass: HomeAssistant):
-    """Unique_id suffix verified against the actual released v1.7.4
-    source — this sensor's unique_id ("_containers_size") didn't match
-    its own translation_key ("containers_disk_usage"), which is exactly
-    what caused the real, reported bug: assuming they matched (like
-    build_cache_size's did) meant this specific entity was never
-    actually cleaned up."""
+    """This sensor's unique ID suffix ("_containers_size", as released in
+    1.7.4) differs from its translation key ("containers_disk_usage"),
+    so cleanup matches the suffix, not the key."""
     entry = _make_entry(hass)
     ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_containers_size")
     migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)

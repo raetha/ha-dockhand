@@ -42,6 +42,8 @@ from custom_components.dockhand.switch import (
     DockhandGitStackAutoUpdateSwitch,
 )
 
+from .conftest import fast_coordinator, slow_coordinator, stack
+
 ENV_ID = 1
 ENTRY_ID = "test_entry_id_git"
 ENV_NAME = "myenv"
@@ -60,27 +62,15 @@ GIT_STACK = {
 
 
 def _make_slow_coord(git_stacks=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandSlowCoordinator)
-    coord.data = {
-        "environments": {
-            ENV_ID: {
-                "git_stacks": git_stacks if git_stacks is not None else [GIT_STACK],
-            }
-        }
-    }
-    coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
-    return coord
+    return slow_coordinator(
+        {ENV_ID: {"git_stacks": git_stacks if git_stacks is not None else [GIT_STACK]}}
+    )
 
 
 def _make_fast_coord(containers=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {
-        "environments": {
-            ENV_ID: {"containers": containers if containers is not None else []}
-        }
-    }
-    return coord
+    return fast_coordinator(
+        {ENV_ID: {"containers": containers if containers is not None else []}}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,10 +148,8 @@ async def test_deploy_button_uses_git_stack_id():
 
 
 def _make_fast_coord_with_stack_status(status: str | None) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    stacks = [{"name": "myapp", "status": status}] if status is not None else []
-    coord.data = {"environments": {ENV_ID: {"containers": [], "stacks": stacks}}}
-    return coord
+    stacks = [stack("myapp", status=status)] if status is not None else []
+    return fast_coordinator({ENV_ID: {"containers": [], "stacks": stacks}})
 
 
 def test_deploy_button_name_is_deploy_when_stack_not_deployed():
@@ -330,12 +318,9 @@ def test_container_auto_update_off_when_absent_from_map():
 
 
 def test_container_auto_update_unavailable_when_fetch_failed():
-    """A swallowed auto_update_settings fetch failure used to show
-    whatever the last-known toggle state was — indistinguishable from a
-    genuinely just-fetched one, and specifically risky here since
-    absence-from-map already means "disabled": a failed fetch could look
-    identical to a real, confirmed disable. Now the entity goes
-    unavailable instead."""
+    """A failed auto_update_settings fetch makes the switch unavailable:
+    a container missing from the settings means "off", so the last state,
+    or an empty one, could pass for a confirmed change."""
     fast = _make_fast_coord(containers=[{"name": "web", "id": "abc"}])
     slow = _make_slow_coord()
     slow.data["environments"][ENV_ID]["auto_update_settings"] = {}

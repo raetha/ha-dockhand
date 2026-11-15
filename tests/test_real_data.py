@@ -30,6 +30,8 @@ from custom_components.dockhand.const import (
 )
 from custom_components.dockhand.entity_defaults import OPTIONAL_ENTITIES
 
+from .conftest import config_entry
+
 from .test_config_flow import _patch_full_setup
 
 FIXTURE = Path(__file__).parent / "fixtures" / "dockhand_environment.json"
@@ -73,8 +75,8 @@ def _coordinator_data() -> tuple[dict[str, Any], dict[str, Any]]:
 
 async def test_every_entity_has_a_state_from_real_data(hass: HomeAssistant):
     fast, slow = _coordinator_data()
-    entry = MockConfigEntry(
-        domain=DOMAIN,
+    entry = config_entry(
+        hass,
         title="Dockhand",
         version=SCHEMA_VERSION,
         minor_version=SCHEMA_MINOR_VERSION,
@@ -90,7 +92,6 @@ async def test_every_entity_has_a_state_from_real_data(hass: HomeAssistant):
             CONF_ENABLED_ENTITIES: {k: list(v) for k, v in OPTIONAL_ENTITIES.items()},
         },
     )
-    entry.add_to_hass(hass)
     with _patch_full_setup(fast, slow):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()

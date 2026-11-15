@@ -18,6 +18,8 @@ from custom_components.dockhand.select import (
     DockhandEventPollIntervalSelect,
 )
 
+from .conftest import fast_coordinator, slow_coordinator
+
 
 @pytest.fixture
 def api_client():
@@ -50,14 +52,12 @@ async def test_api_reads_and_writes_the_general_settings(api_client):
 
 
 def _fast(*connection_types: str) -> MagicMock:
-    fast = MagicMock()
-    fast.data = {
-        "environments": {
+    return fast_coordinator(
+        {
             env_id: {"stats": {"name": f"env{env_id}", "connectionType": kind}}
             for env_id, kind in enumerate(connection_types, start=1)
         }
-    }
-    return fast
+    )
 
 
 def _coordinator(
@@ -130,11 +130,7 @@ async def test_no_repair_without_a_config_entry(hass: HomeAssistant):
 
 
 def _slow(collection) -> MagicMock:
-    slow = MagicMock()
-    slow.data = {"event_collection": collection}
-    slow.last_update_success = True
-    slow.async_refresh_event_collection = AsyncMock()
-    return slow
+    return slow_coordinator(event_collection=collection)
 
 
 async def test_mode_select_on_the_dockhand_device():

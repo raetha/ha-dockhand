@@ -29,6 +29,8 @@ from custom_components.dockhand.events import (
     events_expected,
 )
 
+from .conftest import fast_coordinator
+
 
 def _fast_data(**stats) -> dict:
     return {"environments": {1: {"stats": {"name": "local", **stats}}}}
@@ -141,11 +143,8 @@ def _entry(hass: HomeAssistant, fast_data: dict) -> MagicMock:
         side_effect=lambda hass, coro, name: hass.async_create_task(coro)
     )
     data = entry.runtime_data
-    data.fast_coordinator.data = fast_data
-    data.fast_coordinator.async_add_listener = MagicMock(return_value=lambda: None)
-    data.fast_coordinator.async_request_refresh = AsyncMock()
-    data.fast_coordinator.async_refresh_environment = AsyncMock()
-    data.fast_coordinator.fetched_since = MagicMock(return_value=False)
+    data.fast_coordinator = fast_coordinator(fast_data["environments"])
+    data.fast_coordinator.fetched_since.return_value = False
     data.version_coordinator.async_request_refresh = AsyncMock()
     return entry
 
