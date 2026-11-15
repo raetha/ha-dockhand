@@ -71,6 +71,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Internal
 
+- `docs/backlog.md` records why the cards aren't shipped inside the integration.
 - A poll benchmark (`tests/test_poll_benchmark.py`, skipped unless `DOCKHAND_BENCH` is set) for the performance item of a full review.
 - Upstream reviews also follow Home Assistant's Portainer integration (`docs/development.md` → Upstream compatibility).
 - `docs/backlog.md` records what the Portainer comparison left out (container start time and OOM flag, per-volume sizes, choosing environments), `UpdateFailedUnreachable` for when Home Assistant 2026.12 is the minimum, and specific action errors.
