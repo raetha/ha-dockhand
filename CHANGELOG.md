@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-15
+
 Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely and puts more of Dockhand in your hands.
 
 - **Counts and sizes are sensors**, with history and long-term statistics, states are translated, and nothing writes to the database on every poll without reason.
@@ -1485,7 +1487,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...2.0.0
 [1.11.3]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...v1.11.3
 [1.11.2]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/raetha/ha-dockhand/compare/v1.11.0...v1.11.1
