@@ -22,6 +22,7 @@ from .helpers import (
     _coordinator_env,
     _device_id_instance,
     _env_device,
+    _env_index,
     _find_git_stack,
     _find_stack,
     _stack_device,
@@ -321,7 +322,7 @@ class DockhandStackUpdatesAvailableBinarySensor(
         )
 
     def _stack(self) -> dict | None:
-        return _find_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override
@@ -347,8 +348,7 @@ class DockhandStackUpdatesAvailableBinarySensor(
         # pattern as DockhandStackStatusSensor's container_names.
         pending_ids = env.get("pending_update_container_ids") or set()
         stack_container_ids = s.get("containers") or []
-        env_containers = env.get("containers") or []
-        id_to_name = {c.get("id"): c.get("name") for c in env_containers if c.get("id")}
+        id_to_name = _env_index(self.coordinator, self._env_id).container_names
         pending_container_names = sorted(
             (
                 id_to_name.get(cid, cid)
@@ -408,7 +408,7 @@ class DockhandGitStackSyncErrorBinarySensor(
         )
 
     def _git_stack(self) -> dict[str, Any] | None:
-        return _find_git_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_git_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override

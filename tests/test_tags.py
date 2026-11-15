@@ -240,7 +240,9 @@ def test_system_container_flag_on_container_and_stack():
     stack = DockhandStackStatusSensor(coord, "entry", 1, "local", "http://dh", STACK)
     assert container.extra_state_attributes["system_container"] is True
     assert stack.extra_state_attributes["system_container"] is True
+    # A poll replaces the coordinator's data, as here.
     env["containers"] = [WEB]
+    coord.data = {**coord.data}
     assert container.extra_state_attributes["system_container"] is False
     assert stack.extra_state_attributes["system_container"] is False
 
@@ -250,4 +252,5 @@ def test_stack_status_is_an_enum():
     sensor = DockhandStackStatusSensor(coord, "entry", 1, "local", "http://dh", STACK)
     assert sensor.native_value == "running"
     coord.data["environments"][1]["stacks"] = [{**STACK, "status": "brand_new"}]
+    coord.data = {**coord.data}
     assert sensor.native_value is None

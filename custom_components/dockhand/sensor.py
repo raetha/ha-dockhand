@@ -49,6 +49,7 @@ from .helpers import (
     _ensure_env_devices,
     _ensure_hub_devices,
     _env_device,
+    _env_index,
     _find_git_stack,
     _image_display_name,
     _image_group_device,
@@ -636,7 +637,7 @@ class BaseFastContainerStatsSensor(BaseFastContainerSensor):
 
 
 def _resolve_container_names(
-    container_ids: list[str], env_data: dict[str, Any]
+    container_ids: list[str], id_to_name: dict[str, str]
 ) -> list[str]:
     """Resolve a list of raw container IDs to their current names, against
     an environment's own full container list. Falls back to the ID itself
@@ -652,8 +653,6 @@ def _resolve_container_names(
     attribute, and an unsorted list is harder to skim at a glance,
     especially for a stack with many containers.
     """
-    env_containers = env_data.get("containers") or []
-    id_to_name = {c.get("id"): c.get("name") for c in env_containers if c.get("id")}
     names = [id_to_name.get(cid, cid) for cid in container_ids]
     return sorted(names, key=str.lower)
 
@@ -1716,7 +1715,7 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
         return {
             "type": type_label,
             "system_container": _stack_has_system_container(
-                s, env_data.get("containers") or []
+                self.coordinator, self._env_id, s
             ),
             **tags.attributes(env_data.get("stack_tags", {}).get(self._stack_name, [])),
         }
@@ -1755,9 +1754,12 @@ class DockhandStackContainerCountSensor(BaseFastStackSensor):
         s = self._stack()
         if not s:
             return {}
-        container_ids = s.get("containers") or []
-        env_data = _coordinator_env(self.coordinator.data, self._env_id)
-        return {"container_names": _resolve_container_names(container_ids, env_data)}
+        id_to_name = _env_index(self.coordinator, self._env_id).container_names
+        return {
+            "container_names": _resolve_container_names(
+                s.get("containers") or [], id_to_name
+            )
+        }
 
 
 class DockhandStackUpdateCountSensor(BaseFastStackSensor):
@@ -2747,7 +2749,7 @@ class BaseSlowGitStackSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorE
         self._stack_name = git_stack.get("stackName", "")
 
     def _git_stack(self) -> dict[str, Any] | None:
-        return _find_git_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_git_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override

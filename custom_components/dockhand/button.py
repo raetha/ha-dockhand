@@ -181,9 +181,7 @@ async def async_setup_entry(
                         new.append(button)
 
             for stack in env_data.get("stacks") or []:
-                has_system = _stack_has_system_container(
-                    stack, env_data.get("containers") or []
-                )
+                has_system = _stack_has_system_container(fast, env_id, stack)
                 if not has_system:
                     stack_restart_button = DockhandStackRestartButton(
                         fast,
@@ -747,7 +745,7 @@ class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], Button
         self._stack_name = git_stack.get("stackName", "")
 
     def _git_stack(self) -> dict[str, Any] | None:
-        return _find_git_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_git_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override

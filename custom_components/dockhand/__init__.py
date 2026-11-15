@@ -155,6 +155,10 @@ class DockhandData:
     # registry entry" and "the re-add task finishes." See
     # helpers.py's already_registered() for the full explanation.
     pending_readd_entity_ids: set[str] = field(default_factory=set)
+    # What the last registry cleanup saw: the live sets and how many devices
+    # and entities the entry had afterwards. While neither changes there is
+    # nothing new to remove, so most polls skip the registry passes.
+    cleanup_seen: tuple[dict[str, Any], int, int] | None = None
 
 
 # Typed config entry alias — used throughout all platform setup functions
@@ -856,7 +860,9 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                 stack_name = s["name"]
                 stacks.add(_device_id_stack(entry.entry_id, env_id, stack_name))
                 stacks_group_env_ids.add(env_id)
-                has_system = _stack_has_system_container(s, env_containers)
+                has_system = _stack_has_system_container(
+                    entry.runtime_data.fast_coordinator, env_id, s
+                )
                 if not has_system:
                     for suffix in _STACK_ACTION_SUFFIXES:
                         stack_action_uids.add(
@@ -1104,6 +1110,10 @@ def _cleanup_stale_registry(
     live = _build_live_sets(entry)
     dev_registry = dr.async_get(hass)
     ent_registry = er.async_get(hass)
+    if entry.runtime_data.cleanup_seen == _cleanup_seen(
+        live, dev_registry, ent_registry, entry
+    ):
+        return
 
     # ── Device registry pass ─────────────────────────────────────────────────
     for device in dr.async_entries_for_config_entry(dev_registry, entry.entry_id):
@@ -1605,6 +1615,23 @@ def _cleanup_stale_registry(
     # the check made at start didn't see them.
     if retired_removed and hass.is_running:
         async_check_retired_entities(hass, entry.entry_id)
+
+    entry.runtime_data.cleanup_seen = _cleanup_seen(
+        live, dev_registry, ent_registry, entry
+    )
+
+
+def _cleanup_seen(
+    live: dict[str, Any],
+    dev_registry: dr.DeviceRegistry,
+    ent_registry: er.EntityRegistry,
+    entry: DockhandConfigEntry,
+) -> tuple[dict[str, Any], int, int]:
+    return (
+        live,
+        len(dr.async_entries_for_config_entry(dev_registry, entry.entry_id)),
+        len(er.async_entries_for_config_entry(ent_registry, entry.entry_id)),
+    )
 
 
 async def async_remove_config_entry_device(

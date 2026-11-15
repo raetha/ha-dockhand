@@ -28,7 +28,7 @@ The registry overwrites `manufacturer`/`model`/`name` on every `async_get_or_cre
 
 ## 2. Entity cleanup
 
-Cleanup is central, in `__init__.py`: `_build_live_sets()` computes what exists from all coordinators, and `_cleanup_stale_registry()` removes what doesn't, after every setup. Never build per-platform removal.
+Cleanup is central, in `__init__.py`: `_build_live_sets()` computes what exists from all coordinators, and `_cleanup_stale_registry()` removes what doesn't, after every setup and poll. Its registry passes are skipped while the live sets and the entry's numbers of devices and entities are what the last cleanup left (`cleanup_seen`), which is most polls. Never build per-platform removal.
 
 Recreating an entity cleanup removed is each platform's job: every platform checks `helpers.already_registered()` against `entry.runtime_data.known_entity_ids`, a set made fresh on every setup (§9).
 
@@ -180,6 +180,8 @@ The fast, slow and update coordinators' data are all `{"environments": {env_id: 
 - Grep every read of each coordinator's `.data`, not just the tested ones. A consumer without tests (diagnostics' update summary once) keeps running and silently reads nothing.
 - Check each call site's actual variable: `self.data` reads the same whatever coordinator `self` is.
 - Unwrap `"environments"` in one place per variable, at assignment or at each read, never both: unwrapping twice returns empty without an error.
+
+Entities find their container, stack or git stack with `_find_container`, `_find_stack` and `_find_git_stack`, given the coordinator: they read a per-environment index built once per poll, since a scan per lookup grows with containers × entities and dominated a large host's poll. The index is rebuilt when the coordinator's data is a different object, so coordinators replace their data and never change it in place; tests that change a coordinator's data assign a new dict too.
 
 ## 9. A successful poll can contain a failed fetch: `fetch_failures`
 
