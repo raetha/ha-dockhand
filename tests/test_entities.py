@@ -19,6 +19,8 @@ from homeassistant.helpers import entity_registry as er
 from custom_components.dockhand.installs import InstallSkipped
 from custom_components.dockhand.api import DockhandPermissionError
 
+from .conftest import config_entry, container, fast_coordinator, slow_coordinator
+
 DOMAIN = "dockhand"
 
 # ---------------------------------------------------------------------------
@@ -63,23 +65,15 @@ STATS = {
     "updateCheckAutoUpdate": False,
 }
 
-CONTAINER = {
-    "id": "abc123",
-    "name": "nginx",
-    "state": "running",
-    "image": "nginx:latest",
-    "labels": {},
-    "health": "healthy",
-}
+CONTAINER = container(
+    "nginx",
+    id="abc123",
+    image="nginx:latest",
+    status="Up 2 days (healthy)",
+    health="healthy",
+)
 
-COMPOSE_CONTAINER = {
-    "id": "def456",
-    "name": "web",
-    "state": "running",
-    "image": "python:3.11",
-    "labels": {"com.docker.compose.project": "myapp"},
-    "health": None,
-}
+COMPOSE_CONTAINER = container("web", stack="myapp", id="def456", image="python:3.11")
 
 STACK = {"name": "myapp", "status": "running", "containers": ["c1", "c2", "c3"]}
 
@@ -124,7 +118,7 @@ SCHEDULE = {
     "environmentId": None,
     "cronExpression": "0 2 * * *",
     "enabled": True,
-    "environmentName": "Heimdall",
+    "environmentName": "local",
     "nextRun": 1700100000,
     "lastExecution": {
         "status": "success",
@@ -154,9 +148,8 @@ SCHEDULE_FAILED = {
 
 
 def _fast_coord(env_data=None):
-    coord = MagicMock()
-    coord.data = {
-        "environments": {
+    return fast_coordinator(
+        {
             ENV_ID: env_data
             or {
                 "stats": STATS,
@@ -166,31 +159,17 @@ def _fast_coord(env_data=None):
                 "pending_update_container_ids": {CONTAINER["id"]},
             }
         }
-    }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_refresh_environment = AsyncMock()
-    return coord
+    )
 
 
 def _slow_coord(env_data=None, schedules=None):
-    coord = MagicMock()
-    coord.data = {
-        "environments": {
+    return slow_coordinator(
+        {
             ENV_ID: env_data
-            or {
-                "env": {"name": ENV_NAME},
-                "images": [IMAGE],
-                "networks": [NETWORK],
-                "volumes": [VOLUME],
-            }
+            or {"images": [IMAGE], "networks": [NETWORK], "volumes": [VOLUME]}
         },
-        "schedules": schedules if schedules is not None else [SCHEDULE],
-    }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_refresh_environment = AsyncMock()
-    return coord
+        schedules=schedules if schedules is not None else [SCHEDULE],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -419,11 +398,9 @@ def test_memory_used_and_total_in_bytes():
 
 
 def test_env_cpu_and_mem_value_none_when_metrics_explicitly_null():
-    """End-to-end regression test for the actual reported crash
-    (github.com/raetha/ha-dockhand/issues/20, and a live crash this
-    session): Dockhand can send "metrics": null on an environment's stats
-    blob rather than omitting the key. native_value must return None
-    (making the entity unavailable), not raise AttributeError."""
+    """Dockhand can send "metrics": null rather than leaving the key out
+    (github.com/raetha/ha-dockhand/issues/20): the value is None, not an
+    AttributeError."""
     sc = _sensor_classes()
     coord = _fast_coord(
         env_data={
@@ -523,18 +500,10 @@ def test_container_count_pending_updates_mixed_system_and_normal():
 
 
 def test_container_count_pending_updates_includes_tier_2_only_containers():
-    """Regression test, same class of bug as the system-container case
-    above but a different specific cause: an earlier version of this fix
-    counted only pending_update_container_ids (Tier 1), reasoning that
-    this sensor platform had no access to update_coordinator (Tier 2) at
-    all. True, but the wrong thing to stop at — Tier 2, when configured,
-    can flag a container's update before Tier 1's own cache catches up,
-    and each container's own update entity (update.py's latest_version)
-    already reflects that Tier-1-or-Tier-2 check. A Tier-1-only count
-    here could still disagree with what that container's own entity (and
-    this environment's Updates card rows) shows. This container is
-    absent from pending_update_container_ids entirely — only Tier 2 (via
-    update_coordinator) flags it — and must still be counted."""
+    """The pending-updates count matches each container's own update
+    entity, which also counts a Tier 2 (precise update) result that
+    Tier 1's cache hasn't caught up with yet. This container is flagged
+    by Tier 2 only, and is counted."""
     coord = _fast_coord(
         env_data={
             "stats": STATS,
@@ -844,12 +813,9 @@ def test_hawser_available_when_host_fetch_succeeded():
 
 
 def test_hawser_unavailable_when_host_fetch_failed():
-    """The actual point of BaseSlowEnvSensor's _fetch_failure_key: a
-    swallowed host fetch failure used to show as a stale/blank value
-    indistinguishable from a genuinely-empty host response. Now it marks
-    the entity unavailable instead — a real reported gap, distinct from
-    the entity-existence bug this whole file's already covered
-    elsewhere."""
+    """A failed host fetch makes the entity unavailable (BaseSlowEnvSensor's
+    _fetch_failure_key), rather than showing a value that looks like
+    Dockhand's answer."""
     from custom_components.dockhand.sensor import DockhandEnvHawserVersionSensor
 
     coord = _slow_coord(
@@ -916,10 +882,8 @@ def test_vulnerabilities_available_when_fetch_succeeded():
 
 
 def test_vulnerabilities_unavailable_when_fetch_failed():
-    """The actual bug this guards: a swallowed vulnerabilities fetch
-    failure used to show as a count of 0 — indistinguishable from a
-    genuinely clean scan — rather than the true "we don't know right
-    now." """
+    """A failed vulnerabilities fetch makes the count unavailable: 0 would
+    read as a clean scan."""
     sensor = _make_vuln_sensor({"total": 0}, fetch_failures={"vulnerabilities"})
     assert sensor.available is False
     # native_value would still report 0 if read directly — availability,
@@ -1139,9 +1103,8 @@ CONTAINER_STATS = {
 
 
 def _stats_coord(stats=None, running=True):
-    coord = MagicMock()
-    coord.data = {
-        "environments": {
+    return fast_coordinator(
+        {
             ENV_ID: {
                 "stats": STATS,
                 "containers": [CONTAINER] if running else [],
@@ -1151,11 +1114,7 @@ def _stats_coord(stats=None, running=True):
                 else {},
             }
         }
-    }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_refresh_environment = AsyncMock()
-    return coord
+    )
 
 
 @pytest.fixture
@@ -1370,10 +1329,8 @@ def test_stack_container_names_resolved_from_ids():
 
 
 def test_stack_container_names_sorted_alphabetically():
-    """Real, reported usability issue: an unsorted list is hard to skim
-    for a stack with many containers. Deliberately feeds IDs in an order
-    that would NOT already happen to look sorted, to actually exercise
-    the sort rather than coincidentally pass."""
+    """A stack's container names are sorted, so a long list can be skimmed.
+    The IDs come in an order that isn't already sorted."""
     sc = _sensor_classes()
     stack = {
         "name": "myapp",
@@ -1502,18 +1459,11 @@ def test_image_has_entity_name_true():
 
 
 def test_image_name_recomputes_live_when_tag_is_lost():
-    """Regression test: name used to be fixed at construction (_attr_name
-    set once in __init__). Since this entity object is reused
-    indefinitely for the same image hash (see the known_image_ids dedup
-    pattern in async_setup_entry), a static name meant that once this
-    image's tag moved to a different (newly pulled) image — the normal
-    outcome of a container upgrade — this entity would keep showing the
-    old repo:tag forever, permanently occupying the entity_id slot the
-    new image's entity actually deserved and forcing it into an
-    auto-suffixed "_2" id that never self-heals. name is now a live
-    property so it correctly falls back to the short hash the moment
-    Dockhand's own data shows this image as untagged, freeing that slot
-    naturally within a poll cycle or two."""
+    """The name follows Dockhand's data on every read: an image entity
+    lives as long as its hash, and once its tag moves to a newly pulled
+    image, a fixed name would keep the old repo:tag and push the new
+    image's entity to an "_2" entity ID. Untagged, it falls back to the
+    short hash."""
     coord = _slow_coord()
     sc = _sensor_classes()
     sensor = sc["DockhandImageSensor"](
@@ -1585,9 +1535,7 @@ def test_network_attributes():
 
 
 def test_network_none_when_not_found():
-    coord = _slow_coord(
-        env_data={"env": {}, "images": [], "networks": [], "volumes": []}
-    )
+    coord = _slow_coord(env_data={"images": [], "networks": [], "volumes": []})
     assert _make_network(coord).native_value is None
 
 
@@ -1625,7 +1573,7 @@ def test_volume_container_count_when_used():
 
 def test_volume_container_count_zero_when_unused():
     coord = _slow_coord(
-        env_data={"env": {}, "images": [], "networks": [], "volumes": [VOLUME_UNUSED]}
+        env_data={"images": [], "networks": [], "volumes": [VOLUME_UNUSED]}
     )
     assert _make_volume(VOLUME_UNUSED, coord).native_value == 0
 
@@ -1647,9 +1595,7 @@ def test_volume_driver_scope_mountpoint_created():
 
 
 def test_volume_none_when_not_found():
-    coord = _slow_coord(
-        env_data={"env": {}, "images": [], "networks": [], "volumes": []}
-    )
+    coord = _slow_coord(env_data={"images": [], "networks": [], "volumes": []})
     assert _make_volume(coord=coord).native_value is None
 
 
@@ -1737,7 +1683,7 @@ def test_schedule_last_status_identity_attributes():
     assert attrs["is_system"] is True
     assert attrs["cron_expression"] == "0 2 * * *"
     assert attrs["enabled"]
-    assert attrs["environment"] == "Heimdall"
+    assert attrs["environment"] == "local"
     assert attrs["schedule_type"] == "system"
 
 
@@ -1781,13 +1727,9 @@ def test_schedule_device_is_child_of_hub():
 
 
 def test_schedule_device_env_scoped_uses_environment_prefix_and_group():
-    """Third layer of regression coverage for the shipped naming bug (see
-    test_helpers.py's _sched_device/_ensure_env_devices tests for the
-    other two): this is the sensor-side device_info call site
-    (_BaseScheduleSensor), the one an actual live entity uses. All three
-    layers needed their own coverage — none of the pre-fix tests passed
-    an environmentId/environmentName at all, so the env-scoped branch had
-    zero coverage anywhere before this."""
+    """An environment's schedule device, as the entity itself registers
+    it: named after the environment and under its Schedules group
+    (test_helpers.py covers the factory and the registry pass)."""
     sched = {**SCHEDULE, "environmentId": 3, "environmentName": "Aurora"}
     info = _make_next_run(sched).device_info
     assert info.get("name") == "Aurora – Schedules – nightly-backup"
@@ -1923,10 +1865,8 @@ def test_stack_updates_available_false():
 
 
 def test_stack_updates_available_has_no_device_class():
-    """Regression guard: PROBLEM made a routine available update look
-    like something was wrong (a real, reported issue). UPDATE was
-    considered and rejected too — HA's own developer docs discourage it
-    in favor of a real update-domain entity, a bigger change than this."""
+    """No device class: PROBLEM makes a routine update look like a fault,
+    and Home Assistant's docs steer UPDATE toward a real update entity."""
     stack = {**STACK, "updatesAvailable": True, "updateCount": 1}
     sensor = _make_stack_updates_sensor(stack)
     assert sensor.device_class is None
@@ -2468,15 +2408,9 @@ def test_healthcheck_false_for_unknown(healthcheck_fn):
 
 
 def _make_image_setup_entry(hass, images):
-    """Minimal entry exercising sensor.py's async_setup_entry with a given
-    images list — everything else (containers/stacks/schedules) left
-    empty so only the images path is meaningfully tested. A real
-    MockConfigEntry (not a bare MagicMock) since async_setup_entry's
-    device-registry calls (_ensure_env_devices) validate config_entry_id
-    against an actually-registered config entry — that wasn't exercised
-    before entity creation started checking the real entity registry too
-    (see sensor.py's _already_registered), which is what first surfaced
-    this gap."""
+    """An entry for sensor.py's async_setup_entry with these images and
+    nothing else. A real config entry, since registering the environment's
+    devices checks that its entry exists."""
     from pytest_homeassistant_custom_component.common import MockConfigEntry
     from types import SimpleNamespace
 
@@ -2495,14 +2429,13 @@ def _make_image_setup_entry(hass, images):
     }
     slow.async_add_listener = MagicMock(return_value=lambda: None)
 
-    entry = MockConfigEntry(
-        domain="dockhand",
+    entry = config_entry(
+        hass,
         entry_id=ENTRY_ID,
         data={"api_url": BASE_URL},
         options={"enable_images": True},
         title="test",
     )
-    entry.add_to_hass(hass)
     entry.runtime_data = SimpleNamespace(
         fast_coordinator=fast,
         slow_coordinator=slow,
@@ -2588,19 +2521,10 @@ async def test_setup_entry_untagged_images_never_collide_with_each_other(hass):
 
 
 async def test_entity_not_duplicated_within_the_same_session(hass):
-    """Within one continuous setup call's known_entity_ids, calling the
-    dynamic entity-creation path again with the same data must not try to
-    recreate what's already been added this session — the actual purpose
-    already_registered() serves day to day (avoiding redundant
-    construct-and-add calls on every coordinator poll), as opposed to the
-    cross-session behavior the next test covers. Seeds the registry
-    directly between the two calls to stand in for what a real (not
-    mocked) add_entities call would have done as a side effect of the
-    first one — already_registered() now re-confirms a cache hit is
-    still actually registered (see its own docstring for why), so without
-    this the mock's lack of real side effects would make the second call
-    look like the entity had vanished, which isn't what this test means
-    to exercise."""
+    """A poll with the same data doesn't add an entity the setup already
+    added (known_entity_ids). The registry is seeded between the calls,
+    as a real add would do, since already_registered() also checks the
+    entity is still registered."""
     from custom_components.dockhand.sensor import async_setup_entry
 
     entry = _make_image_setup_entry(hass, [IMAGE])
@@ -2623,15 +2547,8 @@ async def test_entity_not_duplicated_within_the_same_session(hass):
 
 
 async def test_entity_recreated_within_the_same_session_if_removed(hass):
-    """The actual capability this whole re-verification mechanism exists
-    for: an entity removed mid-session (by cleanup — correctly, for a
-    container genuinely deleted, or incorrectly, if a bug like the one
-    fetch_failures fixes ever recurs) must come back on the very next
-    poll where its data is confirmed present again, not just on the next
-    reload/restart. Closes the gap noted in docs/backlog.md when the
-    session-scoped known_entity_ids fix first shipped: that fix alone
-    only self-healed on reload, since nothing told known_entity_ids a
-    mid-session removal had happened."""
+    """An entity removed mid-session by cleanup comes back on the next poll
+    whose data has it, not only after a reload."""
     from custom_components.dockhand.sensor import async_setup_entry
 
     entry = _make_image_setup_entry(hass, [IMAGE])
@@ -2660,22 +2577,10 @@ async def test_entity_recreated_within_the_same_session_if_removed(hass):
 async def test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it(
     hass,
 ):
-    """The actual regression this guards, and the one that shipped
-    briefly during development before being caught: entity creation must
-    never be gated on the real entity registry remembering a unique_id
-    from a *previous* session — the registry is deliberately persistent
-    across reloads and restarts, but the live entity object backing it is
-    not, and has to be freshly constructed and handed to
-    async_add_entities() on every single async_setup_entry call. A
-    version of already_registered() that checked the registry instead of
-    a session-scoped set answered "did this ID ever exist" rather than
-    "is anything live backing it right now" — meaning after any reload,
-    every entity in the whole integration looked "already registered"
-    and nothing ever got its live object reattached again, permanently.
-    Reproduced here directly: seed the registry (simulating a previous
-    session having created this), then confirm a *fresh* known_entity_ids
-    set (simulating the next reload/restart) still recreates it — the
-    registry already remembering the unique_id must not matter at all."""
+    """Each setup adds every entity again, even though the registry
+    remembers its unique ID from before: the registry outlives a reload,
+    the entity objects don't. A fresh known_entity_ids (a new session)
+    still creates the entity."""
     from custom_components.dockhand.sensor import async_setup_entry
 
     entry = _make_image_setup_entry(hass, [IMAGE])
@@ -2956,12 +2861,8 @@ def _make_check_updates_button(
 
 
 async def test_check_updates_press_calls_client_for_its_own_environment_only():
-    """The actual design fix from the original bug report: this button
-    used to call async_refresh() on the whole DockhandUpdateCoordinator,
-    which always re-checked every environment in one gather -- so
-    pressing environment 1's button silently also re-checked every other
-    environment too. Now it calls the client directly, scoped to just
-    its own environment id, regardless of what coordinators exist."""
+    """Pressing an environment's Check for updates asks Dockhand about that
+    environment only, through the client, whichever coordinators exist."""
     button, _, client = _make_check_updates_button(env_id=7)
     await button.async_press()
     client.async_check_container_updates.assert_called_once_with(7)
@@ -3050,9 +2951,8 @@ async def test_check_updates_press_captures_nothing_when_neither_enabled():
 
 
 async def test_check_updates_button_always_created_regardless_of_options(hass):
-    """No longer gated on update_coordinator or either config option --
-    it's a read-only, user-initiated action, not a way to perform
-    updates, so neither option needs to block its existence."""
+    """Check for updates is read-only and pressed by the user, so neither
+    update option decides whether it exists."""
     from custom_components.dockhand.button import async_setup_entry
 
     fast = MagicMock()
@@ -3120,14 +3020,13 @@ def _make_container_stats_setup_entry(
     slow.data = {"environments": {}, "schedules": []}
     slow.async_add_listener = MagicMock(return_value=lambda: None)
 
-    entry = MockConfigEntry(
-        domain="dockhand",
+    entry = config_entry(
+        hass,
         entry_id=ENTRY_ID,
         data={"api_url": BASE_URL},
         options={"enable_resource_stats": enable_resource_stats},
         title="test",
     )
-    entry.add_to_hass(hass)
     entry.runtime_data = SimpleNamespace(
         fast_coordinator=fast,
         slow_coordinator=slow,
@@ -3333,8 +3232,8 @@ async def test_container_stats_entities_created_when_option_on(hass):
     assert STATS_SENSOR_NAMES.issubset(set(names))
 
 
-WEB = {"id": "id-web", "name": "web", "systemContainer": None}
-DB = {"id": "id-db", "name": "db", "systemContainer": None}
+WEB = container("web", id="id-web")
+DB = container("db", id="id-db")
 
 
 async def test_bulk_update_press_queues_every_updatable_container():
@@ -3501,9 +3400,7 @@ def test_network_and_volume_attributes_once_gone():
 
 def test_volume_with_an_unparsable_created_date_keeps_it_as_given():
     bad = {**VOLUME, "created": "2026-13-45T00:00:00"}
-    coord = _slow_coord(
-        env_data={"env": {}, "images": [], "networks": [], "volumes": [bad]}
-    )
+    coord = _slow_coord(env_data={"images": [], "networks": [], "volumes": [bad]})
     assert _make_volume(bad, coord).extra_state_attributes["created"] == (
         "2026-13-45T00:00:00"
     )

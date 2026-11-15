@@ -29,9 +29,15 @@ from custom_components.dockhand import (
     _register_devices,
     async_migrate_entry,
 )
-from custom_components.dockhand.coordinator import (
-    DockhandFastCoordinator,
-    DockhandSlowCoordinator,
+
+from .conftest import (
+    config_entry,
+    container,
+    fast_coordinator,
+    patch_setup,
+    stack,
+    slow_coordinator,
+    update_coordinator,
 )
 
 # ---------------------------------------------------------------------------
@@ -39,13 +45,9 @@ from custom_components.dockhand.coordinator import (
 # ---------------------------------------------------------------------------
 
 ENV1_STATS = {"name": "MyHost"}
-CONTAINER_FREE = {"id": "c1", "name": "nginx", "labels": {}}
-CONTAINER_COMPOSE = {
-    "id": "c2",
-    "name": "web",
-    "labels": {"com.docker.compose.project": "myapp"},
-}
-STACK1 = {"name": "myapp", "status": "running"}
+CONTAINER_FREE = container("nginx", id="c1")
+CONTAINER_COMPOSE = container("web", stack="myapp", id="c2")
+STACK1 = stack("myapp", CONTAINER_COMPOSE)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,9 +55,9 @@ STACK1 = {"name": "myapp", "status": "running"}
 
 
 def _make_entry(hass: HomeAssistant, data=None, options=None) -> MockConfigEntry:
-    """Create a MockConfigEntry registered with hass. Settings passed in
-    `data` are filed under entry.options, where they really live — `data`
-    only keeps the connection details."""
+    """An entry with the optional platforms off. Settings in `data` are
+    filed under entry.options, where they really live: `data` only keeps
+    the connection details."""
     from custom_components.dockhand.const import OPTION_KEYS
 
     d = {"api_url": "http://dh.test:3000", "api_token": "dh_test_token"}
@@ -68,59 +70,30 @@ def _make_entry(hass: HomeAssistant, data=None, options=None) -> MockConfigEntry
     for key, value in (data or {}).items():
         (opts if key in OPTION_KEYS else d)[key] = value
     opts.update(options or {})
-    entry = MockConfigEntry(
-        domain="dockhand",
-        data=d,
-        options=opts,
-        title="http://dh.test:3000",
-    )
-    entry.add_to_hass(hass)
-    return entry
-
-
-def _make_fast_coordinator(data) -> MagicMock:
-    """data is the flat {env_id: {...}} shape every call site in this file
-    already uses — wrapped in "environments" here, once, matching
-    _make_runtime_data's same reasoning above."""
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {"environments": data}
-    coord.async_config_entry_first_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
-
-
-def _make_slow_coordinator(data) -> MagicMock:
-    coord = MagicMock(spec=DockhandSlowCoordinator)
-    coord.data = data
-    coord.last_update_success = True
-    coord.async_config_entry_first_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
+    return config_entry(hass, data=d, options=opts)
 
 
 def _make_runtime_data(fast_data, slow_data, update_data=None) -> MagicMock:
-    """fast_data is the flat {env_id: {...}} shape every call site in this
-    file already uses — wrapped in "environments" here, once, rather than
-    touching all 60+ call sites individually now that
-    DockhandFastCoordinator.data itself carries that wrapper."""
+    """Runtime data whose fast coordinator holds these environments
+    (`fast_data`, by ID), and whose slow coordinator holds `slow_data` (a
+    first poll that failed when empty)."""
     rd = MagicMock()
-    rd.fast_coordinator.data = {"environments": fast_data}
-    rd.fast_coordinator.last_update_success = True
+    rd.fast_coordinator = fast_coordinator(fast_data)
+    rd.slow_coordinator = slow_coordinator(
+        attrs={"last_update_success": bool(slow_data)}
+    )
     rd.slow_coordinator.data = slow_data
-    rd.slow_coordinator.last_update_success = bool(slow_data)
+    rd.update_coordinator = None
     if update_data is not None:
-        rd.update_coordinator = MagicMock()
+        rd.update_coordinator = update_coordinator()
         rd.update_coordinator.data = update_data
-        rd.update_coordinator.last_update_success = True
-    else:
-        rd.update_coordinator = None
     return rd
 
 
 def _run_register(hass, fast_data, slow_data=None, config_overrides=None):
     entry = _make_entry(hass, data=config_overrides)
-    fast = _make_fast_coordinator(fast_data)
-    slow = _make_slow_coordinator(slow_data or {"environments": {}, "schedules": []})
+    fast = fast_coordinator(fast_data)
+    slow = slow_coordinator(**(slow_data or {}))
     _register_devices(
         hass, entry, fast, slow, dict(entry.options), "http://dh.test:3000"
     )
@@ -218,9 +191,7 @@ def test_stacks_group_not_created_when_empty(hass: HomeAssistant):
 
 def test_networks_group_when_enabled_and_data(hass: HomeAssistant):
     slow = {
-        "environments": {
-            1: {"env": {}, "networks": [{"id": "n1"}], "images": [], "volumes": []}
-        },
+        "environments": {1: {"networks": [{"id": "n1"}], "images": [], "volumes": []}},
         "schedules": [],
     }
     entry = _run_register(
@@ -234,9 +205,7 @@ def test_networks_group_when_enabled_and_data(hass: HomeAssistant):
 
 def test_networks_group_not_created_when_disabled(hass: HomeAssistant):
     slow = {
-        "environments": {
-            1: {"env": {}, "networks": [{"id": "n1"}], "images": [], "volumes": []}
-        },
+        "environments": {1: {"networks": [{"id": "n1"}], "images": [], "volumes": []}},
         "schedules": [],
     }
     entry = _run_register(
@@ -270,7 +239,7 @@ def test_env_scoped_schedule_creates_env_group(hass: HomeAssistant):
     """A schedule with environmentId set gets its own env's Schedules group,
     not just the flat hub — see helpers.py's _schedule_group_device."""
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 5,
@@ -293,7 +262,7 @@ def test_env_scoped_schedule_creates_env_group(hass: HomeAssistant):
 
 def test_env_scoped_schedule_device_parented_to_env_group(hass: HomeAssistant):
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 5,
@@ -328,7 +297,7 @@ def test_global_schedule_has_no_env_group_and_stays_under_hub(hass: HomeAssistan
     """environmentId: None (system_cleanup, repo_prune/check/verify) parents
     to schedules_hub, and no per-env Schedules group is created for it."""
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 1,
@@ -365,15 +334,12 @@ def test_global_schedule_has_no_env_group_and_stays_under_hub(hass: HomeAssistan
 def test_schedule_device_via_device_consistent_across_repeated_calls(
     hass: HomeAssistant,
 ):
-    """Regression test for the consolidation pattern in architecture.md §0:
-    _ensure_hub_devices() must build schedule DeviceInfo via the same
-    _sched_device() factory the entity's own device_info uses, not duplicate
-    fields inline — otherwise a repeated call could silently revert an
-    env-scoped schedule's via_device back to schedules_hub on the next
-    coordinator update, the same class of bug that hit the stack device's
-    model field once before."""
+    """_ensure_hub_devices() builds a schedule's device with the same
+    _sched_device() factory as the entity (architecture.md §0), so a
+    later call can't move an environment's schedule back under the
+    schedules hub."""
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 5,
@@ -389,10 +355,8 @@ def test_schedule_device_via_device_consistent_across_repeated_calls(
         slow_data=slow,
         config_overrides={"enable_schedules": True},
     )
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow_coord = _make_slow_coordinator(slow)
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow_coord = slow_coordinator(**slow)
     _register_devices(
         hass, entry, fast, slow_coord, dict(entry.data), "http://dh.test:3000"
     )
@@ -420,10 +384,8 @@ def test_empty_fast_data_creates_no_devices(hass: HomeAssistant):
 
 def test_idempotent_second_call(hass: HomeAssistant):
     entry = _make_entry(hass)
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
     _register_devices(
         hass, entry, fast, slow, dict(entry.options), "http://dh.test:3000"
     )
@@ -560,15 +522,10 @@ def test_removes_stale_container_when_env_online(hass: HomeAssistant):
 def test_preserves_container_when_containers_fetch_specifically_failed(
     hass: HomeAssistant,
 ):
-    """The most severe of this session's findings, reproduced directly:
-    containers == [] with the environment still online looks identical to
-    "every container was genuinely removed" unless fetch_failures says
-    otherwise — see coordinator.py's DockhandFastCoordinator._fetch and
-    docs/architecture.md §9. Container/stack existence is the single
-    most commonly-used data this integration has; a transient DNS/
-    network failure fetching /api/containers used to be able to wipe
-    every container device for an environment that was, in every other
-    respect, perfectly healthy."""
+    """No containers with the environment online looks like every
+    container was removed, unless fetch_failures says the fetch failed
+    (coordinator.py's DockhandFastCoordinator._fetch, architecture.md
+    §9): then nothing is removed."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -662,14 +619,8 @@ def test_removes_containers_group_when_no_freestanding(hass: HomeAssistant):
 
 
 def test_removes_stacks_group_when_no_stacks(hass: HomeAssistant):
-    """The Stacks group device (env_{id}_Stacks) had no cleanup condition
-    at all until this — an empty, useless group device would linger
-    indefinitely once an environment's last stack was genuinely removed.
-    Found during final review, unrelated to the fetch_failures bugs
-    themselves (nothing was being wrongly deleted here — quite the
-    opposite, this device was never being cleaned up when it legitimately
-    should be), fixed alongside them anyway per explicit request to
-    handle all cleanup-related gaps together for this release."""
+    """The Stacks group device goes once an environment's last stack is
+    removed, rather than staying empty."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
@@ -745,15 +696,10 @@ def test_preserves_live_schedule_device(hass: HomeAssistant):
 def test_preserves_schedule_device_when_schedules_fetch_specifically_failed(
     hass: HomeAssistant,
 ):
-    """The actual reported incident, reproduced directly: schedules == []
-    looks identical to "genuinely zero schedules" unless fetch_failures
-    says otherwise. Same slow_data shape as
-    test_removes_stale_schedule_device above — schedules: [] — except
-    this time fetch_failures records that the schedules fetch itself is
-    what produced that empty list, not a real answer. The device must
-    survive here where it wouldn't in that other test; this is the one
-    line of difference that distinguishes a swallowed exception from a
-    real "someone deleted this schedule in Dockhand.\""""
+    """No schedules looks like every schedule was deleted, unless
+    fetch_failures says the fetch failed. The same data as
+    test_removes_stale_schedule_device, except for that record: here the
+    device stays."""
     entry = _make_entry(hass, data={"enable_schedules": True})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"containers": [], "stacks": []}},
@@ -801,12 +747,9 @@ def test_preserves_image_entities_when_images_fetch_specifically_failed(
 def test_disabling_schedules_removes_hub_env_group_and_child_device(
     hass: HomeAssistant,
 ):
-    """Regression test for a real gap: disabling "Enable schedules" used to
-    remove only schedules_hub. HA's device registry clears via_device_id on
-    removal rather than cascading (confirmed against HA core's
-    device_registry.py), so every individual schedule device — and now each
-    env's Schedules group — needs its own explicit unconditional removal too,
-    not just the top-level hub."""
+    """Turning schedules off removes the hub, each environment's
+    Schedules group and every schedule device: Home Assistant clears
+    via_device_id on removal rather than removing children."""
     entry = _make_entry(hass, data={"enable_schedules": False})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
@@ -854,10 +797,8 @@ def test_preserves_populated_env_schedules_group(hass: HomeAssistant):
 
 
 def test_removes_images_group_when_disabled(hass: HomeAssistant):
-    """Regression test: previously nothing ever removed Images/Networks/
-    Volumes group devices at all, even when the toggle was off or the
-    resource list was confirmed empty — only their child entities were
-    cleaned up. Same fix applied to Networks/Volumes below."""
+    """The Images group device goes with the option, not only its
+    entities (Networks and Volumes below likewise)."""
     entry = _make_entry(hass, data={"enable_images": False})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
@@ -1123,9 +1064,9 @@ def test_preserves_live_update_entity(hass: HomeAssistant):
 
 
 def test_preserves_update_entity_when_scheduled_check_disabled(hass: HomeAssistant):
-    """github.com/raetha/ha-dockhand/issues/42: Dockhand's scheduled update
-    check being off for an environment no longer removes its update
-    entities — only the integration's own update-entities option does."""
+    """github.com/raetha/ha-dockhand/issues/42: an environment's update
+    entities stay when Dockhand's scheduled update check is off for it;
+    only the integration's update-entities option removes them."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1606,17 +1547,10 @@ def test_removes_stack_stats_entity_when_stack_gone(hass: HomeAssistant):
 def test_container_stats_memory_limit_collision_disambiguated_by_domain(
     hass: HomeAssistant,
 ):
-    """The actual root cause of the bug report: the container-stats
-    memory_limit sensor and the runtime-control memory_limit number
-    entity share an exact unique_id suffix by design (see
-    _CONTAINER_STATS_SUFFIXES's comment). A container-stats memory_limit
-    *sensor* must not be swept by the runtime-control branch just
-    because both are off/untracked — domain is what disambiguates them,
-    not suffix. Runtime controls off + container stats off: the sensor
-    (container-stats) is removed via the container-stats branch, not
-    preserved by accident, and a same-suffix number entity (a genuine
-    runtime control) is independently removed via its own branch — both
-    correctly evaluated, neither masking the other."""
+    """The container stats memory_limit sensor and the runtime control
+    memory_limit number share a unique ID suffix by design
+    (_CONTAINER_STATS_SUFFIXES): the domain decides which branch handles
+    each. With both options off, each is removed by its own branch."""
     entry = _make_entry(
         hass,
         options={"enable_runtime_controls": False, "enable_resource_stats": False},
@@ -1648,13 +1582,8 @@ def test_container_stats_memory_limit_collision_disambiguated_by_domain(
 
 
 def test_removes_container_stats_entity_predating_the_option(hass: HomeAssistant):
-    """The other half of the bug report: entities created before "Enable
-    container stats" existed at all (option key entirely absent from
-    entry.options, not explicitly False) must also get cleaned up, same
-    as if the option were explicitly turned off. Reads through the same
-    DEFAULT_ENABLE_RESOURCE_STATS fallback as everywhere else — this
-    isn't a special case, just confirming the default (False) behaves
-    like an explicit off for cleanup purposes."""
+    """An entry without the stats option at all counts as off
+    (DEFAULT_ENABLE_RESOURCE_STATS), so its stats entities are removed."""
     entry = _make_entry(hass)  # no options at all — key genuinely absent
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1987,24 +1916,11 @@ def test_removes_stack_deploy_when_stack_becomes_git_tracked(hass: HomeAssistant
 
 
 def test_stack_deploy_cleanup_does_not_affect_git_deploy_button(hass: HomeAssistant):
-    """Confirms a live git stack's Deploy button ("..._git_deploy") is
-    preserved by the _GIT_STACK_SUFFIXES branch, not incorrectly caught
-    by the newer stack-deploy branch below it.
-
-    Note on what this test does and doesn't prove: Python's elif stops
-    at the first matching branch, and _GIT_STACK_SUFFIXES is checked
-    earlier in the chain than the stack-deploy branch — so ordering
-    alone already guarantees "..._git_deploy" never reaches the
-    stack-deploy branch, regardless of whether that branch's own
-    "not uid.endswith('_git_deploy')" exclusion is present. That
-    exclusion is still kept for defensiveness against a future reorder
-    of these branches (an exact match shouldn't depend on file order to
-    be correct), but this particular test can't force it to be the
-    thing that matters — it was verified by temporarily removing the
-    exclusion and confirming this test still passed either way, which
-    is why the exclusion's value here is about not relying on order,
-    not about this test catching its absence.
-    """
+    """A live git stack's Deploy button ("..._git_deploy") is kept by the
+    _GIT_STACK_SUFFIXES branch, not caught by the stack deploy branch.
+    That branch is checked later, so this passes with or without its own
+    "_git_deploy" exclusion; the exclusion is there so the result doesn't
+    depend on branch order."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -2053,10 +1969,8 @@ def test_preserves_stack_action_entities_for_normal_stack(hass: HomeAssistant):
 def test_removes_stack_action_entities_when_stack_gains_system_container(
     hass: HomeAssistant,
 ):
-    """stack['containers'] is a list of container IDs, not names —
-    confirmed from Dockhand's own source. Using names here was a real
-    bug that shipped: this check silently never matched anything, for
-    any stack, ever."""
+    """stack['containers'] lists container IDs, not names, so a system
+    container in it is found by ID."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -2270,20 +2184,10 @@ def test_non_digit_env_id_is_skipped_in_entity_cleanup(hass: HomeAssistant):
 
 async def test_success_stores_runtime_data(hass: HomeAssistant):
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2296,34 +2200,24 @@ async def test_success_stores_runtime_data(hass: HomeAssistant):
 
 
 async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssistant):
-    """Health sensor is created when a container has a healthcheck.
-
-    Regression test for a bug where DockhandContainerHealthSensor was called
-    without entry.entry_id, causing a TypeError at setup time.
-    """
-    from tests.conftest import MOCK_CONTAINER_HEALTHY
-
+    """A container with a healthcheck gets a Health sensor at setup."""
     entry = _make_entry(hass)
-    fast = _make_fast_coordinator(
+    fast = fast_coordinator(
         {
             1: {
                 "stats": ENV1_STATS,
-                "containers": [MOCK_CONTAINER_HEALTHY],
+                "containers": [
+                    container(
+                        "healthy-app", health="healthy", status="Up 3 hours (healthy)"
+                    )
+                ],
                 "stacks": [],
             }
         }
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2343,12 +2237,8 @@ async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssi
 
 
 async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssistant):
-    """A container that gains a healthcheck after setup gets its Health sensor.
-
-    Regression test: health sensor creation was gated behind the same
-    known-key set as the other per-container sensors, so a container whose
-    image update added a HEALTHCHECK never got a Health sensor until restart.
-    """
+    """A container that gains a healthcheck after setup (an image update
+    adding HEALTHCHECK) gets its Health sensor without a restart."""
     entry = _make_entry(hass)
     container = {
         "id": "c1",
@@ -2357,7 +2247,7 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
         "labels": {},
         "health": None,
     }
-    fast = _make_fast_coordinator(
+    fast = fast_coordinator(
         {
             1: {
                 "stats": {"name": "MyHost", "online": True},
@@ -2374,17 +2264,9 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
         return lambda: None
 
     fast.async_add_listener = MagicMock(side_effect=_add_listener)
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2420,12 +2302,8 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
 
 
 async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssistant):
-    """Identical network IDs across environments each get an entity.
-
-    Regression test: the network known-set was keyed on the bare Docker
-    network ID, so two environments pointing at the same Docker host (which
-    report identical network IDs) only got an entity for the first env seen.
-    """
+    """Two environments on the same Docker host report the same network
+    IDs, and each gets its own entity."""
     entry = _make_entry(hass, data={"enable_networks": True})
     network = {
         "id": "netabc123",
@@ -2433,7 +2311,7 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
         "driver": "bridge",
         "containers": {},
     }
-    fast = _make_fast_coordinator(
+    fast = fast_coordinator(
         {
             1: {
                 "stats": {"name": "HostDirect", "online": True},
@@ -2447,17 +2325,15 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
             },
         }
     )
-    slow = _make_slow_coordinator(
-        {
+    slow = slow_coordinator(
+        **{
             "environments": {
                 1: {
-                    "env": {"id": 1, "name": "HostDirect"},
                     "images": [],
                     "networks": [network],
                     "volumes": [],
                 },
                 2: {
-                    "env": {"id": 2, "name": "HostHawser"},
                     "images": [],
                     "networks": [network],
                     "volumes": [],
@@ -2467,15 +2343,7 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
         }
     )
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2488,21 +2356,13 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
 async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):
     """Fast coordinator failure puts entry in SETUP_RETRY state."""
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator({})
+    fast = fast_coordinator({})
     fast.async_config_entry_first_refresh = AsyncMock(
         side_effect=ConfigEntryNotReady("timeout")
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2513,8 +2373,8 @@ async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):
 
 async def test_legacy_entry_without_token_raises_auth_failed(hass: HomeAssistant):
     """Legacy entry without api_token raises ConfigEntryAuthFailed → SETUP_ERROR."""
-    entry = MockConfigEntry(
-        domain="dockhand",
+    entry = config_entry(
+        hass,
         data={
             "api_url": "http://dh.test:3000",
             "username": "admin",
@@ -2527,7 +2387,6 @@ async def test_legacy_entry_without_token_raises_auth_failed(hass: HomeAssistant
         },
         title="http://dh.test:3000",
     )
-    entry.add_to_hass(hass)
 
     with (
         patch(
@@ -2555,20 +2414,10 @@ async def test_legacy_entry_with_token_strips_legacy_keys(hass: HomeAssistant):
             "api_token": "dh_new_token",
         },
     )
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2580,23 +2429,13 @@ async def test_legacy_entry_with_token_strips_legacy_keys(hass: HomeAssistant):
 async def test_slow_coordinator_failure_is_non_fatal(hass: HomeAssistant):
     """Slow coordinator failure at startup is non-fatal; entry reaches LOADED."""
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
     slow.async_config_entry_first_refresh = AsyncMock(
         side_effect=UpdateFailed("slow timeout")
     )
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2613,20 +2452,10 @@ async def test_slow_coordinator_failure_is_non_fatal(hass: HomeAssistant):
 
 async def test_unload_returns_true_on_success(hass: HomeAssistant):
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2636,20 +2465,10 @@ async def test_unload_returns_true_on_success(hass: HomeAssistant):
 
 async def test_unload_returns_false_when_platform_fails(hass: HomeAssistant):
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2664,20 +2483,10 @@ async def test_unload_calls_correct_platforms(hass: HomeAssistant):
     from custom_components.dockhand.const import PLATFORMS
 
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2716,14 +2525,13 @@ SAVED_BY_1_11 = {
 
 
 def _entry(hass, version, minor_version, data, options):
-    entry = MockConfigEntry(
-        domain="dockhand",
+    entry = config_entry(
+        hass,
         version=version,
         minor_version=minor_version,
         data=data,
         options=options,
     )
-    entry.add_to_hass(hass)
     return entry
 
 
@@ -2938,7 +2746,7 @@ def test_no_retired_renames_left_in_the_code():
 
 
 def test_rename_lifecycle_today():
-    """1.11.0's rename is no longer mirrored: schema 2.2's own releases read
+    """1.11.0's rename isn't mirrored any more: schema 2.2's releases read
     the new name, and 2.1's can't load a 2.3 entry."""
     from custom_components.dockhand.const import (
         renames_to_mirror,
@@ -3061,13 +2869,9 @@ def test_config_flow_schema_version():
 def test_update_check_enabled_sensor_survives_cleanup_when_env_online(
     hass: HomeAssistant,
 ):
-    """Regression test: {entry_id}_{env_id}_update_check_enabled was being
-    incorrectly matched by the "update" (Tier 1 update entity) dispatch
-    branch, since position-2 of its unique_id is "update" — same as a
-    real Tier 1 update entity's uid — even though it's an ordinary
-    always-on binary sensor, not a container update entity at all. It
-    was getting removed on every online poll, since it never appears in
-    update_uids (which only contains real container names)."""
+    """{entry_id}_{env_id}_update_check_enabled has "update" where a
+    container update entity's unique ID does, but isn't one: cleanup
+    keeps it while the environment is online."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -3388,35 +3192,14 @@ async def test_remove_config_entry_device_while_not_loaded(hass: HomeAssistant):
 # ---------------------------------------------------------------------------
 
 
-def _setup_patches(fast, slow, update=None):
-    patches = [
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ]
-    if update is not None:
-        patches.append(
-            patch(
-                "custom_components.dockhand.DockhandUpdateCoordinator",
-                return_value=update,
-            )
-        )
-    return patches
-
-
 async def test_setup_with_a_rejected_token_starts_reauth(hass: HomeAssistant):
     entry = _make_entry(hass)
-    fast = _make_fast_coordinator({})
+    fast = fast_coordinator({})
     fast.async_config_entry_first_refresh = AsyncMock(
         side_effect=ConfigEntryAuthFailed("revoked")
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-    p = _setup_patches(fast, slow)
-    with p[0], p[1], p[2], p[3]:
+    slow = slow_coordinator()
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_ERROR
@@ -3432,19 +3215,13 @@ async def test_setup_survives_a_failed_first_precise_update_check(
     """Precise update versions on, and the first registry check fails: the
     integration still loads and retries on the next interval."""
     entry = _make_entry(hass, options={"enable_precise_updates": True})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
+    update = update_coordinator(last_update_success=False)
+    update.async_config_entry_first_refresh.side_effect = UpdateFailed(
+        "registry unreachable"
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-    update = MagicMock()
-    update.data = {"environments": {}}
-    update.last_update_success = False
-    update.async_config_entry_first_refresh = AsyncMock(
-        side_effect=UpdateFailed("registry unreachable")
-    )
-    update.async_add_listener = MagicMock(return_value=lambda: None)
-    p = _setup_patches(fast, slow, update)
-    with p[0], p[1], p[2], p[3], p[4]:
+    with patch_setup(fast, slow, update):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED

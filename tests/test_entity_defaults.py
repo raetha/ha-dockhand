@@ -23,6 +23,8 @@ from custom_components.dockhand.entity_defaults import (
 
 from .test_config_flow import LEGACY_ENTRY_DATA, _patch_full_setup
 
+from .conftest import config_entry
+
 Disabler = er.RegistryEntryDisabler
 
 
@@ -143,12 +145,11 @@ def test_new_entities_of_a_chosen_type_are_created_enabled():
 
 
 async def test_options_flow_stores_the_choice_and_applies_it(hass: HomeAssistant):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
+    entry = config_entry(
+        hass,
         data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
         title="http://dh.test:3000",
     )
-    entry.add_to_hass(hass)
     with _patch_full_setup():
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -226,10 +227,11 @@ def test_all_checkbox_wins_when_changed():
 
 
 async def test_runtime_controls_follow_their_option(hass: HomeAssistant):
-    entry = MockConfigEntry(
-        domain=DOMAIN, data={}, options={"enable_runtime_controls": True}
+    entry = config_entry(
+        hass,
+        data={},
+        options={"enable_runtime_controls": True},
     )
-    entry.add_to_hass(hass)
     restored = _entity(
         hass, entry, "container_1_web", "number", "container_memory_limit"
     )
@@ -287,12 +289,11 @@ async def test_setup_enables_the_parts_of_a_type_chosen_earlier(hass: HomeAssist
     it was off) is enabled at the next setup."""
     from custom_components.dockhand.entity_defaults import async_enable_chosen
 
-    entry = MockConfigEntry(
-        domain=DOMAIN,
+    entry = config_entry(
+        hass,
         entry_id="e1",
         options={CONF_ENABLED_ENTITIES: {"environment": ["disk_usage"]}},
     )
-    entry.add_to_hass(hass)
     part = _entity(hass, entry, "env_1", "sensor", "disk_usage_images")
     async_enable_chosen(hass, entry)
     assert _disabled_by(hass, part) is None

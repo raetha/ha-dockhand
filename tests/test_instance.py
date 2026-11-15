@@ -31,7 +31,7 @@ from custom_components.dockhand.helpers import (
     instance_host,
 )
 
-from .conftest import make_mock_client
+from .conftest import config_entry, api_client
 
 
 def _client_returning(payload) -> DockhandClient:
@@ -73,16 +73,13 @@ async def test_version_coordinator_reports_failures(hass: HomeAssistant):
 
 @pytest.fixture
 async def loaded_entry(hass: HomeAssistant):
-    entry = MockConfigEntry(
-        domain=DOMAIN,
+    entry = config_entry(
+        hass,
         title="Home Dockhand",
         data={"api_url": "http://dh.test:3000", "api_token": "t"},
         options={},
     )
-    entry.add_to_hass(hass)
-    client = make_mock_client()
-    client.async_get_pending_updates = AsyncMock(return_value=[])
-    client.async_get_stack_stats = AsyncMock(return_value=[])
+    client = api_client()
     with (
         patch("custom_components.dockhand.async_get_clientsession"),
         patch("custom_components.dockhand.DockhandClient", return_value=client),
@@ -251,17 +248,14 @@ def _patched(client: MagicMock):
 async def _setup_with_check(
     hass: HomeAssistant, check: dict
 ) -> tuple[MockConfigEntry, MagicMock]:
-    entry = MockConfigEntry(
-        domain=DOMAIN,
+    entry = config_entry(
+        hass,
         title="t",
         data={"api_url": "http://dh.test:3000", "api_token": "t"},
         options={},
     )
-    entry.add_to_hass(hass)
-    client = make_mock_client()
-    client.async_check_self_update = AsyncMock(return_value=check)
-    client.async_get_pending_updates = AsyncMock(return_value=[])
-    client.async_get_stack_stats = AsyncMock(return_value=[])
+    client = api_client()
+    client.async_check_self_update.return_value = check
     session, dockhand = _patched(client)
     with session, dockhand:
         assert await hass.config_entries.async_setup(entry.entry_id)
@@ -335,14 +329,13 @@ async def test_dockhand_update_check_is_feature_detected(hass: HomeAssistant):
 async def test_no_update_entity_without_permission(hass: HomeAssistant):
     from custom_components.dockhand.api import DockhandPermissionError
 
-    entry = MockConfigEntry(
-        domain=DOMAIN,
+    entry = config_entry(
+        hass,
         title="t",
         data={"api_url": "http://dh.test:3000", "api_token": "t"},
         options={},
     )
-    entry.add_to_hass(hass)
-    client = make_mock_client()
+    client = api_client()
     client.async_check_self_update = AsyncMock(side_effect=DockhandPermissionError())
     client.async_get_pending_updates = AsyncMock(return_value=[])
     client.async_get_stack_stats = AsyncMock(return_value=[])

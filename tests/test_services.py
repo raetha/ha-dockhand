@@ -15,14 +15,15 @@ from custom_components.dockhand.api import DockhandPermissionError
 from custom_components.dockhand.const import DOMAIN
 from custom_components.dockhand.services import async_setup_services
 
-WEB = {"id": "c1", "name": "web_app", "state": "running", "image": "nginx:1"}
-HAWSER = {"id": "c2", "name": "hawser", "state": "running", "systemContainer": "hawser"}
+from .conftest import config_entry, container, fast_coordinator, slow_coordinator
+
+WEB = container("web_app", id="c1", image="nginx:1")
+HAWSER = container("hawser", id="c2", systemContainer="hawser")
 
 
 @pytest.fixture
 def entry(hass: HomeAssistant) -> MockConfigEntry:
-    entry = MockConfigEntry(domain=DOMAIN, data={"api_url": "http://dh.test:3000"})
-    entry.add_to_hass(hass)
+    entry = config_entry(hass)
     entry.mock_state(hass, ConfigEntryState.LOADED)
     data = MagicMock()
     data.client.async_prune = AsyncMock(
@@ -33,11 +34,10 @@ def entry(hass: HomeAssistant) -> MockConfigEntry:
         }[resource]
     )
     data.client.async_recreate_container = AsyncMock(return_value={"success": True})
-    data.fast_coordinator.data = {
-        "environments": {1: {"stats": {}, "containers": [WEB, HAWSER]}}
-    }
-    data.fast_coordinator.async_refresh_environment = AsyncMock()
-    data.slow_coordinator.async_refresh = AsyncMock()
+    data.fast_coordinator = fast_coordinator(
+        {1: {"stats": {}, "containers": [WEB, HAWSER]}}
+    )
+    data.slow_coordinator = slow_coordinator()
     entry.runtime_data = data
     async_setup_services(hass)
     return entry

@@ -19,14 +19,13 @@ from custom_components.dockhand.events import (
     container_event_signal,
 )
 
-WEB = {"id": "c1", "name": "web", "state": "running"}
+from .conftest import container, fast_coordinator
+
+WEB = container("web", id="c1")
 
 
 def _fast(stats: dict, containers: list[dict]) -> MagicMock:
-    coord = MagicMock()
-    coord.data = {"environments": {1: {"stats": stats, "containers": containers}}}
-    coord.last_update_success = True
-    return coord
+    return fast_coordinator({1: {"stats": stats, "containers": containers}})
 
 
 def _entity(stats: dict | None = None, containers: list[dict] | None = None):

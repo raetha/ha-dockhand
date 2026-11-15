@@ -2,7 +2,7 @@
 Tests for ContainerUpdateEntity and helpers (update.py).
 
 Two-tier architecture: Tier 1 (always on) is sourced entirely from the
-fast coordinator; Tier 2 (CONF_ENABLE_UPDATES, via update_coordinator,
+fast coordinator; Tier 2 (CONF_ENABLE_PRECISE_UPDATES, via update_coordinator,
 optionally None) layers precise digest data on top.
 
 Covers:
@@ -11,7 +11,7 @@ Covers:
   cache signal) and Tier 2 (real digests, prioritized over Tier 1 signals)
 - available: container in fast data, container missing, env missing,
   coordinator unhealthy (last_update_success=False)
-- release_summary: always None (no longer populated, consistent with HACS)
+- release_summary: always None, as HACS leaves it
 - async_release_notes: image name, ha-alert types verified (warning/info),
   scanner info note, system container warning, update disabled, no
   container, scanner+system combo, systemContainer priority over
@@ -55,6 +55,8 @@ from custom_components.dockhand.update import (
     async_setup_entry,
 )
 
+from .conftest import container, fast_coordinator, update_coordinator
+
 # ---------------------------------------------------------------------------
 # Test data
 # ---------------------------------------------------------------------------
@@ -65,14 +67,7 @@ ENV_NAME = "myenv"
 CONTAINER_NAME = "nginx"
 CONTAINER_ID = "abc123def456"
 
-CONTAINER_NORMAL = {
-    "id": CONTAINER_ID,
-    "name": CONTAINER_NAME,
-    "state": "running",
-    "image": "nginx:latest",
-    "labels": {},
-    "systemContainer": None,
-}
+CONTAINER_NORMAL = container(CONTAINER_NAME, id=CONTAINER_ID, image="nginx:latest")
 CONTAINER_SYSTEM = {
     **CONTAINER_NORMAL,
     "image": "ghcr.io/finsys/hawser:latest",
@@ -147,9 +142,8 @@ def _make_fast_coord(
     pending_ids: set | None = None,
     pending_update_details: dict | None = None,
 ) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {
-        "environments": {
+    coord = fast_coordinator(
+        {
             ENV_ID: {
                 "containers": containers
                 if containers is not None
@@ -165,38 +159,29 @@ def _make_fast_coord(
                 "pending_update_details": pending_update_details or {},
             }
         }
+    )
+    coord.client.async_start_batch_update_stream.return_value = "job-1"
+    coord.client.async_get_update_check_settings.return_value = {
+        "vulnerabilityCriteria": "critical_high"
     }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_refresh_environment = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    coord.client = MagicMock()
-    coord.client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    coord.client.async_get_update_check_settings = AsyncMock(
-        return_value={"vulnerabilityCriteria": "critical_high"}
-    )
-    coord.client.async_get_version_notes = AsyncMock(
-        return_value=VERSION_NOTES_RESPONSE
-    )
+    coord.client.async_get_version_notes.return_value = VERSION_NOTES_RESPONSE
     # Default: job completes immediately in "done" status with one progress
     # line reporting 100%, matching a successful single-container update.
-    coord.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "done",
-                        "current": 1,
-                        "total": 1,
-                    }
+    coord.client.async_get_job.return_value = {
+        "status": "done",
+        "lines": [
+            {
+                "data": {
+                    "type": "progress",
+                    "containerId": CONTAINER_ID,
+                    "step": "done",
+                    "current": 1,
+                    "total": 1,
                 }
-            ],
-            "result": {"summary": {"total": 1, "success": 1}},
-        }
-    )
+            }
+        ],
+        "result": {"summary": {"total": 1, "success": 1}},
+    }
     return coord
 
 
@@ -204,14 +189,7 @@ def _make_update_coord(item: dict | None = None) -> MagicMock:
     """Tier 2 mock. item=None means "no data for this container yet" (not
     the same as update_coordinator=None, which means Tier 2 disabled
     entirely — see _make_entity's update_coordinator=... override)."""
-    coord = MagicMock(spec=DockhandUpdateCoordinator)
-    coord.data = {
-        "environments": {ENV_ID: {CONTAINER_ID: item}} if item else {ENV_ID: {}}
-    }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
+    return update_coordinator({ENV_ID: {CONTAINER_ID: item} if item else {}})
 
 
 _UNSET = object()
@@ -365,11 +343,9 @@ def test_tier2_latest_version_new_digest_when_update_available():
 
 
 def test_tier2_latest_version_falls_back_to_raw_tag_when_new_digest_missing():
-    """hasUpdate=True with no real digest attached — the fix for bug #2:
-    falls back to the container's raw image tag (distinguishable from
-    installed_version, which here is the currentDigest-derived short
-    digest), not to installed_version itself (which would falsely read
-    as "up to date")."""
+    """hasUpdate with no new digest: the latest version is the image's
+    tag, not installed_version (the current digest), which would read as
+    up to date."""
     item = {**ITEM_HAS_UPDATE, "newDigest": ""}
     entity = _make_entity(item)
     assert entity.installed_version == "53bb1e23fb30"
@@ -437,15 +413,13 @@ def test_latest_version_pending_cache_beats_absent_newer_version():
 
 
 # ---------------------------------------------------------------------------
-# _check_updates_item — Tier 1 / Tier 2 merge (bug #1/#2 fix)
+# _check_updates_item — Tier 1 / Tier 2 merge
 # ---------------------------------------------------------------------------
 
 
 def test_check_updates_item_tier1_only_no_tier2_at_all():
-    """Tier 2 entirely disabled — the merged item is built purely from
-    Tier 1's pending_update_details, and hasUpdate/newerVersion still
-    surface. This is the fix for bug #1/#2: previously returned {}
-    unconditionally whenever update_coordinator was None."""
+    """Without Tier 2 the item comes from Tier 1's pending_update_details
+    alone, and still carries hasUpdate and newerVersion."""
     entity = _make_entity(
         update_coordinator=None,
         pending_update_details={
@@ -551,7 +525,7 @@ def test_check_updates_item_empty_when_container_missing():
 
 
 # ---------------------------------------------------------------------------
-# latest_version — raw-tag-vs-sentinel fix (bug #2)
+# latest_version — raw tag or sentinel
 # ---------------------------------------------------------------------------
 
 
@@ -707,7 +681,7 @@ def test_install_offered_when_newer_version_but_pending_cache_flags_it():
 
 
 def test_release_summary_always_none():
-    # release_summary is no longer populated — consistent with HACS convention.
+    # Left empty, as HACS leaves it.
     # Image name and warnings appear in async_release_notes instead.
     assert _make_entity(containers=[CONTAINER_NORMAL]).release_summary is None
     assert (
@@ -1041,7 +1015,7 @@ async def test_release_notes_newer_version_truncates_long_body():
 
 
 # ---------------------------------------------------------------------------
-# async_release_notes — pending update with no newerVersion tag (bug #1 fix)
+# async_release_notes — pending update with no newerVersion tag
 # ---------------------------------------------------------------------------
 
 
@@ -1056,10 +1030,9 @@ async def test_release_notes_no_changelog_section_when_nothing_pending():
 
 
 async def test_release_notes_changelog_link_for_pending_update_without_tag():
-    """The bug #1 fix: hasUpdate=True (via Tier 1's merge, no digest, no
-    newerVersion tag) — version-notes is still called, with an EMPTY
-    versions list, and a bare changelog link is shown if Dockhand
-    resolves one."""
+    """An update with no digest and no newer tag still asks version-notes
+    (with no versions), and shows a changelog link if Dockhand finds
+    one."""
     entity = _make_entity(
         update_coordinator=None,
         pending_update_details={
@@ -1205,9 +1178,8 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     """A fast coordinator + entry pair for async_setup_entry tests, with a
     capturable listener callback (mimics what
     fast_coordinator.async_add_listener(cb) would return/store)."""
-    fast_coord = MagicMock(spec=DockhandFastCoordinator)
-    fast_coord.data = {
-        "environments": {
+    fast_coord = fast_coordinator(
+        {
             ENV_ID: {
                 "containers": containers
                 if containers is not None
@@ -1218,7 +1190,7 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
                 },
             }
         }
-    }
+    )
     listeners = []
     fast_coord.async_add_listener = MagicMock(
         side_effect=lambda cb: (listeners.append(cb), lambda: None)[1]
@@ -1305,21 +1277,10 @@ async def test_setup_entry_creates_entity_for_container_added_later(hass):
 
 
 async def test_entity_not_duplicated_within_the_same_session(hass):
-    """Within one continuous setup call's known_entity_ids, calling the
-    dynamic entity-creation path again with the same data must not try to
-    recreate what's already been added this session. See
-    test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it
-    below for the other half of this — and for why checking the real
-    entity registry instead of a session-scoped set (which is what
-    update.py's own 'seen' set was replaced with, alongside every other
-    platform's equivalent) was actually wrong, not just differently
-    named, the bug this whole file's own history already covers. Seeds
-    the registry directly between the two calls to stand in for what a
-    real (not mocked) add_entities call would have done as a side effect
-    of the first one — already_registered() now re-confirms a cache hit
-    is still actually registered, so without this the mock's lack of
-    real side effects would make the second call look like the entity
-    had vanished."""
+    """A poll with the same data doesn't add an entity the setup already
+    added (known_entity_ids). The registry is seeded between the calls,
+    as a real add would do, since already_registered() also checks the
+    entity is still registered."""
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -1341,17 +1302,10 @@ async def test_entity_not_duplicated_within_the_same_session(hass):
 async def test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it(
     hass,
 ):
-    """The actual regression this guards, and the one that shipped
-    briefly during development before being caught: entity creation must
-    never be gated on the real entity registry remembering a unique_id
-    from a *previous* session — the registry is deliberately persistent
-    across reloads and restarts, but the live entity object backing it is
-    not, and has to be freshly constructed and handed to
-    async_add_entities() on every single async_setup_entry call. Seed the
-    registry (simulating a previous session having created this), but
-    deliberately leave known_entity_ids alone (a fresh, empty one — as it
-    would genuinely be on a new session) and confirm it still gets
-    recreated regardless of what the registry remembers."""
+    """Each setup adds every entity again, even though the registry
+    remembers its unique ID from before: the registry outlives a reload,
+    the entity objects don't. A fresh known_entity_ids (a new session)
+    still creates the entity."""
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -1402,34 +1356,13 @@ async def test_entity_recreated_within_the_same_session_if_removed(hass):
 
 
 async def test_entity_not_double_scheduled_when_add_fires_twice_before_task_runs(hass):
-    """Regression: when cleanup removes an update entity from the registry
-    mid-session, the re-add path in already_registered() must not schedule
-    two concurrent async_add_entities calls for the same unique_id.
-
-    The race: async_add_entities() is fire-and-forget (HA schedules the
-    work as a task). If _add_new_entities fires a second time before the
-    first task has landed — e.g. because a second coordinator refresh
-    completes before the event-loop processes the first re-add task, which
-    is exactly what happens when multiple async_install() calls each
-    trigger coordinator.async_refresh() at nearly the same time — the
-    second call also sees the entity absent from the registry and schedules
-    another re-add. Both tasks eventually run; the second one finds the
-    entity already loaded in the platform and HA logs:
-      "Platform dockhand does not generate unique IDs. ID … already exists"
-
-    The fix (pending_readd_entity_ids in DockhandData): after the first
-    detection of "entity gone from registry," the key is added to the
-    dedicated pending_readd_entity_ids set. Subsequent calls that see the
-    same gap while the key is in pending_readd_ids return True (skip)
-    instead of False (re-add), so the second concurrent firing never
-    schedules a duplicate task. The primary key is never removed from
-    known_entity_ids — it accurately tracks "this session added this
-    entity" throughout.
-
-    Simulated here by calling _add_new_entities directly twice in sequence
-    with the entity absent from the registry between both calls, verifying
-    that async_add_entities is called exactly once (not twice).
-    """
+    """When cleanup removes an update entity mid-session, two quick refreshes
+    (several installs at once) must re-add it once: async_add_entities()
+    runs as a task, so the second refresh still finds it missing, and a
+    second add makes Home Assistant log "ID … already exists". The first
+    re-add marks it in pending_readd_entity_ids, and the second skips it;
+    known_entity_ids keeps it throughout. Simulated by calling
+    _add_new_entities twice with the entity absent both times."""
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 

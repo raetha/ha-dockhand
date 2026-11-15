@@ -22,6 +22,16 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.const import DOMAIN
 
+from .conftest import (
+    config_entry,
+    container,
+    fast_coordinator,
+    patch_setup,
+    slow_coordinator,
+    stack,
+    update_coordinator,
+)
+
 ENV_ID = 1
 STATS = {
     "name": "local",
@@ -34,37 +44,20 @@ STATS = {
     "metrics": {"cpuPercent": 5.0, "memoryPercent": 40.0},
     "containers": {"total": 5, "running": 4},
 }
-FREE = {"id": "c1", "name": "my-app", "state": "running", "image": "nginx:1.27"}
-COMPOSE = {
-    "id": "c2",
-    "name": "web",
-    "state": "running",
-    "image": "nginx:1.27",
-    "labels": {"com.docker.compose.project": "mystack"},
-}
-SYSTEM = {
-    "id": "c3",
-    "name": "dockhand",
-    "state": "running",
-    "image": "fnsys/dockhand:latest",
-    "systemContainer": True,
-}
-UNNAMED = {"id": "c4", "name": "", "state": "running", "image": "busybox"}
+FREE = container("my-app", id="c1", image="nginx:1.27")
+COMPOSE = container("web", stack="mystack", id="c2", image="nginx:1.27")
+SYSTEM = container(
+    "dockhand",
+    stack="infra",
+    id="c3",
+    image="fnsys/dockhand:latest",
+    systemContainer="dockhand",
+)
+UNNAMED = container("", id="c4", image="busybox")
 STACKS = [
-    {
-        "name": "mystack",
-        "status": "running",
-        "sourceType": "internal",
-        "containers": ["c2"],
-        "updatesAvailable": 1,
-    },
-    {"name": "gitapp", "status": "running", "sourceType": "git", "containers": []},
-    {
-        "name": "infra",
-        "status": "running",
-        "sourceType": "external",
-        "containers": ["c3"],
-    },
+    stack("mystack", COMPOSE, updatesAvailable=True, updateCount=1),
+    stack("gitapp", status="running", sourceType="git"),
+    stack("infra", SYSTEM, sourceType="external"),
 ]
 GIT_STACK = {
     "id": 42,
@@ -145,11 +138,9 @@ ENABLED_UP_FRONT = (
 )
 
 
-def _coordinator(data: dict, listeners: list[Callable[[], None]]) -> MagicMock:
-    coord = MagicMock()
-    coord.data = data
-    coord.last_update_success = True
-    coord.async_config_entry_first_refresh = AsyncMock()
+def _listened(coord: MagicMock, listeners: list[Callable[[], None]]) -> MagicMock:
+    """Keep the listeners the integration adds, so a test can run them as a
+    poll would."""
 
     def _add_listener(callback, context=None):
         listeners.append(callback)
@@ -166,33 +157,17 @@ def listeners() -> list[Callable[[], None]]:
 
 @pytest.fixture
 async def loaded_entry(hass: HomeAssistant, listeners) -> MockConfigEntry:
-    fast = _coordinator(FAST_DATA, listeners)
-    slow = _coordinator(SLOW_DATA, listeners)
-    update = _coordinator(UPDATE_DATA, listeners)
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={"api_url": "http://dh.test:3000", "api_token": "dh_x"},
-        options=OPTIONS,
-        version=2,
-        minor_version=2,
-        title="http://dh.test:3000",
-    )
-    entry.add_to_hass(hass)
+    fast = _listened(fast_coordinator(FAST_DATA["environments"]), listeners)
+    slow = _listened(slow_coordinator(**SLOW_DATA), listeners)
+    update = _listened(update_coordinator(UPDATE_DATA["environments"]), listeners)
+    entry = config_entry(hass, options=OPTIONS)
     # Disabled by default; registered enabled up front so they get states.
     ent_reg = er.async_get(hass)
     for domain, suffix in ENABLED_UP_FRONT:
         ent_reg.async_get_or_create(
             domain, DOMAIN, f"{entry.entry_id}_{ENV_ID}_{suffix}", config_entry=entry
         )
-    with (
-        patch("custom_components.dockhand.async_get_clientsession"),
-        patch("custom_components.dockhand.DockhandClient"),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-        patch(
-            "custom_components.dockhand.DockhandUpdateCoordinator", return_value=update
-        ),
-    ):
+    with patch_setup(fast, slow, update):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED

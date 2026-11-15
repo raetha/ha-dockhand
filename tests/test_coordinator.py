@@ -28,6 +28,8 @@ from custom_components.dockhand.coordinator import (
     _unwrap,
 )
 
+from .conftest import container
+
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
 # ---------------------------------------------------------------------------
@@ -35,7 +37,7 @@ from custom_components.dockhand.coordinator import (
 ENV1 = {"id": 1, "name": "local"}
 ENV2 = {"id": 2, "name": "remote"}
 STATS1 = {"name": "local", "cpu": 10.5, "containers": {"running": 2, "stopped": 1}}
-CONTAINER1 = {"id": "abc", "name": "web", "state": "running", "labels": {}}
+CONTAINER1 = container("web", id="abc")
 STACK1 = {"name": "myapp", "status": "running", "containers": 2}
 IMAGE1 = {"id": "sha256:deadbeef", "size": 104857600}
 NETWORK1 = {"id": "net1", "name": "bridge", "containers": {}}
@@ -538,21 +540,12 @@ async def test_fetched_since_tracks_the_fetch_behind_the_data(hass: HomeAssistan
 
 
 async def test_fast_stats_failure_does_not_clear_environments(hass: HomeAssistant):
-    """/api/dashboard/stats (no env param) is the fast coordinator's only
-    source of which environments exist — no separate /api/environments
-    call. If it fails entirely (e.g. DNS resolution failure reaching
-    Dockhand), this must fail the update (last_update_success=False,
-    coordinator.data left at its last-known-good value) rather than
-    silently succeed with an empty dict — an empty-but-successful result
-    previously fed "zero stacks/containers for every environment" through
-    every downstream consumer that trusts non-empty coordinator data as
-    authoritative, including _cleanup_stale_registry's "fast data must be
-    non-empty" guard (empty *all_stats* still produced a non-empty
-    *fast_coordinator.data*, since _fetch_env ran per known env_id
-    regardless — the guard didn't catch this). A transient/total outage
-    should leave everything in place (entities go unavailable via
-    last_update_success) until it resolves, never look like every stack
-    and container just disappeared."""
+    """/api/dashboard/stats is the fast coordinator's only source of which
+    environments exist. If it fails entirely (Dockhand unreachable), the
+    update fails and the last good data stays, rather than succeeding
+    with no environments: cleanup trusts successful data, so an outage
+    would look like every stack and container had disappeared. Entities go
+    unavailable instead until it recovers."""
     client = _make_client()
     client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client)
@@ -658,14 +651,10 @@ async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistan
 async def test_fast_pending_updates_semver_only_row_excluded_from_ids(
     hass: HomeAssistant,
 ):
-    """A row with hasImageUpdate=False but a newerVersion suggestion is a
-    real, previously-unnoticed case: Dockhand's own scheduled update-check
-    job persists a row here for semver-only suggestions too (no actionable
-    digest update). Such a row must NOT contribute to
-    pending_update_container_ids (that set means "actionable"), but its
-    newerVersion must still be reachable via pending_update_details — this
-    is the fix for the over-inclusion bug this whole feature branch
-    uncovered."""
+    """Dockhand's scheduled update check also stores a row for a newer
+    semver tag with no new image (hasImageUpdate False). It isn't
+    actionable, so it stays out of pending_update_container_ids, but its
+    newerVersion is still reachable through pending_update_details."""
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
     newer_version = {"tag": "16.4-alpine", "bump": "minor", "skipped": ["16.4-alpine"]}
     client.async_get_pending_updates = AsyncMock(
@@ -816,13 +805,7 @@ async def test_merge_pending_updates_from_check_ignores_items_without_id(
     assert env_data["pending_update_details"] == {}
 
 
-SYSTEM_CONTAINER = {
-    "id": "sys1",
-    "name": "dockhand",
-    "state": "running",
-    "labels": {},
-    "systemContainer": "dockhand",
-}
+SYSTEM_CONTAINER = container("dockhand", id="sys1", systemContainer="dockhand")
 
 
 async def test_system_container_check_result_survives_next_poll(
@@ -1287,12 +1270,9 @@ async def test_slow_vulnerabilities_malformed_response_defaults_to_empty_dict(
 
 
 async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
-    """The real bug this whole file's _unwrap tracking exists for: a
-    failed images fetch (DNS failure, timeout, 5xx — anything) must not
-    look identical to "this environment genuinely has zero images." Both
-    conditions previously produced images == [] with no way to tell them
-    apart; fetch_failures is what makes that distinction visible to
-    downstream cleanup logic (__init__.py's _build_live_sets)."""
+    """A failed images fetch must not look like an environment with no
+    images: fetch_failures tells them apart for cleanup
+    (__init__.py's _build_live_sets)."""
     client = _make_client(envs=[ENV1])
     client.async_get_images = AsyncMock(side_effect=Exception("timeout"))
     coord = _slow(hass, client)
@@ -1304,14 +1284,10 @@ async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
 async def test_slow_schedules_api_failure_recorded_not_silently_empty(
     hass: HomeAssistant,
 ):
-    """The actual reported incident: a transient schedules-fetch failure
-    (the report's own suspicion: DNS resolution failing intermittently)
-    used to become schedules: [] with the coordinator still reporting
-    success — indistinguishable from "there really are zero schedules
-    now" — which caused every existing schedule device and its entities
-    to be wrongly treated as confirmed-deleted by cleanup. This is the
-    top-level fetch_failures set (schedules is fetched once, not
-    per-environment, unlike images/networks/volumes above)."""
+    """A failed schedules fetch (an intermittent DNS failure in a real
+    report) is recorded in the top-level fetch_failures, not taken as
+    "no schedules": otherwise cleanup would delete every schedule device.
+    Schedules are fetched once, not per environment like images."""
     client = _make_client(envs=[ENV1])
     client.async_get_schedules = AsyncMock(
         side_effect=Exception("Name or service not known")
@@ -1411,14 +1387,9 @@ async def test_update_coord_new_env_failure_is_empty_not_missing(hass: HomeAssis
 async def test_async_check_environment_only_touches_its_own_environment(
     hass: HomeAssistant,
 ):
-    """The actual design fix from this session: a per-environment "Check
-    for updates" button used to trigger a full coordinator refresh
-    (async_refresh()), which always checks every environment in one
-    gather — so pressing environment 1's button silently also re-checked
-    every other environment too, a real mismatch between what the
-    button's device implies and what pressing it actually does.
-    async_check_environment() is genuinely scoped: checking environment 1
-    must leave environment 2's already-known data completely untouched."""
+    """An environment's Check for updates button checks that environment
+    only, as its device implies: async_check_environment() leaves every
+    other environment's data untouched."""
     client = _make_client()
     client.async_check_container_updates = AsyncMock(
         return_value=[{"containerId": "abc", "hasUpdate": True}]
@@ -1717,12 +1688,9 @@ async def test_fast_pending_updates_keep_pinned_digests_and_held_updates(
 # Update coordinator — Dockhand's own release, via /api/self-update/check
 # ---------------------------------------------------------------------------
 
-DOCKHAND_CONTAINER = {
-    "id": "dh1",
-    "name": "dockhand",
-    "image": "fnsys/dockhand:v1.0.53",
-    "systemContainer": "dockhand",
-}
+DOCKHAND_CONTAINER = container(
+    "dockhand", id="dh1", image="fnsys/dockhand:v1.0.53", systemContainer="dockhand"
+)
 DOCKHAND_ROW = {
     "containerId": "dh1",
     "containerName": "dockhand",

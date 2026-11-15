@@ -23,10 +23,12 @@ from custom_components.dockhand.switch import (
     DockhandScheduleEnabledSwitch,
 )
 
+from .conftest import container, fast_coordinator, slow_coordinator
+
 ENTRY_ID = "entry"
 ENV_ID = 1
 BASE_URL = "http://dh.test:3000"
-RUNNING = {"id": "c1", "name": "web", "state": "running", "labels": {}}
+RUNNING = container("web", id="c1")
 PAUSED = {**RUNNING, "state": "paused"}
 SCHED = {
     "id": 7,
@@ -38,24 +40,13 @@ SCHED = {
 
 
 def _fast(container: dict | None) -> MagicMock:
-    coord = MagicMock()
-    coord.data = {
-        "environments": {
-            ENV_ID: {"stats": {}, "containers": [container] if container else []}
-        }
-    }
-    coord.last_update_success = True
-    coord.async_refresh_environment = AsyncMock()
-    return coord
+    return fast_coordinator(
+        {ENV_ID: {"stats": {}, "containers": [container] if container else []}}
+    )
 
 
 def _slow(schedules: list[dict]) -> MagicMock:
-    coord = MagicMock()
-    coord.data = {"environments": {}, "schedules": schedules}
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_refresh_schedules = AsyncMock()
-    return coord
+    return slow_coordinator(schedules=schedules)
 
 
 def _container_button(cls, container: dict | None, client=None):
