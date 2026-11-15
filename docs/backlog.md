@@ -28,6 +28,8 @@ Ideas that came up during development, were deliberately evaluated, and either d
 
 - **Specific translated errors instead of `action_failed`'s raw error text.** Home Assistant's guidance prefers an error per case; `action_failed` passes Dockhand's message as a placeholder. Low priority: permission errors already have their own (`permission_denied`).
 
+- **Not building entity objects for entities that already exist, on every poll.** Each platform's builder constructs every entity it could add, then `already_registered()` drops the ones already added. After the 2.0.0 lookup and cleanup changes (#97) that's about a fifth of a poll's remaining time at 384 containers on one host (around 0.04 s on a 2.1 GHz Xeon; `tests/test_poll_benchmark.py`), and a few milliseconds for a typical host. Skipping it needs either each unique ID before its entity is built, which means a second copy of 71 unique ID formulas (architecture §1 says to copy the pattern, not have two of one), or skipping a builder while nothing it reads has changed, which fails silently (an entity never appears) whenever "nothing it reads" misses something. Neither is worth it for that gain. Revisit if a profile from a real install shows the builders mattering, for instance a host with thousands of containers.
+
 ## Waiting on Dockhand
 
 Requests filed with Dockhand, and what to change here when each is answered. At each backlog or upstream review, check whether they're still open, released, or turned down (`gh api "search/issues?q=repo:Finsys/dockhand+is:issue+author:raetha"` lists them), and update or remove the entry.
