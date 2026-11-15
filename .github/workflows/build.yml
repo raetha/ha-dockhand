@@ -200,7 +200,7 @@ jobs:
 
   test-build:
     needs: [validate, lint, tests, quality-scale]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -212,7 +212,30 @@ jobs:
         with:
           persist-credentials: false
 
+      # A push that changes nothing users install (docs, tests, CI) publishes no
+      # test build. Run the workflow by hand on dev to publish one anyway.
+      - name: Check whether anything that ships changed
+        id: ships
+        run: |
+          set -e
+          ships='^(custom_components/|hacs\.json$)'
+          last=$(gh api "repos/$GH_REPO/releases?per_page=100" \
+            --jq '[.[] | select(.prerelease) | .tag_name | select(test("^v?[0-9.]+-dev\\.[0-9]+$"))][0] // ""')
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -z "$last" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Any doubt (no comparison, too many files to list) publishes.
+          files=$(gh api "repos/$GH_REPO/compare/$last...$GITHUB_SHA" \
+            --jq 'if (.files | length) >= 300 or .status == "behind" or .status == "diverged" then "*" else .files[].filename end') || files='*'
+          if [ "$files" = '*' ] || grep -qE "$ships" <<<"$files"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing that ships changed since $last: no test build." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Publish the test build
+        if: steps.ships.outputs.changed == 'true'
         run: |
           set -e
           version=$(python3 scripts/release.py version)
