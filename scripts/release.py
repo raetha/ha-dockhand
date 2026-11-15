@@ -111,19 +111,20 @@ def notes(changelog: str, version: str, test_build: int | None = None) -> str:
     if body is None:
         raise ValueError(f"CHANGELOG.md has no section for {version}")
     install = (
-        f"**Install** with HACS (search for Dockhand, or add `{REPO}` as a custom "
-        "repository of type Integration), restart Home Assistant, then add the "
-        "Dockhand integration under Settings → Devices & services. The "
-        "[Dockhand Cards](https://github.com/raetha/ha-dockhand-cards) add "
-        f"dashboard cards for it.\n\nMore: [README]({REPO}#readme)"
+        "**Install** from Home Assistant's Marketplace (2026.11 and later; HACS "
+        "on older versions): find Dockhand, install it and restart Home "
+        "Assistant, then add the Dockhand integration under Settings → Devices "
+        "& services. The [Dockhand Cards](https://github.com/raetha/ha-dockhand-cards) "
+        f"add dashboard cards for it.\n\nMore: [README]({REPO}#readme)"
     )
     parts = []
     if test_build is not None:
         parts.append(
             f"**Test build {test_build}** from `dev`, for trying what's coming. "
-            "To get it, enable and turn on the Dockhand **Pre-release** switch "
-            "HACS adds (disabled by default); HACS then offers it as an update. "
-            "The changes since the last release:"
+            "To get it, turn on pre-releases for Dockhand (in the Marketplace, "
+            "Dockhand's ⋮ menu; or its **Pre-release** switch, disabled by "
+            "default) and it's offered as an update. The changes since the last "
+            "release:"
         )
     parts += [body or "_No changes listed yet._", install]
     return "\n\n".join(parts) + "\n"

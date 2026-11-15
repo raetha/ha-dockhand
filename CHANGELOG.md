@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
-Dockhand for Home Assistant 2.0 has two aims. It **follows Home Assistant's standards more closely**: counts and sizes become sensors with history and long-term statistics, polling follows Home Assistant's rules, states are translated, and nothing writes to the database on every poll without reason. And it **puts more of Dockhand in your hands**: an environment's settings, schedules, pausing containers, pruning and recreating, and Dockhand's own event collection can all be controlled from Home Assistant. Container changes now show within seconds through Dockhand's live feed, with fewer requests to Dockhand overall.
+Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely and puts more of Dockhand in your hands.
 
-Some changes are breaking: read **Removed** before upgrading, check automations and dashboards that use attributes, and update [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0 at the same time. Home Assistant 2026.8 or later is required.
+- **Counts and sizes are sensors**, with history and long-term statistics, states are translated, and nothing writes to the database on every poll without reason.
+- **Control Dockhand from Home Assistant**: an environment's settings, running and pausing schedules, pausing containers, pruning, recreating, and Dockhand's own event collection.
+- **Live updates**: container changes show within seconds through Dockhand's live feed, with fewer requests to Dockhand overall.
+- **A Dockhand device** with Dockhand's own update entity, and a Docker event entity for each container.
+
+**Before you upgrade:** some changes are breaking. Read **Removed**, check automations and dashboards that use attributes or the settings' binary sensors (a repair lists the automations and scripts to change), and update [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0 at the same time. Home Assistant 2026.8 or later is required.
 
 ### Removed
 
@@ -63,6 +68,7 @@ Some changes are breaking: read **Removed** before upgrading, check automations 
 
 ### Internal
 
+- Release and test build notes say to install from Home Assistant's Marketplace (HACS on older versions) and how to turn on pre-releases there, instead of adding a HACS custom repository.
 - The full review checklist (`docs/audits.md`) covers tests, tooling and comments.
 - Tests share their coordinator, config entry and sample data helpers (`tests/conftest.py`), with sample containers and stacks shaped like Dockhand's own, and their docstrings say what each test protects rather than how bugs were found.
 - A test sets the integration up from one real Dockhand environment (sanitized, from a diagnostics download) and checks every entity gets a state.
