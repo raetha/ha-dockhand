@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -369,17 +370,20 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
             f"Could not fetch initial Dockhand data: {err}"
         ) from err
 
-    try:
-        # Slow coordinator failure is non-fatal at startup — optional entities
-        # will show as unavailable until the first successful poll.
-        await slow_coordinator.async_config_entry_first_refresh()
-    except Exception as err:
-        _LOGGER.warning(
-            "Dockhand: initial slow data fetch failed, will retry at next poll: %s",
-            err,
-        )
+    async def _first_slow_refresh() -> None:
+        try:
+            # Slow coordinator failure is non-fatal at startup — optional entities
+            # will show as unavailable until the first successful poll.
+            await slow_coordinator.async_config_entry_first_refresh()
+        except Exception as err:
+            _LOGGER.warning(
+                "Dockhand: initial slow data fetch failed, will retry at next poll: %s",
+                err,
+            )
 
-    if update_coordinator is not None:
+    async def _first_update_refresh() -> None:
+        if update_coordinator is None:
+            return
         try:
             # Update coordinator failure is non-fatal — entities will show as
             # unavailable until the first successful poll (up to 24h by default).
@@ -392,7 +396,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
 
     # Never fatal: the version only labels the instance device.
     version_coordinator = DockhandVersionCoordinator(hass, client, entry=entry)
-    await version_coordinator.async_refresh()
+    # Independent of each other, so they're fetched together: one after
+    # another, a precise update check alone could hold setup for seconds.
+    await asyncio.gather(
+        _first_slow_refresh(),
+        _first_update_refresh(),
+        version_coordinator.async_refresh(),
+    )
 
     entry.runtime_data = DockhandData(
         client=client,

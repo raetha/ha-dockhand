@@ -44,6 +44,7 @@ FAST_DATA = {
                 "name": "web",
                 "labels": SECRET_LABELS,
                 "networks": {"proxy": {"ipAddress": "172.20.0.5"}},
+                "command": "app --password hunter2",
                 "mounts": [
                     {"type": "bind", "source": "/home/me/web", "destination": "/data"}
                 ],
@@ -59,7 +60,15 @@ SLOW_DATA = {
     "environments": {
         1: {
             "images": [{"id": "sha256:abc", "labels": {"org.label": "x"}}],
-            "networks": [],
+            "networks": [
+                {
+                    "name": "proxy",
+                    "ipam": {
+                        "config": [{"subnet": "172.20.0.0/24", "gateway": "172.20.0.1"}]
+                    },
+                    "containers": {"c1": {"name": "web", "ipv4Address": "172.20.0.5"}},
+                }
+            ],
             "volumes": [],
             "host": {
                 "hostname": "myhost",
@@ -174,12 +183,16 @@ async def test_addresses_and_credentials_redacted(hass: HomeAssistant):
     assert container["networks"]["proxy"]["ipAddress"] == REDACTED
     assert container["mounts"][0]["source"] == REDACTED
     assert container["mounts"][0]["destination"] == "/data"
+    assert container["command"] == REDACTED
     slow = result["coordinator"]["slow"]["data"]
     env = slow["environments"][1]
     assert env["host"]["hostname"] == REDACTED
     assert env["host"]["ipAddress"] == REDACTED
     assert env["host"]["platform"] == "Linux"
     assert env["env_meta"] == {"connectionHost": REDACTED, "connectionPort": 2376}
+    network = env["networks"][0]
+    assert network["ipam"]["config"] == [{"subnet": REDACTED, "gateway": REDACTED}]
+    assert network["containers"]["c1"] == {"name": "web", "ipv4Address": REDACTED}
     assert env["git_stacks"][0]["repository"]["url"] == REDACTED
     assert slow["schedules"][0]["lastExecution"]["logs"] == REDACTED
     # The source data itself is untouched.

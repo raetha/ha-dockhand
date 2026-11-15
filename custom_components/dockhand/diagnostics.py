@@ -76,8 +76,14 @@ COORDINATOR_TO_REDACT = {
     "url",
     # Addresses and paths that identify the user's network and hosts.
     "ipAddress",
+    "ipv4Address",
+    "ipv6Address",
+    "subnet",
+    "gateway",
     "hostname",
     "connectionHost",
+    # A container's command line, which can carry passwords and tokens.
+    "command",
 }
 
 

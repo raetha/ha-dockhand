@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -3228,6 +3229,36 @@ async def test_setup_survives_a_failed_first_precise_update_check(
     assert entry.runtime_data.update_coordinator is update
     # The cleanup listener is attached to it too.
     update.async_add_listener.assert_called()
+
+
+async def test_setup_fetches_slow_data_and_update_checks_together(
+    hass: HomeAssistant,
+):
+    """After the fast data, the slow data and the precise update check are
+    fetched at the same time: one waiting on the other would hold setup for
+    as long as both take."""
+    entry = _make_entry(hass, options={"enable_precise_updates": True})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
+    update = update_coordinator()
+    update_started = asyncio.Event()
+
+    slow_done = asyncio.Event()
+
+    async def slow_waits_for_the_update_check() -> None:
+        await asyncio.wait_for(update_started.wait(), timeout=1)
+        slow_done.set()
+
+    async def update_check() -> None:
+        update_started.set()
+
+    slow.async_config_entry_first_refresh.side_effect = slow_waits_for_the_update_check
+    update.async_config_entry_first_refresh.side_effect = update_check
+    with patch_setup(fast, slow, update):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert slow_done.is_set()
 
 
 # ---------------------------------------------------------------------------
