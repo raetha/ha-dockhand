@@ -49,6 +49,7 @@ Some changes are breaking: read **Removed** before upgrading, check automations 
 
 ### Fixed
 
+- **Diagnostics leave out more of what identifies your setup**, since they get attached to public bug reports: container labels repeated in Docker events (which can hold secrets such as reverse-proxy passwords), schedule logs, git repository URLs, host names and addresses, mount paths, and the host part of the Dockhand address.
 - **Host last boot changed every 10 minutes** by a fraction of a second, adding a row to Home Assistant's database each time; it now changes only when the host reboots.
 - **An offline environment's Online sensor kept the online icon** — it now shows the Wi-Fi-off icon.
 - **Stacks and images could disappear while Docker was briefly unreachable** — Dockhand reports an empty list rather than an error when it can't reach Docker, so a short outage could remove an environment's stack or image devices. Anything that disappears now has to still be missing on the next refresh before its device is removed, which also covers containers for an outage that starts mid-poll and a container briefly missing while it's recreated.

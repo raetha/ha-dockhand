@@ -275,9 +275,12 @@ rules:
       diagnostics.py implements async_get_config_entry_diagnostics. Returns
       redacted config entry data, per-environment summary counts, full fast
       and slow coordinator snapshots, and an update-check summary (system
-      container results and Dockhand's own release check). api_token is redacted from config data;
-      labels, tlsKey, and hawserToken are redacted from coordinator snapshots
-      (labels routinely carry secrets such as reverse-proxy auth hashes;
+      container results and Dockhand's own release check). api_token and the
+      API URL's host are redacted from config data; labels (and Docker events'
+      actorAttributes, which repeat them), schedule logs, git repository URLs,
+      host names, addresses, environment hosts and mount paths, tlsKey and
+      hawserToken from coordinator snapshots (labels routinely carry secrets
+      such as reverse-proxy auth hashes;
       tlsKey/hawserToken are defense-in-depth for env_meta, which only ever
       extracts specific named fields from /api/environments and never stores
       its raw response — this redaction covers the case where either secret
