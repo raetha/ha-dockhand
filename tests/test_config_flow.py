@@ -74,10 +74,11 @@ def _patch_client(probe_side_effect=None):
 
 
 @contextlib.contextmanager
-def _patch_full_setup():
-    """Patch everything needed for async_setup_entry to succeed without network access."""
+def _patch_full_setup(fast_data: dict | None = None, slow_data: dict | None = None):
+    """Patch everything needed for async_setup_entry to succeed without
+    network access, with the coordinators holding the data given."""
     fast = MagicMock()
-    fast.data = {
+    fast.data = fast_data or {
         "environments": {
             1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}
         }
@@ -85,7 +86,7 @@ def _patch_full_setup():
     fast.async_config_entry_first_refresh = AsyncMock()
     fast.async_add_listener = MagicMock(return_value=lambda: None)
     slow = MagicMock()
-    slow.data = {"environments": {}, "schedules": []}
+    slow.data = slow_data or {"environments": {}, "schedules": []}
     slow.last_update_success = True
     slow.async_config_entry_first_refresh = AsyncMock()
     slow.async_add_listener = MagicMock(return_value=lambda: None)
