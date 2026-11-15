@@ -24,6 +24,7 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 - Tests and tooling (the new checklist item): reviewed today with the cleanup; nothing further.
 - Changelog re-read as release notes: an outage removed stacks and images, not "image devices"; the manifest line moved below the features.
 - Missed, then found through #96: the checklist had no performance item and the review read the code rather than measuring it. Profiling a poll showed each entity scanning its environment's container list (containers × entities per poll) and the registry cleanup walking every device and entity on every poll; both fixed in #97 (0.38 s to 0.18 s per poll at 384 containers). The benchmark is now `tests/test_poll_benchmark.py`, and item 9 above runs it. Still built every poll: entity objects for entities that already exist, about a fifth of what remains, left as is since skipping them needs each platform's unique IDs before building.
+- Also checked whether 1.11.3's attributes made the recorder's work much bigger (#96): with the recorder on, resource stats on and stats changing every poll, 192 containers give about 2,500 state changes per poll in both 1.11.3 and 2.0.0 (the resource stats sensors, off by default). 1.11.3 writes about twice the attribute data (1.6 MB against 0.7 MB over four polls) through the same number of rows; the recorder writes them in its own thread, so it doesn't explain a frozen event loop.
 
 ## 2026-11-14: review before releasing 2.0.0
 
