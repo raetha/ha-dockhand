@@ -3286,11 +3286,22 @@ def test_stack_stats_have_no_memory_percent():
     assert "memory_percent" not in _stack_stats_sensors({})
 
 
-def test_stack_stats_unavailable_when_dockhand_omits_the_stack():
-    """Dockhand leaves out a stack with no running container."""
+def test_stack_stats_when_dockhand_omits_the_stack():
+    """Dockhand leaves out a stack with no running container: none of its
+    containers run, and the rest of its totals are unavailable."""
     sensors = _stack_stats_sensors({"other": {**MYAPP_STACK_STATS, "name": "other"}})
+    running = sensors.pop("running_containers")
+    assert running.available
+    assert running.native_value == 0
     assert all(not s.available for s in sensors.values())
     assert sensors["cpu_percent"].native_value is None
+
+
+def test_stack_running_containers_unavailable_when_dockhand_is():
+    """0 means Dockhand reported nothing running, not that it can't be reached."""
+    running = _stack_stats_sensors({})["running_containers"]
+    running.coordinator.last_update_success = False
+    assert not running.available
 
 
 def test_stack_stats_unavailable_when_the_fetch_failed():

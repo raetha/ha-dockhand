@@ -1850,6 +1850,9 @@ class DockhandStackStatsDescription(SensorEntityDescription):
     percentage: Dockhand doesn't report one for a stack."""
 
     value_fn: Callable[[dict[str, Any]], float | int | None]
+    # The value while none of the stack's containers runs (Dockhand then
+    # leaves the stack out); None makes the sensor unavailable instead.
+    none_running: int | None = None
 
 
 def _round2(value: Any) -> float | None:
@@ -1873,6 +1876,7 @@ STACK_STATS_SENSORS: tuple[DockhandStackStatsDescription, ...] = (
         translation_key="stack_running_containers",
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda t: t.get("runningCount"),
+        none_running=0,
     ),
     DockhandStackStatsDescription(
         key="memory_usage",
@@ -1936,9 +1940,9 @@ class DockhandStackStatsSensor(BaseFastStackSensor):
     reports it (GET /api/stack-stats, 1.0.52+) — the stack-level
     counterpart of the container stats sensors, created and removed with
     the same "Enable container and stack stats" option, and only where Dockhand has
-    the endpoint. Unavailable while none of the stack's containers is
-    running (Dockhand leaves such a stack out), like a stopped container's
-    own stats sensors."""
+    the endpoint. While none of the stack's containers is running, Dockhand
+    leaves the stack out: Running containers is then 0, and the rest are
+    unavailable, like a stopped container's own stats sensors."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     entity_description: DockhandStackStatsDescription
@@ -1959,22 +1963,35 @@ class DockhandStackStatsSensor(BaseFastStackSensor):
             f"{entry_id}_{env_id}_stack_{self._stack_name}_{description.key}"
         )
 
+    def _stack_stats(self) -> dict[str, Any] | None:
+        """Every stack's totals, or None when Dockhand couldn't be asked."""
+        stats: dict[str, Any] | None = _coordinator_env(
+            self.coordinator.data, self._env_id
+        ).get("stack_stats")
+        return stats
+
     def _totals(self) -> dict[str, Any] | None:
-        stack_stats = _coordinator_env(self.coordinator.data, self._env_id).get(
-            "stack_stats"
-        )
-        return (stack_stats or {}).get(self._stack_name)
+        return (self._stack_stats() or {}).get(self._stack_name)
 
     @property
     @override
     def available(self) -> bool:
-        return super().available and self._totals() is not None
+        if not super().available:
+            return False
+        if self._totals() is not None:
+            return True
+        return (
+            self.entity_description.none_running is not None
+            and self._stack_stats() is not None
+        )
 
     @property
     @override
     def native_value(self) -> float | int | None:
         totals = self._totals()
-        return self.entity_description.value_fn(totals) if totals else None
+        if totals is None:
+            return self.entity_description.none_running
+        return self.entity_description.value_fn(totals)
 
 
 # --------------------------------------------------------------------------- #

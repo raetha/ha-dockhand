@@ -39,7 +39,8 @@ FIXTURE = Path(__file__).parent / "fixtures" / "dockhand_environment.json"
 EXPECTED_UNKNOWN = {"hawser_last_seen", "docker_event"}
 # Unavailable here for a reason: events are streamed, not polled; nothing
 # has an update to install; and Dockhand reports no resource use for a
-# stack with nothing running (staging and backup).
+# stack with nothing running (staging and backup), so only its Running
+# containers has a value (0).
 EXPECTED_UNAVAILABLE = {
     "select.dockhand_dockhand_example_internal_3000_event_poll_interval",
     "button.atlas_update_all_containers",
@@ -48,7 +49,6 @@ EXPECTED_UNAVAILABLE = {
         for stack in ("staging", "backup")
         for stat in (
             "cpu_usage",
-            "running_containers",
             "memory_usage",
             "memory_limit",
             "network_in",

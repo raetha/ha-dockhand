@@ -45,6 +45,7 @@ Some changes are breaking: read **Removed** before upgrading, check automations 
 - **Attributes are always there** — an image's version, vendor, title and source, a schedule's last-run details, the Hawser agent's name and ID and the host's architecture are present even when empty, rather than coming and going. A container's `restart_count` is empty unless it's restarting, since Dockhand only counts restarts then; it used to read 0.
 - **Runtime controls are enabled when you turn their option on** — the memory, CPU and process limits and the restart policy were created disabled even with **Enable runtime controls** on. Ones you disabled yourself stay off.
 - **Update all is always there while update entities are on** — unavailable while nothing is pending, rather than appearing and disappearing, so automations and dashboards can rely on its entity ID.
+- **A stack's Running containers is 0 while nothing in it runs**, rather than unavailable, so automations and charts can compare it like any number. Its other resource sensors stay unavailable then, as Dockhand reports nothing for the stack.
 - **Versions show without a leading "v"** — HACS shows release tags, which from this release are plain version numbers (`2.0.0`, test builds such as `2.0.1-dev.42`), like most other HACS repositories. Earlier releases keep their `v` tags.
 
 ### Fixed
