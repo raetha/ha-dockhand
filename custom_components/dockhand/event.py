@@ -91,6 +91,11 @@ class DockhandContainerEventEntity(DockhandContainerEntity, EventEntity):
         )
 
     @override
+    def _update_inputs(self) -> Any:
+        env = _coordinator_env(self.coordinator.data, self._env_id)
+        return (super()._update_inputs(), env_sends_events(env))
+
+    @override
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
         self.async_on_remove(

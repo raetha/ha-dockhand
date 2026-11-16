@@ -45,6 +45,7 @@ from .helpers import (
     _container_has_pending_update,
     _container_has_pinned_digest_only,
     _container_has_version_suggestion_only,
+    _container_inputs,
     _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
@@ -634,6 +635,12 @@ class BaseFastContainerStatsSensor(BaseFastContainerSensor):
     @override
     def available(self) -> bool:
         return super().available and self._container_stats() is not None
+
+    @override
+    def _update_inputs(self) -> Any:
+        return _container_inputs(
+            self.coordinator, self._env_id, self._container_name, stats=True
+        )
 
 
 def _resolve_container_names(
