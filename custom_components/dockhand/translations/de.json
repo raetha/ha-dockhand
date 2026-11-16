@@ -407,6 +407,9 @@
       "disk_usage_build_cache": {
         "name": "Speicherplatz Build-Cache"
       },
+      "volume_size": {
+        "name": "{volume} Größe"
+      },
       "activity_events_today": {
         "name": "Aktivitätsereignisse heute"
       },

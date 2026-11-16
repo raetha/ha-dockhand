@@ -407,6 +407,9 @@
       "disk_usage_build_cache": {
         "name": "构建缓存磁盘用量"
       },
+      "volume_size": {
+        "name": "{volume} 大小"
+      },
       "activity_events_today": {
         "name": "今日活动事件"
       },

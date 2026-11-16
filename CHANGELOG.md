@@ -27,6 +27,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Added
 
+- **Volume sizes** — with volumes enabled, each volume gets a size sensor beside it, from the same disk usage Dockhand shows. Dockhand 1.0.58 and later serve it from a 5-minute cache, so it adds no work for Docker.
 - **Change an environment's settings from Home Assistant** — switches for activity and metrics collection, update checks, auto-update and image pruning, and selects for the vulnerability scanner and the image prune mode. The Dockhand device gets a select for the default vulnerability scanner. Each appears once the token can read the setting. Changing an environment's scanner turns its **Vulnerability scanning** sensor on or off straight away, rather than at the next poll.
 - **Run schedules now, and pause them** — each schedule gets a **Run now** button and, where Dockhand allows it, an **Enabled** switch, so schedules are no longer read-only in Home Assistant. While a run is queued or running, its schedule is checked every 10 seconds, so the result shows soon after it ends.
 - **Pause button** for each container (disabled by default); turning the container's switch on resumes it.

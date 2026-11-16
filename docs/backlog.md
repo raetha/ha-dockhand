@@ -21,7 +21,6 @@ Ideas that came up during development, were deliberately evaluated, and either d
 
 - **Portainer details not carried over** (from the 2026-11-09 comparison with Home Assistant's Portainer integration; the rest of it is in 2.0.0). Each is possible with Dockhand today; none was asked for:
   - A container's start time, OOM-killed flag and true restart count: Portainer inspects every container on each poll; `GET /api/containers/{id}/inspect` would be one call per container. Only the OOM flag seems worth it, and only on request.
-  - Per-volume size: `GET /api/system/disk` (`Volumes[].UsageData.Size`). Since Dockhand 1.0.58 it reads the same 5-minute cache as the fast poll's disk usage (Finsys/dockhand#1893), so one call per environment on the slow poll costs Dockhand nothing extra; worth proposing.
   - Choosing which environments to include: Portainer has a subentry per environment. Only if users ask.
 
 - **`UpdateFailedUnreachable` once the minimum Home Assistant version reaches 2026.12.** Core added it on 2026-11-13 so a coordinator that can't reach its server logs at info level rather than as an error each time; Portainer uses it for connection errors and timeouts. Ours raise `UpdateFailed`.

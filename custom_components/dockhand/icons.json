@@ -198,6 +198,9 @@
       "disk_usage_build_cache": {
         "default": "mdi:hammer-wrench"
       },
+      "volume_size": {
+        "default": "mdi:harddisk"
+      },
       "activity_events_today": {
         "default": "mdi:pulse"
       },

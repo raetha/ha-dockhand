@@ -407,6 +407,9 @@
       "disk_usage_build_cache": {
         "name": "Uso de disco de caché de compilación"
       },
+      "volume_size": {
+        "name": "Tamaño de {volume}"
+      },
       "activity_events_today": {
         "name": "Eventos de actividad hoy"
       },

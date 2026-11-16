@@ -407,6 +407,9 @@
       "disk_usage_build_cache": {
         "name": "Build cache disk usage"
       },
+      "volume_size": {
+        "name": "{volume} size"
+      },
       "activity_events_today": {
         "name": "Activity events today"
       },

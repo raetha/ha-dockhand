@@ -868,7 +868,8 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         "environments": {
             env_id: {
                 "host": {}, "images": [], "networks": [],
-                "volumes": [], "runtime_config": {container_name: {...}},
+                "volumes": [], "volume_sizes": {volume_name: bytes},
+                "runtime_config": {container_name: {...}},
                 "git_stacks": [], "auto_update_settings": {container_name: {...}},
                 "recent_events": [{"containerName", "action", "timestamp", ...}],
                 "vulnerabilities": {"total", "critical", "high", "medium",
@@ -1170,6 +1171,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 named["networks"] = self.client.async_get_networks(env_id)
             if self._enable_volumes:
                 named["volumes"] = self.client.async_get_volumes(env_id)
+                named["volume_sizes"] = self.client.async_get_volume_sizes(env_id)
             if self._enable_runtime_controls:
                 named["runtime_config"] = _fetch_runtime_config(env_id)
             # Both flags below live on the same per-env "stats" blob (the
@@ -1241,6 +1243,17 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                             val, {}, f"host env={env_id}", failures, "host"
                         )
                         results["host"] = (
+                            unwrapped if isinstance(unwrapped, dict) else {}
+                        )
+                    elif key == "volume_sizes":
+                        unwrapped = _unwrap(
+                            val,
+                            {},
+                            f"volume_sizes env={env_id}",
+                            failures,
+                            "volume_sizes",
+                        )
+                        results["volume_sizes"] = (
                             unwrapped if isinstance(unwrapped, dict) else {}
                         )
                     elif key == "runtime_config":
@@ -1320,6 +1333,7 @@ class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "images": results.get("images", []),
                 "networks": results.get("networks", []),
                 "volumes": results.get("volumes", []),
+                "volume_sizes": results.get("volume_sizes", {}),
                 "runtime_config": results.get("runtime_config", {}),
                 "git_stacks": results.get("git_stacks", []),
                 "auto_update_settings": results.get("auto_update_settings", {}),

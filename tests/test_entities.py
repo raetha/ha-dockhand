@@ -208,6 +208,7 @@ def _sensor_classes():
         DockhandStackContainerCountSensor,
         DockhandStackStatusSensor,
         DockhandVolumeSensor,
+        DockhandVolumeSizeSensor,
     )
 
     return locals()
@@ -1592,6 +1593,35 @@ def test_volume_driver_scope_mountpoint_created():
     assert attrs["scope"] == "local"
     assert "mountpoint" in attrs
     assert "created" in attrs
+
+
+def _make_volume_size(sizes):
+    coord = _slow_coord(
+        env_data={
+            "images": [],
+            "networks": [],
+            "volumes": [VOLUME],
+            "volume_sizes": sizes,
+        }
+    )
+    return _sensor_classes()["DockhandVolumeSizeSensor"](
+        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, VOLUME
+    )
+
+
+def test_volume_size():
+    sensor = _make_volume_size({VOLUME["name"]: 4096})
+    assert sensor.native_value == 4096
+    assert sensor.available
+    assert sensor.unique_id == f"{ENTRY_ID}_{ENV_ID}_volume_{VOLUME['name']}_size"
+    assert sensor.translation_placeholders == {"volume": VOLUME["name"]}
+
+
+def test_volume_size_unavailable_without_one():
+    """Docker hadn't worked it out, or Dockhand skips disk usage."""
+    sensor = _make_volume_size({})
+    assert sensor.native_value is None
+    assert not sensor.available
 
 
 def test_volume_none_when_not_found():
