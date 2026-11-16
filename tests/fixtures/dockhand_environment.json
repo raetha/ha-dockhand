@@ -1251,6 +1251,10 @@
       "usedBy": []
      }
     ],
+    "volume_sizes": {
+      "dockhand-grype-db": 3412881214,
+      "dockhand-trivy-db": 1794781820
+    },
     "runtime_config": {},
     "git_stacks": [
      {

@@ -407,6 +407,9 @@
       "disk_usage_build_cache": {
         "name": "Schijfgebruik buildcache"
       },
+      "volume_size": {
+        "name": "Grootte van {volume}"
+      },
       "activity_events_today": {
         "name": "Activiteitsgebeurtenissen vandaag"
       },

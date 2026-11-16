@@ -300,6 +300,33 @@ async def test_get_volumes(client_with_mock_request):
     assert client_with_mock_request._request.call_args.args[1] == "/api/volumes?env=2"
 
 
+async def test_get_volume_sizes(client_with_mock_request):
+    """Docker's system df, keyed by volume name; a size Docker didn't work
+    out (-1) and entries that aren't volumes are left out."""
+    client_with_mock_request._request.return_value = {
+        "diskUsage": {
+            "Volumes": [
+                {"Name": "db_data", "UsageData": {"Size": 4096, "RefCount": 1}},
+                {"Name": "cache", "UsageData": {"Size": -1, "RefCount": 0}},
+                {"Name": "no_usage"},
+                "junk",
+            ]
+        }
+    }
+    r = await client_with_mock_request.async_get_volume_sizes(2)
+    assert client_with_mock_request._request.call_args.args[1] == (
+        "/api/system/disk?env=2"
+    )
+    assert r == {"db_data": 4096}
+
+
+async def test_get_volume_sizes_when_dockhand_skips_disk_usage(
+    client_with_mock_request,
+):
+    client_with_mock_request._request.return_value = {"diskUsage": None}
+    assert await client_with_mock_request.async_get_volume_sizes(2) == {}
+
+
 async def test_get_schedules_list(client_with_mock_request):
     client_with_mock_request._request.return_value = [{"id": "s1"}]
     r = await client_with_mock_request.async_get_schedules()

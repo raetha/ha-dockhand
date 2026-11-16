@@ -992,6 +992,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                 for vol in env_data.get("volumes") or []:
                     vname = vol.get("name", "")
                     volume_uids.add(f"{entry.entry_id}_{env_id}_volume_{vname}")
+                    volume_uids.add(f"{entry.entry_id}_{env_id}_volume_{vname}_size")
                     volumes_group_env_ids.add(env_id)
             # Git stack entities — always fetched (not config-gated), live
             # on the stack's own device, but only exist while Dockhand

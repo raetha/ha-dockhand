@@ -407,6 +407,9 @@
       "disk_usage_build_cache": {
         "name": "Diskbruk for byggebuffer"
       },
+      "volume_size": {
+        "name": "Størrelse på {volume}"
+      },
       "activity_events_today": {
         "name": "Aktivitetshendelser i dag"
       },

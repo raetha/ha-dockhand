@@ -501,6 +501,11 @@ async def async_setup_entry(
                     )
                     if not _already_registered("sensor", volume_sensor.unique_id):
                         new.append(volume_sensor)
+                    size_sensor = DockhandVolumeSizeSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url, volume
+                    )
+                    if not _already_registered("sensor", size_sensor.unique_id):
+                        new.append(size_sensor)
 
             for git_stack in env_data.get("git_stacks") or []:
                 git_sync_sensor = DockhandGitStackSyncStatusSensor(
@@ -2594,6 +2599,62 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
     @override
     def device_info(self) -> DeviceInfo:
         """All volume entities live under the per-env Volumes group device."""
+        return _volume_group_device(
+            getattr(self, "hass", None),
+            self._entry_id,
+            self._env_id,
+            self._env_name,
+            self._base_url,
+        )
+
+
+class DockhandVolumeSizeSensor(BaseSlowEnvSensor):
+    """A volume's size on disk, beside its volume entity under the Volumes
+    group device. From Docker's `system df` (`async_get_volume_sizes`);
+    unavailable while Docker hasn't worked it out or Dockhand skips disk
+    usage."""
+
+    _attr_translation_key = "volume_size"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        volume: dict,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._volume_name: str = volume.get("name") or "unknown"
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_volume_{self._volume_name}_size"
+        )
+        self._attr_translation_placeholders = {"volume": self._volume_name}
+
+    def _size(self) -> int | None:
+        size = (self._env_data().get("volume_sizes") or {}).get(self._volume_name)
+        return size if isinstance(size, int) else None
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._size() is not None
+
+    @property
+    @override
+    def native_value(self) -> int | None:
+        return self._size()
+
+    @property
+    @override
+    def device_info(self) -> DeviceInfo:
         return _volume_group_device(
             getattr(self, "hass", None),
             self._entry_id,

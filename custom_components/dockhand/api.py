@@ -331,6 +331,29 @@ class DockhandClient:
         """Return volumes for an environment. GET /api/volumes?env=X"""
         return await self._get_list(f"/api/volumes?env={_q(env_id)}")
 
+    async def async_get_volume_sizes(self, env_id: int) -> dict[str, int]:
+        """Each volume's size in bytes, by name, from Docker's `system df`.
+
+        GET /api/system/disk?env=X returns {"diskUsage": <Docker's
+        /system/df> | null}: null when Dockhand skips disk usage
+        (SKIP_DF_COLLECTION) or the scan times out. Docker reports -1 for a
+        size it didn't work out; those volumes are left out. Dockhand
+        1.0.58 and later answer from the same 5-minute cache as the
+        dashboard stats, so this starts no scan of its own.
+        """
+        data = await self._get_dict(f"/api/system/disk?env={_q(env_id)}")
+        usage = data.get("diskUsage")
+        volumes = usage.get("Volumes") if isinstance(usage, dict) else None
+        sizes: dict[str, int] = {}
+        for volume in volumes if isinstance(volumes, list) else []:
+            if not isinstance(volume, dict):
+                continue
+            name = volume.get("Name")
+            size = (volume.get("UsageData") or {}).get("Size")
+            if isinstance(name, str) and isinstance(size, int) and size >= 0:
+                sizes[name] = size
+        return sizes
+
     # ------------------------------------------------------------------ #
     # Container actions
     # ------------------------------------------------------------------ #

@@ -38,7 +38,8 @@ myenv                                       ← Environment device
 ├── myenv – Networks  (if enabled)          ← Group device
 │   └── sensor.bridge                  ← one entity per network (no sub-devices)
 ├── myenv – Volumes  (if enabled)           ← Group device
-│   └── sensor.myvolume                ← one entity per volume (no sub-devices)
+│   ├── sensor.myvolume                ← one entity per volume (no sub-devices)
+│   └── sensor.myvolume_size           ← its size on disk
 └── myenv – Images  (if enabled)            ← Group device
     └── sensor.nginx                   ← one entity per image (no sub-devices)
 
@@ -200,11 +201,12 @@ One entity per network, living under the **{env} – Networks** group device.
 
 ### Volume (optional, 600 s)
 
-One entity per volume, living under the **{env} – Volumes** group device.
+Two entities per volume, living under the **{env} – Volumes** group device.
 
 | Entity | Type | Notes |
 |---|---|---|
 | *volume-name* | sensor | Named for the volume; state is connected container count (0 = unused/dangling); attributes include in_use bool, container list, driver, scope, mountpoint, labels, and created timestamp |
+| *volume-name* size | sensor | The volume's size on disk, from Docker's own disk usage (what Dockhand's disk usage breakdown counts). Unavailable while Docker hasn't worked it out, for a volume driver that doesn't report sizes, or when Dockhand skips disk usage (`SKIP_DF_COLLECTION`). With Dockhand 1.0.58 and later it changes at most every 5 minutes |
 
 ### Schedule (optional, 600 s)
 
