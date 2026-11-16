@@ -72,6 +72,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Internal
 
+- `docs/backlog.md` tracks the request for per-container vulnerability counts (Finsys/dockhand#1916).
 - A push to `dev` publishes a test build only when something users install changed; running the Build workflow by hand on `dev` publishes one anyway.
 - `docs/backlog.md` records why the cards aren't shipped inside the integration.
 - A poll benchmark (`tests/test_poll_benchmark.py`, skipped unless `DOCKHAND_BENCH` is set) for the performance item of a full review.
