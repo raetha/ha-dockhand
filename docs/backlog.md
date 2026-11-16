@@ -21,7 +21,7 @@ Ideas that came up during development, were deliberately evaluated, and either d
 
 - **Portainer details not carried over** (from the 2026-11-09 comparison with Home Assistant's Portainer integration; the rest of it is in 2.0.0). Each is possible with Dockhand today; none was asked for:
   - A container's start time, OOM-killed flag and true restart count: Portainer inspects every container on each poll; `GET /api/containers/{id}/inspect` would be one call per container. Only the OOM flag seems worth it, and only on request.
-  - Per-volume size: `GET /api/system/disk` (`Volumes[].UsageData.Size`) runs Docker's `system df`, already the heaviest call (Finsys/dockhand#1885); slow poll at most.
+  - Per-volume size: `GET /api/system/disk` (`Volumes[].UsageData.Size`). Since Dockhand 1.0.58 it reads the same 5-minute cache as the fast poll's disk usage (Finsys/dockhand#1893), so one call per environment on the slow poll costs Dockhand nothing extra; worth proposing.
   - Choosing which environments to include: Portainer has a subentry per environment. Only if users ask.
 
 - **`UpdateFailedUnreachable` once the minimum Home Assistant version reaches 2026.12.** Core added it on 2026-11-13 so a coordinator that can't reach its server logs at info level rather than as an error each time; Portainer uses it for connection errors and timeouts. Ours raise `UpdateFailed`.
@@ -43,7 +43,6 @@ Requests filed with Dockhand, and what to change here when each is answered. At 
 
 - **Poll event collection drops events** ([Finsys/dockhand#1886](https://github.com/Finsys/dockhand/issues/1886)). In Poll mode each poll reads only the last 30 seconds of Docker events, whatever the interval. **If fixed:** events in Poll mode arrive late but all arrive, so reword the `event_collection_poll` repair issue (every locale) and the README's Known limitations line and Data Updates paragraph to say only that events are delayed; whether the repair is still worth raising at all is then the owner's call. If Dockhand fixes it with `since = now - interval` instead, small gaps remain: keep a softened warning.
 
-- **Disk usage on every stats request** ([Finsys/dockhand#1885](https://github.com/Finsys/dockhand/issues/1885)). `GET /api/dashboard/stats`, which the fast poll reads every 60 seconds, runs Docker's `system df` each time. **If Dockhand caches it** (the proposal: the stream endpoint's 5-minute cache): nothing to change, though the disk usage sensors then move at most every 5 minutes; say so in the README's disk usage rows. **If Dockhand adds an opt-out parameter instead:** pass it on the fast poll and read disk usage from `/api/system/disk` on the slow poll, keeping the same sensors and unique IDs.
 
 ## Rejected
 

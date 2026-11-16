@@ -120,7 +120,7 @@ Also disabled by default, but at no extra cost — the data's already part of th
 
 | Entity | Type | Notes |
 |---|---|---|
-| Disk usage | sensor | Total bytes across images, volumes, containers, and build cache — matches Dockhand's own disk-usage breakdown |
+| Disk usage | sensor | Total bytes across images, volumes, containers, and build cache — matches Dockhand's own disk-usage breakdown. Dockhand 1.0.58 and later work it out at most every 5 minutes, so it changes no more often than that |
 | Images, Containers, Volumes, Build cache disk usage | sensor | Each part of Disk usage on its own |
 | Pinned digest updates, Held updates | sensor | Containers whose only update is a moved digest on a pinned image, or one held for the minimum image age |
 
