@@ -73,7 +73,11 @@ def _coordinator_data() -> tuple[dict[str, Any], dict[str, Any]]:
     return by_int(data["fast"]), by_int(data["slow"])
 
 
-async def test_every_entity_has_a_state_from_real_data(hass: HomeAssistant):
+async def setup_from_real_data(
+    hass: HomeAssistant,
+) -> tuple[dict[str, Any], dict[str, Any], Any]:
+    """The integration set up from the fixture with everything turned on:
+    the fast and slow data, and the fast coordinator holding them."""
     fast, slow = _coordinator_data()
     entry = config_entry(
         hass,
@@ -95,7 +99,12 @@ async def test_every_entity_has_a_state_from_real_data(hass: HomeAssistant):
     with _patch_full_setup(fast, slow):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
+    return fast, slow, entry.runtime_data.fast_coordinator
 
+
+async def test_every_entity_has_a_state_from_real_data(hass: HomeAssistant):
+    fast, _slow, coordinator = await setup_from_real_data(hass)
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
     env = fast["environments"][4]
     devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
     names = {d.name for d in devices}

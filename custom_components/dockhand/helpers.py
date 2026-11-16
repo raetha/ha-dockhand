@@ -263,6 +263,7 @@ class _EnvIndex:
     __slots__ = (
         "container_names",
         "containers",
+        "containers_by_id",
         "git_stacks",
         "stacks",
         "system_container_ids",
@@ -270,6 +271,7 @@ class _EnvIndex:
 
     def __init__(self, env: dict[str, Any]) -> None:
         self.containers: dict[str, dict] = {}
+        self.containers_by_id: dict[str, dict] = {}
         self.container_names: dict[str, str] = {}
         self.system_container_ids: set[str] = set()
         for c in env.get("containers") or []:
@@ -279,6 +281,7 @@ class _EnvIndex:
             if name is not None:
                 self.containers.setdefault(name, c)
             if cid := c.get("id"):
+                self.containers_by_id.setdefault(cid, c)
                 if isinstance(name, str):
                     self.container_names.setdefault(cid, name)
                 if c.get("systemContainer"):
@@ -332,6 +335,44 @@ def _find_git_stack(
 ) -> dict[str, Any] | None:
     """A git stack's current dict (slow coordinator) by its stack name."""
     return _env_index(coordinator, env_id).git_stacks.get(stack_name)
+
+
+def _container_inputs(
+    coordinator: Any, env_id: int, name: str, *, stats: bool = False
+) -> tuple[Any, ...]:
+    """What a container's entities on the fast coordinator are worked out
+    from: its own entry and its tags, and its resource stats for the
+    sensors that show them (which change every poll, so the others leave
+    them out). Shared, so an entity that reads something new only needs it
+    added here; tests/test_update_inputs.py checks nothing is missing."""
+    env = _coordinator_env(coordinator.data, env_id)
+    inputs = (
+        _env_index(coordinator, env_id).containers.get(name),
+        (env.get("container_tags") or {}).get(name),
+    )
+    if stats:
+        return (*inputs, (env.get("container_stats") or {}).get(name))
+    return inputs
+
+
+def _stack_inputs(coordinator: Any, env_id: int, name: str) -> tuple[Any, ...]:
+    """What a stack's entities on the fast coordinator are worked out
+    from: its own entry, tags and stats, its containers' entries, and the
+    environment's pending updates (counted per stack)."""
+    env = _coordinator_env(coordinator.data, env_id)
+    index = _env_index(coordinator, env_id)
+    stack = index.stacks.get(name)
+    members = tuple(
+        index.containers_by_id.get(cid) for cid in (stack or {}).get("containers") or []
+    )
+    return (
+        stack,
+        members,
+        (env.get("stack_tags") or {}).get(name),
+        (env.get("stack_stats") or {}).get(name),
+        env.get("pending_update_container_ids"),
+        env.get("pending_update_details"),
+    )
 
 
 def _find_stack(coordinator: Any, env_id: int, stack_name: str) -> dict | None:

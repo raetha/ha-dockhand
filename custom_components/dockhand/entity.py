@@ -5,8 +5,10 @@ identity (environment, name), the same lookup of its current data, and the
 same device; the platform modules add only what's specific to them.
 """
 
+from abc import abstractmethod
 from typing import Any, override
 
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
@@ -14,12 +16,17 @@ from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
 from .helpers import (
     _compose_project,
     _container_device,
+    _container_inputs,
     _find_container,
     _find_stack,
     _sched_device,
     _sched_key,
     _stack_device,
+    _stack_inputs,
 )
+
+# No state written yet: the first update always writes.
+_NOT_WRITTEN = object()
 
 
 class DockhandEnvScopedEntity(CoordinatorEntity[DockhandFastCoordinator]):
@@ -40,6 +47,25 @@ class DockhandEnvScopedEntity(CoordinatorEntity[DockhandFastCoordinator]):
         self._env_id = env_id
         self._env_name = env_name
         self._base_url = base_url
+        self._written_inputs: Any = _NOT_WRITTEN
+
+    @abstractmethod
+    def _update_inputs(self) -> Any:
+        """Everything this entity's state and attributes are worked out
+        from: while they're unchanged, so is what it would write."""
+
+    @callback
+    @override
+    def _handle_coordinator_update(self) -> None:
+        # Most of a large install's entities are unchanged by a poll, and
+        # working out and writing every one of them was most of a poll's
+        # time on Home Assistant's event loop. An entity whose inputs are
+        # what they were when it last wrote has nothing new to write.
+        inputs = (self.coordinator.last_update_success, self._update_inputs())
+        if inputs == self._written_inputs:
+            return
+        self._written_inputs = inputs
+        super()._handle_coordinator_update()
 
 
 class DockhandContainerEntity(DockhandEnvScopedEntity):
@@ -60,6 +86,10 @@ class DockhandContainerEntity(DockhandEnvScopedEntity):
 
     def _container(self) -> dict[str, Any] | None:
         return _find_container(self.coordinator, self._env_id, self._container_name)
+
+    @override
+    def _update_inputs(self) -> Any:
+        return _container_inputs(self.coordinator, self._env_id, self._container_name)
 
     @property
     @override
@@ -92,6 +122,10 @@ class DockhandStackEntity(DockhandEnvScopedEntity):
 
     def _stack(self) -> dict[str, Any] | None:
         return _find_stack(self.coordinator, self._env_id, self._stack_name)
+
+    @override
+    def _update_inputs(self) -> Any:
+        return _stack_inputs(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override
