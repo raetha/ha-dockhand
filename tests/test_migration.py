@@ -25,7 +25,6 @@ from custom_components.dockhand.migration import (
     migrate_1_7_3_entry_scoped_unique_ids,
     migrate_1_8_0_container_stats_option,
     migrate_1_8_0_reenable_container_stats_entities,
-    migrate_1_8_0_remove_consolidated_disk_sensors,
     migrate_1_9_0_entry_scoped_device_identifiers,
     migrate_2_0_0_volume_unique_ids,
 )
@@ -692,40 +691,24 @@ def test_container_stats_option_ignores_unrelated_entity(hass: HomeAssistant):
 
 
 # ---------------------------------------------------------------------------
-# migrate_1_8_0_remove_consolidated_disk_sensors
+# Containers and build cache disk sizes
 # ---------------------------------------------------------------------------
-#
-# Real, reported issue: "Containers disk usage" and "Build cache size" were
-# consolidated into attributes on the single "Disk usage" sensor, but their
-# entity classes being removed from sensor.py never removed their registry
-# entries — they'd have orphaned on a future restart, forcing manual
-# cleanup, rather than being cleanly gone the moment a user upgrades.
 
 
-def test_removes_retired_containers_size_entity(hass: HomeAssistant):
-    """This sensor's unique ID suffix ("_containers_size", as released in
-    1.7.4) differs from its translation key ("containers_disk_usage"),
-    so cleanup matches the suffix, not the key."""
+def test_disk_size_sensors_survive_the_migrations(hass: HomeAssistant):
+    """1.8.0 removed the "Containers disk usage" and "Build cache size"
+    sensors; 2.0.0 brought them back under the same unique IDs. Every
+    setup's migrations must leave them, and a volume whose name ends in
+    "_containers", alone."""
     entry = _make_entry(hass)
-    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_containers_size")
-    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
-    assert er.async_get(hass).async_get(ent.entity_id) is None
-
-
-def test_removes_retired_build_cache_size_entity(hass: HomeAssistant):
-    entry = _make_entry(hass)
-    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_build_cache_size")
-    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
-    assert er.async_get(hass).async_get(ent.entity_id) is None
-
-
-def test_does_not_remove_current_disk_usage_entity(hass: HomeAssistant):
-    """The current, consolidated sensor must not be swept up by its
-    retired predecessors' cleanup — different unique_id suffix entirely."""
-    entry = _make_entry(hass)
-    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_disk_usage")
-    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
-    assert er.async_get(hass).async_get(ent.entity_id) is not None
+    kept = [
+        _add_entity(hass, entry, f"{ENTRY_ID}_1_containers_size"),
+        _add_entity(hass, entry, f"{ENTRY_ID}_1_build_cache_size"),
+        _add_entity(hass, entry, f"{ENTRY_ID}_1_volume_app_containers_size"),
+    ]
+    async_run_migrations(hass, entry, {})
+    for ent in kept:
+        assert er.async_get(hass).async_get(ent.entity_id) is not None
 
 
 # ---------------------------------------------------------------------------

@@ -715,6 +715,25 @@ def test_preserves_schedule_device_when_schedules_fetch_specifically_failed(
     assert _device_exists(hass, dev.id)
 
 
+def test_preserves_schedule_devices_while_the_slow_data_is_still_loading(
+    hass: HomeAssistant,
+):
+    """Right after setup the slow data is still loading in the background,
+    and a coordinator that hasn't fetched yet reports last_update_success:
+    nothing is known about schedules yet, so nothing goes."""
+    entry = _make_entry(hass, data={"enable_schedules": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
+        slow_data=None,
+    )
+    entry.runtime_data.slow_coordinator.last_update_success = True
+    group = _add_device(hass, entry, f"{entry.entry_id}_env_1_Schedules")
+    dev = _add_device(hass, entry, f"{entry.entry_id}_schedule_99_git_stack_sync")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, group.id)
+    assert _device_exists(hass, dev.id)
+
+
 def test_preserves_image_entities_when_images_fetch_specifically_failed(
     hass: HomeAssistant,
 ):

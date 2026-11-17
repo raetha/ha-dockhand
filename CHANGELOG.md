@@ -77,6 +77,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Internal
 
+- The 1.8.0 migration that removed the separate containers and build cache disk size sensors is gone: 2.0.0 brings them back under the same unique IDs, and it was removing them again at every startup.
 - With debug logging on, each poll logs how long updating the entities and the registry cleanup took, beside Home Assistant's own fetch timing, so a slow install can show where the time goes without a profile; `docs/troubleshooting.md` says how.
 - Reviewed Dockhand 1.0.58: nothing to change; its 5-minute disk usage cache answers Finsys/dockhand#1885 (`docs/development.md` → Upstream compatibility).
 - `docs/backlog.md` tracks the requests filed with Dockhand: per-container vulnerability counts (Finsys/dockhand#1916) and the poll-mode event fix (#1886), both merged for Dockhand's next release, and the fixes offered for #1911 and #1501.

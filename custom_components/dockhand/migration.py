@@ -423,49 +423,6 @@ def migrate_1_8_0_reenable_container_stats_entities(
             )
 
 
-# unique_id suffixes for the two pre-1.8.0 sensors that got consolidated
-# into the single "disk_usage" sensor's attributes (images/volumes/
-# containers/build-cache sizes all on one entity now, instead of two
-# separate ones). Their entity classes were removed from sensor.py
-# entirely, but nothing ever removed their registry entries — orphaned
-# entities that HA would eventually flag on a future restart, forcing
-# manual cleanup, rather than being cleanly gone the moment a user
-# upgrades.
-#
-# Verified directly against the actual released v1.7.4 source
-# (github.com/raetha/ha-dockhand, tag v1.7.4) rather than assumed from
-# the translation_key naming — those two aren't the same thing, and
-# guessing wrong here was a real, reported bug: the disk sensor's
-# unique_id used "_containers_size", not "_containers_disk_usage" (its
-# translation_key, used only for the UI label). build_cache_size's
-# unique_id suffix happened to match its own translation_key exactly,
-# which is the only reason that one worked while this one didn't.
-_RETIRED_DISK_SENSOR_SUFFIXES = ("_containers_size", "_build_cache_size")
-
-
-def migrate_1_8_0_remove_consolidated_disk_sensors(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> None:
-    """Remove the pre-1.8.0 "Containers disk usage" and "Build cache
-    size" sensors, now that both are attributes on the single "Disk
-    usage" sensor instead of separate entities. A genuine one-time
-    migration — this is a fixed, one-time population from before the
-    consolidation, not something that can recur, the same reasoning as
-    migrate_1_8_0_reenable_container_stats_entities above.
-    """
-    ent_registry = er.async_get(hass)
-    for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
-        uid = entity_entry.unique_id or ""
-        if uid.endswith(_RETIRED_DISK_SENSOR_SUFFIXES):
-            ent_registry.async_remove(entity_entry.entity_id)
-            _LOGGER.info(
-                "Dockhand: removed retired entity %s — consolidated into "
-                "the single disk_usage sensor's attributes in 1.8.0",
-                entity_entry.entity_id,
-            )
-
-
 def _merge_stray_device(
     hass: HomeAssistant,
     dev_registry: dr.DeviceRegistry,
@@ -640,13 +597,6 @@ REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
         "1.8.0",
         1,
         lambda hass, entry, fast: migrate_1_8_0_reenable_container_stats_entities(
-            hass, entry
-        ),
-    ),
-    RegistryMigration(
-        "1.8.0",
-        1,
-        lambda hass, entry, fast: migrate_1_8_0_remove_consolidated_disk_sensors(
             hass, entry
         ),
     ),

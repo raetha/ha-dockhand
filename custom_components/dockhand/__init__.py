@@ -898,6 +898,9 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     # Slow-coordinator-derived sets — only meaningful when slow data is valid.
     # slow_valid: slow coordinator has run successfully and returned data.
+    # A coordinator that hasn't fetched yet reports last_update_success, so
+    # the data itself must be there too: right after setup the slow data is
+    # still loading, which says nothing about what exists.
     slow_valid = slow.last_update_success and bool(slow_data)
     slow_env_map = _all_envs(slow_data)
     slow_env_ids: set[int] = set(slow_env_map.keys())
@@ -917,7 +920,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # "not loaded", not "deleted"; same treatment now applies when enabled
     # but the schedules fetch itself specifically failed.
     schedules_enabled = (
-        slow.last_update_success
+        slow_valid
         and "schedules" not in top_failures
         and bool(entry_config.get(CONF_ENABLE_SCHEDULES, False))
     )
