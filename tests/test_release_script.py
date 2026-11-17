@@ -67,10 +67,21 @@ def test_check_keeps_released_sections_frozen(tmp_path):
 
 
 def test_dev_version_sorts_above_the_installed_release():
-    assert release.dev_version("1.11.2", 12, tagged=True) == "1.11.3-dev.12"
-    assert release.dev_version("1.12.0", 13, tagged=False) == "1.12.0-dev.13"
+    assert release.dev_version("1.11.2", "", tagged=True) == "1.11.3-dev.1"
+    assert release.dev_version("1.12.0", "", tagged=False) == "1.12.0-dev.1"
     with pytest.raises(ValueError):
-        release.dev_version("1.12.0b1", 1, tagged=True)
+        release.dev_version("1.12.0b1", "", tagged=True)
+
+
+def test_dev_version_counts_test_builds():
+    """One past the last test build of the same version; workflow runs that
+    built nothing (pull requests, docs-only pushes) don't count."""
+    assert release.dev_version("2.0.0", "2.0.0-dev.139", False) == "2.0.0-dev.140"
+    assert release.dev_version("2.0.0", "v2.0.0-dev.9", False) == "2.0.0-dev.10"
+    # A new version starts again.
+    assert release.dev_version("2.1.0", "2.0.0-dev.139", False) == "2.1.0-dev.1"
+    assert release.dev_version("2.0.0", "2.0.0-dev.139", True) == "2.0.1-dev.1"
+    assert release.main(["dev-version", "2.0.0-dev.3", "false"]) == 0
 
 
 def test_notes_use_the_section_and_mark_test_builds():
