@@ -473,7 +473,7 @@ async def async_setup_entry(
                     tag_counts[tag] = tag_counts.get(tag, 0) + 1
                 for image in images_list:
                     image_sensor = DockhandImageSensor(
-                        slow, entry.entry_id, env_id, env_name, base_url, image
+                        slow, fast, entry.entry_id, env_id, env_name, base_url, image
                     )
                     if _already_registered("sensor", image_sensor.unique_id):
                         continue
@@ -2326,6 +2326,7 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     def __init__(
         self,
         coordinator: DockhandSlowCoordinator,
+        fast_coordinator: DockhandFastCoordinator,
         entry_id: str,
         env_id: int,
         env_name: str,
@@ -2333,6 +2334,7 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         image: dict,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._fast_coordinator = fast_coordinator
         raw_id = image.get("id") or ""
         # Strip "sha256:" prefix — store just the 64-char hex for lookups
         self._image_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
@@ -2424,6 +2426,15 @@ class DockhandImageSensor(BaseSlowEnvSensor):
             "digests": digests,
             "size_bytes": size,
             "created": created_iso,
+            # Dockhand gives only the count; the names come from the
+            # containers list, matched by image ID as Dockhand counts them.
+            # Written only when the count is (each image refresh), so the
+            # list doesn't change on its own between them.
+            "containers": sorted(
+                _env_index(
+                    self._fast_coordinator, self._env_id
+                ).container_names_by_image.get(self._image_id, [])
+            ),
             "version": oci_version,
             "vendor": oci_vendor,
             "title": oci_title,

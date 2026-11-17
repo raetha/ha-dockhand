@@ -1441,7 +1441,13 @@ def test_stack_unique_ids_differ(stack_sensors):
 def _make_image(image=None):
     sc = _sensor_classes()
     return sc["DockhandImageSensor"](
-        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, image or IMAGE
+        _slow_coord(),
+        _fast_coord(),
+        ENTRY_ID,
+        ENV_ID,
+        ENV_NAME,
+        BASE_URL,
+        image or IMAGE,
     )
 
 
@@ -1470,7 +1476,7 @@ def test_image_name_recomputes_live_when_tag_is_lost():
     coord = _slow_coord()
     sc = _sensor_classes()
     sensor = sc["DockhandImageSensor"](
-        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+        coord, _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
     )
     assert sensor.name == "nginx"
 
@@ -1489,7 +1495,7 @@ def test_image_name_falls_back_when_image_gone_entirely():
     coord = _slow_coord()
     sc = _sensor_classes()
     sensor = sc["DockhandImageSensor"](
-        coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+        coord, _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
     )
     coord.data["environments"][ENV_ID]["images"] = []
     assert sensor.name == "nginx"
@@ -1503,6 +1509,33 @@ def test_image_size_bytes_attribute():
 
 def test_image_tags_attribute():
     assert _make_image().extra_state_attributes["tags"] == ["nginx:latest"]
+
+
+def test_image_lists_the_containers_using_it():
+    """Matched by image ID, whichever form the container gives it in."""
+    fast = _fast_coord(
+        {
+            "stats": STATS,
+            "containers": [
+                {**CONTAINER, "id": "c1", "name": "web", "imageId": IMAGE["id"]},
+                {**CONTAINER, "id": "c2", "name": "api", "imageId": "deadbeef1234"},
+                {**CONTAINER, "id": "c3", "name": "db", "imageId": "sha256:other"},
+                {**CONTAINER, "id": "c4", "name": "none"},
+            ],
+            "stacks": [],
+        }
+    )
+    sensor = _sensor_classes()["DockhandImageSensor"](
+        _slow_coord(), fast, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+    )
+    assert sensor.extra_state_attributes["containers"] == ["api", "web"]
+
+
+def test_image_used_by_no_container_lists_none():
+    image = {**IMAGE, "id": "sha256:unused"}
+    sensor = _make_image(image)
+    sensor.coordinator.data["environments"][ENV_ID]["images"] = [image]
+    assert sensor.extra_state_attributes["containers"] == []
 
 
 def test_image_device_is_images_group():
@@ -2352,7 +2385,7 @@ def test_network_entity_under_group_device():
 def test_image_entity_under_group_device():
     sc = _sensor_classes()
     sensor = sc["DockhandImageSensor"](
-        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+        _slow_coord(), _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
     )
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Images") in idents

@@ -267,6 +267,7 @@ class _EnvIndex:
 
     __slots__ = (
         "container_names",
+        "container_names_by_image",
         "containers",
         "containers_by_id",
         "git_stacks",
@@ -279,12 +280,19 @@ class _EnvIndex:
         self.containers_by_id: dict[str, dict] = {}
         self.container_names: dict[str, str] = {}
         self.system_container_ids: set[str] = set()
+        # Keyed by the image ID's hex, as image entities store it.
+        self.container_names_by_image: dict[str, list[str]] = {}
         for c in env.get("containers") or []:
             if not isinstance(c, dict):
                 continue
             name = c.get("name")
             if name is not None:
                 self.containers.setdefault(name, c)
+            image_id = c.get("imageId")
+            if isinstance(image_id, str) and image_id and isinstance(name, str):
+                self.container_names_by_image.setdefault(
+                    image_id.rsplit(":", 1)[-1], []
+                ).append(name)
             if cid := c.get("id"):
                 self.containers_by_id.setdefault(cid, c)
                 if isinstance(name, str):

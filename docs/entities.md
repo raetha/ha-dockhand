@@ -198,7 +198,7 @@ One entity per image, living under the **{env} – Images** group device. Images
 
 | Entity | Type | Notes |
 |---|---|---|
-| *repository* | sensor | Named for the repository of its first tag (e.g. `nginx`), or its short ID when untagged; state is how many containers use it (0 = unused, a candidate for pruning); attributes include `tags` (each `repository:tag`), digests, size, created, and the image's version, vendor, title and source labels |
+| *repository* | sensor | Named for the repository of its first tag (e.g. `nginx`), or its short ID when untagged; state is how many containers use it (0 = unused, a candidate for pruning); attributes include `tags` (each `repository:tag`), `containers` (the names of the containers using it, updated together with the count), digests, size, created, and the image's version, vendor, title and source labels |
 
 ### Network (optional, 600 s)
 
