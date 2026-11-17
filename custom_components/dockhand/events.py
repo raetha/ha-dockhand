@@ -30,6 +30,9 @@ _LOGGER = logging.getLogger(__name__)
 # Docker sends several events for one change (kill, die, stop), so an
 # environment is refreshed once they settle.
 REFRESH_DELAY = 2.0
+# And at most this often: a container stuck restarting, or a deploy,
+# sends events without pause, and each refresh updates every entity.
+REFRESH_MIN_GAP = 15.0
 RETRY_MIN = 5.0
 RETRY_MAX = 300.0
 # The feed isn't there (Dockhand too old) or the token's user may not
@@ -71,8 +74,10 @@ class DockhandEventStream:
         self._entry = entry
         self._task: asyncio.Task[None] | None = None
         self._pending: dict[int, CALLBACK_TYPE] = {}
-        # Per environment, when its latest event arrived (event-loop time).
+        # Per environment, when its latest event arrived and when an event
+        # last refreshed it (event-loop time).
         self._last_event: dict[int, float] = {}
+        self._last_refresh: dict[int, float] = {}
         self._started = False
         self._connected = False
         self._listeners: list[CALLBACK_TYPE] = []
@@ -214,10 +219,14 @@ class DockhandEventStream:
                     container_event_signal(self._entry.entry_id, env_id, container),
                     data,
                 )
-            self._last_event[env_id] = self._hass.loop.time()
+            now = self._hass.loop.time()
+            self._last_event[env_id] = now
             if env_id not in self._pending:
+                since = now - self._last_refresh.get(env_id, float("-inf"))
                 self._pending[env_id] = async_call_later(
-                    self._hass, REFRESH_DELAY, self._refresher(env_id)
+                    self._hass,
+                    max(REFRESH_DELAY, REFRESH_MIN_GAP - since),
+                    self._refresher(env_id),
                 )
 
     def _refresher(self, env_id: int) -> Callable[[Any], None]:
@@ -229,6 +238,7 @@ class DockhandEventStream:
             fast = self._entry.runtime_data.fast_coordinator
             if fast.fetched_since(env_id, self._last_event[env_id]):
                 return
+            self._last_refresh[env_id] = self._hass.loop.time()
             self._entry.async_create_background_task(
                 self._hass,
                 self._async_refresh(env_id),

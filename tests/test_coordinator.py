@@ -24,6 +24,7 @@ from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
+    DockhandVersionCoordinator,
     _safe_list,
     _unwrap,
 )
@@ -2006,3 +2007,26 @@ async def test_schedule_refresh_does_nothing_without_schedules(hass: HomeAssista
     coord = _slow(hass, client, config={"enable_schedules": False})
     await coord.async_refresh_schedules()
     client.async_get_schedules.assert_not_called()
+
+
+async def test_listener_and_cleanup_timing_logged_at_debug(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+):
+    """Where a slow poll's time goes, without a profile."""
+    import logging
+
+    from custom_components.dockhand import _cleanup_stale_registry
+
+    coord = DockhandVersionCoordinator(hass, MagicMock())
+    coord.async_add_listener(lambda: None)
+    coord.async_update_listeners()
+    assert "listeners in" not in caplog.text
+    caplog.set_level(logging.DEBUG, logger="custom_components.dockhand")
+    coord.async_update_listeners()
+    assert "1 listeners in" in caplog.text
+
+    entry = MagicMock()
+    entry.title = "Dockhand"
+    entry.runtime_data.fast_coordinator.data = {"environments": {}}
+    _cleanup_stale_registry(hass, entry)
+    assert "registry cleanup for Dockhand took" in caplog.text

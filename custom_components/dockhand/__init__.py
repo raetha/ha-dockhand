@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -1065,6 +1066,25 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
 
 def _cleanup_stale_registry(
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+) -> None:
+    """Remove stale device and entity registry entries; timed at debug level,
+    so a slow Home Assistant can be told where the time goes without a
+    profile."""
+    if not _LOGGER.isEnabledFor(logging.DEBUG):
+        _cleanup_stale_registry_now(hass, entry)
+        return
+    started = time.perf_counter()
+    _cleanup_stale_registry_now(hass, entry)
+    _LOGGER.debug(
+        "Dockhand: registry cleanup for %s took %.3f seconds",
+        entry.title,
+        time.perf_counter() - started,
+    )
+
+
+def _cleanup_stale_registry_now(
     hass: HomeAssistant,
     entry: DockhandConfigEntry,
 ) -> None:

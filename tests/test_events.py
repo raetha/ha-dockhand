@@ -244,6 +244,29 @@ async def test_activity_refreshes_its_environment_once_events_settle(
     fast.async_request_refresh.assert_not_called()
 
 
+async def test_events_without_pause_refresh_at_most_every_15_seconds(
+    hass: HomeAssistant,
+):
+    """A container stuck restarting sends events without pause; each
+    refresh updates every entity, so they're spaced out."""
+    entry = _entry(hass, _fast_data(collectActivity=True))
+    fast = entry.runtime_data.fast_coordinator
+    stream = DockhandEventStream(hass, entry)
+    _feed(entry, [*CONNECTED, *_activity(1)])
+    await _run(stream, 1)
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=3))
+    await hass.async_block_till_done()
+    assert fast.async_refresh_environment.await_count == 1
+
+    stream._async_handle("activity", {"environmentId": 1})
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=6))
+    await hass.async_block_till_done()
+    assert fast.async_refresh_environment.await_count == 1
+    async_fire_time_changed(hass, dt_util.utcnow() + timedelta(seconds=16))
+    await hass.async_block_till_done()
+    assert fast.async_refresh_environment.await_count == 2
+
+
 async def test_no_event_refresh_when_newer_data_already_shows_it(
     hass: HomeAssistant,
 ):

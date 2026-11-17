@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import re
+import time
 from typing import Any, override
 
 from homeassistant.config_entries import ConfigEntry
@@ -227,7 +228,29 @@ def _self_update_newer_version(result: dict[str, Any]) -> dict[str, Any] | None:
     return newer
 
 
-class DockhandFastCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class _TimedCoordinator[DataT](DataUpdateCoordinator[DataT]):
+    """Logs, at debug level, how long updating the entities took after each
+    fetch. Home Assistant already logs how long the fetch took ("Finished
+    fetching ... in X seconds"), so together they show where a slow poll's
+    time goes without a profile."""
+
+    @callback
+    @override
+    def async_update_listeners(self) -> None:
+        if not self.logger.isEnabledFor(logging.DEBUG):
+            super().async_update_listeners()
+            return
+        started = time.perf_counter()
+        super().async_update_listeners()
+        self.logger.debug(
+            "Finished updating %s's %d listeners in %.3f seconds",
+            self.name,
+            len(self._listeners),
+            time.perf_counter() - started,
+        )
+
+
+class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
     """Polls 60s: dashboard stats, containers, stacks, container resource
     stats, pending update flags.
 
@@ -850,7 +873,7 @@ async def _fetch_env_settings(
     return out
 
 
-class DockhandSlowCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
     """Polls 600s: images, volumes, networks, schedules, runtime controls
     (all opt-in), git stacks/host/auto_update_settings/env_meta (always —
     cheap bulk calls, not gated), recent_events (gated on collectActivity),
@@ -1465,7 +1488,7 @@ def _sync_fetch_issues(
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
-class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+class DockhandUpdateCoordinator(_TimedCoordinator[dict[str, Any]]):
     """Polls for container image update availability — Tier 2 only.
 
     Default interval: 86400s (24 hours). Only created when the user enables
@@ -1731,7 +1754,7 @@ class DockhandUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.async_merge_check_results(env_id, items)
 
 
-class DockhandVersionCoordinator(DataUpdateCoordinator[str | None]):
+class DockhandVersionCoordinator(_TimedCoordinator[str | None]):
     """Dockhand's own version, for the instance device's software version
     and its update entity.
 

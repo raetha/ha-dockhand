@@ -16,6 +16,8 @@
 
 **A schedule has no Run now button or Enabled switch** Both follow what Dockhand's own Schedules page offers. Environment reports and stack deploys can't be run on demand. Container update and Git stack sync schedules are turned on and off with the container's **Auto update** and the stack's **Auto deploy** switches instead, and Dockhand's backup-repository jobs and its deploy-log housekeeping can't be paused.
 
+**Home Assistant is slow or freezes while Dockhand is set up** Turn on debug logging for the integration (**Settings → Devices & Services → Dockhand → ⋮ → Enable debug logging**) for a few minutes. Each poll then logs how long the fetch took (`Finished fetching ... in X seconds`), how long updating the entities took (`Finished updating ... listeners in X seconds`), and how long the registry cleanup took, per Dockhand entry. Turning it off downloads the log; attach it to an issue with the integration's diagnostics.
+
 
 ## Known limitations
 
