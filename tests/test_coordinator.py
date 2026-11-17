@@ -2019,14 +2019,18 @@ async def test_listener_and_cleanup_timing_logged_at_debug(
 
     coord = DockhandVersionCoordinator(hass, MagicMock())
     coord.async_add_listener(lambda: None)
-    coord.async_update_listeners()
-    assert "listeners in" not in caplog.text
-    caplog.set_level(logging.DEBUG, logger="custom_components.dockhand")
-    coord.async_update_listeners()
-    assert "1 listeners in" in caplog.text
-
     entry = MagicMock()
     entry.title = "Dockhand"
     entry.runtime_data.fast_coordinator.data = {"environments": {}}
+
+    caplog.set_level(logging.INFO, logger="custom_components.dockhand")
+    coord.async_update_listeners()
     _cleanup_stale_registry(hass, entry)
+    assert "listeners in" not in caplog.text
+    assert "registry cleanup" not in caplog.text
+
+    caplog.set_level(logging.DEBUG, logger="custom_components.dockhand")
+    coord.async_update_listeners()
+    _cleanup_stale_registry(hass, entry)
+    assert "1 listeners in" in caplog.text
     assert "registry cleanup for Dockhand took" in caplog.text
