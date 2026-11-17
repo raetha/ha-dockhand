@@ -8,8 +8,9 @@ name: Build
 # GitHub release (the changelog section as notes, dockhand.zip attached: HACS installs from it,
 # per hacs.json's zip_release), delete the test builds, then reset `dev` to `main` when they
 # hold the same files.
-# Push to dev: publish a test build as a GitHub pre-release (`<version>-dev.<run>`, or the next
-# patch's while `dev` still holds the released version; that version is stamped into its zip's
+# Push to dev: publish a test build as a GitHub pre-release (`<version>-dev.<n>`, counting test
+# builds of that version, or the next patch's while `dev` still holds the released version;
+# that version is stamped into its zip's
 # manifest.json), which HACS offers once the repository's
 # Pre-release switch is on; older test builds are deleted.
 
@@ -221,6 +222,7 @@ jobs:
           ships='^(custom_components/|hacs\.json$)'
           last=$(gh api "repos/$GH_REPO/releases?per_page=100" \
             --jq '[.[] | select(.prerelease) | .tag_name | select(test("^v?[0-9.]+-dev\\.[0-9]+$"))][0] // ""')
+          echo "last=$last" >> "$GITHUB_OUTPUT"
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -z "$last" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
@@ -236,15 +238,17 @@ jobs:
 
       - name: Publish the test build
         if: steps.ships.outputs.changed == 'true'
+        env:
+          LAST: ${{ steps.ships.outputs.last }}
         run: |
           set -e
           version=$(python3 scripts/release.py version)
           if gh api "repos/$GH_REPO/git/ref/tags/$version" >/dev/null 2>&1 ||
              gh api "repos/$GH_REPO/git/ref/tags/v$version" >/dev/null 2>&1; then tagged=true; else tagged=false; fi
-          dev=$(python3 scripts/release.py dev-version "$GITHUB_RUN_NUMBER" "$tagged")
+          dev=$(python3 scripts/release.py dev-version "$LAST" "$tagged")
           tag="$dev"
           python3 scripts/release.py package release/dockhand.zip --version "$dev"
-          python3 scripts/release.py notes Unreleased --test-build "$GITHUB_RUN_NUMBER" > notes.md
+          python3 scripts/release.py notes Unreleased --test-build "${dev##*-dev.}" > notes.md
           gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
             --title "Dockhand $tag (test build)" --notes-file notes.md release/dockhand.zip
           gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |

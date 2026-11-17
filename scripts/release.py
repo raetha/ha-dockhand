@@ -8,11 +8,13 @@ python3 scripts/release.py check [--release] [--released-from <changelog>]
     unchanged here.
 python3 scripts/release.py version
     manifest.json's version.
-python3 scripts/release.py dev-version <run> <tagged>
+python3 scripts/release.py dev-version <last> <tagged>
     The test build's version: the next patch once the current version is
     tagged (<tagged> = true|false), so HACS offers it over the installed
-    release.
-python3 scripts/release.py notes <version> [--test-build <run>]
+    release, numbered one past <last> (the latest test build's tag, or "")
+    for the same version and from 1 for a new one, so the number counts
+    test builds rather than workflow runs.
+python3 scripts/release.py notes <version> [--test-build <n>]
     Release notes: that changelog section plus install text ("Unreleased"
     for test builds).
 python3 scripts/release.py package <zip> [--version <version>]
@@ -103,13 +105,14 @@ def check(
     return problems
 
 
-def dev_version(version: str, run: int, tagged: bool) -> str:
+def dev_version(version: str, last: str, tagged: bool) -> str:
     match = _PLAIN_VERSION.match(version)
     if not match:
         raise ValueError(f"not a plain X.Y.Z version: {version}")
     major, minor, patch = (int(part) for part in match.groups())
     base = f"{major}.{minor}.{patch + 1}" if tagged else version
-    return f"{base}-dev.{run}"
+    previous = re.fullmatch(rf"v?{re.escape(base)}-dev\.(\d+)", last)
+    return f"{base}-dev.{int(previous.group(1)) + 1 if previous else 1}"
 
 
 def notes(changelog: str, version: str, test_build: int | None = None) -> str:
@@ -176,7 +179,7 @@ def main(argv: list[str]) -> int:
     chk.add_argument("--released-from", type=Path)
     sub.add_parser("version")
     dev = sub.add_parser("dev-version")
-    dev.add_argument("run", type=int)
+    dev.add_argument("last")
     dev.add_argument("tagged", choices=["true", "false"])
     note = sub.add_parser("notes")
     note.add_argument("version")
@@ -203,7 +206,7 @@ def main(argv: list[str]) -> int:
     elif args.cmd == "version":
         print(version)
     elif args.cmd == "dev-version":
-        print(dev_version(version, args.run, args.tagged == "true"))
+        print(dev_version(version, args.last, args.tagged == "true"))
     elif args.cmd == "notes":
         sys.stdout.write(notes(changelog, args.version, args.test_build))
     else:
