@@ -124,7 +124,7 @@
         "default": "mdi:docker"
       },
       "uptime": {
-        "default": "mdi:restart"
+        "default": "mdi:clock-start"
       },
       "vulnerabilities": {
         "default": "mdi:shield-bug"

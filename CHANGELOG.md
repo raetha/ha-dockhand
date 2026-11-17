@@ -58,7 +58,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 - **Runtime controls are enabled when you turn their option on** — the memory, CPU and process limits and the restart policy were created disabled even with **Enable runtime controls** on. Ones you disabled yourself stay off.
 - **Update all is always there while update entities are on** — unavailable while nothing is pending, rather than appearing and disappearing, so automations and dashboards can rely on its entity ID.
 - **A stack's Running containers is 0 while nothing in it runs**, rather than unavailable, so automations and charts can compare it like any number. Its other resource sensors stay unavailable then, as Dockhand reports nothing for the stack.
-- **Uptime shows as a duration** — an environment's Uptime sensor uses Home Assistant's uptime device class, so tile cards and badges show "1 week" by default instead of "Last week". Its state is still the time of the last boot.
+- **Uptime shows as a duration** — an environment's Uptime sensor uses Home Assistant's uptime device class, so tile cards and badges show "1 week" by default instead of "Last week". Its state is still the time of the last boot. Its icon is a clock (`mdi:clock-start`, as UniFi Network's uptime sensors use) rather than the restart icon the restart buttons use.
 - **Versions show without a leading "v"** — HACS shows release tags, which from this release are plain version numbers (`2.0.0`, test builds such as `2.0.1-dev.42`), like most other HACS repositories. Earlier releases keep their `v` tags.
 
 ### Fixed
