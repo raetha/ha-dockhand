@@ -10,7 +10,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 - **A Dockhand device** with Dockhand's own update entity, and a Docker event entity for each container.
 - **Checked feature by feature against Home Assistant's own Portainer integration**: this release brings its live updates, Docker event entities, and pause, prune and recreate, its volume devices and sizes, and goes further on updates, vulnerabilities, schedules and Git stacks. What Portainer still has is either something Dockhand doesn't offer (killing a container, pruning the build cache) or a smaller detail (a container's start time).
 
-**Before you upgrade:** some changes are breaking. Read **Removed**, check automations and dashboards that use attributes or the settings' binary sensors (a repair lists the automations and scripts to change), and update [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0 at the same time. Home Assistant 2026.8 or later is required.
+**Before you upgrade:** some changes are breaking. Read the entries marked **Breaking** under **Removed** and **Changed**, check automations and dashboards that use attributes or the settings' binary sensors (a repair lists the automations and scripts to change), and update [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0 at the same time. Home Assistant 2026.8 or later is required.
 
 ### Removed
 
@@ -22,8 +22,6 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
   Update templates and automations that read them. **ha-dockhand-cards 2.0.0 is needed**: earlier cards read these attributes.
 - **Breaking: the environment's Activity collection, Metrics collection, Update checks, Auto update and Image pruning binary sensors are now switches**, enabled by default, so their entity IDs change from `binary_sensor.…` to `switch.…`: update automations and dashboards that use them. The old entities are removed, and each automation or script that still uses them, templates in it included, gets a repair with a link to its editor and the new entities to use, until it's changed (dashboards and template entities aren't checked). Vulnerability scanning stays a sensor.
-- **Breaking: each volume is a device**, like containers and stacks, under its environment's Volumes group, with its driver as its model (**Local Volume**). Its entities are **Containers** (how many use it, the volume's old entity, which keeps its entity ID and history) and **Size**. Automations that use the volume entity's device, and device-based dashboards, need the new device.
-- **Breaking: an image's state is how many containers use it**, like volumes and networks, rather than its tag, so it has history and statistics; the tags are still in its `tags` attribute, a new `containers` attribute names the containers, and the `containers_using` attribute is gone. Images keep one entity each on the Images group device: every pull makes a new image, so devices would come and go with each update.
 - **Breaking: polling intervals can no longer be set.** Home Assistant doesn't allow integrations to offer polling-interval settings, so the Fast poll interval, Slow poll interval and Precise update check interval options are gone, and any values you set are no longer used. Dockhand now refreshes container and stack data every minute, images, volumes, networks and schedules every 10 minutes, and precise update versions once a day: the old defaults. If you'd raised or lowered an interval, see "Controlling when data refreshes" in [Data updates](https://github.com/raetha/ha-dockhand/blob/main/docs/data-updates.md) to turn polling off and refresh from an automation on your own schedule instead. Downgrading to 1.11.x still works and keeps the intervals you'd set.
 - **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3). HACS and the Marketplace won't install this release on older versions; 1.11.3 keeps working there.
 
@@ -50,6 +48,8 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Changed
 
+- **Breaking: each volume is a device**, like containers and stacks, under its environment's Volumes group, with its driver as its model (**Local Volume**). Its entities are **Containers** (how many use it, the volume's old entity, which keeps its entity ID and history) and **Size**. Automations that use the volume entity's device, and device-based dashboards, need the new device.
+- **Breaking: an image's state is how many containers use it**, like volumes and networks, rather than its tag, so it has history and statistics; the tags are still in its `tags` attribute, a new `containers` attribute names the containers, and the `containers_using` attribute is gone. Images keep one entity each on the Images group device: every pull makes a new image, so devices would come and go with each update.
 - **Fewer requests to Dockhand** — an action re-reads only its own environment, actions on several containers at once share their refreshes, and the live feed skips a refresh a poll has already made. Installs that start together (Home Assistant's "update all", the cards' Update all, a script) go to Dockhand as one update job, followed by one precise update check instead of one per container. Scripts acting on several containers finish sooner and Dockhand does less work. Each update entity still shows its own progress and result, and Update all now shows progress on each container's update entity too. A container the job didn't update (blocked by findings, skipped, failed, or never reached) fails its own Install and is logged with Dockhand's reason, so it's still on record after the dashboard's error message is gone.
 - **Faster setup** — after the first container data, the integration fetches the rest (images, volumes, schedules, precise update checks, Dockhand's version) at the same time instead of one after another.
 - **Less work in Home Assistant on each poll** — entities find their container or stack without searching the whole list, a container's or stack's entities skip writing a state that hasn't changed, and the check for removed containers and stacks runs only when something changed. A host with a few hundred containers spends about a third as long on each poll as before.
@@ -77,12 +77,13 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 ### Internal
 
 - Reviewed Dockhand 1.0.58: nothing to change; its 5-minute disk usage cache answers Finsys/dockhand#1885 (`docs/development.md` → Upstream compatibility).
-- `docs/backlog.md` tracks the request for per-container vulnerability counts (Finsys/dockhand#1916) and links the fixes offered upstream for it, #1886, #1911 and #1501.
+- `docs/backlog.md` tracks the requests filed with Dockhand: per-container vulnerability counts (Finsys/dockhand#1916) and the poll-mode event fix (#1886), both merged for Dockhand's next release, and the fixes offered for #1911 and #1501.
+- `docs/backlog.md` records why images and networks have no devices of their own.
 - A push to `dev` publishes a test build only when something users install changed; running the Build workflow by hand on `dev` publishes one anyway. Test builds are numbered by test build, not by workflow run, so the numbers go up by one.
 - `docs/backlog.md` records why the cards aren't shipped inside the integration.
 - A poll benchmark (`tests/test_poll_benchmark.py`, skipped unless `DOCKHAND_BENCH` is set) for the performance item of a full review.
 - Upstream reviews also follow Home Assistant's Portainer integration (`docs/development.md` → Upstream compatibility).
-- `docs/backlog.md` records what the Portainer comparison left out (container start time and OOM flag, per-volume sizes, choosing environments), `UpdateFailedUnreachable` for when Home Assistant 2026.12 is the minimum, and specific action errors.
+- `docs/backlog.md` records what the Portainer comparison left out (container start time and OOM flag, choosing environments), `UpdateFailedUnreachable` for when Home Assistant 2026.12 is the minimum, and specific action errors.
 - Test build notes link the changelog's docs and images on `dev`, where they are until the release puts them on `main`.
 - Release and test build notes say to install from Home Assistant's Marketplace (HACS on older versions) and how to turn on pre-releases there, instead of adding a HACS custom repository.
 - The full review checklist (`docs/audits.md`) covers tests, tooling and comments.

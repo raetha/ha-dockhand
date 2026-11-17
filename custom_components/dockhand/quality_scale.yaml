@@ -262,14 +262,15 @@ rules:
     comment: >
       All device registration is centralised in helpers.py via two functions:
       _ensure_env_devices (env hub, Containers/Stacks/Networks/Images/Volumes
-      group devices, and individual stack devices) and _ensure_hub_devices
+      group devices, and individual stack and volume devices) and _ensure_hub_devices
       (Schedules hub and per-schedule devices). Both functions are called from
       _register_devices at startup and from coordinator listeners on live
       updates, ensuring device attributes are always consistent. Device
       hierarchy: Environment hub → Containers/Stacks/Networks/Images/Volumes
-      group → individual container/stack devices (env-prefixed names).
-      Images, networks, and volumes are entities directly under their group
-      device — no per-resource sub-devices. Schedules hub is a top-level
+      group → individual container/stack/volume devices (env-prefixed names).
+      Images and networks are entities directly under their group device:
+      their IDs change with every pull or recreate, so devices would churn.
+      Schedules hub is a top-level
       device with one per-schedule child device.
 
   diagnostics:
@@ -477,7 +478,8 @@ rules:
     comment: >
       _cleanup_stale_registry removes devices and entities Dockhand no longer
       reports, on every coordinator update and once at startup. Container and
-      stack devices are keyed by name, so recreation doesn't orphan them.
+      stack devices are keyed by name, so recreation doesn't orphan them;
+      volume devices too, and they also go when volumes are turned off.
       Anything it can't confirm is gone is kept: an offline environment's
       devices, or those of a fetch that failed this cycle. For those,
       async_remove_config_entry_device lets the user delete the device by
