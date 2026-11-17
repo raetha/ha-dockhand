@@ -11,6 +11,7 @@ construct entities around rather than through.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,6 +20,7 @@ from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import async_get_platforms
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.const import DOMAIN
@@ -304,3 +306,41 @@ async def test_a_1x_volume_entity_moves_to_its_volume_device(hass: HomeAssistant
     assert (DOMAIN, f"{entry.entry_id}_volume_{ENV_ID}_mydata") in device.identifiers
     assert device.model == "Local Volume"
     assert hass.states.get(old.entity_id).state == "0"
+
+
+async def test_uptime_keeps_its_state_through_clock_wobble(hass: HomeAssistant):
+    """The boot time is worked out from uptime and the clock, read at
+    slightly different moments, so it wobbles each poll; the state must
+    change only on a reboot, or every poll writes a row to the database."""
+    slow_data = copy.deepcopy(SLOW_DATA)
+    host = slow_data["environments"][ENV_ID]["host"]
+    host["uptime"] = 3600
+    entry = config_entry(hass, options=OPTIONS)
+    uid = f"{entry.entry_id}_{ENV_ID}_host_last_boot"
+    # Disabled by default: registered beforehand as turned on.
+    er.async_get(hass).async_get_or_create(
+        "sensor", DOMAIN, uid, config_entry=entry, disabled_by=None
+    )
+    with patch_setup(
+        fast_coordinator(FAST_DATA["environments"]),
+        slow_coordinator(**slow_data),
+        update_coordinator(UPDATE_DATA["environments"]),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, uid)
+    assert entity_id is not None
+    entity = next(
+        e
+        for platform in async_get_platforms(hass, DOMAIN)
+        for e in platform.entities.values()
+        if e.entity_id == entity_id
+    )
+    first = hass.states.get(entity_id).state
+    host["uptime"] = 3610.5
+    entity.async_write_ha_state()
+    assert hass.states.get(entity_id).state == first
+    host["uptime"] = 60
+    entity.async_write_ha_state()
+    assert hass.states.get(entity_id).state != first

@@ -979,17 +979,12 @@ def test_host_last_boot_sensor_computed_from_uptime():
     assert abs((result - expected).total_seconds()) < 5
 
 
-def test_host_last_boot_sensor_ignores_drift_but_follows_a_reboot():
-    """Uptime and the clock are read at slightly different moments, so
-    the computed boot time wobbles; a wobble must not change the state."""
+def test_host_last_boot_sensor_is_an_uptime():
+    """Home Assistant's UPTIME device class keeps the state through the
+    wobble of a boot time computed from uptime and the clock (read at
+    slightly different moments), and cards show it as a duration."""
     sensor = _make_host_sensor("DockhandEnvLastBootSensor", {"uptime": 3600})
-    first = sensor.native_value
-    host = sensor.coordinator.data["environments"][ENV_ID]["host"]
-    host["uptime"] = 3610.5
-    assert sensor.native_value == first
-    host["uptime"] = 60
-    rebooted = sensor.native_value
-    assert (rebooted - first).total_seconds() > 3000
+    assert sensor.device_class == "uptime"
 
 
 def test_host_last_boot_sensor_none_when_uptime_absent():

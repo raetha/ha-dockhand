@@ -116,7 +116,7 @@ The following are sourced from `GET /api/host` (already polled every slow cycle 
 | Hawser last seen | sensor | Timestamp of the Hawser Edge agent's last check-in. Hawser Edge environments only. It changes every poll, so each poll adds a row to Home Assistant's database while it's on |
 | Host platform | sensor | OS platform, e.g. `linux`, with an `architecture` attribute, e.g. `x64` |
 | Docker version | sensor | Docker Engine server version |
-| Host last boot | sensor | Timestamp, computed from host uptime; changes only when the host reboots |
+| Uptime | sensor | The host's last boot, computed from its uptime, with Home Assistant's uptime device class: cards show it as a duration ("1 week") by default; changes only when the host reboots |
 
 Also disabled by default, but at no extra cost — the data's already part of the same `/api/dashboard/stats` call already polled every 60s:
 

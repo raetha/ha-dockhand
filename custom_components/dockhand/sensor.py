@@ -2248,33 +2248,21 @@ class DockhandEnvDockerVersionSensor(BaseSlowEnvHostSensor):
         return version if version and version != "unknown" else None
 
 
-_BOOT_DRIFT = timedelta(minutes=1)
-
-
 class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
     """Host uptime, computed from Node's os.uptime() (seconds since boot)
-    at the moment /api/host was called, expressed as a boot-time
-    TIMESTAMP rather than a raw duration — matches the convention HA's
-    own System Monitor integration uses for the same concept, and lets
-    HA's own per-entity "Display as: Relative time" setting show it as
-    "2 days ago" / "3 weeks ago" natively — no new device_class or
-    server-side duration formatting needed, HA already does this
-    conversion for any TIMESTAMP sensor when the user opts into it.
-
-    Named/keyed as "uptime" (translation_key), matching Dockhand's own
-    API field name, even though the underlying value is a timestamp —
-    "Uptime" is the more intuitive label for what this represents.
+    at the moment /api/host was called, as the boot time: Home Assistant's
+    UPTIME device class, whose state is the time of the last boot. Cards
+    then show it as a duration ("1 week") by default rather than as a past
+    time ("last week").
 
     Uptime and the clock are read at slightly different moments, so the
     boot time computed from them moves by a fraction of a second every
-    poll. Each move would be a new state in the database, so it only
-    changes when it moves by more than a minute (a reboot).
+    poll; the UPTIME device class keeps the state unless it moves by more
+    than a minute (a reboot), so no new state is written each poll.
     """
 
-    _last_boot: datetime | None = None
-
     _attr_translation_key = "uptime"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_device_class = SensorDeviceClass.UPTIME
 
     def __init__(
         self,
@@ -2293,10 +2281,7 @@ class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
         uptime_seconds = self._host().get("uptime")
         if not isinstance(uptime_seconds, int | float) or uptime_seconds < 0:
             return None
-        boot = dt_util.utcnow() - timedelta(seconds=uptime_seconds)
-        if self._last_boot is None or abs(boot - self._last_boot) > _BOOT_DRIFT:
-            self._last_boot = boot
-        return self._last_boot
+        return dt_util.utcnow() - timedelta(seconds=uptime_seconds)
 
 
 class DockhandImageSensor(BaseSlowEnvSensor):
