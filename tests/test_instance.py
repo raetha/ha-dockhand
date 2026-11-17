@@ -193,7 +193,7 @@ async def test_unloading_stops_the_version_poll(
 
 def test_instance_host_falls_back_to_dockhand():
     assert instance_host("https://dockhand.example.com") == "dockhand.example.com"
-    assert _instance_device("e", "", None)["name"] == "Dockhand"
+    assert _instance_device("e", "")["name"] == "Dockhand"
 
 
 def _entity_id(hass: HomeAssistant, platform: str, unique_id: str) -> str:

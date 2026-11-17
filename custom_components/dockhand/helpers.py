@@ -552,12 +552,13 @@ def instance_host(base_url: str) -> str | None:
     return f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
 
 
-def _instance_device(entry_id: str, base_url: str, version: str | None) -> DeviceInfo:
+def _instance_device(entry_id: str, base_url: str) -> DeviceInfo:
     """The Dockhand server itself, parent of its environments.
 
     Named after its host rather than the entry's title, which is the whole
     API URL. Registered in async_setup_entry before any other device and
-    never removed while the entry is loaded.
+    never removed while the entry is loaded. Its software version is set
+    once the version coordinator has it (_update_instance_version).
     """
     host = instance_host(base_url)
     info = DeviceInfo(
@@ -569,8 +570,6 @@ def _instance_device(entry_id: str, base_url: str, version: str | None) -> Devic
     )
     if base_url:
         info["configuration_url"] = base_url
-    if version:
-        info["sw_version"] = version
     return info
 
 

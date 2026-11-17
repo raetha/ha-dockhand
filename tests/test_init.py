@@ -2478,10 +2478,7 @@ async def test_slow_coordinator_failure_is_non_fatal(hass: HomeAssistant):
     """Slow coordinator failure at startup is non-fatal; entry reaches LOADED."""
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
     fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
-    slow = slow_coordinator()
-    slow.async_config_entry_first_refresh = AsyncMock(
-        side_effect=UpdateFailed("slow timeout")
-    )
+    slow = slow_coordinator(last_update_success=False)
 
     with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
@@ -3269,9 +3266,6 @@ async def test_setup_survives_a_failed_first_precise_update_check(
     fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
     slow = slow_coordinator()
     update = update_coordinator(last_update_success=False)
-    update.async_config_entry_first_refresh.side_effect = UpdateFailed(
-        "registry unreachable"
-    )
     with patch_setup(fast, slow, update):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -3281,34 +3275,32 @@ async def test_setup_survives_a_failed_first_precise_update_check(
     update.async_add_listener.assert_called()
 
 
-async def test_setup_fetches_slow_data_and_update_checks_together(
+async def test_setup_does_not_wait_for_slow_data_or_update_checks(
     hass: HomeAssistant,
 ):
-    """After the fast data, the slow data and the precise update check are
-    fetched at the same time: one waiting on the other would hold setup for
-    as long as both take."""
+    """Only the fast data is needed to set up. The slow data, a precise
+    update check (which may take minutes) and the version are fetched right
+    after, without holding setup."""
     entry = _make_entry(hass, options={"enable_precise_updates": True})
     fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
     slow = slow_coordinator()
     update = update_coordinator()
-    update_started = asyncio.Event()
+    release = asyncio.Event()
 
-    slow_done = asyncio.Event()
+    async def slow_fetch() -> None:
+        await release.wait()
 
-    async def slow_waits_for_the_update_check() -> None:
-        await asyncio.wait_for(update_started.wait(), timeout=1)
-        slow_done.set()
-
-    async def update_check() -> None:
-        update_started.set()
-
-    slow.async_config_entry_first_refresh.side_effect = slow_waits_for_the_update_check
-    update.async_config_entry_first_refresh.side_effect = update_check
+    slow.async_refresh = AsyncMock(side_effect=slow_fetch)
+    update.async_refresh = AsyncMock(side_effect=slow_fetch)
     with patch_setup(fast, slow, update):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-    assert entry.state is ConfigEntryState.LOADED
-    assert slow_done.is_set()
+        assert entry.state is ConfigEntryState.LOADED
+        slow.async_refresh.assert_awaited_once()
+        update.async_refresh.assert_awaited_once()
+        slow.async_config_entry_first_refresh.assert_not_called()
+        release.set()
+        await hass.async_block_till_done(wait_background_tasks=True)
 
 
 # ---------------------------------------------------------------------------

@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import time
 from collections.abc import Mapping
@@ -373,39 +372,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
             f"Could not fetch initial Dockhand data: {err}"
         ) from err
 
-    async def _first_slow_refresh() -> None:
-        try:
-            # Slow coordinator failure is non-fatal at startup — optional entities
-            # will show as unavailable until the first successful poll.
-            await slow_coordinator.async_config_entry_first_refresh()
-        except Exception as err:
-            _LOGGER.warning(
-                "Dockhand: initial slow data fetch failed, will retry at next poll: %s",
-                err,
-            )
-
-    async def _first_update_refresh() -> None:
-        if update_coordinator is None:
-            return
-        try:
-            # Update coordinator failure is non-fatal — entities will show as
-            # unavailable until the first successful poll (up to 24h by default).
-            await update_coordinator.async_config_entry_first_refresh()
-        except Exception as err:
-            _LOGGER.warning(
-                "Dockhand: initial update check failed, will retry at next poll: %s",
-                err,
-            )
-
     # Never fatal: the version only labels the instance device.
     version_coordinator = DockhandVersionCoordinator(hass, client, entry=entry)
-    # Independent of each other, so they're fetched together: one after
-    # another, a precise update check alone could hold setup for seconds.
-    await asyncio.gather(
-        _first_slow_refresh(),
-        _first_update_refresh(),
-        version_coordinator.async_refresh(),
-    )
 
     entry.runtime_data = DockhandData(
         client=client,
@@ -439,7 +407,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     base_url = entry.data.get(CONF_API_URL, "")
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        **_instance_device(entry.entry_id, base_url, version_coordinator.data),
+        **_instance_device(entry.entry_id, base_url),
     )
     # No entity listens to this coordinator, so this listener is also what
     # keeps it polling.
@@ -454,6 +422,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
             lambda: _update_container_versions(hass, entry)
         )
     )
+
+    # Only the fast data is needed to set up; the rest is fetched right after,
+    # so setup doesn't wait on it: the slow fetch reads several endpoints per
+    # environment, and a precise update check asks every image's registry
+    # (it may take minutes). Their entities are unavailable until it lands,
+    # and the ones that need its data are added then; a failure waits for the
+    # next poll, as it always has.
+    for name, coordinator in (
+        ("slow data", slow_coordinator),
+        ("update check", update_coordinator),
+        ("version", version_coordinator),
+    ):
+        if coordinator is not None:
+            entry.async_create_background_task(
+                hass, coordinator.async_refresh(), f"dockhand first {name} refresh"
+            )
 
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
