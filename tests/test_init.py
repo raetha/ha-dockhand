@@ -871,6 +871,53 @@ def test_removes_volumes_group_when_disabled(hass: HomeAssistant):
     assert not _device_exists(hass, dev.id)
 
 
+def _volume_cleanup(hass, *, volumes, enabled=True, slow_ok=True, env_ids=(1,)):
+    entry = _make_entry(hass, data={"enable_volumes": enabled})
+    rd = _make_runtime_data(
+        fast_data={
+            env_id: {"stats": ENV1_STATS, "containers": [], "stacks": []}
+            for env_id in env_ids
+        },
+        slow_data={
+            "environments": {
+                env_id: {"images": [], "networks": [], "volumes": volumes}
+                for env_id in env_ids
+            },
+            "schedules": [],
+        },
+    )
+    rd.slow_coordinator.last_update_success = slow_ok
+    entry.runtime_data = rd
+    dev = _add_device(hass, entry, f"{entry.entry_id}_volume_1_mydata")
+    _cleanup_stale_registry(hass, entry)
+    return _device_exists(hass, dev.id)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "kept"),
+    [
+        ({"volumes": [{"name": "mydata"}]}, True),
+        ({"volumes": []}, False),  # Dockhand no longer lists it
+        ({"volumes": [], "slow_ok": False}, True),  # can't tell
+        ({"volumes": [{"name": "mydata"}], "enabled": False}, False),
+        ({"volumes": [], "slow_ok": False, "env_ids": (2,)}, False),  # env gone
+    ],
+)
+def test_volume_device_cleanup(hass: HomeAssistant, kwargs, kept):
+    assert _volume_cleanup(hass, **kwargs) is kept
+
+
+def test_volume_device_with_a_bad_identifier_is_left_alone(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_volumes": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={"environments": {1: {"volumes": []}}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, f"{entry.entry_id}_volume_x_mydata")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
 def test_preserves_images_group_during_slow_poll_failure(hass: HomeAssistant):
     """Two-case safety rule: a failed slow poll must never be mistaken for
     "confirmed empty" — the group device must survive."""
@@ -3138,6 +3185,7 @@ _LIVE = {
     "containers": {"e1_container_1_web"},
     "stacks": {"e1_stack_1_media"},
     "schedules": {"e1_schedule_5_system"},
+    "volumes": {"e1_volume_1_data"},
     "schedules_feature_enabled": True,
 }
 
@@ -3152,6 +3200,8 @@ _LIVE = {
         ("e1_schedule_5_system", False),
         ("e1_schedule_9_system", True),
         ("e1_schedules_hub", False),
+        ("e1_volume_1_data", False),
+        ("e1_volume_1_gone", True),
         ("e1_env_1", False),  # a live environment and its group devices
         ("e1_env_1_Containers", False),
         ("e1_env_10", True),  # environment 10 is gone; only 1 is live

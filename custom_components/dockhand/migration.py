@@ -27,7 +27,11 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_ENABLE_RESOURCE_STATS, DOMAIN, SCHEMA_VERSION
-from .helpers import CONTAINER_STATS_SUFFIXES, _device_by_identifier
+from .helpers import (
+    CONTAINER_STATS_SUFFIXES,
+    VOLUME_SUFFIXES,
+    _device_by_identifier,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -569,6 +573,41 @@ def migrate_1_9_0_entry_scoped_device_identifiers(
         )
 
 
+def migrate_2_0_0_volume_unique_ids(hass: HomeAssistant, entry_id: str) -> None:
+    """Give each volume's container count sensor its suffix.
+
+    Up to 1.11 a volume had one entity, `{entry_id}_{env_id}_volume_{name}`.
+    In 2.0.0 a volume is a device with several entities, each ID ending in
+    one of VOLUME_SUFFIXES, so that no volume's IDs can equal another's
+    whose name ends in a suffix. Renaming keeps the entity's ID, history and
+    settings.
+
+    The old entity is told apart by its name: 1.x named it after the
+    volume, while every 2.0 volume entity has a translated name instead.
+    That also makes this idempotent.
+    """
+    ent_registry = er.async_get(hass)
+    prefix = f"{entry_id}_"
+    for entity in er.async_entries_for_config_entry(ent_registry, entry_id):
+        if entity.domain != "sensor" or entity.translation_key is not None:
+            continue
+        parts = entity.unique_id.removeprefix(prefix).split("_", 2)
+        if (
+            not entity.unique_id.startswith(prefix)
+            or len(parts) != 3
+            or not parts[0].isdigit()
+            or parts[1] != "volume"
+            or parts[2] != entity.original_name
+        ):
+            continue
+        new_uid = f"{entity.unique_id}_{VOLUME_SUFFIXES[0]}"
+        if ent_registry.async_get_entity_id("sensor", DOMAIN, new_uid):
+            ent_registry.async_remove(entity.entity_id)
+            continue
+        ent_registry.async_update_entity(entity.entity_id, new_unique_id=new_uid)
+        _LOGGER.debug("Dockhand: renamed volume entity %s", entity.entity_id)
+
+
 # Config schema 1 was current up to 1.7.x; 1.8.0 introduced schema 2.
 REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
     RegistryMigration(
@@ -617,5 +656,10 @@ REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
         lambda hass, entry, fast: migrate_1_9_0_entry_scoped_device_identifiers(
             hass, entry.entry_id
         ),
+    ),
+    RegistryMigration(
+        "2.0.0",
+        2,
+        lambda hass, entry, fast: migrate_2_0_0_volume_unique_ids(hass, entry.entry_id),
     ),
 )

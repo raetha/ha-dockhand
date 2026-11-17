@@ -407,8 +407,11 @@
       "disk_usage_build_cache": {
         "name": "Espace disque du cache de build"
       },
+      "volume_containers": {
+        "name": "Conteneurs"
+      },
       "volume_size": {
-        "name": "Taille de {volume}"
+        "name": "Taille"
       },
       "activity_events_today": {
         "name": "Événements d'activité aujourd'hui"

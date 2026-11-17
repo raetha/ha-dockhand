@@ -1445,8 +1445,10 @@ def _make_image(image=None):
     )
 
 
-def test_image_native_value_is_tag():
-    assert _make_image().native_value == "latest"
+def test_image_native_value_is_containers_using():
+    sensor = _make_image()
+    assert sensor.native_value == 2
+    assert "containers_using" not in sensor.extra_state_attributes
 
 
 def test_image_name_is_repo_only():
@@ -1501,10 +1503,6 @@ def test_image_size_bytes_attribute():
 
 def test_image_tags_attribute():
     assert _make_image().extra_state_attributes["tags"] == ["nginx:latest"]
-
-
-def test_image_containers_using_attribute():
-    assert _make_image().extra_state_attributes["containers_using"] == 2
 
 
 def test_image_device_is_images_group():
@@ -1614,7 +1612,6 @@ def test_volume_size():
     assert sensor.native_value == 4096
     assert sensor.available
     assert sensor.unique_id == f"{ENTRY_ID}_{ENV_ID}_volume_{VOLUME['name']}_size"
-    assert sensor.translation_placeholders == {"volume": VOLUME["name"]}
 
 
 def test_volume_size_unavailable_without_one():
@@ -1629,15 +1626,24 @@ def test_volume_none_when_not_found():
     assert _make_volume(coord=coord).native_value is None
 
 
-def test_volume_name_is_volume_name():
+def test_volume_sensor_is_named_by_translation():
     sensor = _make_volume()
-    assert sensor._attr_name == VOLUME["name"]
+    assert sensor.translation_key == "volume_containers"
+    assert sensor.unique_id == (
+        f"{ENTRY_ID}_{ENV_ID}_volume_{VOLUME['name']}_container_count"
+    )
     assert sensor._attr_has_entity_name
 
 
-def test_volume_device_is_volumes_group():
-    idents = _make_volume().device_info.get("identifiers", set())
-    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Volumes") in idents
+def test_volume_entities_share_the_volume_device():
+    """The volume's own device, its model saying which driver it uses."""
+    for sensor in (_make_volume(), _make_volume_size({})):
+        info = sensor.device_info
+        assert info["identifiers"] == {
+            (DOMAIN, f"{ENTRY_ID}_volume_{ENV_ID}_{VOLUME['name']}")
+        }
+        assert info["name"] == f"{ENV_NAME} – Volumes – {VOLUME['name']}"
+        assert info["model"] == "Local Volume"
 
 
 # ===========================================================================
@@ -2341,15 +2347,6 @@ def test_network_entity_under_group_device():
     idents = sensor.device_info.get("identifiers", set())
     assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Networks") in idents
     assert (DOMAIN, f"network_{NETWORK['id']}") not in idents
-
-
-def test_volume_entity_under_group_device():
-    sc = _sensor_classes()
-    sensor = sc["DockhandVolumeSensor"](
-        _slow_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, VOLUME
-    )
-    idents = sensor.device_info.get("identifiers", set())
-    assert (DOMAIN, f"{ENTRY_ID}_env_{ENV_ID}_Volumes") in idents
 
 
 def test_image_entity_under_group_device():
@@ -3391,10 +3388,11 @@ def test_image_sensor_once_the_image_is_gone():
     assert sensor.extra_state_attributes == {}
 
 
-def test_untagged_image_has_no_tag_value():
-    untagged = {**IMAGE, "repoTags": ["<none>:<none>"]}
-    sensor = _make_image(untagged)
-    sensor.coordinator.data["environments"][ENV_ID]["images"] = [untagged]
+def test_image_without_a_container_count():
+    """Docker reports -1 when it hasn't counted."""
+    image = {**IMAGE, "containers": -1}
+    sensor = _make_image(image)
+    sensor.coordinator.data["environments"][ENV_ID]["images"] = [image]
     assert sensor.native_value is None
 
 

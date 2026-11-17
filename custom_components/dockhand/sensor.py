@@ -57,7 +57,7 @@ from .helpers import (
     _network_group_device,
     _stack_device,
     _stack_has_system_container,
-    _volume_group_device,
+    _volume_device,
     already_registered,
 )
 
@@ -2302,12 +2302,13 @@ class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
 class DockhandImageSensor(BaseSlowEnvSensor):
     """Entity for a single Docker image, living under the Images group device.
 
-    One entity per image — no individual image devices. The entity name is the
-    repository portion of the primary tag (e.g. "cloudflare/cloudflared") and
-    the state is the tag portion (e.g. "latest", "2.1.0"). For untagged images
-    the name is the short hash ID and the state is None. All image metadata
-    (size, digests, OCI labels, created, containers_using) is surfaced as
-    extra_state_attributes.
+    One entity per image, no image devices: an image's identity is its ID,
+    so every pull makes a new one, and devices would come and go with each
+    update. The entity name is the repository portion of the primary tag
+    (e.g. "cloudflare/cloudflared"), or the short ID for an untagged image.
+    The state is how many containers use it, as for volumes and networks
+    (0 means unused, a candidate for pruning). Everything else about an
+    image is fixed once it exists (tags aside), so it is attributes.
 
     name is a live @property, not a value fixed at construction — see its
     docstring for why.
@@ -2319,6 +2320,8 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_has_entity_name = True
     _attr_icon = "mdi:package-variant-closed"
+    _attr_native_unit_of_measurement = "containers"
+    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
         self,
@@ -2380,16 +2383,9 @@ class DockhandImageSensor(BaseSlowEnvSensor):
 
     @property
     @override
-    def native_value(self) -> str | None:
-        """The tag portion of the primary tag, e.g. 'latest' or '2.1.0'."""
-        img = self._image()
-        if img is None:
-            return None
-        tags = [t for t in (img.get("repoTags") or []) if t and t != "<none>:<none>"]
-        if not tags:
-            return None  # untagged image — no meaningful tag value
-        primary = str(tags[0])
-        return primary.rsplit(":", 1)[1] if ":" in primary else primary
+    def native_value(self) -> int | None:
+        containers = (self._image() or {}).get("containers")
+        return containers if isinstance(containers, int) and containers >= 0 else None
 
     @property
     @override
@@ -2405,7 +2401,6 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         digests = img.get("repoDigests") or []
 
         size = img.get("size")
-        containers_using = img.get("containers")
 
         # OCI standard labels contain useful metadata worth surfacing
         labels = img.get("labels") or {}
@@ -2429,7 +2424,6 @@ class DockhandImageSensor(BaseSlowEnvSensor):
             "digests": digests,
             "size_bytes": size,
             "created": created_iso,
-            "containers_using": containers_using,
             "version": oci_version,
             "vendor": oci_vendor,
             "title": oci_title,
@@ -2524,19 +2518,10 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         )
 
 
-class DockhandVolumeSensor(BaseSlowEnvSensor):
-    """Entity for a Docker volume, living under the Volumes group device.
-
-    One entity per volume — no individual volume sub-devices. The state is the
-    container count (most actionable: 0 = unused/dangling candidate for pruning).
-    All volume metadata (in_use bool, driver, scope, mountpoint, labels, created,
-    container list) is surfaced as extra_state_attributes.
-    """
+class _BaseVolumeSensor(BaseSlowEnvSensor):
+    """An entity on a volume's own device, under the Volumes group."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "containers"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:database"
     _attr_has_entity_name = True
 
     def __init__(
@@ -2547,11 +2532,14 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         env_name: str,
         base_url: str,
         volume: dict,
+        suffix: str,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
         self._volume_name: str = volume.get("name") or "unknown"
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_volume_{self._volume_name}"
-        self._attr_name = self._volume_name
+        self._driver = volume.get("driver")
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_volume_{self._volume_name}_{suffix}"
+        )
 
     def _volume(self) -> dict | None:
         for v in self._env_data().get("volumes") or []:
@@ -2561,13 +2549,47 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
 
     @property
     @override
+    def device_info(self) -> DeviceInfo:
+        return _volume_device(
+            getattr(self, "hass", None),
+            self._entry_id,
+            self._volume_name,
+            self._env_id,
+            self._env_name,
+            self._base_url,
+            self._driver,
+        )
+
+
+class DockhandVolumeSensor(_BaseVolumeSensor):
+    """How many containers use the volume: 0 means unused, a candidate for
+    pruning. The volume's fixed details (driver, scope, mountpoint, labels,
+    created) are attributes."""
+
+    _attr_translation_key = "volume_containers"
+    _attr_native_unit_of_measurement = "containers"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        volume: dict,
+    ) -> None:
+        super().__init__(
+            coordinator, entry_id, env_id, env_name, base_url, volume, "container_count"
+        )
+
+    @property
+    @override
     def native_value(self) -> int | None:
-        """Container count — 0 means unused/dangling, a pruning candidate."""
         v = self._volume()
         if not v:
             return None
-        used_by = v.get("usedBy") or []
-        return len(used_by)
+        return len(v.get("usedBy") or [])
 
     @property
     @override
@@ -2576,7 +2598,6 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         if not v:
             return {}
         used_by = v.get("usedBy") or []
-        # created timestamp — parse to ISO string if present
         created_iso: str | None = None
         raw_created = v.get("created")
         if raw_created:
@@ -2595,32 +2616,17 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
             "created": created_iso,
         }
 
-    @property
-    @override
-    def device_info(self) -> DeviceInfo:
-        """All volume entities live under the per-env Volumes group device."""
-        return _volume_group_device(
-            getattr(self, "hass", None),
-            self._entry_id,
-            self._env_id,
-            self._env_name,
-            self._base_url,
-        )
 
-
-class DockhandVolumeSizeSensor(BaseSlowEnvSensor):
-    """A volume's size on disk, beside its volume entity under the Volumes
-    group device. From Docker's `system df` (`async_get_volume_sizes`);
-    unavailable while Docker hasn't worked it out or Dockhand skips disk
-    usage."""
+class DockhandVolumeSizeSensor(_BaseVolumeSensor):
+    """A volume's size on disk, from Docker's `system df`
+    (`async_get_volume_sizes`); unavailable while Docker hasn't worked it
+    out or Dockhand skips disk usage."""
 
     _attr_translation_key = "volume_size"
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_device_class = SensorDeviceClass.DATA_SIZE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = UnitOfInformation.BYTES
     _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
-    _attr_has_entity_name = True
 
     def __init__(
         self,
@@ -2631,12 +2637,9 @@ class DockhandVolumeSizeSensor(BaseSlowEnvSensor):
         base_url: str,
         volume: dict,
     ) -> None:
-        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
-        self._volume_name: str = volume.get("name") or "unknown"
-        self._attr_unique_id = (
-            f"{self._entry_id}_{env_id}_volume_{self._volume_name}_size"
+        super().__init__(
+            coordinator, entry_id, env_id, env_name, base_url, volume, "size"
         )
-        self._attr_translation_placeholders = {"volume": self._volume_name}
 
     def _size(self) -> int | None:
         size = (self._env_data().get("volume_sizes") or {}).get(self._volume_name)
@@ -2651,17 +2654,6 @@ class DockhandVolumeSizeSensor(BaseSlowEnvSensor):
     @override
     def native_value(self) -> int | None:
         return self._size()
-
-    @property
-    @override
-    def device_info(self) -> DeviceInfo:
-        return _volume_group_device(
-            getattr(self, "hass", None),
-            self._entry_id,
-            self._env_id,
-            self._env_name,
-            self._base_url,
-        )
 
 
 # --------------------------------------------------------------------------- #

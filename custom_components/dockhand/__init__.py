@@ -55,6 +55,7 @@ from .events import DockhandEventStream
 from .helpers import (
     CONTAINER_STATS_SUFFIXES,
     STACK_STATS_SUFFIXES,
+    VOLUME_SUFFIXES,
     _all_envs,
     _compose_project,
     _container_device_version,
@@ -67,6 +68,7 @@ from .helpers import (
     _device_id_schedule,
     _device_id_schedules_hub,
     _device_id_stack,
+    _device_id_volume,
     _ensure_env_devices,
     _ensure_hub_devices,
     _instance_device,
@@ -679,6 +681,8 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         image_uids               set[str]   — live entity unique_ids
         network_uids             set[str]   — live entity unique_ids
         volume_uids               set[str]  — live entity unique_ids
+        volumes                   set[str]  — live volume device identifiers
+                                              (empty while volumes are off)
         update_uids              set[str]   — live entity unique_ids (Tier 1 — one
                                               per container while update entities
                                               are enabled, not the optional Tier 2
@@ -938,6 +942,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     image_uids: set[str] = set()
     network_uids: set[str] = set()
     volume_uids: set[str] = set()
+    volumes: set[str] = set()
     images_group_env_ids: set[int] = set()
     networks_group_env_ids: set[int] = set()
     volumes_group_env_ids: set[int] = set()
@@ -991,8 +996,12 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                 volumes_fetch_ok_env_ids.add(env_id)
                 for vol in env_data.get("volumes") or []:
                     vname = vol.get("name", "")
-                    volume_uids.add(f"{entry.entry_id}_{env_id}_volume_{vname}")
-                    volume_uids.add(f"{entry.entry_id}_{env_id}_volume_{vname}_size")
+                    for suffix in VOLUME_SUFFIXES:
+                        volume_uids.add(
+                            f"{entry.entry_id}_{env_id}_volume_{vname}_{suffix}"
+                        )
+                    if enable_volumes:
+                        volumes.add(_device_id_volume(entry.entry_id, env_id, vname))
                     volumes_group_env_ids.add(env_id)
             # Git stack entities — always fetched (not config-gated), live
             # on the stack's own device, but only exist while Dockhand
@@ -1037,6 +1046,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         "image_uids": image_uids,
         "network_uids": network_uids,
         "volume_uids": volume_uids,
+        "volumes": volumes,
         "update_uids": update_uids,
         "bulk_update_uids": bulk_update_uids,
         "runtime_control_uids": runtime_control_uids,
@@ -1304,6 +1314,28 @@ def _cleanup_stale_registry(
                             env_id,
                         )
                         dev_registry.async_remove_device(device.id)
+
+            elif bare.startswith("volume_"):
+                # volume_{env_id}_{name}. Removing the Volumes group doesn't
+                # remove its children, so turning volumes off is checked here
+                # too.
+                try:
+                    env_id = int(bare.split("_")[1])
+                except ValueError:
+                    continue
+                if identifier not in live["volumes"] and (
+                    env_id not in live["env_ids"]
+                    or not live["enable_volumes"]
+                    or (
+                        live["slow_valid"]
+                        and env_id in live["online_env_ids"]
+                        and env_id in live["volumes_fetch_ok_env_ids"]
+                    )
+                ):
+                    _LOGGER.debug(
+                        "Dockhand: removing stale volume device %s", identifier
+                    )
+                    dev_registry.async_remove_device(device.id)
 
             elif bare == "schedules_hub":
                 # Remove the schedules hub device when schedules are disabled
@@ -1668,6 +1700,7 @@ async def async_remove_config_entry_device(
         *live_sets["containers"],
         *live_sets["stacks"],
         *live_sets["schedules"],
+        *live_sets["volumes"],
     }
     if live_sets["schedules_feature_enabled"]:
         live.add(_device_id_schedules_hub(entry.entry_id))

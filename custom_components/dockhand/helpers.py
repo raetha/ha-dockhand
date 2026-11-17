@@ -217,6 +217,11 @@ STACK_STATS_SUFFIXES = (
     "_running_containers",
 )
 
+# The entities on a volume's device, as `_BaseVolumeSensor` ends their
+# unique IDs. Every one has a suffix, so no volume's IDs can be mistaken for
+# another's whose name ends in one of them.
+VOLUME_SUFFIXES = ("container_count", "size")
+
 # "_memory_limit" here is a deliberate exact collision with a runtime
 # control entity of the same name (number.py) — disambiguated by entity
 # domain (number vs sensor) wherever both are in scope, not by suffix
@@ -515,6 +520,11 @@ def _device_id_stack(entry_id: str, env_id: int, stack_name: str) -> str:
     return f"{entry_id}_stack_{env_id}_{stack_name}"
 
 
+def _device_id_volume(entry_id: str, env_id: int, volume_name: str) -> str:
+    """Identifier string for a volume device."""
+    return f"{entry_id}_volume_{env_id}_{volume_name}"
+
+
 def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
     """Identifier string for an individual schedule device."""
     return f"{entry_id}_schedule_{sched_id}_{sched_type}"
@@ -646,6 +656,45 @@ def _volume_group_device(
         entry_type=DeviceEntryType.SERVICE,
     )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
+    if parent_id is not None:
+        info["via_device_id"] = parent_id
+    return info
+
+
+def _volume_model(driver: Any) -> str:
+    """A volume's driver is what kind of volume it is, as a stack's source
+    is for a stack, so it goes in the model."""
+    if not isinstance(driver, str) or not driver:
+        return "Volume"
+    if driver == "local":
+        return "Local Volume"
+    return f"{driver} Volume"
+
+
+def _volume_device(
+    hass: Any,
+    entry_id: str,
+    volume_name: str,
+    env_id: int,
+    env_name: str,
+    base_url: str,
+    driver: Any = None,
+) -> DeviceInfo:
+    """Device info for a volume, under the environment's Volumes group.
+
+    Name-based like containers: Docker volume names are unique per host and
+    a volume keeps its name for life."""
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_volume(entry_id, env_id, volume_name))},
+        name=f"{env_name} – Volumes – {volume_name}",
+        manufacturer="Dockhand",
+        model=_volume_model(driver),
+        configuration_url=_volume_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
+    parent_id = _device_entry_id(
+        hass, entry_id, _device_id_volumes_group(entry_id, env_id)
+    )
     if parent_id is not None:
         info["via_device_id"] = parent_id
     return info
@@ -1391,9 +1440,9 @@ def _ensure_env_devices(
 
     Handles per-environment devices only — the env hub and all its children
     (Containers group, Stacks group, individual stack devices, optional
-    Networks/Images/Volumes groups). Called once per environment on every
-    coordinator update. For hub-level (instance-wide) devices such as Schedules,
-    see _ensure_hub_devices.
+    Networks/Images/Volumes groups, volume devices). Called once per
+    environment on every coordinator update. For hub-level (instance-wide)
+    devices such as Schedules, see _ensure_hub_devices.
 
     This is the single source of truth for per-environment device registration.
     Both the initial setup path (_register_devices in __init__.py) and the
@@ -1419,7 +1468,8 @@ def _ensure_env_devices(
             from writing different values.
         networks / images / volumes: Slow coordinator resource lists. Each group
             device is only created when the corresponding enable_* flag is True
-            AND the list is non-empty.
+            AND the list is non-empty. Each volume also gets its own device
+            under the Volumes group.
         schedules: Schedules for this env only (caller filters the full
             /api/schedules list by `environmentId == env_id` before passing
             it in — genuinely global schedules, `environmentId is None`, are
@@ -1490,6 +1540,21 @@ def _ensure_env_devices(
             config_entry_id=entry_id,
             **_volume_group_device(hass, entry_id, env_id, env_name, base_url),
         )
+        for volume in volumes:
+            volume_name = volume.get("name")
+            if volume_name:
+                registry.async_get_or_create(
+                    config_entry_id=entry_id,
+                    **_volume_device(
+                        hass,
+                        entry_id,
+                        volume_name,
+                        env_id,
+                        env_name,
+                        base_url,
+                        volume.get("driver"),
+                    ),
+                )
 
     # ── Schedules group + individual schedule devices (env-scoped only) ──────
     # Global schedules (environmentId is None) are handled by
