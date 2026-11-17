@@ -38,8 +38,9 @@ myenv                                       ← Environment device
 ├── myenv – Networks  (if enabled)          ← Group device
 │   └── sensor.bridge                  ← one entity per network (no sub-devices)
 ├── myenv – Volumes  (if enabled)           ← Group device
-│   ├── sensor.myvolume                ← one entity per volume (no sub-devices)
-│   └── sensor.myvolume_size           ← its size on disk
+│   └── myenv – Volumes – myvolume    ← Volume device (model: its driver)
+│       ├── sensor.Containers
+│       └── sensor.Size
 └── myenv – Images  (if enabled)            ← Group device
     └── sensor.nginx                   ← one entity per image (no sub-devices)
 
@@ -61,7 +62,7 @@ Each device in the list shows its **Type** (`model` field), so it's easy to dist
 Container and stack switches are **primary entities** — the entity name equals the device name with no suffix, following HA convention for the principal on/off control of a device.
 
 ### Portainer users
-If you're also running the Portainer integration, note that this integration uses the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and stack.
+If you're also running the Portainer integration, note that this integration uses the same structural patterns — one environment device, child devices for containers, stacks and volumes, a control switch and `Restart` button per container and stack.
 
 
 ## Entities reference
@@ -191,6 +192,14 @@ The following are created automatically whenever a stack is detected as **git-tr
 | Deploy / Sync from Git | button | Same underlying action either way (sync from git, then redeploy) — the name and icon change based on the stack's current status to match Dockhand's own labeling exactly: **"Deploy"** (rocket icon) while the stack is down (not yet deployed, or created but not started), **"Sync from Git"** (refresh icon) once it's up. Unlike the internal-stack Redeploy button above, this does **not** guarantee a fresh image pull or a forced recreate: whether containers actually get recreated depends on whether the git sync found real changes, and whether images get re-pulled depends on this git stack's own "repull images" setting in Dockhand (not something this integration can override per-press) — a Dockhand API limitation, not a choice made here. There's no separate check-only Sync button — Dockhand's own `deployGitStack()` always runs the identical sync step first regardless of whether a deploy follows, confirmed from source, so a standalone check-only action would add no real capability. *Dockhand's own terminology/iconography here may change in a future version; if you notice this drift from what Dockhand itself calls it, that's worth flagging.* |
 | Auto deploy | switch | Toggles the stack's own scheduled sync+redeploy job. Disabled by default in the entity registry |
 
+### Image (optional, 600 s)
+
+One entity per image, living under the **{env} – Images** group device. Images have no devices of their own: an image is identified by its ID, so every pull is a new image, and devices would come and go with each update.
+
+| Entity | Type | Notes |
+|---|---|---|
+| *repository* | sensor | Named for the repository of its first tag (e.g. `nginx`), or its short ID when untagged; state is how many containers use it (0 = unused, a candidate for pruning); attributes include `tags` (each `repository:tag`), digests, size, created, and the image's version, vendor, title and source labels |
+
 ### Network (optional, 600 s)
 
 One entity per network, living under the **{env} – Networks** group device.
@@ -201,12 +210,12 @@ One entity per network, living under the **{env} – Networks** group device.
 
 ### Volume (optional, 600 s)
 
-Two entities per volume, living under the **{env} – Volumes** group device.
+Each volume is a device, **{env} – Volumes – *name***, under the environment's **{env} – Volumes** group device. Its model is the volume's driver (**Local Volume** for Docker's own).
 
 | Entity | Type | Notes |
 |---|---|---|
-| *volume-name* | sensor | Named for the volume; state is connected container count (0 = unused/dangling); attributes include in_use bool, container list, driver, scope, mountpoint, labels, and created timestamp |
-| *volume-name* size | sensor | The volume's size on disk, from Docker's own disk usage (what Dockhand's disk usage breakdown counts). Unavailable while Docker hasn't worked it out, for a volume driver that doesn't report sizes, or when Dockhand skips disk usage (`SKIP_DF_COLLECTION`). With Dockhand 1.0.58 and later it changes at most every 5 minutes |
+| Containers | sensor | How many containers use the volume (0 = unused, a candidate for pruning); attributes include in_use, the containers, driver, scope, mountpoint, labels, and created timestamp |
+| Size | sensor | The volume's size on disk, from Docker's own disk usage (what Dockhand's disk usage breakdown counts). Unavailable while Docker hasn't worked it out, for a volume driver that doesn't report sizes, or when Dockhand skips disk usage (`SKIP_DF_COLLECTION`). With Dockhand 1.0.58 and later it changes at most every 5 minutes |
 
 ### Schedule (optional, 600 s)
 

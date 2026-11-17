@@ -21,8 +21,10 @@ import pytest
 from unittest.mock import MagicMock
 
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 
 from custom_components.dockhand.api import DockhandError, DockhandPermissionError
+from custom_components.dockhand.const import DOMAIN
 from custom_components.dockhand.helpers import (
     async_dockhand_action,
     _actionable_pending_update_container_ids,
@@ -59,6 +61,7 @@ from custom_components.dockhand.helpers import (
     _stack_has_system_container,
     _stack_url,
     _volume_group_device,
+    _volume_model,
     _volume_url,
 )
 
@@ -847,10 +850,28 @@ def test_ensure_env_devices_creates_volumes_group_when_enabled(hass):
         "http://dh.test:3000",
         1,
         "myenv",
-        volumes=[{"name": "mydata", "usedBy": []}],
+        volumes=[{"name": "mydata", "usedBy": []}, {"driver": "local"}],
         enable_volumes=True,
     )
-    assert "env_1_Volumes" in _device_ids(hass, entry)
+    assert {"env_1_Volumes", "volume_1_mydata"} <= _device_ids(hass, entry)
+    registry = dr.async_get(hass)
+    volume = _device_by_identifier(
+        registry, (DOMAIN, f"{entry.entry_id}_volume_1_mydata"), entry.entry_id
+    )
+    group = _device_by_identifier(
+        registry, (DOMAIN, f"{entry.entry_id}_env_1_Volumes"), entry.entry_id
+    )
+    assert volume is not None and group is not None
+    assert volume.via_device_id == group.id
+    assert volume.model == "Volume"
+
+
+@pytest.mark.parametrize(
+    ("driver", "model"),
+    [("local", "Local Volume"), ("rclone", "rclone Volume"), (None, "Volume")],
+)
+def test_volume_model_is_its_driver(driver, model):
+    assert _volume_model(driver) == model
 
 
 def test_ensure_env_devices_is_idempotent(hass):

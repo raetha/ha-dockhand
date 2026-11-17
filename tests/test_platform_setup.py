@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -191,7 +192,8 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
         f"{p}_stack_gitapp_git_auto_deploy",
         f"{p}_stack_gitapp_git_sync_status",
         f"{p}_stack_gitapp_git_last_sync",
-        f"{p}_volume_mydata",
+        f"{p}_volume_mydata_container_count",
+        f"{p}_volume_mydata_size",
         f"{p}_container_my-app_memory_limit",
         f"{p}_container_my-app_restart_policy",
         f"{p}_container_my-app_running",
@@ -270,3 +272,35 @@ async def test_git_stack_and_env_meta_entities_have_states(
     assert state("select", "prune_mode") == "all"
     assert state("binary_sensor", "stack_gitapp_git_sync_error") == "off"
     assert state("switch", "stack_gitapp_git_auto_deploy") == "off"
+
+
+async def test_a_1x_volume_entity_moves_to_its_volume_device(hass: HomeAssistant):
+    """Upgrading from 1.x: the volume's one entity becomes its Containers
+    sensor on the volume's own device, keeping its entity ID."""
+    entry = config_entry(hass, options=OPTIONS)
+    ent_reg = er.async_get(hass)
+    old = ent_reg.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_{ENV_ID}_volume_mydata",
+        config_entry=entry,
+        original_name="mydata",
+        suggested_object_id="local_volumes_mydata",
+    )
+    with patch_setup(
+        fast_coordinator(FAST_DATA["environments"]),
+        slow_coordinator(**SLOW_DATA),
+        update_coordinator(UPDATE_DATA["environments"]),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    moved = ent_reg.async_get(old.entity_id)
+    assert moved is not None
+    assert moved.unique_id == f"{entry.entry_id}_{ENV_ID}_volume_mydata_container_count"
+    assert moved.translation_key == "volume_containers"
+    device = dr.async_get(hass).async_get(moved.device_id)
+    assert device is not None
+    assert (DOMAIN, f"{entry.entry_id}_volume_{ENV_ID}_mydata") in device.identifiers
+    assert device.model == "Local Volume"
+    assert hass.states.get(old.entity_id).state == "0"

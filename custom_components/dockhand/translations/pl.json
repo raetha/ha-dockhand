@@ -407,8 +407,11 @@
       "disk_usage_build_cache": {
         "name": "Miejsce na dysku: pamięć podręczna buildów"
       },
+      "volume_containers": {
+        "name": "Kontenery"
+      },
       "volume_size": {
-        "name": "Rozmiar {volume}"
+        "name": "Rozmiar"
       },
       "activity_events_today": {
         "name": "Zdarzenia aktywności dzisiaj"

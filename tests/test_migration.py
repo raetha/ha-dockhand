@@ -27,6 +27,7 @@ from custom_components.dockhand.migration import (
     migrate_1_8_0_reenable_container_stats_entities,
     migrate_1_8_0_remove_consolidated_disk_sensors,
     migrate_1_9_0_entry_scoped_device_identifiers,
+    migrate_2_0_0_volume_unique_ids,
 )
 
 # ---------------------------------------------------------------------------
@@ -143,6 +144,58 @@ def test_volume_entity_migrated(hass: HomeAssistant):
     ent = _add_entity(hass, entry, "dockhand_volume_1_mydata")
     migrate_1_7_3_entry_scoped_unique_ids(hass, ENTRY_ID)
     assert _get_uid(hass, ent.entity_id) == f"{ENTRY_ID}_1_volume_mydata"
+
+
+def test_volume_entity_gets_its_suffix(hass: HomeAssistant):
+    """1.x's one volume entity, named after its volume, becomes the
+    volume's container count; 2.0's own entities, the size and anything
+    that only looks like a volume entity, are left alone."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+
+    def add(uid: str, name: str | None, key: str | None = None):
+        return registry.async_get_or_create(
+            "sensor",
+            "dockhand",
+            uid,
+            config_entry=entry,
+            original_name=name,
+            translation_key=key,
+        )
+
+    old = add(f"{ENTRY_ID}_1_volume_my_data", "my_data")
+    size = add(f"{ENTRY_ID}_1_volume_my_data_size", None, "volume_size")
+    other = add(f"{ENTRY_ID}_1_network_abc", "abc")
+    named_otherwise = add(f"{ENTRY_ID}_1_volume_cache", "Something else")
+    other_entry = add("another_1_volume_x", "x")
+
+    for _ in range(2):  # idempotent
+        migrate_2_0_0_volume_unique_ids(hass, ENTRY_ID)
+
+    assert _get_uid(hass, old.entity_id) == (
+        f"{ENTRY_ID}_1_volume_my_data_container_count"
+    )
+    assert _get_uid(hass, size.entity_id) == f"{ENTRY_ID}_1_volume_my_data_size"
+    assert _get_uid(hass, other.entity_id) == f"{ENTRY_ID}_1_network_abc"
+    assert _get_uid(hass, named_otherwise.entity_id) == f"{ENTRY_ID}_1_volume_cache"
+    assert _get_uid(hass, other_entry.entity_id) == "another_1_volume_x"
+
+
+def test_volume_entity_already_recreated_is_dropped(hass: HomeAssistant):
+    """If the new entity already exists, the old one only duplicates it."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+    old = registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        f"{ENTRY_ID}_1_volume_data",
+        config_entry=entry,
+        original_name="data",
+    )
+    new = _add_entity(hass, entry, f"{ENTRY_ID}_1_volume_data_container_count")
+    migrate_2_0_0_volume_unique_ids(hass, ENTRY_ID)
+    assert registry.async_get(old.entity_id) is None
+    assert registry.async_get(new.entity_id) is not None
 
 
 def test_update_entity_migrated(hass: HomeAssistant):
@@ -866,5 +919,5 @@ def test_registry_migration_lifecycle():
     assert registry_migrations_to_run() == list(REGISTRY_MIGRATIONS)
     # At the next schema major, schema 1 installs can't be set up any more,
     # so only the migrations from schema 2 releases still run.
-    assert [m.release for m in registry_migrations_to_run(3)] == ["1.9.0"]
+    assert [m.release for m in registry_migrations_to_run(3)] == ["1.9.0", "2.0.0"]
     assert registry_migrations_to_run(4) == []
