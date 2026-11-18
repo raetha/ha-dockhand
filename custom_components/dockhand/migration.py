@@ -574,7 +574,7 @@ def migrate_2_0_0_image_and_network_unique_ids(
     """Key image and network entities by name instead of Docker's IDs.
 
     In 1.x an image entity was `{entry_id}_{env_id}_image_{image ID}`, named
-    after its first tag, and a network entity
+    after its repository (or its first `repository:tag`), and a network entity
     `{entry_id}_{env_id}_network_{network ID}`, named after the network, so
     each pull of an image, and each time Compose recreated a network,
     replaced the entity. 2.0.0 has one image entity per repository and keys
@@ -616,6 +616,12 @@ def migrate_2_0_0_image_and_network_unique_ids(
             "sensor", DOMAIN, new_uid
         ):
             ent_registry.async_remove(entity.entity_id)
+            _LOGGER.debug(
+                "Dockhand: removed %s entity %s (%s)",
+                kind,
+                entity.entity_id,
+                "nothing to key it by" if new_uid is None else "a duplicate",
+            )
             continue
         ent_registry.async_update_entity(entity.entity_id, new_unique_id=new_uid)
         _LOGGER.debug("Dockhand: renamed %s entity %s", kind, entity.entity_id)

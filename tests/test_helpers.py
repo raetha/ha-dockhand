@@ -40,6 +40,7 @@ from custom_components.dockhand.helpers import (
     image_groups,
     image_repositories,
     image_tag,
+    tag_repository,
     short_image_id,
     async_dockhand_action,
     _actionable_pending_update_container_ids,
@@ -460,6 +461,8 @@ def test_a_registry_port_is_part_of_the_repository():
         "registry.lan:5000/app"
     ]
     assert image_tag("registry.lan:5000/app:2") == "2"
+    assert tag_repository("registry.lan:5000/app") == "registry.lan:5000/app"
+    assert image_tag("registry.lan:5000/app") == "latest"
 
 
 def test_an_untagged_image_belongs_to_the_repository_its_digest_names():

@@ -236,6 +236,8 @@ def test_images_and_networks_are_keyed_by_name(hass: HomeAssistant):
     unknown = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_ddd", "unknown")
     nameless = _add_1x(hass, entry, f"{ENTRY_ID}_1_network_eee", None)
     network = _add_1x(hass, entry, f"{ENTRY_ID}_2_network_fff", "proxy_default")
+    # 1.11 named an image by its repository alone, which can hold a port.
+    ported = _add_1x(hass, entry, f"{ENTRY_ID}_2_image_ggg", "registry.lan:5000/app")
     current = registry.async_get_or_create(
         "sensor",
         "dockhand",
@@ -252,6 +254,9 @@ def test_images_and_networks_are_keyed_by_name(hass: HomeAssistant):
     assert latest.entity_id == "sensor.env_jellyfin"
     assert _get_uid(hass, latest.entity_id) == f"{ENTRY_ID}_1_image_jellyfin/jellyfin"
     assert _get_uid(hass, network.entity_id) == f"{ENTRY_ID}_2_network_proxy_default"
+    assert _get_uid(hass, ported.entity_id) == (
+        f"{ENTRY_ID}_2_image_registry.lan:5000/app"
+    )
     for gone in (pinned, untagged, unknown, nameless):
         assert registry.async_get(gone.entity_id) is None
     assert _get_uid(hass, current.entity_id) == f"{ENTRY_ID}_1_image_nginx"

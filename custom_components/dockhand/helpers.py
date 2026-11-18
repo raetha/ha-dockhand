@@ -1013,14 +1013,23 @@ def image_groups(images: list) -> dict[str, list[dict]]:
     return groups
 
 
+def _tag_colon(tag: str) -> int:
+    """Where `repository:tag` splits, or -1: a colon before the last `/` is a
+    registry's port (`registry.lan:5000/app`), not a tag."""
+    colon = tag.rfind(":")
+    return colon if colon > max(tag.rfind("/"), 0) else -1
+
+
 def tag_repository(tag: str) -> str:
     """The repository part of `repository:tag`."""
-    return tag[: tag.rindex(":")] if tag.rfind(":") > 0 else tag
+    colon = _tag_colon(tag)
+    return tag[:colon] if colon > 0 else tag
 
 
 def image_tag(tag: str) -> str:
     """The tag part of `repository:tag`."""
-    return tag[tag.rindex(":") + 1 :] if tag.rfind(":") > 0 else "latest"
+    colon = _tag_colon(tag)
+    return tag[colon + 1 :] if colon > 0 else "latest"
 
 
 def short_image_id(image: dict) -> str:
