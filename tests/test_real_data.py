@@ -135,3 +135,73 @@ async def test_every_entity_has_a_state_from_real_data(hass: HomeAssistant):
     assert bad == [], "\n".join(bad)
     # Every one of those is still here, so the list stays true.
     assert EXPECTED_UNAVAILABLE <= {e.entity_id for e in entities}
+
+
+# Attributes Home Assistant itself sets and translates, for every entity and
+# for update entities.
+_PLATFORM_ATTRIBUTES = {
+    "assumed_state",
+    "attribution",
+    "device_class",
+    "entity_picture",
+    "event_type",
+    "event_types",
+    "friendly_name",
+    "icon",
+    "max",
+    "min",
+    "mode",
+    "options",
+    "state_class",
+    "step",
+    "supported_features",
+    "unit_of_measurement",
+}
+_UPDATE_ATTRIBUTES = {
+    "auto_update",
+    "display_precision",
+    "in_progress",
+    "installed_version",
+    "latest_version",
+    "release_summary",
+    "release_url",
+    "skipped_version",
+    "title",
+    "update_percentage",
+}
+
+
+async def test_every_attribute_has_a_translated_name(hass: HomeAssistant):
+    """Home Assistant shows each attribute by its translated name; without
+    one it shows the raw key in English to everyone."""
+    await setup_from_real_data(hass)
+    strings = json.loads(
+        (
+            Path(__file__).parent.parent / "custom_components/dockhand/strings.json"
+        ).read_text()
+    )["entity"]
+    entry = hass.config_entries.async_entries(DOMAIN)[0]
+    missing: set[str] = set()
+    for entity in er.async_entries_for_config_entry(er.async_get(hass), entry.entry_id):
+        state = hass.states.get(entity.entity_id)
+        if state is None:
+            continue
+        translated = (
+            strings.get(entity.domain, {})
+            .get(entity.translation_key or "", {})
+            .get("state_attributes", {})
+        )
+        for attribute in state.attributes:
+            if attribute in _PLATFORM_ATTRIBUTES or (
+                entity.domain == "update" and attribute in _UPDATE_ATTRIBUTES
+            ):
+                continue
+            if "name" not in translated.get(attribute, {}):
+                missing.add(f"{entity.domain}.{entity.translation_key}: {attribute}")
+            values = translated.get(attribute, {}).get("state")
+            value = state.attributes[attribute]
+            if values is not None and isinstance(value, str) and value not in values:
+                missing.add(
+                    f"{entity.domain}.{entity.translation_key}: {attribute}={value}"
+                )
+    assert not missing, "\n".join(sorted(missing))

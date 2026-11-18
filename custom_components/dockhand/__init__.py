@@ -73,6 +73,9 @@ from .helpers import (
     _ensure_hub_devices,
     _instance_device,
     _stack_has_system_container,
+    image_groups,
+    image_unique_id,
+    network_unique_id,
 )
 from .installs import DockhandInstaller
 from .migration import async_run_migrations
@@ -325,9 +328,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         else:
             # No token yet — prompt the user to provide one via reauth.
             raise ConfigEntryAuthFailed(
-                "This Dockhand entry uses the old session-cookie auth, "
-                "which is no longer supported. Use Reconfigure to provide "
-                "an API token (Profile → API tokens in Dockhand)."
+                translation_domain=DOMAIN,
+                translation_key="session_auth_unsupported",
             )
 
     data, options = _normalized_entry_config(entry.data, entry.options)
@@ -369,7 +371,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         raise
     except Exception as err:
         raise ConfigEntryNotReady(
-            f"Could not fetch initial Dockhand data: {err}"
+            translation_domain=DOMAIN,
+            translation_key="setup_failed",
+            translation_placeholders={"error": str(err)},
         ) from err
 
     # Never fatal: the version only labels the instance device.
@@ -969,16 +973,17 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             if "images" not in env_failures:
                 if "images" not in (env_data.get("unconfirmed") or set()):
                     images_fetch_ok_env_ids.add(env_id)
-                for img in env_data.get("images") or []:
-                    raw_id = img.get("id") or ""
-                    short_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-                    image_uids.add(f"{entry.entry_id}_{env_id}_image_{short_id}")
+                for repository in image_groups(env_data.get("images") or []):
+                    image_uids.add(image_unique_id(entry.entry_id, env_id, repository))
                     images_group_env_ids.add(env_id)
             if "networks" not in env_failures:
                 networks_fetch_ok_env_ids.add(env_id)
                 for net in env_data.get("networks") or []:
-                    net_id = net.get("id", "")
-                    network_uids.add(f"{entry.entry_id}_{env_id}_network_{net_id}")
+                    network_uids.add(
+                        network_unique_id(
+                            entry.entry_id, env_id, str(net.get("name") or "")
+                        )
+                    )
                     networks_group_env_ids.add(env_id)
             if "volumes" not in env_failures:
                 volumes_fetch_ok_env_ids.add(env_id)

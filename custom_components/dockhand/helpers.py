@@ -8,21 +8,28 @@ must never be imported by __init__.py or by each other.
 
 import inspect
 import math
-from collections.abc import Awaitable, Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
 from typing import Any
 from urllib.parse import urlparse
 from weakref import WeakKeyDictionary
 
+from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
-from .api import DockhandPermissionError
+from .api import (
+    DockhandAuthError,
+    DockhandFailedError,
+    DockhandPermissionError,
+    DockhandUnexpectedResponseError,
+)
 from .const import DOMAIN
 
 
@@ -47,12 +54,49 @@ async def async_dockhand_action[T](action: Awaitable[T]) -> T:
             translation_domain=DOMAIN,
             translation_key="permission_denied",
         ) from err
+    except DockhandAuthError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="token_invalid"
+        ) from err
+    except DockhandUnexpectedResponseError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="unexpected_response"
+        ) from err
+    except DockhandFailedError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="dockhand_failed"
+        ) from err
+    except (TimeoutError, ClientError) as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="cannot_connect"
+        ) from err
     except Exception as err:
         raise HomeAssistantError(
             translation_domain=DOMAIN,
             translation_key="action_failed",
             translation_placeholders={"error": str(err)},
         ) from err
+
+
+type Texts = Callable[..., str]
+
+
+async def async_common_texts(hass: HomeAssistant | None) -> Texts:
+    """The `common` section of this integration's translations, in Home
+    Assistant's language (English where a locale lacks a key), as a function
+    of a key and its placeholders. For text that has no translation route
+    of its own, such as an update entity's release notes."""
+    texts: dict[str, str] = {}
+    if hass is not None:
+        texts = await async_get_translations(
+            hass, hass.config.language, "common", {DOMAIN}
+        )
+    prefix = f"component.{DOMAIN}.common."
+
+    def text(key: str, **placeholders: object) -> str:
+        return texts.get(prefix + key, key).format(**placeholders)
+
+    return text
 
 
 def _device_entry_id(hass: Any, entry_id: str, identifier: str) -> str | None:
@@ -936,18 +980,64 @@ def _sched_device(
 # --------------------------------------------------------------------------- #
 
 
-def _image_display_name(image: dict) -> str:
-    """Return a human-readable name for an image.
+UNTAGGED_IMAGES = "<none>"
+"""The repository Dockhand's Images page puts images under when they have
+neither a tag nor a digest that names one."""
 
-    Prefer the first repoTag (e.g. 'traefik:latest'). Fall back to the
-    short 12-char hex ID for untagged/intermediate images.
-    API field confirmed camelCase: repoTags, id (with sha256: prefix).
-    """
+
+def image_repositories(image: dict) -> list[str]:
+    """The repositories an image belongs to, as Dockhand's Images page
+    groups them (`groupedImages` in routes/images/+page.svelte): each tag's
+    repository, or for an untagged image the repository its digest names,
+    or UNTAGGED_IMAGES."""
     tags = [t for t in (image.get("repoTags") or []) if t and t != "<none>:<none>"]
     if tags:
-        return str(tags[0])
-    raw_id = image.get("id") or ""
-    return raw_id.split(":")[-1][:12] if raw_id else "unknown"
+        return list(dict.fromkeys(tag_repository(t) for t in tags))
+    for digest in image.get("repoDigests") or []:
+        if isinstance(digest, str) and digest.find("@") > 0:
+            return [digest[: digest.index("@")]]
+    return [UNTAGGED_IMAGES]
+
+
+def image_groups(images: list) -> dict[str, list[dict]]:
+    """Each repository's images, each image once, as Dockhand lists them:
+    one entry per repository, whatever its tags or how often it's pulled."""
+    groups: dict[str, list[dict]] = {}
+    for image in images or []:
+        if not isinstance(image, dict):
+            continue
+        for repo in image_repositories(image):
+            group = groups.setdefault(repo, [])
+            if all(other.get("id") != image.get("id") for other in group):
+                group.append(image)
+    return groups
+
+
+def tag_repository(tag: str) -> str:
+    """The repository part of `repository:tag`."""
+    return tag[: tag.rindex(":")] if tag.rfind(":") > 0 else tag
+
+
+def image_tag(tag: str) -> str:
+    """The tag part of `repository:tag`."""
+    return tag[tag.rindex(":") + 1 :] if tag.rfind(":") > 0 else "latest"
+
+
+def short_image_id(image: dict) -> str:
+    """An image's ID without its `sha256:` prefix."""
+    raw_id = str(image.get("id") or "")
+    return raw_id.split(":")[-1] if ":" in raw_id else raw_id
+
+
+def image_unique_id(entry_id: str, env_id: int, repository: str) -> str:
+    """An image sensor's unique ID: by repository, so it lasts across pulls."""
+    return f"{entry_id}_{env_id}_image_{repository}"
+
+
+def network_unique_id(entry_id: str, env_id: int, name: str) -> str:
+    """A network sensor's unique ID: by name, since Compose gives a network a
+    new ID each time it recreates it."""
+    return f"{entry_id}_{env_id}_network_{name}"
 
 
 def _container_has_healthcheck(container: dict) -> bool:

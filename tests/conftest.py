@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import json
 from collections.abc import Iterator
+from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -27,6 +29,33 @@ from custom_components.dockhand.coordinator import (
 # ---------------------------------------------------------------------------
 # Required by pytest-homeassistant-custom-component to load custom integrations
 # ---------------------------------------------------------------------------
+
+
+def english_texts() -> Any:
+    """The `common` texts in English, from strings.json, as
+    async_common_texts gives them in a running Home Assistant."""
+    common = json.loads(
+        (
+            Path(__file__).parent.parent / "custom_components/dockhand/strings.json"
+        ).read_text()
+    )["common"]
+
+    def text(key: str, **placeholders: object) -> str:
+        return common.get(key, key).format(**placeholders)
+
+    return text
+
+
+@pytest.fixture(autouse=True)
+def _english_common_texts() -> Iterator[None]:
+    """Entities built without a running Home Assistant read the English
+    texts; test_helpers covers loading them through Home Assistant."""
+
+    async def texts(_hass: Any) -> Any:
+        return english_texts()
+
+    with patch("custom_components.dockhand.update.async_common_texts", texts):
+        yield
 
 
 @pytest.fixture(autouse=True)

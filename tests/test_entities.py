@@ -203,6 +203,7 @@ def _sensor_classes():
         DockhandEnvVolumesSensor,
         DockhandImageSensor,
         DockhandNetworkSensor,
+        DockhandUntaggedImagesSensor,
         DockhandScheduleLastStatusSensor,
         DockhandScheduleNextRunSensor,
         DockhandStackContainerCountSensor,
@@ -1289,17 +1290,17 @@ def test_stack_container_count_names_attribute():
     sensor = sc["DockhandStackContainerCountSensor"](
         coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
     )
-    assert sensor.extra_state_attributes == {"container_names": ["web", "worker"]}
+    assert sensor.extra_state_attributes == {"containers": ["web", "worker"]}
 
 
 def test_stack_status_leaves_the_containers_to_their_own_sensor(stack_sensors):
     attrs = stack_sensors["status"].extra_state_attributes
     assert "container_count" not in attrs
-    assert "container_names" not in attrs
+    assert "containers" not in attrs
     assert "name" not in attrs
 
 
-def test_stack_container_names_resolved_from_ids():
+def test_stack_containers_resolved_from_ids():
     """Dockhand's own stack.containers field is a list of raw container
     IDs (verified against Dockhand's source, src/lib/server/stacks.ts),
     not names — this attribute must resolve them against the
@@ -1321,10 +1322,10 @@ def test_stack_container_names_resolved_from_ids():
     sensor = sc["DockhandStackContainerCountSensor"](
         coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
     )
-    assert sensor.extra_state_attributes["container_names"] == ["web", "worker"]
+    assert sensor.extra_state_attributes["containers"] == ["web", "worker"]
 
 
-def test_stack_container_names_sorted_alphabetically():
+def test_stack_containers_sorted_alphabetically():
     """A stack's container names are sorted, so a long list can be skimmed.
     The IDs come in an order that isn't already sorted."""
     sc = _sensor_classes()
@@ -1351,14 +1352,14 @@ def test_stack_container_names_sorted_alphabetically():
     )
     # Case-insensitive: "Mike" sorts between "alpha" and "zebra", not
     # before both of them due to capitalization.
-    assert sensor.extra_state_attributes["container_names"] == [
+    assert sensor.extra_state_attributes["containers"] == [
         "alpha",
         "Mike",
         "zebra",
     ]
 
 
-def test_stack_container_names_falls_back_to_id_when_unresolved():
+def test_stack_containers_falls_back_to_id_when_unresolved():
     """A container ID that isn't in the environment's current container
     list (e.g. removed since the stack's own list last refreshed) should
     still show up as its raw ID, not silently vanish from the list."""
@@ -1376,7 +1377,7 @@ def test_stack_container_names_falls_back_to_id_when_unresolved():
     sensor = sc["DockhandStackContainerCountSensor"](
         coord, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, stack
     )
-    assert sensor.extra_state_attributes["container_names"] == ["gone999", "web"]
+    assert sensor.extra_state_attributes["containers"] == ["gone999", "web"]
 
 
 def test_stack_status_model_untracked_when_no_source_record(stack_sensors):
@@ -1433,83 +1434,122 @@ def test_stack_unique_ids_differ(stack_sensors):
 # ===========================================================================
 
 
-def _make_image(image=None):
+def _make_image(images=None, repository="nginx", fast=None):
+    """An image sensor for a repository, over these images (IMAGE alone by
+    default)."""
+    coord = _slow_coord()
+    if images is not None:
+        coord.data["environments"][ENV_ID]["images"] = images
     sc = _sensor_classes()
-    return sc["DockhandImageSensor"](
-        _slow_coord(),
-        _fast_coord(),
-        ENTRY_ID,
-        ENV_ID,
-        ENV_NAME,
-        BASE_URL,
-        image or IMAGE,
+    cls = (
+        sc["DockhandUntaggedImagesSensor"]
+        if repository == "<none>"
+        else sc["DockhandImageSensor"]
+    )
+    return cls(
+        coord, fast or _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, repository
     )
 
 
-def test_image_has_no_long_term_statistics():
-    """Each pull replaces an image's entity: with a state class, every one
-    would leave orphaned statistics behind."""
-    assert _make_image().state_class is None
+def test_image_keeps_long_term_statistics():
+    """Keyed by repository, an image's entity lasts across pulls."""
+    assert _make_image().state_class == "measurement"
+
+
+def test_image_is_named_after_and_keyed_by_its_repository():
+    sensor = _make_image()
+    assert sensor.name == "nginx"
+    assert sensor._attr_has_entity_name
+    assert sensor.unique_id == f"{ENTRY_ID}_{ENV_ID}_image_nginx"
+    assert sensor.translation_key == "image"
 
 
 def test_image_native_value_is_containers_using():
-    sensor = _make_image()
+    assert _make_image().native_value == 2
+
+
+def test_a_pull_updates_the_same_entity():
+    """The new image takes the tag; the old one, untagged but still named by
+    its digest, stays in the repository until it's pruned."""
+    old = {
+        **IMAGE,
+        "repoTags": [],
+        "repoDigests": ["nginx@sha256:old"],
+        "containers": 0,
+    }
+    new = {**IMAGE, "id": "sha256:new", "containers": 2, "created": 1800000000}
+    sensor = _make_image([old, new])
     assert sensor.native_value == 2
-    assert "containers_using" not in sensor.extra_state_attributes
+    attrs = sensor.extra_state_attributes
+    assert attrs["tags"] == ["latest"]
+    assert attrs["digests"] == ["nginx@sha256:old"]
 
 
-def test_image_name_is_repo_only():
-    sensor = _make_image()
-    assert sensor.name == "nginx"
-    assert ":" not in sensor.name
-
-
-def test_image_has_entity_name_true():
-    assert _make_image()._attr_has_entity_name
-
-
-def test_image_name_recomputes_live_when_tag_is_lost():
-    """The name follows Dockhand's data on every read: an image entity
-    lives as long as its hash, and once its tag moves to a newly pulled
-    image, a fixed name would keep the old repo:tag and push the new
-    image's entity to an "_2" entity ID. Untagged, it falls back to the
-    short hash."""
-    coord = _slow_coord()
-    sc = _sensor_classes()
-    sensor = sc["DockhandImageSensor"](
-        coord, _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+def test_two_tags_of_one_repository_are_one_entity():
+    """jellyfin/jellyfin:latest and :1.0: one entity, both tags, every
+    container counted once."""
+    latest = {
+        **IMAGE,
+        "id": "sha256:aaa",
+        "repoTags": ["jellyfin/jellyfin:latest"],
+        "containers": 1,
+        "created": 1800000000,
+        "size": 300,
+    }
+    pinned = {
+        **IMAGE,
+        "id": "sha256:bbb",
+        "repoTags": ["jellyfin/jellyfin:1.0"],
+        "containers": 1,
+        "created": 1700000000,
+        "size": 500,
+    }
+    fast = _fast_coord(
+        {
+            "stats": STATS,
+            "containers": [
+                {**CONTAINER, "id": "c1", "name": "jf", "imageId": "sha256:aaa"},
+                {**CONTAINER, "id": "c2", "name": "jf-old", "imageId": "bbb"},
+                {**CONTAINER, "id": "c3", "name": "db", "imageId": "sha256:other"},
+                {**CONTAINER, "id": "c4", "name": "none"},
+            ],
+            "stacks": [],
+        }
     )
-    assert sensor.name == "nginx"
-
-    # Simulate the next poll: Dockhand's data now shows this exact image
-    # (same id) as untagged — a new image has taken over "nginx:latest".
-    untagged_image = {**IMAGE, "repoTags": []}
-    coord.data["environments"][ENV_ID]["images"] = [untagged_image]
-    assert sensor.name == "deadbeef1234"
-
-
-def test_image_name_falls_back_when_image_gone_entirely():
-    """If the image disappears from the environment entirely (e.g.
-    pruned) while this entity object still exists momentarily, name
-    falls back to whatever it was last known as, rather than crashing
-    or going blank."""
-    coord = _slow_coord()
-    sc = _sensor_classes()
-    sensor = sc["DockhandImageSensor"](
-        coord, _fast_coord(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
-    )
-    coord.data["environments"][ENV_ID]["images"] = []
-    assert sensor.name == "nginx"
+    sensor = _make_image([latest, pinned], "jellyfin/jellyfin", fast)
+    assert sensor.native_value == 2
+    attrs = sensor.extra_state_attributes
+    assert attrs["tags"] == ["latest", "1.0"]
+    assert attrs["containers"] == ["jf", "jf-old"]
+    # The largest, as Dockhand shows a repository's size; the newest's date.
+    assert attrs["size_bytes"] == 500
+    assert attrs["created"].startswith("2027-")
 
 
-def test_image_size_bytes_attribute():
-    attrs = _make_image().extra_state_attributes
-    assert attrs["size_bytes"] == 104857600
-    assert "size_mib" not in attrs
+def test_an_image_tagged_in_two_repositories_counts_in_both():
+    both = {**IMAGE, "repoTags": ["nginx:latest", "web:1"]}
+    assert _make_image([both], "nginx").native_value == 2
+    assert _make_image([both], "web").native_value == 2
+    assert _make_image([both], "web").extra_state_attributes["tags"] == ["1"]
 
 
-def test_image_tags_attribute():
-    assert _make_image().extra_state_attributes["tags"] == ["nginx:latest"]
+def test_untagged_images_are_one_entity_with_a_translated_name():
+    anonymous = [
+        {
+            **IMAGE,
+            "id": "sha256:a1",
+            "repoTags": [],
+            "repoDigests": [],
+            "containers": 0,
+        },
+        {**IMAGE, "id": "sha256:a2", "repoTags": ["<none>:<none>"], "containers": 1},
+    ]
+    sensor = _make_image(anonymous, "<none>")
+    assert sensor.translation_key == "untagged_images"
+    assert not hasattr(sensor, "_attr_name")
+    assert sensor.unique_id == f"{ENTRY_ID}_{ENV_ID}_image_<none>"
+    assert sensor.native_value == 1
+    assert sensor.extra_state_attributes["tags"] == []
 
 
 def test_image_lists_the_containers_using_it():
@@ -1520,23 +1560,41 @@ def test_image_lists_the_containers_using_it():
             "containers": [
                 {**CONTAINER, "id": "c1", "name": "web", "imageId": IMAGE["id"]},
                 {**CONTAINER, "id": "c2", "name": "api", "imageId": "deadbeef1234"},
-                {**CONTAINER, "id": "c3", "name": "db", "imageId": "sha256:other"},
-                {**CONTAINER, "id": "c4", "name": "none"},
             ],
             "stacks": [],
         }
     )
-    sensor = _sensor_classes()["DockhandImageSensor"](
-        _slow_coord(), fast, ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, IMAGE
+    assert _make_image(fast=fast).extra_state_attributes["containers"] == ["api", "web"]
+
+
+def test_image_sensor_once_its_repository_is_gone():
+    sensor = _make_image([])
+    assert sensor.native_value is None
+    assert sensor.extra_state_attributes == {}
+
+
+def test_image_without_a_container_count_or_size():
+    sensor = _make_image([{**IMAGE, "containers": None, "size": None}])
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["size_bytes"] is None
+
+
+def test_image_attributes_include_oci_labels_and_skip_a_bad_timestamp():
+    labels = {
+        "org.opencontainers.image.version": "1.2.3",
+        "org.opencontainers.image.vendor": "Acme",
+        "org.opencontainers.image.title": "Web",
+        "org.opencontainers.image.source": "https://example.com/web",
+    }
+    sensor = _make_image([{**IMAGE, "labels": labels, "created": 10**20}])
+    attrs = sensor.extra_state_attributes
+    assert (attrs["version"], attrs["vendor"], attrs["title"], attrs["source"]) == (
+        "1.2.3",
+        "Acme",
+        "Web",
+        "https://example.com/web",
     )
-    assert sensor.extra_state_attributes["containers"] == ["api", "web"]
-
-
-def test_image_used_by_no_container_lists_none():
-    image = {**IMAGE, "id": "sha256:unused"}
-    sensor = _make_image(image)
-    sensor.coordinator.data["environments"][ENV_ID]["images"] = [image]
-    assert sensor.extra_state_attributes["containers"] == []
+    assert attrs["created"] is None
 
 
 def test_image_device_is_images_group():
@@ -1564,7 +1622,19 @@ def test_network_attributes():
     attrs = _make_network().extra_state_attributes
     assert attrs["driver"] == "bridge"
     assert attrs["subnet"] == "172.17.0.0/16"
-    assert "nginx" in attrs["connected_containers"]
+    assert attrs["containers"] == ["nginx"]
+    assert attrs["addresses"] == {"nginx": "172.17.0.2"}
+
+
+def test_a_recreated_network_is_the_same_entity():
+    """Compose gives a recreated network a new ID; the entity follows its
+    name."""
+    sensor = _make_network()
+    assert sensor.unique_id == f"{ENTRY_ID}_{ENV_ID}_network_bridge"
+    sensor.coordinator.data["environments"][ENV_ID]["networks"] = [
+        {**NETWORK, "id": "recreated"}
+    ]
+    assert sensor.native_value == 1
 
 
 def test_network_none_when_not_found():
@@ -2278,7 +2348,7 @@ class TestButtons:
         b._client = MagicMock()
         with pytest.raises(HomeAssistantError) as exc_info:
             await b.async_press()
-        assert exc_info.value.translation_key == "action_failed"
+        assert exc_info.value.translation_key == "stack_not_found"
 
     async def test_stack_deploy_raises_ha_error_on_client_exception(self):
         b = self._stack_deploy_btn()
@@ -2304,6 +2374,14 @@ class TestButtons:
         assert "compose file not configured" in str(
             exc_info.value.translation_placeholders["error"]
         )
+
+    async def test_stack_deploy_failure_without_a_reason(self):
+        b = self._stack_deploy_btn()
+        b._client = MagicMock()
+        b._client.async_deploy_stack = AsyncMock(return_value={"success": False})
+        with pytest.raises(HomeAssistantError) as exc_info:
+            await b.async_press()
+        assert exc_info.value.translation_key == "dockhand_failed"
 
 
 # ===========================================================================
@@ -2508,77 +2586,27 @@ def _make_image_setup_entry(hass, images):
     return entry
 
 
-async def test_setup_entry_defers_image_entities_when_tag_collides(hass):
-    """Two images momentarily reporting the same repo:tag (a container
-    upgrade in progress — the old image hasn't been marked untagged in
-    Dockhand's data yet) — neither gets an entity created this poll,
-    avoiding the "_2" suffix collision entirely."""
+async def test_setup_entry_creates_one_image_entity_per_repository(hass):
     from custom_components.dockhand.sensor import async_setup_entry
 
-    old_image = {**IMAGE, "id": "sha256:old111111111"}
-    new_image = {**IMAGE, "id": "sha256:new222222222"}
-    entry = _make_image_setup_entry(hass, [old_image, new_image])
+    pinned = {**IMAGE, "id": "sha256:pinned", "repoTags": ["nginx:1.27"]}
+    untagged = {**IMAGE, "id": "sha256:anon", "repoTags": [], "repoDigests": []}
+    entry = _make_image_setup_entry(hass, [IMAGE, pinned, untagged])
     add_entities = MagicMock()
     await async_setup_entry(hass, entry, add_entities)
 
     created = []
     for call in add_entities.call_args_list:
         created.extend(call.args[0])
-    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
-    assert image_entities == []
-
-
-async def test_setup_entry_creates_image_entity_when_tag_unambiguous(hass):
-    from custom_components.dockhand.sensor import async_setup_entry
-
-    entry = _make_image_setup_entry(hass, [IMAGE])
-    add_entities = MagicMock()
-    await async_setup_entry(hass, entry, add_entities)
-
-    created = []
-    for call in add_entities.call_args_list:
-        created.extend(call.args[0])
-    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
-    assert len(image_entities) == 1
-
-
-async def test_setup_entry_creates_entity_once_collision_resolves(hass):
-    """Same scenario as the deferred case, but simulating the next poll:
-    the old image has dropped out of the list (Dockhand's data caught up
-    — it's now untagged and no longer shares the tag), so the new image
-    can be created cleanly."""
-    from custom_components.dockhand.sensor import async_setup_entry
-
-    new_image = {**IMAGE, "id": "sha256:new222222222"}
-    entry = _make_image_setup_entry(hass, [new_image])
-    add_entities = MagicMock()
-    await async_setup_entry(hass, entry, add_entities)
-
-    created = []
-    for call in add_entities.call_args_list:
-        created.extend(call.args[0])
-    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
-    assert len(image_entities) == 1
-    assert image_entities[0].name == "nginx"
-
-
-async def test_setup_entry_untagged_images_never_collide_with_each_other(hass):
-    """Two different untagged images each fall back to their own short
-    hash as a display name — since hashes are unique, they never
-    collide, regardless of how many untagged images exist at once."""
-    from custom_components.dockhand.sensor import async_setup_entry
-
-    untagged_1 = {**IMAGE, "id": "sha256:aaaa11111111", "repoTags": []}
-    untagged_2 = {**IMAGE, "id": "sha256:bbbb22222222", "repoTags": []}
-    entry = _make_image_setup_entry(hass, [untagged_1, untagged_2])
-    add_entities = MagicMock()
-    await async_setup_entry(hass, entry, add_entities)
-
-    created = []
-    for call in add_entities.call_args_list:
-        created.extend(call.args[0])
-    image_entities = [e for e in created if type(e).__name__ == "DockhandImageSensor"]
-    assert len(image_entities) == 2
+    image_entities = [
+        e
+        for e in created
+        if type(e).__name__ in ("DockhandImageSensor", "DockhandUntaggedImagesSensor")
+    ]
+    assert sorted(e.unique_id for e in image_entities) == [
+        f"{ENTRY_ID}_{ENV_ID}_image_<none>",
+        f"{ENTRY_ID}_{ENV_ID}_image_nginx",
+    ]
 
 
 async def test_entity_not_duplicated_within_the_same_session(hass):
@@ -2590,7 +2618,7 @@ async def test_entity_not_duplicated_within_the_same_session(hass):
 
     entry = _make_image_setup_entry(hass, [IMAGE])
     ent_registry = er.async_get(hass)
-    image_uid = f"{ENTRY_ID}_{ENV_ID}_image_{IMAGE['id'].split(':')[-1]}"
+    image_uid = f"{ENTRY_ID}_{ENV_ID}_image_nginx"
 
     await async_setup_entry(hass, entry, MagicMock())
     ent_registry.async_get_or_create("sensor", DOMAIN, image_uid, config_entry=entry)
@@ -2614,7 +2642,7 @@ async def test_entity_recreated_within_the_same_session_if_removed(hass):
 
     entry = _make_image_setup_entry(hass, [IMAGE])
     ent_registry = er.async_get(hass)
-    image_uid = f"{ENTRY_ID}_{ENV_ID}_image_{IMAGE['id'].split(':')[-1]}"
+    image_uid = f"{ENTRY_ID}_{ENV_ID}_image_nginx"
 
     await async_setup_entry(hass, entry, MagicMock())
     entity_entry = ent_registry.async_get_or_create(
@@ -2646,7 +2674,7 @@ async def test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it
 
     entry = _make_image_setup_entry(hass, [IMAGE])
     ent_registry = er.async_get(hass)
-    image_uid = f"{ENTRY_ID}_{ENV_ID}_image_{IMAGE['id'].split(':')[-1]}"
+    image_uid = f"{ENTRY_ID}_{ENV_ID}_image_nginx"
 
     # Seed the registry directly, standing in for "a previous session
     # already created this" — deliberately NOT touching
@@ -3413,42 +3441,6 @@ def test_hawser_edge_attributes():
     assert last_seen.native_value.isoformat() == "2026-10-01T00:00:00+00:00"
     assert last_seen.unique_id == f"{ENTRY_ID}_{ENV_ID}_hawser_last_seen"
     assert not last_seen.entity_registry_enabled_default
-
-
-def test_image_sensor_once_the_image_is_gone():
-    sensor = _make_image()
-    sensor.coordinator.data["environments"][ENV_ID]["images"] = []
-    assert sensor.native_value is None
-    assert sensor.extra_state_attributes == {}
-
-
-def test_image_without_a_container_count():
-    """Docker reports -1 when it hasn't counted."""
-    image = {**IMAGE, "containers": -1}
-    sensor = _make_image(image)
-    sensor.coordinator.data["environments"][ENV_ID]["images"] = [image]
-    assert sensor.native_value is None
-
-
-def test_image_attributes_include_oci_labels_and_skip_a_bad_timestamp():
-    image = {
-        **IMAGE,
-        "created": 10**20,
-        "labels": {
-            "org.opencontainers.image.version": "1.27.0",
-            "org.opencontainers.image.vendor": "NGINX",
-            "org.opencontainers.image.title": "nginx",
-            "org.opencontainers.image.source": "https://github.com/nginx/nginx",
-        },
-    }
-    sensor = _make_image(image)
-    sensor.coordinator.data["environments"][ENV_ID]["images"] = [image]
-    attrs = sensor.extra_state_attributes
-    assert attrs["created"] is None
-    assert attrs["version"] == "1.27.0"
-    assert attrs["vendor"] == "NGINX"
-    assert attrs["title"] == "nginx"
-    assert attrs["source"] == "https://github.com/nginx/nginx"
 
 
 def test_network_and_volume_attributes_once_gone():

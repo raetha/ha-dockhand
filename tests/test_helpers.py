@@ -8,7 +8,8 @@ Covers:
 - _env_device: name, connectionType as hw_version
 - group device helpers: network, volume, image
 - _sched_key / _sched_device
-- _image_display_name: tagged, untagged, multi-tag, empty
+- image_repositories / image_groups: Dockhand's Images page grouping
+- async_common_texts: the `common` translations
 - _container_has_healthcheck: all states
 - _compose_project: with/without label, None container
 - _ensure_env_devices: all device creation branches
@@ -23,9 +24,23 @@ from unittest.mock import MagicMock
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 
-from custom_components.dockhand.api import DockhandError, DockhandPermissionError
+from aiohttp import ClientConnectionError
+
+from custom_components.dockhand.api import (
+    DockhandAuthError,
+    DockhandError,
+    DockhandFailedError,
+    DockhandPermissionError,
+    DockhandUnexpectedResponseError,
+)
 from custom_components.dockhand.const import DOMAIN
 from custom_components.dockhand.helpers import (
+    UNTAGGED_IMAGES,
+    async_common_texts,
+    image_groups,
+    image_repositories,
+    image_tag,
+    short_image_id,
     async_dockhand_action,
     _actionable_pending_update_container_ids,
     _device_by_identifier,
@@ -46,7 +61,6 @@ from custom_components.dockhand.helpers import (
     _find_stack,
     _env_device,
     _env_settings_url,
-    _image_display_name,
     _image_group_device,
     _image_url,
     _image_version_label,
@@ -430,42 +444,69 @@ def test_ensure_env_devices_schedule_name_uses_environment_prefix(hass):
 
 
 # ---------------------------------------------------------------------------
-# _image_display_name
+# image_repositories / image_groups
 # ---------------------------------------------------------------------------
 
 
-def test_image_display_name_prefers_first_repo_tag():
-    assert (
-        _image_display_name({"repoTags": ["nginx:latest", "nginx:1.25"]})
-        == "nginx:latest"
-    )
+def test_an_image_belongs_to_each_repository_it_is_tagged_in():
+    image = {
+        "repoTags": ["jellyfin/jellyfin:latest", "jellyfin/jellyfin:10.11", "media:1"]
+    }
+    assert image_repositories(image) == ["jellyfin/jellyfin", "media"]
 
 
-def test_image_display_name_skips_none_tag():
-    result = _image_display_name(
-        {"repoTags": ["<none>:<none>"], "id": "sha256:abc123def456789"}
-    )
-    assert result == "abc123def456"
+def test_a_registry_port_is_part_of_the_repository():
+    assert image_repositories({"repoTags": ["registry.lan:5000/app:2"]}) == [
+        "registry.lan:5000/app"
+    ]
+    assert image_tag("registry.lan:5000/app:2") == "2"
 
 
-def test_image_display_name_falls_back_to_short_id():
-    result = _image_display_name({"repoTags": [], "id": "sha256:deadbeef1234567890"})
-    assert result == "deadbeef1234"
+def test_an_untagged_image_belongs_to_the_repository_its_digest_names():
+    image = {"repoTags": ["<none>:<none>"], "repoDigests": ["nginx@sha256:abc"]}
+    assert image_repositories(image) == ["nginx"]
 
 
-def test_image_display_name_handles_empty_id():
-    result = _image_display_name({"repoTags": [], "id": ""})
-    assert result == "unknown"
+def test_an_image_with_neither_is_untagged():
+    assert image_repositories({"repoTags": [], "repoDigests": []}) == [UNTAGGED_IMAGES]
+    assert image_repositories({}) == [UNTAGGED_IMAGES]
 
 
-def test_image_display_name_handles_no_fields():
-    result = _image_display_name({})
-    assert result == "unknown"
+def test_two_tags_of_one_repository_are_one_group_and_each_image_counts_once():
+    """jellyfin/jellyfin:latest and :1.0 on two images, and a third image
+    tagged twice in the repository: one group of three images."""
+    images = [
+        {"id": "sha256:a", "repoTags": ["jellyfin/jellyfin:latest"]},
+        {"id": "sha256:b", "repoTags": ["jellyfin/jellyfin:1.0"]},
+        {
+            "id": "sha256:c",
+            "repoTags": ["jellyfin/jellyfin:10.11", "jellyfin/jellyfin:10"],
+        },
+        "not an image",
+    ]
+    groups = image_groups(images)
+    assert list(groups) == ["jellyfin/jellyfin"]
+    assert [short_image_id(i) for i in groups["jellyfin/jellyfin"]] == ["a", "b", "c"]
 
 
-def test_image_display_name_id_without_colon():
-    result = _image_display_name({"repoTags": [], "id": "deadbeef1234567890"})
-    assert result == "deadbeef1234"
+def test_short_image_id_without_a_prefix():
+    assert short_image_id({"id": "deadbeef"}) == "deadbeef"
+    assert short_image_id({}) == ""
+
+
+# ---------------------------------------------------------------------------
+# async_common_texts
+# ---------------------------------------------------------------------------
+
+
+async def test_common_texts_come_from_the_translations(hass):
+    text = await async_common_texts(hass)
+    assert text("release_notes_image", image="nginx:latest") == "Image: nginx:latest"
+
+
+async def test_common_texts_without_home_assistant_give_the_key():
+    text = await async_common_texts(None)
+    assert text("release_notes_image", image="x") == "release_notes_image"
 
 
 # ---------------------------------------------------------------------------
@@ -1352,8 +1393,13 @@ async def test_dockhand_action_returns_the_result():
     ("error", "translation_key"),
     [
         (DockhandPermissionError("403"), "permission_denied"),
-        (DockhandError("API error 500: boom"), "action_failed"),
-        (TimeoutError(), "action_failed"),
+        (DockhandAuthError("401"), "token_invalid"),
+        (DockhandUnexpectedResponseError("shape"), "unexpected_response"),
+        (DockhandFailedError(), "dockhand_failed"),
+        (DockhandError("HTTP 500: boom"), "action_failed"),
+        (TimeoutError(), "cannot_connect"),
+        (ClientConnectionError(), "cannot_connect"),
+        (ValueError("bug"), "action_failed"),
     ],
 )
 async def test_dockhand_action_turns_failures_into_user_errors(

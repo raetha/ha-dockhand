@@ -18,8 +18,10 @@ from custom_components.dockhand.api import (
     DockhandAuthError,
     DockhandClient,
     DockhandError,
+    DockhandFailedError,
     DockhandNotFoundError,
     DockhandPermissionError,
+    DockhandUnexpectedResponseError,
 )
 
 
@@ -70,7 +72,7 @@ async def test_request_4xx_raises_dockhand_error():
 
 
 async def test_request_5xx_raises_dockhand_error():
-    with pytest.raises(DockhandError, match="API error 500: boom") as exc_info:
+    with pytest.raises(DockhandError, match="HTTP 500: boom") as exc_info:
         await _client(_session(_resp(500, text="boom")))._request("GET", "/api/x")
     assert type(exc_info.value) is DockhandError
 
@@ -436,19 +438,26 @@ async def test_prune_returns_dockers_report(
 
 
 @pytest.mark.parametrize(
-    ("reply", "message"),
+    ("reply", "error", "message"),
     [
-        ("not json", "Unexpected response"),
-        ({"success": False, "error": "Failed to prune images"}, "Failed to prune"),
-        ({"success": False}, "Pruning images failed"),
+        ("not json", DockhandUnexpectedResponseError, "prune images"),
+        (
+            {"success": False, "error": "Failed to prune images"},
+            DockhandError,
+            "Failed to prune",
+        ),
+        ({"success": False}, DockhandFailedError, None),
     ],
 )
 async def test_prune_raises_when_dockhand_reports_a_failure(
-    action_client, reply, message: str
+    action_client, reply, error: type[Exception], message: str | None
 ):
+    """Dockhand's own reason when it gives one; otherwise an error the action
+    turns into a translated message, so no English of ours reaches users."""
     action_client._request.return_value = reply
-    with pytest.raises(DockhandError, match=message):
+    with pytest.raises(error, match=message) as exc_info:
         await action_client.async_prune(1, "images")
+    assert type(exc_info.value) is error
 
 
 async def test_prune_without_a_report(action_client):
@@ -876,7 +885,7 @@ async def test_wrong_response_shape_is_a_dockhand_error(
     """A reply of the wrong JSON type fails the fetch cleanly instead of
     breaking whatever reads it later."""
     client_with_mock_request._request.return_value = wrong_shape
-    with pytest.raises(DockhandError, match="Unexpected response"):
+    with pytest.raises(DockhandUnexpectedResponseError):
         await getattr(client_with_mock_request, method)(*args)
 
 
