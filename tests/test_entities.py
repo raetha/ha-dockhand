@@ -1626,6 +1626,14 @@ def test_network_attributes():
     assert attrs["addresses"] == {"nginx": "172.17.0.2"}
 
 
+def test_a_stopped_container_on_a_network_has_no_address():
+    sensor = _make_network()
+    sensor.coordinator.data["environments"][ENV_ID]["networks"] = [
+        {**NETWORK, "containers": {"abc": {"name": "down", "ipv4Address": ""}}}
+    ]
+    assert sensor.extra_state_attributes["addresses"] == {"down": None}
+
+
 def test_a_recreated_network_is_the_same_entity():
     """Compose gives a recreated network a new ID; the entity follows its
     name."""

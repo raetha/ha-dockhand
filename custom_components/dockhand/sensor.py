@@ -2469,8 +2469,9 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         if not n:
             return {}
         ipam = (n.get("ipam") or {}).get("config") or []
+        # Docker reports "" for a stopped container still attached.
         addresses = {
-            i.get("name"): i.get("ipv4Address")
+            i.get("name"): i.get("ipv4Address") or None
             for i in (n.get("containers") or {}).values()
             if i.get("name")
         }
