@@ -1187,8 +1187,10 @@ def _cleanup_stale_registry_now(
                         dev_registry.async_remove_device(device.id)
                     else:
                         _LOGGER.debug(
-                            "Dockhand: env offline or containers fetch failed, "
-                            "skipping container cleanup: %s",
+                            "Dockhand: keeping container device %s: its "
+                            "environment is offline, its containers fetch "
+                            "failed, or it isn't confirmed gone yet (missing "
+                            "on one poll only, as while it's recreated)",
                             identifier,
                         )
 
@@ -1219,8 +1221,10 @@ def _cleanup_stale_registry_now(
                         dev_registry.async_remove_device(device.id)
                     else:
                         _LOGGER.debug(
-                            "Dockhand: env offline or stacks fetch failed, "
-                            "skipping stack cleanup: %s",
+                            "Dockhand: keeping stack device %s: its "
+                            "environment is offline, its stacks fetch failed, "
+                            "or it isn't confirmed gone yet (missing on one "
+                            "poll only)",
                             identifier,
                         )
 

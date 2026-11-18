@@ -80,7 +80,8 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 - The 1.8.0 migration that removed the separate containers and build cache disk size sensors is gone: 2.0.0 brings them back under the same unique IDs, and it was removing them again at every startup.
 - With debug logging on, each poll logs how long updating the entities and the registry cleanup took, beside Home Assistant's own fetch timing, so a slow install can show where the time goes without a profile; `docs/troubleshooting.md` says how.
 - Reviewed Dockhand 1.0.58: nothing to change; its 5-minute disk usage cache answers Finsys/dockhand#1885 (`docs/development.md` → Upstream compatibility).
-- `docs/backlog.md` tracks the requests filed with Dockhand: per-container vulnerability counts (Finsys/dockhand#1916) and the poll-mode event fix (#1886), both merged for Dockhand's next release, and the fixes offered for #1911 and #1501.
+- `docs/backlog.md` tracks the requests filed with Dockhand: per-container vulnerability counts (Finsys/dockhand#1916), the poll-mode event fix (#1886) and hiding Dockhand's helper containers from its container list (#1911, so a vulnerability scan stops adding a device for a minute), all merged for Dockhand's next release, and the fix offered for #1501.
+- The debug log says why a container or stack device is kept when it's missing from a poll, including that it isn't confirmed gone yet, as while it's recreated.
 - `docs/backlog.md` records why images and networks have no devices of their own.
 - A push to `dev` publishes a test build only when something users install changed; running the Build workflow by hand on `dev` publishes one anyway. Test builds are numbered by test build, not by workflow run, so the numbers go up by one.
 - `docs/backlog.md` records why the cards aren't shipped inside the integration.
