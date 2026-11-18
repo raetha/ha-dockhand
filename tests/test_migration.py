@@ -26,6 +26,7 @@ from custom_components.dockhand.migration import (
     migrate_1_8_0_container_stats_option,
     migrate_1_8_0_reenable_container_stats_entities,
     migrate_1_9_0_entry_scoped_device_identifiers,
+    migrate_2_0_0_image_and_network_unique_ids,
     migrate_2_0_0_volume_unique_ids,
 )
 
@@ -195,6 +196,75 @@ def test_volume_entity_already_recreated_is_dropped(hass: HomeAssistant):
     migrate_2_0_0_volume_unique_ids(hass, ENTRY_ID)
     assert registry.async_get(old.entity_id) is None
     assert registry.async_get(new.entity_id) is not None
+
+
+def _add_1x(hass, entry, uid: str, name: str | None, entity_id: str | None = None):
+    """A sensor as 1.x left it: named, without a translation key."""
+    registry = er.async_get(hass)
+    return registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        uid,
+        config_entry=entry,
+        original_name=name,
+        suggested_object_id=entity_id,
+    )
+
+
+def test_images_and_networks_are_keyed_by_name(hass: HomeAssistant):
+    """1.x keyed them by Docker's IDs. Each becomes its repository's or
+    network's entity, keeping its entity ID; of two tags of one
+    repository the unsuffixed entity stays; untagged images go (2.0 groups
+    them under one new entity); 2.0's own entities are left alone."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+    latest = _add_1x(
+        hass,
+        entry,
+        f"{ENTRY_ID}_1_image_aaa",
+        "jellyfin/jellyfin:latest",
+        "env_jellyfin",
+    )
+    pinned = _add_1x(
+        hass,
+        entry,
+        f"{ENTRY_ID}_1_image_bbb",
+        "jellyfin/jellyfin:10.9",
+        "env_jellyfin_2",
+    )
+    untagged = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_ccc", "0123456789ab")
+    unknown = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_ddd", "unknown")
+    nameless = _add_1x(hass, entry, f"{ENTRY_ID}_1_network_eee", None)
+    network = _add_1x(hass, entry, f"{ENTRY_ID}_2_network_fff", "proxy_default")
+    current = registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        f"{ENTRY_ID}_1_image_nginx",
+        config_entry=entry,
+        original_name="nginx",
+        translation_key="image",
+    )
+    other_entry = _add_1x(hass, entry, "another_1_image_x", "x:1")
+
+    for _ in range(2):  # idempotent
+        migrate_2_0_0_image_and_network_unique_ids(hass, ENTRY_ID)
+
+    assert latest.entity_id == "sensor.env_jellyfin"
+    assert _get_uid(hass, latest.entity_id) == f"{ENTRY_ID}_1_image_jellyfin/jellyfin"
+    assert _get_uid(hass, network.entity_id) == f"{ENTRY_ID}_2_network_proxy_default"
+    for gone in (pinned, untagged, unknown, nameless):
+        assert registry.async_get(gone.entity_id) is None
+    assert _get_uid(hass, current.entity_id) == f"{ENTRY_ID}_1_image_nginx"
+    assert _get_uid(hass, other_entry.entity_id) == "another_1_image_x"
+
+
+def test_a_migrated_image_whose_repository_is_gone_stays(hass: HomeAssistant):
+    """Until 2.0 sets it up again it keeps its 1.x name and no translation
+    key, which mustn't look like a second entity of its repository."""
+    entry = _make_entry(hass)
+    image = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_nginx", "nginx:latest")
+    migrate_2_0_0_image_and_network_unique_ids(hass, ENTRY_ID)
+    assert _get_uid(hass, image.entity_id) == f"{ENTRY_ID}_1_image_nginx"
 
 
 def test_update_entity_migrated(hass: HomeAssistant):
@@ -902,5 +972,9 @@ def test_registry_migration_lifecycle():
     assert registry_migrations_to_run() == list(REGISTRY_MIGRATIONS)
     # At the next schema major, schema 1 installs can't be set up any more,
     # so only the migrations from schema 2 releases still run.
-    assert [m.release for m in registry_migrations_to_run(3)] == ["1.9.0", "2.0.0"]
+    assert [m.release for m in registry_migrations_to_run(3)] == [
+        "1.9.0",
+        "2.0.0",
+        "2.0.0",
+    ]
     assert registry_migrations_to_run(4) == []

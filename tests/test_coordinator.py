@@ -1327,8 +1327,9 @@ async def test_slow_auth_error_raises_update_failed_with_message(hass: HomeAssis
     client = _make_client()
     client.async_get_environments = AsyncMock(side_effect=DockhandAuthError("expired"))
     coord = _slow(hass, client)
-    with pytest.raises(UpdateFailed, match="reauth"):
+    with pytest.raises(UpdateFailed) as exc_info:
         await coord._async_update_data()
+    assert exc_info.value.translation_key == "token_invalid"
 
 
 async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):

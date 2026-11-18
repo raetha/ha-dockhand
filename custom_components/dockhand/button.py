@@ -446,8 +446,7 @@ class DockhandStackDeployButton(_BaseFastStackButton):
         if not self._stack():
             raise HomeAssistantError(
                 translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": "Stack not found"},
+                translation_key="stack_not_found",
             )
         result = await async_dockhand_action(
             self._client.async_deploy_stack(self._env_id, self._stack_name)
@@ -457,12 +456,14 @@ class DockhandStackDeployButton(_BaseFastStackButton):
         # configured) rather than an HTTP error — _request() wouldn't
         # raise on this, so check explicitly.
         if not result.get("success", True):
+            if error := result.get("error"):
+                raise HomeAssistantError(
+                    translation_domain="dockhand",
+                    translation_key="action_failed",
+                    translation_placeholders={"error": str(error)},
+                )
             raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={
-                    "error": result.get("error", "Stack deploy failed")
-                },
+                translation_domain="dockhand", translation_key="dockhand_failed"
             )
         await self.coordinator.async_refresh_environment(self._env_id)
 
@@ -564,8 +565,7 @@ class DockhandEnvBulkUpdateButton(
         if not container_ids:
             raise HomeAssistantError(
                 translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": "No pending updates"},
+                translation_key="no_pending_updates",
             )
         names = {
             c.get("id"): c.get("name") or c.get("id")

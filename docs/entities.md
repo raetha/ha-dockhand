@@ -42,7 +42,7 @@ myenv                                       ← Environment device
 │       ├── sensor.Containers
 │       └── sensor.Size
 └── myenv – Images  (if enabled)            ← Group device
-    └── sensor.nginx                   ← one entity per image (no sub-devices)
+    └── sensor.nginx                   ← one entity per image repository (no sub-devices)
 
 sensor.CPU usage, sensor.Memory usage, sensor.Containers  ← on env device
 binary_sensor.Online
@@ -194,11 +194,12 @@ The following are created automatically whenever a stack is detected as **git-tr
 
 ### Image (optional, 600 s)
 
-One entity per image, living under the **{env} – Images** group device. Images have no devices of their own: an image is identified by its ID, so every pull is a new image, and devices would come and go with each update.
+One entity per repository, as Dockhand's Images page lists them, living under the **{env} – Images** group device. A pull updates the repository's entity rather than making a new one, so its history and long-term statistics carry on; images have no devices of their own.
 
 | Entity | Type | Notes |
 |---|---|---|
-| *repository* | sensor | Named for the repository of its first tag (e.g. `nginx`), or its short ID when untagged; state is how many containers use it (0 = unused, a candidate for pruning); attributes include `tags` (each `repository:tag`), `containers` (the names of the containers using it, updated together with the count), digests, size, created, and the image's version, vendor, title and source labels |
+| *repository* | sensor | Named for the repository (e.g. `jellyfin/jellyfin`), covering every image of it: `jellyfin/jellyfin:latest` and `:10.9` are one entity. State is how many containers use its images (0 = unused, a candidate for pruning). Attributes: `tags` (the tags in this repository, e.g. `latest`, newest image first), `containers` (the containers using them), `digests`, `size_bytes` (the largest image's, as Dockhand shows it), `created` (the newest image's), and the newest image's `version`, `vendor`, `title` and `source` labels. An image tagged in two repositories counts in both |
+| Untagged | sensor | Every image without a tag or a digest's repository (Dockhand's `<none>` group): dangling layers left by pulls and builds, the ones Prune unused images removes first |
 
 ### Network (optional, 600 s)
 
@@ -206,7 +207,7 @@ One entity per network, living under the **{env} – Networks** group device.
 
 | Entity | Type | Notes |
 |---|---|---|
-| *network-name* | sensor | Named for the network (e.g. `bridge`); state is connected container count; attributes include driver, scope, subnet, and connected container names/IPs |
+| *network-name* | sensor | Named for the network (e.g. `bridge`) and keyed by its name, so a network Compose recreates keeps its entity, history and statistics. State is how many containers are connected. Attributes: `driver`, `scope`, `internal`, `subnet`, `containers` (the connected containers' names) and `addresses` (each container's IPv4 address on the network) |
 
 ### Volume (optional, 600 s)
 

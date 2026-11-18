@@ -2,7 +2,7 @@ import logging
 from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import quote
 
 from aiohttp import ClientResponse, ClientSession, ClientTimeout
@@ -27,6 +27,13 @@ def _q(value: Any) -> str:
     return quote(str(value), safe="")
 
 
+def _raise_failure(message: object) -> NoReturn:
+    """Raise Dockhand's own reason for a failed action, if it gave one."""
+    if message:
+        raise DockhandError(str(message))
+    raise DockhandFailedError
+
+
 class DockhandError(Exception):
     """Base class for Dockhand API errors."""
 
@@ -40,6 +47,15 @@ class DockhandPermissionError(DockhandError):
     """403 — the token's Dockhand user lacks a permission the route needs.
     Only Dockhand Enterprise roles can cause this; in the free edition every
     authenticated user may do everything."""
+
+
+class DockhandUnexpectedResponseError(DockhandError):
+    """Dockhand answered, but not in the shape this integration expects:
+    usually a Dockhand version that changed the route."""
+
+
+class DockhandFailedError(DockhandError):
+    """Dockhand reported that an action failed without saying why."""
 
 
 class DockhandAuthError(DockhandError):
@@ -92,10 +108,10 @@ class DockhandClient:
         if resp.status >= 400:
             text = await resp.text()
             if resp.status == 404:
-                raise DockhandNotFoundError(f"API error 404: {text[:300]}")
+                raise DockhandNotFoundError(f"HTTP 404: {text[:300]}")
             if resp.status == 403:
-                raise DockhandPermissionError(f"API error 403: {text[:300]}")
-            raise DockhandError(f"API error {resp.status}: {text}")
+                raise DockhandPermissionError(f"HTTP 403: {text[:300]}")
+            raise DockhandError(f"HTTP {resp.status}: {text}")
 
     async def _request(
         self, method: str, path: str, timeout_seconds: int = 30, **kwargs: Any
@@ -136,14 +152,14 @@ class DockhandClient:
         """GET an endpoint whose response is a JSON array."""
         result = await self._request("GET", path)
         if not isinstance(result, list):
-            raise DockhandError(f"Unexpected response from {path}: not a list")
+            raise DockhandUnexpectedResponseError(f"{path}: not a list")
         return result
 
     async def _get_dict(self, path: str) -> dict[str, Any]:
         """GET an endpoint whose response is a JSON object."""
         result = await self._request("GET", path)
         if not isinstance(result, dict):
-            raise DockhandError(f"Unexpected response from {path}: not an object")
+            raise DockhandUnexpectedResponseError(f"{path}: not an object")
         return result
 
     # ------------------------------------------------------------------ #
@@ -427,10 +443,9 @@ class DockhandClient:
             "POST", f"/api/prune/{_q(resource)}?{query}", timeout_seconds=600
         )
         if not isinstance(result, dict):
-            raise DockhandError(f"Unexpected response pruning {resource}")
+            raise DockhandUnexpectedResponseError(f"prune {resource}")
         if not result.get("success", False):
-            error = result.get("error") or f"Pruning {resource} failed"
-            raise DockhandError(str(error))
+            _raise_failure(result.get("error"))
         report = result.get("result")
         return report if isinstance(report, dict) else {}
 
@@ -443,7 +458,7 @@ class DockhandClient:
             timeout_seconds=300,
         )
         if isinstance(result, dict) and result.get("success") is False:
-            raise DockhandError(str(result.get("message") or "Schedule run failed"))
+            _raise_failure(result.get("message"))
 
     async def async_toggle_schedule(
         self, sched_type: str, sched_id: int, *, system: bool = False
@@ -458,7 +473,7 @@ class DockhandClient:
         result = await self._request("POST", path)
         enabled = result.get("enabled") if isinstance(result, dict) else None
         if not isinstance(enabled, bool):
-            raise DockhandError("Unexpected response toggling a schedule")
+            raise DockhandUnexpectedResponseError("schedule toggle")
         return enabled
 
     async def async_update_container_runtime(
@@ -859,7 +874,7 @@ class DockhandClient:
         )
         job_id = result.get("jobId") if isinstance(result, dict) else None
         if not job_id:
-            raise DockhandError("batch-update-stream did not return a job ID")
+            raise DockhandUnexpectedResponseError("batch-update-stream: no job ID")
         return str(job_id)
 
     async def async_get_job(self, job_id: str) -> dict[str, Any]:

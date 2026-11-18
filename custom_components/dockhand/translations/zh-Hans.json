@@ -150,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "CPU 使用率"
+        "name": "CPU 使用率",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "CPU 数量"
+          },
+          "top_containers": {
+            "name": "占用最高的容器"
+          }
+        }
       },
       "memory_usage": {
         "name": "内存使用率"
@@ -174,7 +182,12 @@
         "name": "磁盘使用情况"
       },
       "activity_events": {
-        "name": "活动事件"
+        "name": "活动事件",
+        "state_attributes": {
+          "recent_events": {
+            "name": "最近事件"
+          }
+        }
       },
       "state": {
         "name": "状态",
@@ -186,6 +199,29 @@
           "removing": "正在移除",
           "exited": "已退出",
           "dead": "已失效"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "退出码"
+          },
+          "image": {
+            "name": "镜像"
+          },
+          "networks": {
+            "name": "网络"
+          },
+          "restart_count": {
+            "name": "重启次数"
+          },
+          "system_container": {
+            "name": "系统容器"
+          },
+          "tag_colors": {
+            "name": "标签颜色"
+          },
+          "tags": {
+            "name": "标签"
+          }
         }
       },
       "health": {
@@ -204,13 +240,45 @@
           "restarting": "正在重启",
           "stopped": "已停止",
           "created": "已创建"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "系统容器"
+          },
+          "tag_colors": {
+            "name": "标签颜色"
+          },
+          "tags": {
+            "name": "标签"
+          },
+          "type": {
+            "name": "类型",
+            "state": {
+              "internal": "内部",
+              "git": "Git",
+              "untracked": "未跟踪"
+            }
+          }
         }
       },
       "containers_in_stack": {
-        "name": "容器"
+        "name": "容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Hawser 代理版本"
+        "name": "Hawser 代理版本",
+        "state_attributes": {
+          "agent_id": {
+            "name": "代理 ID"
+          },
+          "agent_name": {
+            "name": "代理名称"
+          }
+        }
       },
       "next_run": {
         "name": "下次运行",
@@ -231,7 +299,17 @@
               "stack_deploy": "堆栈部署",
               "deploy_log_reconcile": "部署日志核对",
               "env_report": "状态报告"
-            }
+            },
+            "name": "类型"
+          },
+          "cron_expression": {
+            "name": "Cron 表达式"
+          },
+          "enabled": {
+            "name": "已启用"
+          },
+          "environment": {
+            "name": "环境"
           }
         }
       },
@@ -265,7 +343,43 @@
               "stack_deploy": "堆栈部署",
               "deploy_log_reconcile": "部署日志核对",
               "env_report": "状态报告"
+            },
+            "name": "类型"
+          },
+          "cron_expression": {
+            "name": "Cron 表达式"
+          },
+          "description": {
+            "name": "描述"
+          },
+          "duration_ms": {
+            "name": "耗时（毫秒）"
+          },
+          "enabled": {
+            "name": "已启用"
+          },
+          "environment": {
+            "name": "环境"
+          },
+          "error_message": {
+            "name": "错误信息"
+          },
+          "is_system": {
+            "name": "系统计划"
+          },
+          "triggered_at": {
+            "name": "触发时间"
+          },
+          "triggered_by": {
+            "name": "触发方式",
+            "state": {
+              "cron": "已计划",
+              "manual": "手动",
+              "webhook": "Webhook"
             }
+          },
+          "updates_found": {
+            "name": "发现的更新"
           }
         }
       },
@@ -321,13 +435,32 @@
           "syncing": "同步中",
           "synced": "已同步",
           "error": "错误"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "最近提交"
+          },
+          "sync_error": {
+            "name": "同步错误"
+          },
+          "auto_update": {
+            "name": "自动部署"
+          },
+          "webhook_enabled": {
+            "name": "已启用 Webhook"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "上次同步时间"
       },
       "host_platform": {
-        "name": "主机平台"
+        "name": "主机平台",
+        "state_attributes": {
+          "architecture": {
+            "name": "架构"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Docker 版本"
@@ -408,7 +541,30 @@
         "name": "构建缓存磁盘用量"
       },
       "volume_containers": {
-        "name": "容器"
+        "name": "容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          },
+          "created": {
+            "name": "创建时间"
+          },
+          "driver": {
+            "name": "驱动"
+          },
+          "in_use": {
+            "name": "使用中"
+          },
+          "labels": {
+            "name": "标签"
+          },
+          "mountpoint": {
+            "name": "挂载点"
+          },
+          "scope": {
+            "name": "范围"
+          }
+        }
       },
       "volume_size": {
         "name": "大小"
@@ -442,20 +598,129 @@
       },
       "stack_pending_updates": {
         "name": "待处理更新"
+      },
+      "image": {
+        "unit_of_measurement": "个容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          },
+          "created": {
+            "name": "创建时间"
+          },
+          "digests": {
+            "name": "摘要"
+          },
+          "size_bytes": {
+            "name": "大小（字节）"
+          },
+          "source": {
+            "name": "来源"
+          },
+          "tags": {
+            "name": "标签"
+          },
+          "title": {
+            "name": "标题"
+          },
+          "vendor": {
+            "name": "供应商"
+          },
+          "version": {
+            "name": "版本"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "无标签",
+        "unit_of_measurement": "个容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          },
+          "created": {
+            "name": "创建时间"
+          },
+          "digests": {
+            "name": "摘要"
+          },
+          "size_bytes": {
+            "name": "大小（字节）"
+          },
+          "source": {
+            "name": "来源"
+          },
+          "tags": {
+            "name": "标签"
+          },
+          "title": {
+            "name": "标题"
+          },
+          "vendor": {
+            "name": "供应商"
+          },
+          "version": {
+            "name": "版本"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "个容器",
+        "state_attributes": {
+          "addresses": {
+            "name": "地址"
+          },
+          "containers": {
+            "name": "容器"
+          },
+          "driver": {
+            "name": "驱动"
+          },
+          "internal": {
+            "name": "内部"
+          },
+          "scope": {
+            "name": "范围"
+          },
+          "subnet": {
+            "name": "子网"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "在线"
+        "name": "在线",
+        "state_attributes": {
+          "connection_host": {
+            "name": "主机"
+          },
+          "connection_port": {
+            "name": "端口"
+          },
+          "labels": {
+            "name": "标签"
+          }
+        }
       },
       "vulnerability_scanning": {
         "name": "漏洞扫描"
       },
       "git_stack_sync_error": {
-        "name": "同步错误"
+        "name": "同步错误",
+        "state_attributes": {
+          "sync_error": {
+            "name": "同步错误"
+          }
+        }
       },
       "stack_updates_available": {
-        "name": "有可用更新"
+        "name": "有可用更新",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "有更新的容器"
+          }
+        }
       },
       "live_updates": {
         "name": "实时更新",
@@ -614,7 +879,7 @@
             }
           },
           "exit_code": {
-            "name": "退出代码"
+            "name": "退出码"
           }
         }
       }
@@ -641,6 +906,33 @@
     },
     "system_container": {
       "message": "无法从 Home Assistant 重建 Dockhand 自身的容器和 Hawser 代理。"
+    },
+    "session_auth_unsupported": {
+      "message": "此条目使用会话 Cookie 登录，已不再受支持。请通过“重新配置”输入 API 令牌（Dockhand 中的 个人资料 → API 令牌）。"
+    },
+    "setup_failed": {
+      "message": "无法从 Dockhand 加载数据：{error}"
+    },
+    "update_failed": {
+      "message": "无法从 Dockhand 更新：{error}"
+    },
+    "token_invalid": {
+      "message": "Dockhand 的 API 令牌无效或已被撤销。请在 设置 → 设备与服务 中重新验证此集成。"
+    },
+    "stack_not_found": {
+      "message": "未找到堆栈——它可能已被删除"
+    },
+    "no_pending_updates": {
+      "message": "没有可安装的更新"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand 报告失败，但未说明原因。其日志可能有更多信息。"
+    },
+    "unexpected_response": {
+      "message": "Dockhand 返回了此集成无法理解的响应。请检查 Dockhand 是否为最新版本。"
+    },
+    "cannot_connect": {
+      "message": "无法连接到 Dockhand。请检查它是否正在运行，以及 Home Assistant 能否访问它。"
     }
   },
   "issues": {
@@ -747,5 +1039,21 @@
         "git_stack_auto_deploy": "自动部署"
       }
     }
+  },
+  "common": {
+    "release_notes_image": "镜像：{image}",
+    "newer_tag_available": "有更新的版本标签可用：**{tag}**。",
+    "newer_tag_also_available": "另有更新的版本标签可用：**{tag}**。要切换到它，请在 compose 文件或容器配置中更新标签。",
+    "newer_tag_advisory_only": "此信息仅供参考——容器已固定在当前标签上，因此“安装”不会将其升级到此版本。要升级，请在 compose 文件或容器配置中更新标签。",
+    "release_notes_truncated": "……（已截断）",
+    "versions_skipped": "_中间跳过了 {count} 个版本。_",
+    "view_full_release_notes": "查看完整发行说明",
+    "view_release_notes": "查看发行说明",
+    "pinned_to_digest": "**已固定到摘要。** 镜像标签已指向新的摘要，但此容器固定在旧摘要上。要更新它，请在其 compose 文件或运行命令中更改摘要；“安装”只会重新拉取固定的镜像。",
+    "update_held": "**更新已暂缓：** 距离 Dockhand 中设置的镜像最短存在时间还剩 {hours} 小时。之后即可安装。",
+    "update_held_until_check": "**更新已暂缓：** 新镜像已达到 Dockhand 中设置的最短存在时间。Dockhand 下次检查更新后（或执行 **检查镜像更新** 后）即可安装。",
+    "scanner_may_block_update": "此环境会在更新前扫描镜像漏洞。根据所配置的策略，如果发现的问题超过阈值，此更新可能会被阻止。",
+    "system_container_update": "这是系统容器，必须直接在 Docker 主机上更新。",
+    "updates_disabled_by_label": "已通过 `dockhand.update=false` 标签禁用更新。"
   }
 }

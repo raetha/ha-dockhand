@@ -150,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "CPU-gebruik"
+        "name": "CPU-gebruik",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "CPU's"
+          },
+          "top_containers": {
+            "name": "Topcontainers"
+          }
+        }
       },
       "memory_usage": {
         "name": "Geheugengebruik"
@@ -174,7 +182,12 @@
         "name": "Schijfgebruik"
       },
       "activity_events": {
-        "name": "Activiteitsgebeurtenissen"
+        "name": "Activiteitsgebeurtenissen",
+        "state_attributes": {
+          "recent_events": {
+            "name": "Recente gebeurtenissen"
+          }
+        }
       },
       "state": {
         "name": "Toestand",
@@ -186,6 +199,29 @@
           "removing": "Verwijderen",
           "exited": "Gestopt",
           "dead": "Dood"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "Afsluitcode"
+          },
+          "image": {
+            "name": "Image"
+          },
+          "networks": {
+            "name": "Netwerken"
+          },
+          "restart_count": {
+            "name": "Aantal herstarts"
+          },
+          "system_container": {
+            "name": "Systeemcontainer"
+          },
+          "tag_colors": {
+            "name": "Tagkleuren"
+          },
+          "tags": {
+            "name": "Tags"
+          }
         }
       },
       "health": {
@@ -204,13 +240,45 @@
           "restarting": "Herstarten",
           "stopped": "Gestopt",
           "created": "Aangemaakt"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "Systeemcontainer"
+          },
+          "tag_colors": {
+            "name": "Tagkleuren"
+          },
+          "tags": {
+            "name": "Tags"
+          },
+          "type": {
+            "name": "Type",
+            "state": {
+              "internal": "Intern",
+              "git": "Git",
+              "untracked": "Niet bijgehouden"
+            }
+          }
         }
       },
       "containers_in_stack": {
-        "name": "Containers"
+        "name": "Containers",
+        "state_attributes": {
+          "containers": {
+            "name": "Containers"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Hawser-agentversie"
+        "name": "Hawser-agentversie",
+        "state_attributes": {
+          "agent_id": {
+            "name": "Agent-ID"
+          },
+          "agent_name": {
+            "name": "Agentnaam"
+          }
+        }
       },
       "next_run": {
         "name": "Volgende uitvoering",
@@ -231,7 +299,17 @@
               "stack_deploy": "Stack uitrollen",
               "deploy_log_reconcile": "Afstemming van implementatielogboek",
               "env_report": "Statusrapport"
-            }
+            },
+            "name": "Type"
+          },
+          "cron_expression": {
+            "name": "Cron-expressie"
+          },
+          "enabled": {
+            "name": "Ingeschakeld"
+          },
+          "environment": {
+            "name": "Omgeving"
           }
         }
       },
@@ -265,7 +343,43 @@
               "stack_deploy": "Stack uitrollen",
               "deploy_log_reconcile": "Afstemming van implementatielogboek",
               "env_report": "Statusrapport"
+            },
+            "name": "Type"
+          },
+          "cron_expression": {
+            "name": "Cron-expressie"
+          },
+          "description": {
+            "name": "Beschrijving"
+          },
+          "duration_ms": {
+            "name": "Duur (ms)"
+          },
+          "enabled": {
+            "name": "Ingeschakeld"
+          },
+          "environment": {
+            "name": "Omgeving"
+          },
+          "error_message": {
+            "name": "Foutmelding"
+          },
+          "is_system": {
+            "name": "Systeemplanning"
+          },
+          "triggered_at": {
+            "name": "Gestart op"
+          },
+          "triggered_by": {
+            "name": "Gestart door",
+            "state": {
+              "cron": "Gepland",
+              "manual": "Handmatig",
+              "webhook": "Webhook"
             }
+          },
+          "updates_found": {
+            "name": "Gevonden updates"
           }
         }
       },
@@ -321,13 +435,32 @@
           "syncing": "Bezig met synchroniseren",
           "synced": "Gesynchroniseerd",
           "error": "Fout"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "Laatste commit"
+          },
+          "sync_error": {
+            "name": "Synchronisatiefout"
+          },
+          "auto_update": {
+            "name": "Automatisch uitrollen"
+          },
+          "webhook_enabled": {
+            "name": "Webhook ingeschakeld"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "Laatste synchronisatie"
       },
       "host_platform": {
-        "name": "Hostplatform"
+        "name": "Hostplatform",
+        "state_attributes": {
+          "architecture": {
+            "name": "Architectuur"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Docker-versie"
@@ -408,7 +541,30 @@
         "name": "Schijfgebruik buildcache"
       },
       "volume_containers": {
-        "name": "Containers"
+        "name": "Containers",
+        "state_attributes": {
+          "containers": {
+            "name": "Containers"
+          },
+          "created": {
+            "name": "Aangemaakt"
+          },
+          "driver": {
+            "name": "Driver"
+          },
+          "in_use": {
+            "name": "In gebruik"
+          },
+          "labels": {
+            "name": "Labels"
+          },
+          "mountpoint": {
+            "name": "Koppelpunt"
+          },
+          "scope": {
+            "name": "Bereik"
+          }
+        }
       },
       "volume_size": {
         "name": "Grootte"
@@ -442,20 +598,129 @@
       },
       "stack_pending_updates": {
         "name": "Openstaande updates"
+      },
+      "image": {
+        "unit_of_measurement": "containers",
+        "state_attributes": {
+          "containers": {
+            "name": "Containers"
+          },
+          "created": {
+            "name": "Aangemaakt"
+          },
+          "digests": {
+            "name": "Digests"
+          },
+          "size_bytes": {
+            "name": "Grootte (bytes)"
+          },
+          "source": {
+            "name": "Bron"
+          },
+          "tags": {
+            "name": "Tags"
+          },
+          "title": {
+            "name": "Titel"
+          },
+          "vendor": {
+            "name": "Leverancier"
+          },
+          "version": {
+            "name": "Versie"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "Zonder tag",
+        "unit_of_measurement": "containers",
+        "state_attributes": {
+          "containers": {
+            "name": "Containers"
+          },
+          "created": {
+            "name": "Aangemaakt"
+          },
+          "digests": {
+            "name": "Digests"
+          },
+          "size_bytes": {
+            "name": "Grootte (bytes)"
+          },
+          "source": {
+            "name": "Bron"
+          },
+          "tags": {
+            "name": "Tags"
+          },
+          "title": {
+            "name": "Titel"
+          },
+          "vendor": {
+            "name": "Leverancier"
+          },
+          "version": {
+            "name": "Versie"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "containers",
+        "state_attributes": {
+          "addresses": {
+            "name": "Adressen"
+          },
+          "containers": {
+            "name": "Containers"
+          },
+          "driver": {
+            "name": "Driver"
+          },
+          "internal": {
+            "name": "Intern"
+          },
+          "scope": {
+            "name": "Bereik"
+          },
+          "subnet": {
+            "name": "Subnet"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "Online"
+        "name": "Online",
+        "state_attributes": {
+          "connection_host": {
+            "name": "Host"
+          },
+          "connection_port": {
+            "name": "Poort"
+          },
+          "labels": {
+            "name": "Labels"
+          }
+        }
       },
       "vulnerability_scanning": {
         "name": "Kwetsbaarheidsscan"
       },
       "git_stack_sync_error": {
-        "name": "Synchronisatiefout"
+        "name": "Synchronisatiefout",
+        "state_attributes": {
+          "sync_error": {
+            "name": "Synchronisatiefout"
+          }
+        }
       },
       "stack_updates_available": {
-        "name": "Updates beschikbaar"
+        "name": "Updates beschikbaar",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "Containers met updates"
+          }
+        }
       },
       "live_updates": {
         "name": "Live-updates",
@@ -641,6 +906,33 @@
     },
     "system_container": {
       "message": "De eigen container van Dockhand en Hawser-agents kunnen niet vanuit Home Assistant opnieuw worden aangemaakt."
+    },
+    "session_auth_unsupported": {
+      "message": "Deze vermelding meldt zich aan met een sessiecookie, wat niet meer wordt ondersteund. Gebruik Opnieuw configureren om een API-token in te voeren (Profiel → API-tokens in Dockhand)."
+    },
+    "setup_failed": {
+      "message": "Kan geen gegevens van Dockhand laden: {error}"
+    },
+    "update_failed": {
+      "message": "Bijwerken vanuit Dockhand mislukt: {error}"
+    },
+    "token_invalid": {
+      "message": "Het API-token van Dockhand is ongeldig of ingetrokken. Verifieer de integratie opnieuw via Instellingen → Apparaten en diensten."
+    },
+    "stack_not_found": {
+      "message": "Stack niet gevonden — mogelijk is hij verwijderd"
+    },
+    "no_pending_updates": {
+      "message": "Er zijn geen updates om te installeren"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand meldde een fout zonder de reden te noemen. De logboeken zeggen misschien meer."
+    },
+    "unexpected_response": {
+      "message": "Dockhand gaf een antwoord dat deze integratie niet begrijpt. Controleer of Dockhand up-to-date is."
+    },
+    "cannot_connect": {
+      "message": "Kan Dockhand niet bereiken. Controleer of het draait en of Home Assistant het kan bereiken."
     }
   },
   "issues": {
@@ -747,5 +1039,21 @@
         "git_stack_auto_deploy": "Automatisch implementeren"
       }
     }
+  },
+  "common": {
+    "release_notes_image": "Image: {image}",
+    "newer_tag_available": "Er is een nieuwere versietag beschikbaar: **{tag}**.",
+    "newer_tag_also_available": "Er is ook een nieuwere versietag beschikbaar: **{tag}**. Wijzig daarvoor de tag in je compose-bestand of containerconfiguratie.",
+    "newer_tag_advisory_only": "Dit is alleen een advies — de container is vastgezet op zijn huidige tag, dus Installeren zet hem niet over naar deze versie. Wijzig de tag in je compose-bestand of containerconfiguratie om te upgraden.",
+    "release_notes_truncated": "… (ingekort)",
+    "versions_skipped": "_{count} versie(s) onderweg overgeslagen._",
+    "view_full_release_notes": "Volledige releaseopmerkingen bekijken",
+    "view_release_notes": "Releaseopmerkingen bekijken",
+    "pinned_to_digest": "**Vastgezet op een digest.** De tag van de image wijst naar een nieuwe digest, maar deze container is vastgezet op de oude. Wijzig om bij te werken de digest in het compose-bestand of startcommando; Installeren zou alleen de vastgezette image opnieuw ophalen.",
+    "update_held": "**Update vastgehouden:** nog {hours} uur tot de minimale image-leeftijd die in Dockhand is ingesteld. Daarna kan hij worden geïnstalleerd.",
+    "update_held_until_check": "**Update vastgehouden:** de nieuwe image heeft de minimale leeftijd uit Dockhand bereikt. Hij kan worden geïnstalleerd zodra Dockhand opnieuw op updates controleert (of na **Controleren op image-updates**).",
+    "scanner_may_block_update": "Deze omgeving scant images op kwetsbaarheden voordat er wordt bijgewerkt. Afhankelijk van het ingestelde beleid kan deze update worden geblokkeerd als de bevindingen de drempel overschrijden.",
+    "system_container_update": "Dit is een systeemcontainer en moet direct op de Docker-host worden bijgewerkt.",
+    "updates_disabled_by_label": "Updates uitgeschakeld via het label `dockhand.update=false`."
   }
 }

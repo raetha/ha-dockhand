@@ -418,27 +418,27 @@ rules:
   entity-translations:
     status: done
     comment: >
-      All statically-named entities use _attr_translation_key referencing entries
-      in strings.json and translations/*.json. Dynamic-name entities (image repo,
-      network name, volume name) use self._attr_name in __init__ since their
-      names are data-driven. Translation keys are defined for English plus
-      all machine-translated locales in translations/.
+      Every entity has a translation_key in strings.json and every locale:
+      names, states, units and attribute names and values. Entities named
+      after Docker objects (an image's repository, a network, a volume) take
+      that name from _attr_name, since it's data, and the rest (unit, icon,
+      attributes) from their translation key; the untagged-images entity's
+      name is translated. tests/test_real_data.py checks every attribute
+      has a translated name.
 
   exception-translations:
     status: done
     comment: >
-      All entity action methods (async_press in button.py, async_turn_on /
-      async_turn_off in switch.py, async_install in update.py) catch API
-      errors and re-raise as HomeAssistantError with translation_domain=
-      "dockhand" and a translation_key referencing entries in strings.json.
-      The defined exception keys are action_failed (wraps the API error
-      message via a {error} placeholder), permission_denied (a 403 from
-      Dockhand), container_not_found (raised when the coordinator no longer
-      has the container at action time), git_stack_not_found (the same case
-      for git stack sync/deploy actions), and invalid_target,
-      entry_not_loaded and system_container for the service actions.
-      Config flow errors use translated error keys (cannot_connect,
-      invalid_auth) via strings.json.
+      Every exception users can see is raised with translation_domain=
+      "dockhand" and a translation key: HomeAssistantError from actions and
+      buttons (async_dockhand_action in helpers.py maps each API error to
+      one: permission_denied, token_invalid, unexpected_response,
+      dockhand_failed, cannot_connect, action_failed with Dockhand's own
+      message), ServiceValidationError from service actions, and
+      ConfigEntryNotReady, ConfigEntryAuthFailed and UpdateFailed from setup
+      and the coordinators. Text shown in update entities' release notes
+      comes from the "common" section of the translations. Dockhand's own
+      messages and release notes are passed through as Dockhand gives them.
 
   icon-translations:
     status: done

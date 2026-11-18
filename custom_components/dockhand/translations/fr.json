@@ -150,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "Utilisation CPU"
+        "name": "Utilisation CPU",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "Processeurs"
+          },
+          "top_containers": {
+            "name": "Conteneurs les plus actifs"
+          }
+        }
       },
       "memory_usage": {
         "name": "Utilisation mémoire"
@@ -174,7 +182,12 @@
         "name": "Utilisation du disque"
       },
       "activity_events": {
-        "name": "Événements d'activité"
+        "name": "Événements d'activité",
+        "state_attributes": {
+          "recent_events": {
+            "name": "Événements récents"
+          }
+        }
       },
       "state": {
         "name": "État",
@@ -186,6 +199,29 @@
           "removing": "Suppression",
           "exited": "Arrêté",
           "dead": "Mort"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "Code de sortie"
+          },
+          "image": {
+            "name": "Image"
+          },
+          "networks": {
+            "name": "Réseaux"
+          },
+          "restart_count": {
+            "name": "Nombre de redémarrages"
+          },
+          "system_container": {
+            "name": "Conteneur système"
+          },
+          "tag_colors": {
+            "name": "Couleurs des tags"
+          },
+          "tags": {
+            "name": "Tags"
+          }
         }
       },
       "health": {
@@ -204,13 +240,45 @@
           "restarting": "Redémarrage",
           "stopped": "Arrêté",
           "created": "Créé"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "Conteneur système"
+          },
+          "tag_colors": {
+            "name": "Couleurs des tags"
+          },
+          "tags": {
+            "name": "Tags"
+          },
+          "type": {
+            "name": "Type",
+            "state": {
+              "internal": "Interne",
+              "git": "Git",
+              "untracked": "Non suivie"
+            }
+          }
         }
       },
       "containers_in_stack": {
-        "name": "Conteneurs"
+        "name": "Conteneurs",
+        "state_attributes": {
+          "containers": {
+            "name": "Conteneurs"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Version de l'agent Hawser"
+        "name": "Version de l'agent Hawser",
+        "state_attributes": {
+          "agent_id": {
+            "name": "ID de l'agent"
+          },
+          "agent_name": {
+            "name": "Nom de l'agent"
+          }
+        }
       },
       "next_run": {
         "name": "Prochain démarrage",
@@ -231,7 +299,17 @@
               "stack_deploy": "Déploiement de stacks",
               "deploy_log_reconcile": "Rapprochement du journal de déploiement",
               "env_report": "Rapport d'état"
-            }
+            },
+            "name": "Type"
+          },
+          "cron_expression": {
+            "name": "Expression cron"
+          },
+          "enabled": {
+            "name": "Activé"
+          },
+          "environment": {
+            "name": "Environnement"
           }
         }
       },
@@ -265,7 +343,43 @@
               "stack_deploy": "Déploiement de stacks",
               "deploy_log_reconcile": "Rapprochement du journal de déploiement",
               "env_report": "Rapport d'état"
+            },
+            "name": "Type"
+          },
+          "cron_expression": {
+            "name": "Expression cron"
+          },
+          "description": {
+            "name": "Description"
+          },
+          "duration_ms": {
+            "name": "Durée (ms)"
+          },
+          "enabled": {
+            "name": "Activé"
+          },
+          "environment": {
+            "name": "Environnement"
+          },
+          "error_message": {
+            "name": "Message d'erreur"
+          },
+          "is_system": {
+            "name": "Planification système"
+          },
+          "triggered_at": {
+            "name": "Déclenché le"
+          },
+          "triggered_by": {
+            "name": "Déclenché par",
+            "state": {
+              "cron": "Planifiée",
+              "manual": "Manuelle",
+              "webhook": "Webhook"
             }
+          },
+          "updates_found": {
+            "name": "Mises à jour trouvées"
           }
         }
       },
@@ -321,13 +435,32 @@
           "syncing": "Synchronisation en cours",
           "synced": "Synchronisé",
           "error": "Erreur"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "Dernier commit"
+          },
+          "sync_error": {
+            "name": "Erreur de synchronisation"
+          },
+          "auto_update": {
+            "name": "Déploiement automatique"
+          },
+          "webhook_enabled": {
+            "name": "Webhook activé"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "Dernière synchronisation"
       },
       "host_platform": {
-        "name": "Plateforme de l'hôte"
+        "name": "Plateforme de l'hôte",
+        "state_attributes": {
+          "architecture": {
+            "name": "Architecture"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Version de Docker"
@@ -408,7 +541,30 @@
         "name": "Espace disque du cache de build"
       },
       "volume_containers": {
-        "name": "Conteneurs"
+        "name": "Conteneurs",
+        "state_attributes": {
+          "containers": {
+            "name": "Conteneurs"
+          },
+          "created": {
+            "name": "Créé"
+          },
+          "driver": {
+            "name": "Pilote"
+          },
+          "in_use": {
+            "name": "Utilisé"
+          },
+          "labels": {
+            "name": "Étiquettes"
+          },
+          "mountpoint": {
+            "name": "Point de montage"
+          },
+          "scope": {
+            "name": "Portée"
+          }
+        }
       },
       "volume_size": {
         "name": "Taille"
@@ -442,20 +598,129 @@
       },
       "stack_pending_updates": {
         "name": "Mises à jour en attente"
+      },
+      "image": {
+        "unit_of_measurement": "conteneurs",
+        "state_attributes": {
+          "containers": {
+            "name": "Conteneurs"
+          },
+          "created": {
+            "name": "Créé"
+          },
+          "digests": {
+            "name": "Empreintes"
+          },
+          "size_bytes": {
+            "name": "Taille (octets)"
+          },
+          "source": {
+            "name": "Source"
+          },
+          "tags": {
+            "name": "Tags"
+          },
+          "title": {
+            "name": "Titre"
+          },
+          "vendor": {
+            "name": "Fournisseur"
+          },
+          "version": {
+            "name": "Version"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "Sans tag",
+        "unit_of_measurement": "conteneurs",
+        "state_attributes": {
+          "containers": {
+            "name": "Conteneurs"
+          },
+          "created": {
+            "name": "Créé"
+          },
+          "digests": {
+            "name": "Empreintes"
+          },
+          "size_bytes": {
+            "name": "Taille (octets)"
+          },
+          "source": {
+            "name": "Source"
+          },
+          "tags": {
+            "name": "Tags"
+          },
+          "title": {
+            "name": "Titre"
+          },
+          "vendor": {
+            "name": "Fournisseur"
+          },
+          "version": {
+            "name": "Version"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "conteneurs",
+        "state_attributes": {
+          "addresses": {
+            "name": "Adresses"
+          },
+          "containers": {
+            "name": "Conteneurs"
+          },
+          "driver": {
+            "name": "Pilote"
+          },
+          "internal": {
+            "name": "Interne"
+          },
+          "scope": {
+            "name": "Portée"
+          },
+          "subnet": {
+            "name": "Sous-réseau"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "En ligne"
+        "name": "En ligne",
+        "state_attributes": {
+          "connection_host": {
+            "name": "Hôte"
+          },
+          "connection_port": {
+            "name": "Port"
+          },
+          "labels": {
+            "name": "Étiquettes"
+          }
+        }
       },
       "vulnerability_scanning": {
         "name": "Analyse des vulnérabilités"
       },
       "git_stack_sync_error": {
-        "name": "Erreur de synchronisation"
+        "name": "Erreur de synchronisation",
+        "state_attributes": {
+          "sync_error": {
+            "name": "Erreur de synchronisation"
+          }
+        }
       },
       "stack_updates_available": {
-        "name": "Mises à jour disponibles"
+        "name": "Mises à jour disponibles",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "Conteneurs avec mises à jour"
+          }
+        }
       },
       "live_updates": {
         "name": "Mises à jour en direct",
@@ -641,6 +906,33 @@
     },
     "system_container": {
       "message": "Le conteneur de Dockhand lui-même et les agents Hawser ne peuvent pas être recréés depuis Home Assistant."
+    },
+    "session_auth_unsupported": {
+      "message": "Cette entrée se connecte avec un cookie de session, qui n'est plus pris en charge. Utilisez Reconfigurer pour saisir un jeton d'API (Profil → Jetons d'API dans Dockhand)."
+    },
+    "setup_failed": {
+      "message": "Impossible de charger les données de Dockhand : {error}"
+    },
+    "update_failed": {
+      "message": "Impossible de mettre à jour depuis Dockhand : {error}"
+    },
+    "token_invalid": {
+      "message": "Le jeton d'API de Dockhand est invalide ou a été révoqué. Authentifiez à nouveau l'intégration dans Paramètres → Appareils et services."
+    },
+    "stack_not_found": {
+      "message": "Stack introuvable — il a peut-être été supprimé"
+    },
+    "no_pending_updates": {
+      "message": "Aucune mise à jour à installer"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand a signalé un échec sans en donner la raison. Ses journaux peuvent en dire plus."
+    },
+    "unexpected_response": {
+      "message": "Dockhand a donné une réponse que cette intégration ne comprend pas. Vérifiez que Dockhand est à jour."
+    },
+    "cannot_connect": {
+      "message": "Impossible de joindre Dockhand. Vérifiez qu'il fonctionne et que Home Assistant peut l'atteindre."
     }
   },
   "issues": {
@@ -747,5 +1039,21 @@
         "git_stack_auto_deploy": "Déploiement automatique"
       }
     }
+  },
+  "common": {
+    "release_notes_image": "Image : {image}",
+    "newer_tag_available": "Un tag de version plus récent est disponible : **{tag}**.",
+    "newer_tag_also_available": "Un tag de version plus récent est aussi disponible : **{tag}**. Pour y passer, modifiez le tag dans votre fichier compose ou la configuration du conteneur.",
+    "newer_tag_advisory_only": "Ceci est seulement indicatif — le conteneur est lié à son tag actuel, donc Installer ne le fera pas passer à cette version. Pour mettre à niveau, modifiez le tag dans votre fichier compose ou la configuration du conteneur.",
+    "release_notes_truncated": "… (tronqué)",
+    "versions_skipped": "_{count} version(s) sautée(s) en chemin._",
+    "view_full_release_notes": "Voir les notes de version complètes",
+    "view_release_notes": "Voir les notes de version",
+    "pinned_to_digest": "**Lié à une empreinte.** Le tag de l'image pointe désormais vers une nouvelle empreinte, mais ce conteneur est lié à l'ancienne. Pour le mettre à jour, modifiez l'empreinte dans son fichier compose ou sa commande de lancement ; Installer ne ferait que retélécharger l'image liée.",
+    "update_held": "**Mise à jour retenue :** il reste {hours} heure(s) avant l'âge minimal d'image défini dans Dockhand. Elle pourra être installée ensuite.",
+    "update_held_until_check": "**Mise à jour retenue :** la nouvelle image a atteint l'âge minimal défini dans Dockhand. Elle pourra être installée à la prochaine recherche de mises à jour de Dockhand (ou après **Rechercher des mises à jour d'images**).",
+    "scanner_may_block_update": "Cet environnement analyse les images à la recherche de vulnérabilités avant la mise à jour. Selon la politique configurée, cette mise à jour peut être bloquée si les résultats dépassent le seuil.",
+    "system_container_update": "Ceci est un conteneur système, qui doit être mis à jour directement sur l'hôte Docker.",
+    "updates_disabled_by_label": "Mises à jour désactivées par l'étiquette `dockhand.update=false`."
   }
 }

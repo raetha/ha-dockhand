@@ -38,6 +38,7 @@ from .entity import (
 )
 from .entity_defaults import enabling_chosen
 from .helpers import (
+    UNTAGGED_IMAGES,
     _actionable_pending_update_container_ids,
     _all_envs,
     _container_has_healthcheck,
@@ -52,13 +53,18 @@ from .helpers import (
     _env_device,
     _env_index,
     _find_git_stack,
-    _image_display_name,
     _image_group_device,
     _network_group_device,
     _stack_device,
     _stack_has_system_container,
     _volume_device,
     already_registered,
+    image_groups,
+    image_tag,
+    image_unique_id,
+    network_unique_id,
+    short_image_id,
+    tag_repository,
 )
 
 
@@ -452,34 +458,22 @@ async def async_setup_entry(
                 )
 
             if enable_images:
-                images_list = env_data.get("images") or []
-                # A container upgrade momentarily produces two images under
-                # the same repo:tag — the freshly-pulled one, and the old
-                # one it's replacing, which hasn't been marked untagged in
-                # Dockhand's own data yet (that usually resolves by the very
-                # next poll). Creating a brand-new entity for either one
-                # while both still claim the same tag would collide with
-                # whichever entity gets added first, forcing an ugly
-                # auto-suffixed "_2" entity_id that doesn't self-heal
-                # without a manual "recreate entity ids" action. Detect
-                # any tag currently claimed by more than one image and
-                # defer creating entities for all of them — normal,
-                # unambiguous images are never affected, and a real
-                # collision resolves itself within a poll cycle or two
-                # once Dockhand's data catches up.
-                tag_counts: dict[str, int] = {}
-                for image in images_list:
-                    tag = _image_display_name(image)
-                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
-                for image in images_list:
-                    image_sensor = DockhandImageSensor(
-                        slow, fast, entry.entry_id, env_id, env_name, base_url, image
+                for repository in image_groups(env_data.get("images") or []):
+                    image_sensor = (
+                        DockhandUntaggedImagesSensor
+                        if repository == UNTAGGED_IMAGES
+                        else DockhandImageSensor
+                    )(
+                        slow,
+                        fast,
+                        entry.entry_id,
+                        env_id,
+                        env_name,
+                        base_url,
+                        repository,
                     )
-                    if _already_registered("sensor", image_sensor.unique_id):
-                        continue
-                    if tag_counts.get(_image_display_name(image), 0) > 1:
-                        continue
-                    new.append(image_sensor)
+                    if not _already_registered("sensor", image_sensor.unique_id):
+                        new.append(image_sensor)
 
             if enable_networks:
                 for network in env_data.get("networks") or []:
@@ -1717,15 +1711,11 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
         if not s:
             return {}
         source_type = s.get("sourceType")
-        type_map = {"internal": "Internal", "git": "Git", "external": "Untracked"}
-        type_label = (
-            type_map.get(source_type, "Untracked")
-            if isinstance(source_type, str)
-            else "Untracked"
-        )
         env_data = _coordinator_env(self.coordinator.data, self._env_id)
         return {
-            "type": type_label,
+            # Dockhand's own words in its stacks list: a stack it didn't
+            # create is "Untracked" there. Translated like a state.
+            "type": source_type if source_type in ("internal", "git") else "untracked",
             "system_container": _stack_has_system_container(
                 self.coordinator, self._env_id, s
             ),
@@ -1768,7 +1758,7 @@ class DockhandStackContainerCountSensor(BaseFastStackSensor):
             return {}
         id_to_name = _env_index(self.coordinator, self._env_id).container_names
         return {
-            "container_names": _resolve_container_names(
+            "containers": _resolve_container_names(
                 s.get("containers") or [], id_to_name
             )
         }
@@ -2284,32 +2274,27 @@ class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
         return dt_util.utcnow() - timedelta(seconds=uptime_seconds)
 
 
+def _image_created(image: dict) -> int:
+    created = image.get("created")
+    return created if isinstance(created, int) else 0
+
+
 class DockhandImageSensor(BaseSlowEnvSensor):
-    """Entity for a single Docker image, living under the Images group device.
+    """An image repository, one entity under the Images group device, as
+    Dockhand's Images page lists it: `jellyfin/jellyfin` whatever its tags
+    and however often it's pulled, so the entity and its statistics last.
 
-    One entity per image, no image devices: an image's identity is its ID,
-    so every pull makes a new one, and devices would come and go with each
-    update. The entity name is the repository portion of the primary tag
-    (e.g. "cloudflare/cloudflared"), or the short ID for an untagged image.
-    The state is how many containers use it, as for volumes and networks
-    (0 means unused, a candidate for pruning). Everything else about an
-    image is fixed once it exists (tags aside), so it is attributes.
-
-    No state class, so no long-term statistics: an image's entity lasts only
-    until the next pull, and each one would leave its statistics behind,
-    orphaned (Spook raises a repair for every one).
-
-    name is a live @property, not a value fixed at construction — see its
-    docstring for why.
-
-    API shape (confirmed from /api/images): camelCase fields, created is a
-    Unix timestamp integer, containers is always an int (0 = unused).
+    The state is how many containers use any of its images, each image
+    counted once (Dockhand's own sum; 0 means unused, a candidate for
+    pruning). Its tags, digests and the newest image's details are
+    attributes. Named after the repository; the translation key gives the
+    unit and icon.
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_has_entity_name = True
-    _attr_icon = "mdi:package-variant-closed"
-    _attr_native_unit_of_measurement = "containers"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "image"
 
     def __init__(
         self,
@@ -2319,88 +2304,48 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         env_id: int,
         env_name: str,
         base_url: str,
-        image: dict,
+        repository: str,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
         self._fast_coordinator = fast_coordinator
-        raw_id = image.get("id") or ""
-        # Strip "sha256:" prefix — store just the 64-char hex for lookups
-        self._image_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-        # Fallback repo name if a live lookup ever comes back empty (image
-        # gone entirely — shouldn't normally happen while this entity still
-        # exists, but avoids a blank name in that edge case).
-        primary_tag = _image_display_name(image)  # e.g. "cloudflare/cloudflared:latest"
-        self._image_repo_fallback = (
-            primary_tag.rsplit(":", 1)[0] if ":" in primary_tag else primary_tag
+        self._repository = repository
+        self._attr_unique_id = image_unique_id(self._entry_id, env_id, repository)
+        self._attr_name = repository
+
+    def _images(self) -> list[dict]:
+        """Its images, newest first, as Dockhand sorts a repository's tags."""
+        images = image_groups(self._env_data().get("images") or []).get(
+            self._repository, []
         )
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_image_{self._image_id}"
-
-    def _image(self) -> dict | None:
-        for img in self._env_data().get("images") or []:
-            raw_id = img.get("id") or ""
-            short_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-            if short_id == self._image_id and isinstance(img, dict):
-                return img
-        return None
-
-    @property
-    @override
-    def name(self) -> str:
-        """Recomputed from live data on every access — NOT fixed at
-        construction. The unique_id is hash-based and this entity object
-        is reused indefinitely for the same hash (see the dedup pattern
-        in async_setup_entry), so a static name would go stale the moment
-        this image's tag changes: a container upgrade pulls a new image
-        under the same repo:tag, the old image (this one) loses that tag
-        and becomes just a hash — if the name were fixed at construction,
-        this entity would keep showing the old repo:tag forever, and
-        worse, would permanently occupy the entity_id slot the *new*
-        image's entity actually deserves, forcing it into an auto-
-        suffixed "_2" id that never self-heals without a manual
-        "recreate entity ids" action. Recomputing live means this
-        entity's name correctly becomes the short hash on the very next
-        poll after the tag moves elsewhere, freeing the slot naturally.
-        See also the tag-collision check in async_setup_entry, which
-        covers the (usually one extra poll cycle) window before that
-        happens, where the two images might briefly still agree on the
-        same tag.
-        """
-        img = self._image()
-        if img is None:
-            return self._image_repo_fallback
-        primary_tag = _image_display_name(img)
-        return primary_tag.rsplit(":", 1)[0] if ":" in primary_tag else primary_tag
+        return sorted(images, key=_image_created, reverse=True)
 
     @property
     @override
     def native_value(self) -> int | None:
-        containers = (self._image() or {}).get("containers")
-        return containers if isinstance(containers, int) and containers >= 0 else None
+        images = self._images()
+        if not images:
+            return None
+        counts = [img.get("containers") for img in images]
+        return sum(c for c in counts if isinstance(c, int) and c > 0)
 
     @property
     @override
     def extra_state_attributes(self) -> dict[str, Any]:
-        img = self._image()
-        if not img:
+        images = self._images()
+        if not images:
             return {}
-
-        # All tags — filter Docker placeholder for untagged layers
-        tags = [t for t in (img.get("repoTags") or []) if t and t != "<none>:<none>"]
-
-        # Digests — keep full digest string (algo:hex), trim nothing
-        digests = img.get("repoDigests") or []
-
-        size = img.get("size")
-
-        # OCI standard labels contain useful metadata worth surfacing
-        labels = img.get("labels") or {}
-        oci_version = labels.get("org.opencontainers.image.version")
-        oci_vendor = labels.get("org.opencontainers.image.vendor")
-        oci_title = labels.get("org.opencontainers.image.title")
-        oci_source = labels.get("org.opencontainers.image.source")
-
-        # created is a Unix timestamp integer — convert to ISO 8601 UTC string
-        created_ts = img.get("created")
+        newest = images[0]
+        tags = [
+            image_tag(tag)
+            for img in images
+            for tag in img.get("repoTags") or []
+            if tag
+            and tag != "<none>:<none>"
+            and tag_repository(tag) == self._repository
+        ]
+        digests = [d for img in images for d in img.get("repoDigests") or [] if d]
+        labels = newest.get("labels") or {}
+        created_ts = newest.get("created")
         created_iso: str | None = None
         if isinstance(created_ts, int):
             try:
@@ -2408,25 +2353,30 @@ class DockhandImageSensor(BaseSlowEnvSensor):
             except OverflowError, OSError, ValueError:
                 # Out of range for this platform: no creation date.
                 pass
-
+        sizes = [size for img in images if isinstance(size := img.get("size"), int)]
+        names_by_image = _env_index(
+            self._fast_coordinator, self._env_id
+        ).container_names_by_image
+        containers = {
+            name
+            for img in images
+            for name in names_by_image.get(short_image_id(img), [])
+        }
         return {
-            "tags": tags,
-            "digests": digests,
-            "size_bytes": size,
+            "tags": list(dict.fromkeys(tags)),
+            "digests": list(dict.fromkeys(digests)),
+            # The largest image's size, as Dockhand shows a repository's.
+            "size_bytes": max(sizes) if sizes else None,
             "created": created_iso,
-            # Dockhand gives only the count; the names come from the
-            # containers list, matched by image ID as Dockhand counts them.
-            # Written only when the count is (each image refresh), so the
-            # list doesn't change on its own between them.
-            "containers": sorted(
-                _env_index(
-                    self._fast_coordinator, self._env_id
-                ).container_names_by_image.get(self._image_id, [])
-            ),
-            "version": oci_version,
-            "vendor": oci_vendor,
-            "title": oci_title,
-            "source": oci_source,
+            # Dockhand gives only counts; the names come from the containers
+            # list, matched by image ID as Dockhand counts them. Written only
+            # when the count is (each image refresh), so the list doesn't
+            # change on its own between them.
+            "containers": sorted(containers),
+            "version": labels.get("org.opencontainers.image.version"),
+            "vendor": labels.get("org.opencontainers.image.vendor"),
+            "title": labels.get("org.opencontainers.image.title"),
+            "source": labels.get("org.opencontainers.image.source"),
         }
 
     @property
@@ -2442,20 +2392,47 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         )
 
 
-class DockhandNetworkSensor(BaseSlowEnvSensor):
-    """Entity for a Docker network, living under the Networks group device.
+class DockhandUntaggedImagesSensor(DockhandImageSensor):
+    """Images with neither a tag nor a digest that names their repository,
+    together, as Dockhand's Images page lists them under `<none>`; named by
+    its translation."""
 
-    One entity per network — no individual network sub-devices. The entity name
-    is the network name and the state is the count of connected containers.
-    All network metadata (driver, scope, subnet, connected containers) is
-    surfaced as extra_state_attributes.
+    _attr_translation_key = "untagged_images"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        fast_coordinator: DockhandFastCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        repository: str = UNTAGGED_IMAGES,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            fast_coordinator,
+            entry_id,
+            env_id,
+            env_name,
+            base_url,
+            UNTAGGED_IMAGES,
+        )
+        del self._attr_name
+
+
+class DockhandNetworkSensor(BaseSlowEnvSensor):
+    """A Docker network, one entity under the Networks group device, named
+    after it and identified by its name: Compose gives a network a new ID
+    each time it recreates it, and the entity and its statistics should
+    last. The state is how many containers are connected; the translation
+    key gives the unit and icon.
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "containers"
     _attr_has_entity_name = True
-    _attr_icon = "mdi:lan"
+    _attr_translation_key = "network"
 
     def __init__(
         self,
@@ -2467,14 +2444,15 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         network: dict,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
-        self._network_id = network.get("id", "")
-        self._network_name = network.get("name", "")
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_network_{self._network_id}"
+        self._network_name = str(network.get("name") or "")
+        self._attr_unique_id = network_unique_id(
+            self._entry_id, env_id, self._network_name
+        )
         self._attr_name = self._network_name
 
     def _network(self) -> dict | None:
         for n in self._env_data().get("networks") or []:
-            if isinstance(n, dict) and n.get("id") == self._network_id:
+            if isinstance(n, dict) and n.get("name") == self._network_name:
                 return n
         return None
 
@@ -2491,7 +2469,7 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         if not n:
             return {}
         ipam = (n.get("ipam") or {}).get("config") or []
-        connected = {
+        addresses = {
             i.get("name"): i.get("ipv4Address")
             for i in (n.get("containers") or {}).values()
             if i.get("name")
@@ -2501,7 +2479,8 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
             "scope": n.get("scope"),
             "internal": n.get("internal"),
             "subnet": ipam[0].get("subnet") if ipam else None,
-            "connected_containers": connected,
+            "containers": sorted(addresses),
+            "addresses": dict(sorted(addresses.items())),
         }
 
     @property

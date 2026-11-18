@@ -31,6 +31,9 @@ from .helpers import (
     CONTAINER_STATS_SUFFIXES,
     VOLUME_SUFFIXES,
     _device_by_identifier,
+    image_unique_id,
+    network_unique_id,
+    tag_repository,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -565,6 +568,64 @@ def migrate_2_0_0_volume_unique_ids(hass: HomeAssistant, entry_id: str) -> None:
         _LOGGER.debug("Dockhand: renamed volume entity %s", entity.entity_id)
 
 
+def migrate_2_0_0_image_and_network_unique_ids(
+    hass: HomeAssistant, entry_id: str
+) -> None:
+    """Key image and network entities by name instead of Docker's IDs.
+
+    In 1.x an image entity was `{entry_id}_{env_id}_image_{image ID}`, named
+    after its first tag, and a network entity
+    `{entry_id}_{env_id}_network_{network ID}`, named after the network, so
+    each pull of an image, and each time Compose recreated a network,
+    replaced the entity. 2.0.0 has one image entity per repository and keys
+    networks by name, so the old entity's name gives the new ID. Renaming
+    keeps the entity's ID, history and settings.
+
+    The old entities are told apart by their translation key, which 1.x
+    didn't give them, and by a unique ID that isn't already the new one, so
+    this is idempotent. Of several 1.x images of one repository (two tags),
+    the one with the shortest entity ID (no suffix) is kept and the others
+    are removed; so are untagged 1.x images, named by their short ID, which
+    2.0.0 groups under one entity.
+    """
+    ent_registry = er.async_get(hass)
+    prefix = f"{entry_id}_"
+    old = []
+    for entity in er.async_entries_for_config_entry(ent_registry, entry_id):
+        if entity.domain != "sensor" or entity.translation_key is not None:
+            continue
+        parts = entity.unique_id.removeprefix(prefix).split("_", 2)
+        if (
+            entity.unique_id.startswith(prefix)
+            and len(parts) == 3
+            and parts[0].isdigit()
+            and parts[1] in ("image", "network")
+        ):
+            old.append((entity, parts[0], parts[1]))
+    for entity, env_id, kind in sorted(old, key=lambda item: len(item[0].entity_id)):
+        name = entity.original_name
+        if kind == "network":
+            new_uid = network_unique_id(entry_id, int(env_id), name) if name else None
+        elif name and name != "unknown" and not _is_short_image_id(name):
+            new_uid = image_unique_id(entry_id, int(env_id), tag_repository(name))
+        else:
+            new_uid = None
+        if new_uid == entity.unique_id:
+            continue
+        if new_uid is None or ent_registry.async_get_entity_id(
+            "sensor", DOMAIN, new_uid
+        ):
+            ent_registry.async_remove(entity.entity_id)
+            continue
+        ent_registry.async_update_entity(entity.entity_id, new_unique_id=new_uid)
+        _LOGGER.debug("Dockhand: renamed %s entity %s", kind, entity.entity_id)
+
+
+def _is_short_image_id(name: str) -> bool:
+    """1.x named an untagged image by the first 12 hex digits of its ID."""
+    return len(name) == 12 and all(c in "0123456789abcdef" for c in name)
+
+
 # Config schema 1 was current up to 1.7.x; 1.8.0 introduced schema 2.
 REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
     RegistryMigration(
@@ -611,5 +672,12 @@ REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
         "2.0.0",
         2,
         lambda hass, entry, fast: migrate_2_0_0_volume_unique_ids(hass, entry.entry_id),
+    ),
+    RegistryMigration(
+        "2.0.0",
+        2,
+        lambda hass, entry, fast: migrate_2_0_0_image_and_network_unique_ids(
+            hass, entry.entry_id
+        ),
     ),
 )

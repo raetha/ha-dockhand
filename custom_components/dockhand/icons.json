@@ -233,6 +233,15 @@
       },
       "stack_pending_updates": {
         "default": "mdi:update"
+      },
+      "image": {
+        "default": "mdi:package-variant-closed"
+      },
+      "untagged_images": {
+        "default": "mdi:package-variant"
+      },
+      "network": {
+        "default": "mdi:lan"
       }
     },
     "binary_sensor": {

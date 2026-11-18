@@ -214,6 +214,7 @@ from .coordinator import (
     DockhandVersionCoordinator,
 )
 from .helpers import (
+    Texts,
     _all_envs,
     _container_installed_version,
     _container_update_status,
@@ -225,6 +226,7 @@ from .helpers import (
     _short_digest,
     _update_held_hours,
     already_registered,
+    async_common_texts,
 )
 from .installs import DockhandInstaller, install_signal, raise_for_outcome
 
@@ -357,6 +359,11 @@ def _async_add_self_update_entity(
 
     listening.append(version.async_add_listener(_check_works))
     entry.async_on_unload(_stop)
+
+
+def _alert(alert_type: str, message: str) -> str:
+    """A notice in the update dialog's release notes."""
+    return f"<ha-alert alert-type='{alert_type}'>{message}</ha-alert>"
 
 
 class DockhandSelfUpdateEntity(
@@ -669,7 +676,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         """Not used — release notes cover all warning content."""
         return None
 
-    async def _newer_version_section(self, item: dict) -> str | None:
+    async def _newer_version_section(self, item: dict, text: Texts) -> str | None:
         """Pick which "what's coming" section, if any, belongs at the top
         of the release notes dialog for this container's merged
         update-status item. An actionable update (hasUpdate, or Tier 1's
@@ -699,22 +706,20 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         if item.get("hasUpdate") or self._pending_via_dockhand_cache():
             lines = []
             if tag:
-                lines.append(
-                    f"A newer version tag is also available: **{tag}**."
-                    " Moving to it requires updating the tag in your compose"
-                    " file or container config."
-                )
-            changelog = await self._pending_update_changelog_section()
+                lines.append(text("newer_tag_also_available", tag=tag))
+            changelog = await self._pending_update_changelog_section(text)
             if changelog:
                 lines.append(changelog)
             return "\n\n".join(lines) or None
 
         if tag:
-            return await self._semver_advisory_section(tag, newer)
+            return await self._semver_advisory_section(tag, newer, text)
 
         return None
 
-    async def _semver_advisory_section(self, tag: str, newer: dict) -> str | None:
+    async def _semver_advisory_section(
+        self, tag: str, newer: dict, text: Texts
+    ) -> str | None:
         """Build the semver "newer version tag" advisory section — see
         the module docstring's "Semver 'newer version tag' detection"
         section for what this is and why it's advisory only.
@@ -746,35 +751,33 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             )
             return None
 
-        lines = [f"A newer version tag is available: **{tag}**."]
+        lines = [text("newer_tag_available", tag=tag)]
 
         notes = result.get("notes") or []
         target_note = next((n for n in notes if n.get("version") == tag), None)
         if target_note and target_note.get("body"):
             body = target_note["body"].strip()
             if len(body) > _RELEASE_NOTES_MAX_CHARS:
-                body = body[:_RELEASE_NOTES_MAX_CHARS].rstrip() + "\n\n… (truncated)"
+                body = (
+                    body[:_RELEASE_NOTES_MAX_CHARS].rstrip()
+                    + "\n\n"
+                    + text("release_notes_truncated")
+                )
             lines.append(body)
 
         skipped_count = len(versions) - 1
         if skipped_count > 0:
-            lines.append(f"_{skipped_count} version(s) skipped along the way._")
+            lines.append(text("versions_skipped", count=skipped_count))
 
         changelog_url = result.get("changelogUrl")
         if changelog_url:
-            lines.append(f"[View full release notes]({changelog_url})")
+            lines.append(f"[{text('view_full_release_notes')}]({changelog_url})")
 
-        msg = (
-            "This is advisory only — the container is pinned to its"
-            " current tag, so Install will not move it to this version."
-            " Update the tag in your compose file or container config to"
-            " upgrade."
-        )
-        lines.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+        lines.append(_alert("info", text("newer_tag_advisory_only")))
 
         return "\n\n".join(lines)
 
-    async def _pending_update_changelog_section(self) -> str | None:
+    async def _pending_update_changelog_section(self, text: Texts) -> str | None:
         """Bare changelog-link section for a pending/actionable update —
         there's no target version to fetch notes for, since Install just
         re-pulls the current tag (see _newer_version_section's own
@@ -816,7 +819,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         if not changelog_url:
             return None
 
-        return f"[View release notes]({changelog_url})"
+        return f"[{text('view_release_notes')}]({changelog_url})"
 
     @override
     async def async_release_notes(self) -> str | None:
@@ -825,56 +828,32 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         if not c:
             return None
         parts = []
+        text = await async_common_texts(self.hass)
 
         image_name = c.get("image")
         if image_name:
-            parts.append(f"Image: {image_name}")
+            parts.append(text("release_notes_image", image=image_name))
 
         item = self._check_updates_item()
-        newer_version_section = await self._newer_version_section(item)
+        newer_version_section = await self._newer_version_section(item, text)
         if newer_version_section:
             parts.append(newer_version_section)
         if item.get("pinnedToDigest"):
-            msg = (
-                "**Pinned to a digest.** The image's tag has moved to a new"
-                " digest, but this container is pinned to the old one. To"
-                " update it, change the digest in its compose file or run"
-                " command; Install would only pull the pinned image again."
-            )
-            parts.append(f"<ha-alert alert-type='warning'>{msg}</ha-alert>")
+            parts.append(_alert("warning", text("pinned_to_digest")))
         held_hours = _update_held_hours(item)
         if held_hours:
-            msg = (
-                f"**Update held:** {held_hours} hour(s) left of the minimum"
-                " image age set in Dockhand. It can be installed after that."
-            )
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("update_held", hours=held_hours)))
         elif held_hours == 0:
-            msg = (
-                "**Update held:** the new image has reached the minimum image"
-                " age set in Dockhand. It can be installed once Dockhand"
-                " next checks for updates (or after **Check for updates**)."
-            )
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("update_held_until_check")))
 
         if self._scanner_enabled():
-            msg = (
-                "This environment scans images for vulnerabilities before"
-                " updating. Depending on its configured policy, this update"
-                " may be blocked if findings exceed the threshold."
-            )
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("scanner_may_block_update")))
 
         labels = c.get("labels") or {}
         if self._is_system():
-            msg = (
-                "This is a system container and must be updated"
-                " directly on the docker host."
-            )
-            parts.append(f"<ha-alert alert-type='warning'>{msg}</ha-alert>")
+            parts.append(_alert("warning", text("system_container_update")))
         elif _is_update_disabled_by_label(labels):
-            msg = "Updates disabled via `dockhand.update=false` label."
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("updates_disabled_by_label")))
 
         return "\n\n".join(parts) if parts else None
 

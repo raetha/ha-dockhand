@@ -1023,7 +1023,7 @@ def test_preserves_live_image_entity(hass: HomeAssistant):
         slow_data={
             "environments": {
                 1: {
-                    "images": [{"id": "sha256:deadbeef"}],
+                    "images": [{"id": "sha256:deadbeef", "repoTags": ["nginx:1"]}],
                     "networks": [],
                     "volumes": [],
                 }
@@ -1031,7 +1031,7 @@ def test_preserves_live_image_entity(hass: HomeAssistant):
             "schedules": [],
         },
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_nginx")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -1071,7 +1071,7 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
         slow_data={
             "environments": {
                 1: {
-                    "images": [{"id": "sha256:aabbccdd"}],
+                    "images": [{"id": "sha256:aabbccdd", "repoTags": []}],
                     "networks": [],
                     "volumes": [],
                 }
@@ -1079,7 +1079,7 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
             "schedules": [],
         },
     )
-    live = _add_entity(hass, entry, f"{entry.entry_id}_1_image_aabbccdd")
+    live = _add_entity(hass, entry, f"{entry.entry_id}_1_image_<none>")
     stale = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, live.entity_id)
@@ -2368,9 +2368,9 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
         )
 
 
-async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssistant):
-    """Two environments on the same Docker host report the same network
-    IDs, and each gets its own entity."""
+async def test_same_network_in_two_envs_creates_both_entities(hass: HomeAssistant):
+    """Two environments on the same Docker host report the same networks,
+    and each gets its own entity."""
     entry = _make_entry(hass, data={"enable_networks": True})
     network = {
         "id": "netabc123",
@@ -2416,8 +2416,8 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
 
     reg = er.async_get(hass)
     uids = {e.unique_id for e in er.async_entries_for_config_entry(reg, entry.entry_id)}
-    assert f"{entry.entry_id}_1_network_netabc123" in uids, uids
-    assert f"{entry.entry_id}_2_network_netabc123" in uids, uids
+    assert f"{entry.entry_id}_1_network_bridge" in uids, uids
+    assert f"{entry.entry_id}_2_network_bridge" in uids, uids
 
 
 async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):

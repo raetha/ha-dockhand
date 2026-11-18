@@ -85,6 +85,15 @@ def _unwrap(
     return val
 
 
+def _update_failed(err: Exception) -> UpdateFailed:
+    """A failed poll, in the user's language, with Dockhand's own message."""
+    return UpdateFailed(
+        translation_domain=DOMAIN,
+        translation_key="update_failed",
+        translation_placeholders={"error": str(err) or type(err).__name__},
+    )
+
+
 class _RemovalGuard:
     """Decides when a list from Dockhand is complete enough to remove things
     on its evidence.
@@ -390,7 +399,7 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
             except DockhandAuthError as err:
                 last_auth_err = err
             except Exception as err:
-                raise UpdateFailed(f"Fast data error: {err}") from err
+                raise _update_failed(err) from err
         else:
             # Every attempt returned 401 — the token is genuinely invalid or
             # revoked. Surface re-auth so the user can fix it.
@@ -402,8 +411,7 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
                 _total_attempts,
             )
             raise ConfigEntryAuthFailed(
-                "Dockhand API token is invalid or was revoked. "
-                "Go to Settings → Devices & Services → Dockhand → Re-authenticate."
+                translation_domain=DOMAIN, translation_key="token_invalid"
             ) from last_auth_err
 
         # stats_source is this coordinator's own result — unlike the slow
@@ -432,9 +440,7 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
         except DockhandAuthError:
             raise
         except Exception as err:
-            raise UpdateFailed(
-                f"Could not reach Dockhand for dashboard stats: {err}"
-            ) from err
+            raise _update_failed(err) from err
         all_stats: dict[int, dict] = {
             s["id"]: s for s in all_stats_list if isinstance(s, dict) and "id" in s
         }
@@ -953,11 +959,13 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
             result = await self._fetch()
         except DockhandAuthError as err:
             # Let the fast coordinator own reauth — just surface as transient failure.
+            # The fast coordinator raises the re-authentication; this one
+            # just fails for now.
             raise UpdateFailed(
-                "API token rejected — fast coordinator will surface reauth"
+                translation_domain=DOMAIN, translation_key="token_invalid"
             ) from err
         except Exception as err:
-            raise UpdateFailed(f"Slow data error: {err}") from err
+            raise _update_failed(err) from err
         _sync_fetch_issues(
             self.hass, self.config_entry, "slow", result, self._fast_coordinator.data
         )
@@ -1796,7 +1804,7 @@ class DockhandVersionCoordinator(_TimedCoordinator[str | None]):
         try:
             version = await self.client.async_get_dockhand_version()
         except Exception as err:
-            raise UpdateFailed(f"Version error: {err}") from err
+            raise _update_failed(err) from err
         if self.self_update_allowed:
             try:
                 self.self_update = await self.client.async_check_self_update()

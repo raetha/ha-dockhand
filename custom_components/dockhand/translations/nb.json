@@ -150,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "CPU-bruk"
+        "name": "CPU-bruk",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "CPU-er"
+          },
+          "top_containers": {
+            "name": "Mest aktive beholdere"
+          }
+        }
       },
       "memory_usage": {
         "name": "Minnebruk"
@@ -174,7 +182,12 @@
         "name": "Diskbruk"
       },
       "activity_events": {
-        "name": "Aktivitetshendelser"
+        "name": "Aktivitetshendelser",
+        "state_attributes": {
+          "recent_events": {
+            "name": "Nylige hendelser"
+          }
+        }
       },
       "state": {
         "name": "Tilstand",
@@ -186,6 +199,29 @@
           "removing": "Fjernes",
           "exited": "Avsluttet",
           "dead": "Død"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "Avslutningskode"
+          },
+          "image": {
+            "name": "Image"
+          },
+          "networks": {
+            "name": "Nettverk"
+          },
+          "restart_count": {
+            "name": "Antall omstarter"
+          },
+          "system_container": {
+            "name": "Systembeholder"
+          },
+          "tag_colors": {
+            "name": "Taggfarger"
+          },
+          "tags": {
+            "name": "Tagger"
+          }
         }
       },
       "health": {
@@ -204,13 +240,45 @@
           "restarting": "Starter på nytt",
           "stopped": "Stoppet",
           "created": "Opprettet"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "Systembeholder"
+          },
+          "tag_colors": {
+            "name": "Taggfarger"
+          },
+          "tags": {
+            "name": "Tagger"
+          },
+          "type": {
+            "name": "Type",
+            "state": {
+              "internal": "Intern",
+              "git": "Git",
+              "untracked": "Ikke sporet"
+            }
+          }
         }
       },
       "containers_in_stack": {
-        "name": "Beholdere"
+        "name": "Beholdere",
+        "state_attributes": {
+          "containers": {
+            "name": "Beholdere"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Hawser-agentversjon"
+        "name": "Hawser-agentversjon",
+        "state_attributes": {
+          "agent_id": {
+            "name": "Agent-ID"
+          },
+          "agent_name": {
+            "name": "Agentnavn"
+          }
+        }
       },
       "next_run": {
         "name": "Neste kjøring",
@@ -231,7 +299,17 @@
               "stack_deploy": "Stack-utrulling",
               "deploy_log_reconcile": "Avstemming av distribusjonslogg",
               "env_report": "Statusrapport"
-            }
+            },
+            "name": "Type"
+          },
+          "cron_expression": {
+            "name": "Cron-uttrykk"
+          },
+          "enabled": {
+            "name": "Aktivert"
+          },
+          "environment": {
+            "name": "Miljø"
           }
         }
       },
@@ -265,7 +343,43 @@
               "stack_deploy": "Stack-utrulling",
               "deploy_log_reconcile": "Avstemming av distribusjonslogg",
               "env_report": "Statusrapport"
+            },
+            "name": "Type"
+          },
+          "cron_expression": {
+            "name": "Cron-uttrykk"
+          },
+          "description": {
+            "name": "Beskrivelse"
+          },
+          "duration_ms": {
+            "name": "Varighet (ms)"
+          },
+          "enabled": {
+            "name": "Aktivert"
+          },
+          "environment": {
+            "name": "Miljø"
+          },
+          "error_message": {
+            "name": "Feilmelding"
+          },
+          "is_system": {
+            "name": "Systemplan"
+          },
+          "triggered_at": {
+            "name": "Utløst"
+          },
+          "triggered_by": {
+            "name": "Utløst av",
+            "state": {
+              "cron": "Planlagt",
+              "manual": "Manuell",
+              "webhook": "Webhook"
             }
+          },
+          "updates_found": {
+            "name": "Oppdateringer funnet"
           }
         }
       },
@@ -321,13 +435,32 @@
           "syncing": "Synkroniserer",
           "synced": "Synkronisert",
           "error": "Feil"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "Siste commit"
+          },
+          "sync_error": {
+            "name": "Synkroniseringsfeil"
+          },
+          "auto_update": {
+            "name": "Automatisk utrulling"
+          },
+          "webhook_enabled": {
+            "name": "Webhook aktivert"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "Siste synkronisering"
       },
       "host_platform": {
-        "name": "Vertsplattform"
+        "name": "Vertsplattform",
+        "state_attributes": {
+          "architecture": {
+            "name": "Arkitektur"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Docker-versjon"
@@ -408,7 +541,30 @@
         "name": "Diskbruk for byggebuffer"
       },
       "volume_containers": {
-        "name": "Beholdere"
+        "name": "Beholdere",
+        "state_attributes": {
+          "containers": {
+            "name": "Beholdere"
+          },
+          "created": {
+            "name": "Opprettet"
+          },
+          "driver": {
+            "name": "Driver"
+          },
+          "in_use": {
+            "name": "I bruk"
+          },
+          "labels": {
+            "name": "Etiketter"
+          },
+          "mountpoint": {
+            "name": "Monteringspunkt"
+          },
+          "scope": {
+            "name": "Omfang"
+          }
+        }
       },
       "volume_size": {
         "name": "Størrelse"
@@ -442,20 +598,129 @@
       },
       "stack_pending_updates": {
         "name": "Ventende oppdateringer"
+      },
+      "image": {
+        "unit_of_measurement": "beholdere",
+        "state_attributes": {
+          "containers": {
+            "name": "Beholdere"
+          },
+          "created": {
+            "name": "Opprettet"
+          },
+          "digests": {
+            "name": "Digester"
+          },
+          "size_bytes": {
+            "name": "Størrelse (byte)"
+          },
+          "source": {
+            "name": "Kilde"
+          },
+          "tags": {
+            "name": "Tagger"
+          },
+          "title": {
+            "name": "Tittel"
+          },
+          "vendor": {
+            "name": "Leverandør"
+          },
+          "version": {
+            "name": "Versjon"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "Uten tagg",
+        "unit_of_measurement": "beholdere",
+        "state_attributes": {
+          "containers": {
+            "name": "Beholdere"
+          },
+          "created": {
+            "name": "Opprettet"
+          },
+          "digests": {
+            "name": "Digester"
+          },
+          "size_bytes": {
+            "name": "Størrelse (byte)"
+          },
+          "source": {
+            "name": "Kilde"
+          },
+          "tags": {
+            "name": "Tagger"
+          },
+          "title": {
+            "name": "Tittel"
+          },
+          "vendor": {
+            "name": "Leverandør"
+          },
+          "version": {
+            "name": "Versjon"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "beholdere",
+        "state_attributes": {
+          "addresses": {
+            "name": "Adresser"
+          },
+          "containers": {
+            "name": "Beholdere"
+          },
+          "driver": {
+            "name": "Driver"
+          },
+          "internal": {
+            "name": "Intern"
+          },
+          "scope": {
+            "name": "Omfang"
+          },
+          "subnet": {
+            "name": "Subnett"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "Tilkoblet"
+        "name": "Tilkoblet",
+        "state_attributes": {
+          "connection_host": {
+            "name": "Vert"
+          },
+          "connection_port": {
+            "name": "Port"
+          },
+          "labels": {
+            "name": "Etiketter"
+          }
+        }
       },
       "vulnerability_scanning": {
         "name": "Sårbarhetsskanning"
       },
       "git_stack_sync_error": {
-        "name": "Synkroniseringsfeil"
+        "name": "Synkroniseringsfeil",
+        "state_attributes": {
+          "sync_error": {
+            "name": "Synkroniseringsfeil"
+          }
+        }
       },
       "stack_updates_available": {
-        "name": "Oppdateringer tilgjengelig"
+        "name": "Oppdateringer tilgjengelig",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "Beholdere med oppdateringer"
+          }
+        }
       },
       "live_updates": {
         "name": "Direkteoppdateringer",
@@ -641,6 +906,33 @@
     },
     "system_container": {
       "message": "Dockhands egen container og Hawser-agenter kan ikke gjenopprettes fra Home Assistant."
+    },
+    "session_auth_unsupported": {
+      "message": "Denne oppføringen logger inn med en øktinformasjonskapsel, som ikke støttes lenger. Bruk Konfigurer på nytt for å angi et API-token (Profil → API-tokener i Dockhand)."
+    },
+    "setup_failed": {
+      "message": "Kunne ikke laste inn data fra Dockhand: {error}"
+    },
+    "update_failed": {
+      "message": "Kunne ikke oppdatere fra Dockhand: {error}"
+    },
+    "token_invalid": {
+      "message": "API-tokenet til Dockhand er ugyldig eller er trukket tilbake. Autentiser integrasjonen på nytt under Innstillinger → Enheter og tjenester."
+    },
+    "stack_not_found": {
+      "message": "Fant ikke stacken – den kan ha blitt fjernet"
+    },
+    "no_pending_updates": {
+      "message": "Det finnes ingen oppdateringer å installere"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand rapporterte en feil uten å oppgi årsaken. Loggene kan si mer."
+    },
+    "unexpected_response": {
+      "message": "Dockhand ga et svar denne integrasjonen ikke forstår. Sjekk at Dockhand er oppdatert."
+    },
+    "cannot_connect": {
+      "message": "Fikk ikke kontakt med Dockhand. Sjekk at den kjører og at Home Assistant kan nå den."
     }
   },
   "issues": {
@@ -747,5 +1039,21 @@
         "git_stack_auto_deploy": "Automatisk distribusjon"
       }
     }
+  },
+  "common": {
+    "release_notes_image": "Image: {image}",
+    "newer_tag_available": "En nyere versjonstagg er tilgjengelig: **{tag}**.",
+    "newer_tag_also_available": "En nyere versjonstagg er også tilgjengelig: **{tag}**. For å bytte til den må du endre taggen i compose-filen eller beholderkonfigurasjonen.",
+    "newer_tag_advisory_only": "Dette er bare til informasjon – beholderen er låst til den nåværende taggen, så Installer flytter den ikke til denne versjonen. Endre taggen i compose-filen eller beholderkonfigurasjonen for å oppgradere.",
+    "release_notes_truncated": "… (avkortet)",
+    "versions_skipped": "_{count} versjon(er) hoppet over underveis._",
+    "view_full_release_notes": "Vis fullstendige versjonsmerknader",
+    "view_release_notes": "Vis versjonsmerknader",
+    "pinned_to_digest": "**Låst til en digest.** Taggen til imaget peker nå på en ny digest, men denne beholderen er låst til den gamle. For å oppdatere den må du endre digesten i compose-filen eller kjørekommandoen; Installer ville bare hentet det låste imaget på nytt.",
+    "update_held": "**Oppdatering holdt tilbake:** {hours} time(r) igjen av minstealderen for images satt i Dockhand. Den kan installeres etter det.",
+    "update_held_until_check": "**Oppdatering holdt tilbake:** det nye imaget har nådd minstealderen satt i Dockhand. Det kan installeres neste gang Dockhand ser etter oppdateringer (eller etter **Se etter image-oppdateringer**).",
+    "scanner_may_block_update": "Dette miljøet skanner images for sårbarheter før oppdatering. Avhengig av den konfigurerte policyen kan denne oppdateringen blokkeres hvis funnene overskrider terskelen.",
+    "system_container_update": "Dette er en systembeholder og må oppdateres direkte på Docker-verten.",
+    "updates_disabled_by_label": "Oppdateringer deaktivert med etiketten `dockhand.update=false`."
   }
 }
