@@ -6,6 +6,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UNDEFINED, UndefinedType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
@@ -14,6 +15,7 @@ from .const import (
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_UPDATE_ENTITIES,
     DEFAULT_ENABLE_UPDATE_ENTITIES,
+    DOMAIN,
 )
 from .coordinator import (
     DockhandFastCoordinator,
@@ -764,18 +766,10 @@ class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], Button
 class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
     """Pull latest and redeploy the stack.
 
-    name and icon are live @properties matching Dockhand's own state-
-    dependent labeling exactly, confirmed from its frontend source:
-    "Deploy" + a rocket icon when the stack is down (status 'not
-    deployed' or 'created'), "Sync from Git" + a refresh icon otherwise
-    — both cases call the identical underlying action in Dockhand
-    (deployGitStackWithProgress), it's purely a cosmetic change for UX
-    clarity based on context, not two different operations. Our button
-    mirrors that same relabeling for the same reason.
-
-    If Dockhand ever changes this terminology or iconography, this needs
-    to be updated to match — check stacks/+page.svelte's conditional
-    around GitDeployProgressPopover on a future Dockhand version review.
+    Named and drawn as Dockhand's stacks list does for the stack's state
+    (stacks/+page.svelte, around GitDeployProgressPopover): "Deploy" with
+    a rocket while it's down ('not deployed' or 'created'), "Sync from
+    Git" with a refresh icon otherwise. Both call the same action.
     """
 
     _attr_translation_key = "git_stack_deploy"
@@ -800,8 +794,29 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
 
     @property
     @override
-    def name(self) -> str:
-        return "Deploy" if self._is_down() else "Sync from Git"
+    def name(self) -> str | UndefinedType | None:
+        # Translated: this entity's own name while the stack is down, the
+        # git_stack_sync entry's otherwise.
+        if not self.platform_data:
+            return UNDEFINED
+        translations = self.platform_data.platform_translations
+        if not self._is_down() and (
+            name := translations.get(
+                f"component.{DOMAIN}.entity.button.git_stack_sync.name"
+            )
+        ):
+            return name
+        return self._name_internal(None, translations)
+
+    @property
+    @override
+    def suggested_object_id(self) -> str | None:
+        # One entity ID, from the English "Deploy", whatever the stack's
+        # state or the language when the entity was added.
+        name = self._name_internal(
+            None, self.platform_data.object_id_platform_translations
+        )
+        return None if name is UNDEFINED else name
 
     @property
     @override

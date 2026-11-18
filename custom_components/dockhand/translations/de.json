@@ -502,6 +502,9 @@
       "git_stack_deploy": {
         "name": "Bereitstellen"
       },
+      "git_stack_sync": {
+        "name": "Aus Git synchronisieren"
+      },
       "stack_deploy": {
         "name": "Neu bereitstellen"
       },

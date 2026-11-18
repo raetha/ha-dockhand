@@ -64,6 +64,7 @@ Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely 
 
 ### Fixed
 
+- **A Git stack's Deploy / Sync from Git button was named in English only** — both names are now translated, Sync from Git in Dockhand's own wording where it has one. New buttons get an entity ID from "Deploy" whatever the stack's state when they're added.
 - **Diagnostics leave out more of what identifies your setup**, since they get attached to public bug reports: container labels repeated in Docker events (which can hold secrets such as reverse-proxy passwords), schedule logs, git repository URLs, host names and addresses (Docker networks' subnets, gateways and container addresses too), containers' command lines (which can hold passwords), mount paths, and the host part of the Dockhand address.
 - **Host last boot changed every 10 minutes** by a fraction of a second, adding a row to Home Assistant's database each time; it now changes only when the host reboots.
 - **An offline environment's Online sensor kept the online icon** — it now shows the Wi-Fi-off icon.

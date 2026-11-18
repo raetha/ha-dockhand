@@ -502,6 +502,9 @@
       "git_stack_deploy": {
         "name": "Implementeren"
       },
+      "git_stack_sync": {
+        "name": "Synchroniseren vanuit Git"
+      },
       "stack_deploy": {
         "name": "Opnieuw implementeren"
       },

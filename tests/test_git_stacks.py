@@ -5,12 +5,8 @@ container and git-stack auto-update switches.
 Covers:
 - Git stack sync status/last sync sensors and sync-error binary sensor
 - Git stack Deploy/Sync from Git button: correct git_stack_id used,
-  git_stack_not_found and action_failed error handling, and its live
-  name/icon matching Dockhand's own state-dependent labeling (see
-  DockhandGitStackDeployButton's docstring for why there's no separate
-  check-only Sync button — confirmed redundant with this one, since
-  Dockhand's own deployGitStack() always runs the identical sync step
-  first regardless of whether a deploy follows)
+  git_stack_not_found and action_failed error handling, and its
+  translated name and icon, which follow the stack's state as in Dockhand
 - Git stack auto-update switch: optimistic update, PUT body shape
 - Container auto-update switch: on/off state derived from map membership
   (not an explicit boolean field), optimistic update, enable/disable body shape
@@ -18,10 +14,13 @@ Covers:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.typing import UNDEFINED
 
 from custom_components.dockhand.binary_sensor import (
     DockhandGitStackSyncErrorBinarySensor,
@@ -152,44 +151,70 @@ def _make_fast_coord_with_stack_status(status: str | None) -> MagicMock:
     return fast_coordinator({ENV_ID: {"containers": [], "stacks": stacks}})
 
 
-def test_deploy_button_name_is_deploy_when_stack_not_deployed():
-    fast = _make_fast_coord_with_stack_status("not deployed")
-    slow = _make_slow_coord()
-    button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
+def _translations(language: str) -> dict[str, str]:
+    """The integration's button names in a language, keyed as Home
+    Assistant's platform translations are."""
+    path = (
+        Path(__file__).parent.parent
+        / "custom_components/dockhand/translations"
+        / f"{language}.json"
     )
-    assert button.name == "Deploy"
+    buttons = json.loads(path.read_text(encoding="utf-8"))["entity"]["button"]
+    return {
+        f"component.dockhand.entity.button.{key}.name": value["name"]
+        for key, value in buttons.items()
+    }
 
 
-def test_deploy_button_name_is_deploy_when_stack_created_not_started():
-    fast = _make_fast_coord_with_stack_status("created")
-    slow = _make_slow_coord()
+def _git_deploy_button(status: str | None, language: str = "en"):
     button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
+        _make_fast_coord_with_stack_status(status),
+        _make_slow_coord(),
+        MagicMock(),
+        ENTRY_ID,
+        ENV_ID,
+        ENV_NAME,
+        BASE_URL,
+        GIT_STACK,
     )
-    assert button.name == "Deploy"
+    button.platform_data = MagicMock(
+        platform_name="dockhand",
+        domain="button",
+        platform_translations=_translations(language),
+        object_id_platform_translations=_translations("en"),
+    )
+    return button
+
+
+@pytest.mark.parametrize("status", ["not deployed", "created"])
+def test_deploy_button_name_is_deploy_when_stack_down(status):
+    assert _git_deploy_button(status).name == "Deploy"
 
 
 def test_deploy_button_name_is_sync_from_git_when_running():
-    fast = _make_fast_coord_with_stack_status("running")
-    slow = _make_slow_coord()
-    button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
-    )
-    assert button.name == "Sync from Git"
+    assert _git_deploy_button("running").name == "Sync from Git"
 
 
 def test_deploy_button_name_is_sync_from_git_when_stack_status_unknown():
-    """If the stack isn't found in fast data at all (e.g. a poll gap),
-    default to "Sync from Git" rather than "Deploy" — matching Dockhand's
-    own condition, which only shows "Deploy" for the two specific down
-    states, defaulting to the "up" label otherwise."""
-    fast = _make_fast_coord_with_stack_status(None)
-    slow = _make_slow_coord()
-    button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
-    )
-    assert button.name == "Sync from Git"
+    """Not in the fast data at all (a poll gap): Dockhand only says
+    "Deploy" for the two down states."""
+    assert _git_deploy_button(None).name == "Sync from Git"
+
+
+def test_deploy_button_names_are_translated():
+    assert _git_deploy_button("running", "de").name == "Aus Git synchronisieren"
+    assert _git_deploy_button("created", "de").name == "Bereitstellen"
+
+
+def test_deploy_button_entity_id_comes_from_english_deploy_in_any_state():
+    assert _git_deploy_button("running", "de").suggested_object_id == "Deploy"
+    assert _git_deploy_button("created").suggested_object_id == "Deploy"
+
+
+def test_deploy_button_has_no_name_before_it_is_added():
+    button = _git_deploy_button("running")
+    button.platform_data = None
+    assert button.name is UNDEFINED
 
 
 def test_deploy_button_icon_is_rocket_when_down():

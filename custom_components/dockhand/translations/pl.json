@@ -502,6 +502,9 @@
       "git_stack_deploy": {
         "name": "Wdróż"
       },
+      "git_stack_sync": {
+        "name": "Synchronizuj z Gita"
+      },
       "stack_deploy": {
         "name": "Wdróż ponownie"
       },

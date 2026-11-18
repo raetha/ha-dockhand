@@ -502,6 +502,9 @@
       "git_stack_deploy": {
         "name": "Distribuisci"
       },
+      "git_stack_sync": {
+        "name": "Sincronizza da Git"
+      },
       "stack_deploy": {
         "name": "Ridistribuisci"
       },

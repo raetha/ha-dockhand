@@ -502,6 +502,9 @@
       "git_stack_deploy": {
         "name": "部署"
       },
+      "git_stack_sync": {
+        "name": "从 Git 同步"
+      },
       "stack_deploy": {
         "name": "重新部署"
       },
