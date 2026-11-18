@@ -2295,6 +2295,10 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     (0 means unused, a candidate for pruning). Everything else about an
     image is fixed once it exists (tags aside), so it is attributes.
 
+    No state class, so no long-term statistics: an image's entity lasts only
+    until the next pull, and each one would leave its statistics behind,
+    orphaned (Spook raises a repair for every one).
+
     name is a live @property, not a value fixed at construction — see its
     docstring for why.
 
@@ -2306,7 +2310,6 @@ class DockhandImageSensor(BaseSlowEnvSensor):
     _attr_has_entity_name = True
     _attr_icon = "mdi:package-variant-closed"
     _attr_native_unit_of_measurement = "containers"
-    _attr_state_class = SensorStateClass.MEASUREMENT
 
     def __init__(
         self,

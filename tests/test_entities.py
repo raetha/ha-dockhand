@@ -1446,6 +1446,12 @@ def _make_image(image=None):
     )
 
 
+def test_image_has_no_long_term_statistics():
+    """Each pull replaces an image's entity: with a state class, every one
+    would leave orphaned statistics behind."""
+    assert _make_image().state_class is None
+
+
 def test_image_native_value_is_containers_using():
     sensor = _make_image()
     assert sensor.native_value == 2

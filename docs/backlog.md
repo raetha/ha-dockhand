@@ -2,6 +2,12 @@
 
 Ideas that came up during development, were deliberately evaluated, and either deferred or rejected. Kept here so they aren't re-litigated from scratch in a future session — if you're considering one of these, read the reasoning first and only revisit if the stated condition has changed.
 
+## Next (2.1)
+
+Found in the pre-release pass on 2026-11-18; none changes an entity, attribute or option, so none needed 2.0.
+
+- **Text that bypasses translations.** The update dialog's notices (`update.py`: pinned tag, update held, scanner may block, system container, `dockhand.update=false`, "View full release notes", "version(s) skipped", "(truncated)") are English in every language; an update entity's release notes have no translation mechanism of their own, so they need the platform's translations looked up as the Git stack button's name does, or another way that hassfest accepts. The messages of `ConfigEntryNotReady`, `ConfigEntryAuthFailed` and `UpdateFailed` (`__init__.py`, `coordinator.py`) are English too, though Home Assistant shows the first two (Retrying setup, re-authentication), and `quality_scale.yaml` marks **exception-translations** done; and `button.py` puts English ("Stack not found", "No pending updates", "Stack deploy failed") into the translated `action_failed` message instead of keys of their own.
+
 ## Deferred
 
 - **Update only the refreshed environment's entities after a live-feed refresh** (raised by #96, 2026-11-17). A refresh of one environment from Dockhand's live feed calls every listener of the fast coordinator, so every entity of the instance re-checks its inputs; with many environments, most of that is for environments that didn't change. Entities could pass their environment as the coordinator context and the per-environment refresh notify only those (plus the entity-adding listeners). Held until the debug timing (`Finished updating ... listeners in X seconds`) from a large install shows listener passes cost enough to matter; since 2.0.0 the feed refreshes an environment at most every 15 seconds.
