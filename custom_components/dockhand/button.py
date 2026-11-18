@@ -2,7 +2,7 @@ from typing import Any, override
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -35,6 +35,7 @@ from .helpers import (
     _coordinator_env,
     _env_device,
     _find_git_stack,
+    _find_stack,
     _schedule_can_run,
     _stack_device,
     _stack_has_system_container,
@@ -782,15 +783,34 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
         self._attr_unique_id = (
             f"{self._entry_id}_{self._env_id}_stack_{self._stack_name}_git_deploy"
         )
+        self._written_down = False
 
     def _is_down(self) -> bool:
-        for s in (
-            _coordinator_env(self._fast_coordinator.data, self._env_id).get("stacks")
-            or []
-        ):
-            if s.get("name") == self._stack_name:
-                return s.get("status") in ("not deployed", "created")
-        return False
+        stack = _find_stack(self._fast_coordinator, self._env_id, self._stack_name)
+        return (stack or {}).get("status") in ("not deployed", "created")
+
+    @override
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # The stack's state comes with the fast data, not the slow data this
+        # entity follows: rewrite when it moves between down and up, so the
+        # name and icon follow a deploy within a poll rather than ten minutes.
+        self._written_down = self._is_down()
+        self.async_on_remove(
+            self._fast_coordinator.async_add_listener(self._handle_fast_update)
+        )
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        # Nothing is keyed on entity_id: rename in place (HA 2026.11+), as
+        # event.py explains.
+        super().async_entity_id_changed(old_entity_id)  # type: ignore[misc, unused-ignore]
+
+    @callback
+    def _handle_fast_update(self) -> None:
+        if (down := self._is_down()) != self._written_down:
+            self._written_down = down
+            self.async_write_ha_state()
 
     @property
     @override

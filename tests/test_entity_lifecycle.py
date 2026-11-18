@@ -79,6 +79,7 @@ def test_update_and_event_hooks_call_super():
     from custom_components.dockhand.binary_sensor import (
         DockhandLiveUpdatesBinarySensor,
     )
+    from custom_components.dockhand.button import DockhandGitStackDeployButton
     from custom_components.dockhand.event import DockhandContainerEventEntity
     from custom_components.dockhand.update import ContainerUpdateEntity
 
@@ -86,6 +87,7 @@ def test_update_and_event_hooks_call_super():
         ContainerUpdateEntity,
         DockhandContainerEventEntity,
         DockhandLiveUpdatesBinarySensor,
+        DockhandGitStackDeployButton,
     ):
         entity = cls.__new__(cls)
         base = cls.__mro__[1]

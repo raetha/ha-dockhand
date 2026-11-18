@@ -16,6 +16,15 @@ Quality, security and housekeeping reviews of the integration, its tests and CI.
 10. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
 11. **Record it:** a dated section below, and changelog lines for anything users notice.
 
+## 2026-11-18: final review for 2.0.0
+
+- Open pull requests: only the release pull request. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.5, mypy 2.4.1 and PHCC 0.13.375 (HA 2026.10.4) are still the newest; Home Assistant 2026.11.2 is a patch release with no PHCC yet. `pip-audit`: only pillow, test-only as before. CodeQL ran on the latest `dev` push and passed.
+- Upstream: no Dockhand release since 1.0.58 (reviewed 2026-11-16); `main` has only #1922 and #1923 (merged, waiting for Dockhand's next release; `docs/backlog.md`) and translations. Nothing new in Home Assistant's Portainer integration since 2026-11-14.
+- Changes since the 2026-11-15 review read through: volume devices and sizes, the image state and its `containers` attribute, the Uptime device class, setup waiting only for the fast data (with the schedule and disk sensor fixes it needed), event refresh spacing, debug timing, the per-poll index and skipped writes, and the translated Git stack button. Found: that button's Deploy / Sync from Git name and icon follow the stack's state from the fast data, but it only rewrote on the slow poll, so its name could lag a deploy by up to ten minutes; it now also listens to the fast data, rewriting only when the stack goes up or down (with a test, and a rename hook so it still renames in place).
+- Tests, ruff, mypy, quality scale rules: pass, 100% coverage. The poll benchmark: 192 containers and 6,147 entities take about 0.05 s per poll, as on 2026-11-16.
+- Entity model: the new entities follow §12 (sizes and counts are states; the image's container names are an attribute written with its count, not churning between polls).
+- Changelog re-read as release notes: **Faster startup** and **Faster setup** said the same thing and are one entry now; the Uptime fix named a sensor ("Host last boot") users no longer see.
+
 ## 2026-11-15: final review for 2.0.0
 
 - Open pull requests: none. PHCC 0.13.375 (HA 2026.10.4) is still the newest, though Home Assistant 2026.11.1 is out; no Dockhand release since 1.0.57. `pip-audit`: only pillow, test-only as before. CodeQL runs on every pull request; the last ones passed.

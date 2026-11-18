@@ -211,6 +211,20 @@ def test_deploy_button_entity_id_comes_from_english_deploy_in_any_state():
     assert _git_deploy_button("created").suggested_object_id == "Deploy"
 
 
+def test_deploy_button_rewrites_when_the_stack_goes_up_or_down():
+    """Its name and icon follow the fast data's stack state, not just the
+    slow data it otherwise follows."""
+    button = _git_deploy_button("created")
+    button.async_write_ha_state = MagicMock()
+    button._written_down = True
+    button._handle_fast_update()
+    button.async_write_ha_state.assert_not_called()
+    button._fast_coordinator.data = _make_fast_coord_with_stack_status("running").data
+    button._handle_fast_update()
+    button.async_write_ha_state.assert_called_once()
+    assert button.name == "Sync from Git"
+
+
 def test_deploy_button_has_no_name_before_it_is_added():
     button = _git_deploy_button("running")
     button.platform_data = None
