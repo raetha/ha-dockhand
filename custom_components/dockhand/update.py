@@ -1,21 +1,18 @@
 """Update platform for Dockhand container image updates.
 
-Whole platform gated on CONF_ENABLE_UPDATE_ENTITIES (default True, for
-upgrade compatibility — Tier 1 was unconditional before this option
-existed). Off entirely disables both tiers' ENTITIES below, and the
-env-level bulk "Update all" button (button.py/__init__.py) since it has
-nothing to act on without them — that's the actual "backdoor to
-performing updates from HA" concern behind this option. It does NOT
-disable the update_coordinator (Tier 2) object itself or the env-level
-"Check for updates" button: that button is read-only (forces a real
-registry check, refreshing Dockhand's own cached values that other
-things — e.g. the stack binary sensor's pending-updates attributes —
-still consume regardless of whether update entities exist), so it keeps
-working whenever CONF_ENABLE_PRECISE_UPDATES is on, independent of this
-toggle. See __init__.py's update_coordinator construction for that
-split. Added in response to github.com/raetha/ha-dockhand/issues/23 —
-some users manage container updates outside HA entirely and don't want
-these entities cluttering HA's own update management.
+Whole platform gated on CONF_ENABLE_UPDATE_ENTITIES (default True). Off
+entirely disables both tiers' ENTITIES below, and the env-level bulk "Update
+all" button (button.py/__init__.py) since it has nothing to act on without them
+— that's the actual "backdoor to performing updates from HA" concern behind
+this option. It does NOT disable the update_coordinator (Tier 2) object itself
+or the env-level "Check for updates" button: that button is read-only (forces a
+real registry check, refreshing Dockhand's own cached values that other things
+— e.g. the stack binary sensor's pending-updates attributes — still consume
+regardless of whether update entities exist), so it keeps working whenever
+CONF_ENABLE_PRECISE_UPDATES is on, independent of this toggle. See
+__init__.py's update_coordinator construction for that split. Some users manage
+container updates outside HA entirely and don't want these entities in HA's own
+update management (github.com/raetha/ha-dockhand/issues/23).
 
 Two-tier design for entity DISPLAY (both tiers require
 CONF_ENABLE_UPDATE_ENTITIES to be on — Tier 2 alone, e.g. via a manual
@@ -28,16 +25,15 @@ its data on):
   manual check in Dockhand (or this integration's own check-updates
   calls) records pending updates just the same.
   installed_version shows the image tag (no digest available at this
-  tier). latest_version flips to the "update-pending" sentinel — or, once
-  bug #2 below shipped, the container's own raw image tag when that's
-  distinguishable from installed_version — when the fast coordinator's
+  tier). latest_version flips to the container's own raw image tag when
+  that's distinguishable from installed_version, else to the
+  "update-pending" sentinel, when the fast coordinator's
   cheap GET /api/containers/pending-updates poll (Dockhand's own cached
   check results, no registry query of its own) flags this
   container. That same poll (DockhandFastCoordinator, see its own
-  docstring) also carries hasImageUpdate/newerVersion per container —
-  confirmed richer than originally assumed — so Tier 1 alone is now a
-  full source of "is there an update" and "is there a semver suggestion",
-  not just a boolean flag. Install works fully at this tier —
+  docstring) also carries hasImageUpdate/newerVersion per container, so
+  Tier 1 alone answers both "is there an update" and "is there a semver
+  suggestion". Install works fully at this tier —
   POST /api/containers/batch-update-stream only needs a container ID,
   never a digest.
 
@@ -55,9 +51,7 @@ its data on):
   this container at all (Tier 2 disabled, or Tier 2 ran but excluded/
   hasn't reached this container). Tier 2's own newerVersion still wins
   when it has one; Tier 1's fills the gap only when Tier 2's doesn't
-  carry one. This used to return {} outright whenever Tier 2 was absent
-  or had no row, discarding Tier 1's data completely — the root cause of
-  both bugs below.
+  carry one.
 
 The "Install" button triggers a pull-and-recreate via
 POST /api/containers/batch-update-stream, which (unlike the older
@@ -90,11 +84,9 @@ Version string strategy:
                       string), or the "update-pending" sentinel only when
                       the raw tag would collide with installed_version
                       (no OCI label was found, so installed_version
-                      already IS just the tag). Falling all the way back
-                      to plain installed_version in this no-digest case
-                      used to make the entity read as falsely "up to
-                      date" (HA renders STATE_OFF whenever latest_version
-                      == installed_version) — see bug #2 this fixed.
+                      already IS just the tag). Never installed_version
+                      itself: HA shows the entity off whenever
+                      latest_version == installed_version.
                       Otherwise, Dockhand's own opt-in semver "newer
                       version tag" detection (1.0.43+, global setting),
                       when the merged item carries a newerVersion field
@@ -168,10 +160,9 @@ containers list shows them:
 Whenever there's a pending/actionable update (with or without a
 newerVersion suggestion alongside it), _newer_version_section() calls
 _pending_update_changelog_section(), which asks Dockhand's version-notes
-endpoint for a bare changelog link with an empty `versions` list — this
-is the fix for bug #1 (release notes/changelog links disappearing
-entirely whenever there was no specific semver target to attach them
-to). See api.py's async_get_version_notes docstring for exactly how
+endpoint for a bare changelog link with an empty `versions` list, so a
+pending update gets a changelog link even with no specific version to
+attach notes to. See api.py's async_get_version_notes docstring for exactly how
 Dockhand resolves this with no wanted versions.
 
 Release notes for a newerVersion suggestion, or a bare changelog link
@@ -182,8 +173,8 @@ Dockhand does the forge resolution (GitHub or self-hosted Gitea/Forgejo)
 and release-matching itself, including its own unauthenticated-GitHub
 rate-limit handling. Deliberately not reimplemented client-side here.
 
-systemContainer/updateDisabled (whether Install is offered at all) used
-to only be known via check-updates. systemContainer is Dockhand's own
+systemContainer/updateDisabled decide whether Install is offered at all,
+without needing check-updates. systemContainer is Dockhand's own
 precomputed field on the regular containers list already (GET
 /api/containers) — the same isSystemContainer(imageName) classification
 Dockhand's UI itself uses, image-name matching we don't need to
@@ -203,64 +194,48 @@ systemContainer is used as well once a check has covered the container
 in batch-update either way; this is what keeps Install from being offered.
 """
 
-import asyncio
 import logging
 from typing import Any, override
 
 from homeassistant.components.update import UpdateEntity, UpdateEntityFeature
-from homeassistant.core import HomeAssistant
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
 from .const import CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES, DOMAIN
-from .coordinator import DockhandFastCoordinator, DockhandUpdateCoordinator
+from .coordinator import (
+    DockhandFastCoordinator,
+    DockhandUpdateCoordinator,
+    DockhandVersionCoordinator,
+)
 from .helpers import (
+    Texts,
     _all_envs,
     _container_installed_version,
     _container_update_status,
     _coordinator_env,
     _device_id_container,
+    _device_id_instance,
     _find_container,
     _is_update_disabled_by_label,
     _short_digest,
     _update_held_hours,
     already_registered,
+    async_common_texts,
 )
+from .installs import DockhandInstaller, install_signal, raise_for_outcome
 
 _LOGGER = logging.getLogger(__name__)
 
-# No limit in Home Assistant: each Install is one batch-update job, and
-# Dockhand queues the Docker work itself (see quality_scale.yaml).
+# No limit in Home Assistant: Installs that start together must all reach
+# the install queue at once to share one Dockhand job (installs.py), and
+# Dockhand updates a job's containers one after another itself.
 PARALLEL_UPDATES = 0
-
-# How often to poll GET /api/jobs/{id} while an install is running.
-_JOB_POLL_INTERVAL_SECONDS = 2
-# Upper bound on total wait — protects against a job stuck in "running"
-# forever (e.g. a Dockhand-side crash mid-job). Generous because a scan
-# plus a large image pull can legitimately take several minutes.
-_JOB_POLL_MAX_ATTEMPTS = 900  # 900 * 2s = 30 minutes
-
-# Dockhand's own "current"/"total" on batch-update-stream progress lines
-# are a batch-index counter (current = i+1 over containerIds.length), NOT
-# intra-container progress — meaningless here since we always send exactly
-# one container ID, so total is always 1 and current/total hits 100% on
-# the very first progress line (step="pulling"), long before the actual
-# pull/scan/recreate work happens. We derive our own percentage instead,
-# from the fixed, known pipeline of "step" values Dockhand's route always
-# emits in this order for a single container: pulling -> scanning (only
-# if a scanner is configured) -> creating -> done. Monotonically
-# increasing only, in case of any out-of-order duplicate step events
-# (e.g. "creating" is sent more than once via a progress callback during
-# the actual recreate call).
-_STEP_PERCENTAGES = {
-    "pulling": 20,
-    "scanning": 45,
-    "creating": 75,
-    "done": 100,
-}
 
 # Cap a fetched release-notes body — some upstream release bodies embed
 # screenshots/large diffs. Same bound the more-info dialog's other content
@@ -289,6 +264,8 @@ async def async_setup_entry(
     offline" (which must never trigger cleanup), so update entities
     reuse that same safety logic rather than duplicating it.
     """
+    _async_add_self_update_entity(hass, entry, async_add_entities)
+
     if not entry.options.get(
         CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES
     ):
@@ -319,6 +296,7 @@ async def async_setup_entry(
                     env_id=env_id,
                     env_name=env_name,
                     container_name=container_name,
+                    installer=data.installer,
                 )
                 if already_registered(
                     hass,
@@ -339,6 +317,104 @@ async def async_setup_entry(
     # Re-run on each fast-coordinator update to pick up new containers or
     # environments.
     entry.async_on_unload(fast_coordinator.async_add_listener(_add_new_entities))
+
+
+@callback
+def _async_add_self_update_entity(
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Add Dockhand's update entity only while its check works. Where it
+    doesn't at setup (Dockhand can't inspect its own container, as with
+    Hawser-only installs, or the token isn't an admin's), one registered
+    earlier is removed rather than left unavailable for good. The check
+    runs every 6 hours whatever happens, so a setup that starts working
+    later (Dockhand given Docker access to its own container) gets the
+    entity then, without a reload; a check that fails only now and then
+    after that leaves it unavailable until the next."""
+    version = entry.runtime_data.version_coordinator
+    if version.self_update_usable:
+        async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
+        return
+    registry = er.async_get(hass)
+    stale = registry.async_get_entity_id(
+        "update", DOMAIN, f"{entry.entry_id}_instance_update"
+    )
+    if stale:
+        registry.async_remove(stale)
+
+    listening: list[CALLBACK_TYPE] = []
+
+    @callback
+    def _stop() -> None:
+        while listening:
+            listening.pop()()
+
+    @callback
+    def _check_works() -> None:
+        if version.self_update_usable:
+            _stop()
+            async_add_entities([DockhandSelfUpdateEntity(version, entry.entry_id)])
+
+    listening.append(version.async_add_listener(_check_works))
+    entry.async_on_unload(_stop)
+
+
+def _alert(alert_type: str, message: str) -> str:
+    """A notice in the update dialog's release notes."""
+    return f"<ha-alert alert-type='{alert_type}'>{message}</ha-alert>"
+
+
+class DockhandSelfUpdateEntity(
+    CoordinatorEntity[DockhandVersionCoordinator], UpdateEntity
+):
+    """Dockhand itself, on its device: Dockhand's own check for a newer
+    release (Settings → About), which also covers installs Dockhand can't
+    inspect as a container. Where Dockhand runs in an environment it
+    manages, its container has an update entity of its own too: that one
+    follows the image, this one the release. No Install: Dockhand's
+    self-update replaces its own container, which is better started from
+    Dockhand."""
+
+    _attr_has_entity_name = True
+    _attr_name = None
+    _attr_release_url = "https://github.com/Finsys/dockhand/releases"
+
+    def __init__(self, coordinator: DockhandVersionCoordinator, entry_id: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_instance_update"
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, _device_id_instance(entry_id))}
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self.coordinator.self_update_usable
+
+    @property
+    @override
+    def installed_version(self) -> str | None:
+        check = self.coordinator.self_update or {}
+        return self.coordinator.data or check.get("currentVersion")
+
+    @property
+    @override
+    def latest_version(self) -> str | None:
+        check = self.coordinator.self_update or {}
+        installed = self.installed_version
+        if not check.get("updateAvailable"):
+            return installed
+        if check.get("latestVersion"):
+            return str(check["latestVersion"])
+        # A moving tag (latest) has a newer image rather than a version.
+        digest = str(check.get("newDigest") or "")
+        return digest.removeprefix("sha256:")[:12] or None
+
+    @override
+    def version_is_newer(self, latest_version: str, installed_version: str) -> bool:
+        return bool((self.coordinator.self_update or {}).get("updateAvailable"))
 
 
 class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEntity):
@@ -365,9 +441,11 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         env_id: int,
         env_name: str,
         container_name: str,
+        installer: DockhandInstaller,
     ) -> None:
         super().__init__(fast_coordinator)
         self._update_coordinator = update_coordinator
+        self._installer = installer
         self._entry_id = entry_id
         self._env_id = env_id
         self._container_name = container_name
@@ -382,14 +460,12 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         self._update_supported_features()
 
     def _container(self) -> dict | None:
-        return _find_container(
-            self.coordinator.data, self._env_id, self._container_name
-        )
+        return _find_container(self.coordinator, self._env_id, self._container_name)
 
     @property
     @override
     def extra_state_attributes(self) -> dict[str, Any]:
-        attrs: dict[str, Any] = {"name": self._container_name}
+        attrs: dict[str, Any] = {}
         # latest_version only carries the newer tag while nothing actionable
         # is pending, so a consumer showing both needs it on its own.
         newer = self._check_updates_item().get("newerVersion") or {}
@@ -429,22 +505,15 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         excludes, or a container Tier 2 simply hasn't reached this poll)
         — the returned item is built entirely from Tier 1's detail
         instead, so hasUpdate/newerVersion still surface without ever
-        needing Tier 2. This used to return {} unconditionally whenever
-        Tier 2 was absent, discarding Tier 1's own hasImageUpdate/
-        newerVersion data entirely — see the module docstring's "Two-tier
-        design" section and bug #1/#2 it links to.
+        needing Tier 2 (see the module docstring's "Two-tier design").
 
         Looked up by the container's *current* id (from Tier 1's fresh
         container list), not by name. Tier 2's data is keyed by
         container_id at fetch time; a container recreated since Tier 2
         last ran (the normal effect of an image update) gets a new id,
         so its stale entry — still sitting under the old id — simply
-        won't be found here. Previously this scanned by containerName
-        instead, which meant a resolved update kept showing as pending
-        for up to 24h (Tier 2's poll interval) after the container was
-        actually recreated with the update already applied, since the
-        name-matched stale entry doesn't know it's describing a
-        container that no longer exists. Real bug, reported by Raetha.
+        won't be found here. Matching by name would keep showing a
+        resolved update as pending until Tier 2's next run, up to 24 h.
         """
         c = self._container()
         if not c:
@@ -469,6 +538,17 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             c.get("systemContainer")
             or self._check_updates_item().get("systemContainer")
         )
+
+    @override
+    def version_is_newer(self, latest_version: str, installed_version: str) -> bool:
+        """Any latest version that differs from the installed one is a signal.
+
+        latest_version is set apart from installed_version only when Dockhand
+        reports something, and the two often number differently (an image's
+        version label "v2026.11.0", its tags "4.0"), so Home Assistant's own
+        comparison could call a real update older and turn the entity off.
+        """
+        return latest_version != installed_version
 
     def _advisory_only(self, item: dict) -> bool:
         """True when the only reason installed_version != latest_version is
@@ -542,11 +622,9 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             # the COMMON case, since Tier 1's own hasImageUpdate (which
             # never carries a digest at all) can flow through here on its
             # own via _check_updates_item()'s merge, whether or not Tier 2
-            # is configured. Falling back to installed_version here (the
-            # old behavior) made the entity look falsely "up to date" —
-            # HA renders STATE_OFF whenever latest_version ==
-            # installed_version — even though there genuinely IS a
-            # pending update. See module docstring, bug #2.
+            # is configured. Not installed_version: HA renders STATE_OFF
+            # whenever latest_version == installed_version, which would
+            # hide a genuinely pending update.
             #
             # Prefer the container's raw image tag instead: a real,
             # meaningful string, and distinguishable from
@@ -598,7 +676,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         """Not used — release notes cover all warning content."""
         return None
 
-    async def _newer_version_section(self, item: dict) -> str | None:
+    async def _newer_version_section(self, item: dict, text: Texts) -> str | None:
         """Pick which "what's coming" section, if any, belongs at the top
         of the release notes dialog for this container's merged
         update-status item. An actionable update (hasUpdate, or Tier 1's
@@ -628,22 +706,20 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         if item.get("hasUpdate") or self._pending_via_dockhand_cache():
             lines = []
             if tag:
-                lines.append(
-                    f"A newer version tag is also available: **{tag}**."
-                    " Moving to it requires updating the tag in your compose"
-                    " file or container config."
-                )
-            changelog = await self._pending_update_changelog_section()
+                lines.append(text("newer_tag_also_available", tag=tag))
+            changelog = await self._pending_update_changelog_section(text)
             if changelog:
                 lines.append(changelog)
             return "\n\n".join(lines) or None
 
         if tag:
-            return await self._semver_advisory_section(tag, newer)
+            return await self._semver_advisory_section(tag, newer, text)
 
         return None
 
-    async def _semver_advisory_section(self, tag: str, newer: dict) -> str | None:
+    async def _semver_advisory_section(
+        self, tag: str, newer: dict, text: Texts
+    ) -> str | None:
         """Build the semver "newer version tag" advisory section — see
         the module docstring's "Semver 'newer version tag' detection"
         section for what this is and why it's advisory only.
@@ -675,35 +751,33 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
             )
             return None
 
-        lines = [f"A newer version tag is available: **{tag}**."]
+        lines = [text("newer_tag_available", tag=tag)]
 
         notes = result.get("notes") or []
         target_note = next((n for n in notes if n.get("version") == tag), None)
         if target_note and target_note.get("body"):
             body = target_note["body"].strip()
             if len(body) > _RELEASE_NOTES_MAX_CHARS:
-                body = body[:_RELEASE_NOTES_MAX_CHARS].rstrip() + "\n\n… (truncated)"
+                body = (
+                    body[:_RELEASE_NOTES_MAX_CHARS].rstrip()
+                    + "\n\n"
+                    + text("release_notes_truncated")
+                )
             lines.append(body)
 
         skipped_count = len(versions) - 1
         if skipped_count > 0:
-            lines.append(f"_{skipped_count} version(s) skipped along the way._")
+            lines.append(text("versions_skipped", count=skipped_count))
 
         changelog_url = result.get("changelogUrl")
         if changelog_url:
-            lines.append(f"[View full release notes]({changelog_url})")
+            lines.append(f"[{text('view_full_release_notes')}]({changelog_url})")
 
-        msg = (
-            "This is advisory only — the container is pinned to its"
-            " current tag, so Install will not move it to this version."
-            " Update the tag in your compose file or container config to"
-            " upgrade."
-        )
-        lines.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+        lines.append(_alert("info", text("newer_tag_advisory_only")))
 
         return "\n\n".join(lines)
 
-    async def _pending_update_changelog_section(self) -> str | None:
+    async def _pending_update_changelog_section(self, text: Texts) -> str | None:
         """Bare changelog-link section for a pending/actionable update —
         there's no target version to fetch notes for, since Install just
         re-pulls the current tag (see _newer_version_section's own
@@ -745,7 +819,7 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         if not changelog_url:
             return None
 
-        return f"[View release notes]({changelog_url})"
+        return f"[{text('view_release_notes')}]({changelog_url})"
 
     @override
     async def async_release_notes(self) -> str | None:
@@ -754,56 +828,32 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
         if not c:
             return None
         parts = []
+        text = await async_common_texts(self.hass)
 
         image_name = c.get("image")
         if image_name:
-            parts.append(f"Image: {image_name}")
+            parts.append(text("release_notes_image", image=image_name))
 
         item = self._check_updates_item()
-        newer_version_section = await self._newer_version_section(item)
+        newer_version_section = await self._newer_version_section(item, text)
         if newer_version_section:
             parts.append(newer_version_section)
         if item.get("pinnedToDigest"):
-            msg = (
-                "**Pinned to a digest.** The image's tag has moved to a new"
-                " digest, but this container is pinned to the old one. To"
-                " update it, change the digest in its compose file or run"
-                " command; Install would only pull the pinned image again."
-            )
-            parts.append(f"<ha-alert alert-type='warning'>{msg}</ha-alert>")
+            parts.append(_alert("warning", text("pinned_to_digest")))
         held_hours = _update_held_hours(item)
         if held_hours:
-            msg = (
-                f"**Update held:** {held_hours} hour(s) left of the minimum"
-                " image age set in Dockhand. It can be installed after that."
-            )
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("update_held", hours=held_hours)))
         elif held_hours == 0:
-            msg = (
-                "**Update held:** the new image has reached the minimum image"
-                " age set in Dockhand. It can be installed once Dockhand"
-                " next checks for updates (or after **Check for updates**)."
-            )
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("update_held_until_check")))
 
         if self._scanner_enabled():
-            msg = (
-                "This environment scans images for vulnerabilities before"
-                " updating. Depending on its configured policy, this update"
-                " may be blocked if findings exceed the threshold."
-            )
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("scanner_may_block_update")))
 
         labels = c.get("labels") or {}
         if self._is_system():
-            msg = (
-                "This is a system container and must be updated"
-                " directly on the docker host."
-            )
-            parts.append(f"<ha-alert alert-type='warning'>{msg}</ha-alert>")
+            parts.append(_alert("warning", text("system_container_update")))
         elif _is_update_disabled_by_label(labels):
-            msg = "Updates disabled via `dockhand.update=false` label."
-            parts.append(f"<ha-alert alert-type='info'>{msg}</ha-alert>")
+            parts.append(_alert("info", text("updates_disabled_by_label")))
 
         return "\n\n".join(parts) if parts else None
 
@@ -821,11 +871,10 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
     async def async_install(
         self, version: str | None, backup: bool, **kwargs: Any
     ) -> None:
-        """Trigger a scanned pull-and-recreate update via Dockhand's job API.
-
-        Only ever needs the container's current ID — never a digest — so
-        this works identically whether Tier 2 has ever run for this
-        container or not.
+        """Pull and recreate the container through Dockhand's update job,
+        shared with any other Install in the environment that starts at
+        the same time (see installs.py). Only needs the container's current
+        id, never a digest, so it works with or without precise updates.
         """
         c = self._container()
         container_id = c.get("id", "") if c else ""
@@ -834,142 +883,42 @@ class ContainerUpdateEntity(CoordinatorEntity[DockhandFastCoordinator], UpdateEn
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
+        outcomes = await self._installer.async_install(self._env_id, [container_id])
+        raise_for_outcome(outcomes[container_id])
 
-        self._attr_in_progress = True
-        self._attr_update_percentage = 0
-        self.async_write_ha_state()
+    @property
+    @override
+    def in_progress(self) -> bool:
+        return self._install_progress() is not None
 
-        try:
-            criteria = await self._vulnerability_criteria()
-            job_id = await self.coordinator.client.async_start_batch_update_stream(
-                self._env_id, [container_id], vulnerability_criteria=criteria
-            )
-            skipped = await self._poll_job(job_id, container_id)
-        except HomeAssistantError:
-            raise
-        except Exception as err:
-            _LOGGER.error(
-                "batch-update-stream failed for container '%s' (env %s, id %s): %s: %s",
-                self._container_name,
-                self._env_id,
-                container_id,
-                type(err).__name__,
-                err,
-            )
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        finally:
-            self._attr_in_progress = False
-            self._attr_update_percentage = None
-            self.async_write_ha_state()
-        # Request a refresh so the entity state reflects the result. Also
-        # nudge Tier 2 if configured, so a precise digest shows up sooner
-        # than its own (up to 24h) schedule would otherwise provide.
-        # Deliberately async_refresh(), not async_request_refresh() — see
-        # DockhandCheckUpdatesButton's docstring in button.py for why the
-        # latter can silently no-op here (a live, non-obvious debouncer
-        # cooldown gotcha, not a hypothetical).
-        await self.coordinator.async_refresh()
-        if self._update_coordinator is not None:
-            await self._update_coordinator.async_refresh()
-        if skipped is not None:
-            # Dockhand reports a skip as a successful job, but nothing was
-            # updated, so it must not look like Install worked.
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": skipped},
-            )
+    @property
+    @override
+    def update_percentage(self) -> int | None:
+        return self._install_progress()
 
-    async def _vulnerability_criteria(self) -> str | None:
-        """Fetch this environment's configured vulnerability blocking policy.
-
-        Best-effort: falls back to None (Dockhand's own server-side default,
-        "never" — scan but don't block) if the settings call fails, so a
-        transient error here doesn't prevent the update itself from running.
-        """
-        try:
-            settings = await self.coordinator.client.async_get_update_check_settings(
-                self._env_id
-            )
-            return settings.get("vulnerabilityCriteria")
-        except Exception as err:
-            _LOGGER.warning(
-                "Could not fetch vulnerability criteria for env %s — Dockhand"
-                " will use its own default ('never': scan but don't block): %s",
-                self._env_id,
-                err,
-            )
+    def _install_progress(self) -> int | None:
+        c = self._container()
+        container_id = c.get("id") if c else None
+        if not container_id:
             return None
+        return self._installer.progress(self._env_id, container_id)
 
-    async def _poll_job(self, job_id: str, container_id: str) -> str | None:
-        """Poll GET /api/jobs/{id} until the job finishes, reporting progress.
-
-        Dockhand's job endpoint returns the full accumulated "lines" array on
-        every call rather than a stream — we re-scan it each poll, which is
-        cheap since a single-container update produces at most a handful of
-        lines. Raises HomeAssistantError on a blocked update, a per-container
-        failure, a job-level error, or a timeout. Returns Dockhand's message
-        when it skipped the container instead of updating it (e.g. it is the
-        container Dockhand reaches the environment through), else None.
-        """
-        skipped: str | None = None
-        for _ in range(_JOB_POLL_MAX_ATTEMPTS):
-            job = await self.coordinator.client.async_get_job(job_id)
-
-            for line in job.get("lines") or []:
-                data = line.get("data") or {}
-                if data.get("containerId") not in (container_id, None):
-                    continue
-
-                step = data.get("step")
-                new_pct = _STEP_PERCENTAGES.get(step) if isinstance(step, str) else None
-                if new_pct is not None and (
-                    self._attr_update_percentage is None
-                    or new_pct > self._attr_update_percentage
-                ):
-                    self._attr_update_percentage = new_pct
-                    self.async_write_ha_state()
-
-                event_type = data.get("type")
-                if event_type == "blocked":
-                    reason = data.get("blockReason", "vulnerability findings")
-                    raise HomeAssistantError(
-                        translation_domain="dockhand",
-                        translation_key="action_failed",
-                        translation_placeholders={"error": f"Update blocked: {reason}"},
-                    )
-                if event_type == "progress" and data.get("step") == "skipped":
-                    skipped = data.get("message") or "update skipped by Dockhand"
-                if event_type == "progress" and data.get("step") == "failed":
-                    raise HomeAssistantError(
-                        translation_domain="dockhand",
-                        translation_key="action_failed",
-                        translation_placeholders={
-                            "error": data.get("error", "update failed")
-                        },
-                    )
-
-            status = job.get("status")
-            if status == "done":
-                return skipped
-            if status == "error":
-                result = job.get("result") or {}
-                raise HomeAssistantError(
-                    translation_domain="dockhand",
-                    translation_key="action_failed",
-                    translation_placeholders={
-                        "error": result.get("error", "update job failed")
-                    },
-                )
-
-            await asyncio.sleep(_JOB_POLL_INTERVAL_SECONDS)
-
-        raise HomeAssistantError(
-            translation_domain="dockhand",
-            translation_key="action_failed",
-            translation_placeholders={"error": "update timed out waiting for Dockhand"},
+    @override
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        self.async_on_remove(
+            async_dispatcher_connect(
+                self.hass,
+                install_signal(self._entry_id, self._env_id),
+                self.async_write_ha_state,
+            )
         )
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        # Nothing here is keyed on entity_id, so a rename can happen in
+        # place (HA 2026.11+) instead of removing and re-adding the entity,
+        # which defining async_added_to_hass otherwise forces. Only ever
+        # called by HA versions that have this method, which is also why
+        # mypy (checking against an older one) can't see it yet.
+        super().async_entity_id_changed(old_entity_id)  # type: ignore[misc, unused-ignore]

@@ -2,6 +2,120 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-11-18
+
+Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely and puts more of Dockhand in your hands.
+
+- **Counts and sizes are sensors**, with history and long-term statistics, states are translated, and nothing writes to the database on every poll without reason.
+- **Control Dockhand from Home Assistant**: an environment's settings, running and pausing schedules, pausing containers, pruning, recreating, and Dockhand's own event collection.
+- **Live updates**: container changes show within seconds through Dockhand's live feed, with fewer requests to Dockhand overall.
+- **A Dockhand device** with Dockhand's own update entity, and a Docker event entity for each container.
+- **Checked feature by feature against Home Assistant's own Portainer integration**: this release brings its live updates, Docker event entities, and pause, prune and recreate, its volume devices and sizes, and goes further on updates, vulnerabilities, schedules and Git stacks. What Portainer still has is either something Dockhand doesn't offer (killing a container, pruning the build cache) or a smaller detail (a container's start time).
+
+**Before you upgrade:** some changes are breaking. Read the entries marked **Breaking** under **Removed** and **Changed**, check automations and dashboards that use attributes or the settings' binary sensors (a repair lists the automations and scripts to change), and update [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) to 2.0.0 at the same time. Home Assistant 2026.8 or later is required.
+
+### Removed
+
+- **Breaking: counts and sizes are sensors now, not attributes** — Home Assistant keeps history and long-term statistics, and offers automation triggers, for entity states only, so values that change are their own sensors, as its guidance asks:
+  - New sensors: running, stopped, paused, restarting and unhealthy containers; running, partially running and stopped stacks; pending, installable, system container and newer version tag updates; memory used and total; a container's memory cache; a stack's pending updates and running containers. Disabled by default: pinned digest and held updates, Hawser last seen, and the sensors that come with Vulnerabilities, Disk usage and Activity events (each severity and scanned images, each part of disk usage, today's events).
+  - The attributes they replace are gone: `running`, `stopped`, `paused`, `restarting`, `unhealthy` and the `pending_*` counts on Containers; `running`, `partial` and `stopped` on Stacks; `memory_used_bytes` and `memory_total_bytes` on Memory usage; `total_size_bytes` on Images and Volumes; the `*_size_bytes` parts of Disk usage; `today` on Activity events; the severity counts, `images_scanned` and `total_images` on Vulnerabilities; `memory_cache_bytes` on a container's Memory usage; `running_containers` on the stack stats; `update_count` on a stack's Updates available; `last_seen` on Hawser agent version.
+  - No more `name` attributes (environment Online, container State and update entity, stack Status, schedule Last status): the device carries the name. A container's `image_version` is now its device's version.
+  - A container's State no longer has Docker's `status` text ("Up 3 hours"), which changed every minute and wrote a new state to the database each time; a stack's Status no longer repeats the `container_count` and `container_names` its Containers sensor has.
+
+  Update templates and automations that read them. **ha-dockhand-cards 2.0.0 is needed**: earlier cards read these attributes.
+- **Breaking: the environment's Activity collection, Metrics collection, Update checks, Auto update and Image pruning binary sensors are now switches**, enabled by default, so their entity IDs change from `binary_sensor.…` to `switch.…`: update automations and dashboards that use them. The old entities are removed, and each automation or script that still uses them, templates in it included, gets a repair with a link to its editor and the new entities to use, until it's changed (dashboards and template entities aren't checked). Vulnerability scanning stays a sensor.
+- **Breaking: polling intervals can no longer be set.** Home Assistant doesn't allow integrations to offer polling-interval settings, so the Fast poll interval, Slow poll interval and Precise update check interval options are gone, and any values you set are no longer used. Dockhand now refreshes container and stack data every minute, images, volumes, networks and schedules every 10 minutes, and precise update versions once a day: the old defaults. If you'd raised or lowered an interval, see "Controlling when data refreshes" in [Data updates](https://github.com/raetha/ha-dockhand/blob/main/docs/data-updates.md) to turn polling off and refresh from an automation on your own schedule instead. Downgrading to 1.11.x still works and keeps the intervals you'd set.
+- **Breaking: Home Assistant 2026.8 or later is required** (was 2026.3). HACS and the Marketplace won't install this release on older versions; 1.11.3 keeps working there.
+
+### Added
+
+- **Volume sizes** — with volumes enabled, each volume gets a size sensor on its device, from the same disk usage Dockhand shows. Dockhand 1.0.58 and later serve it from a 5-minute cache, so it adds no work for Docker.
+- **Change an environment's settings from Home Assistant** — switches for activity and metrics collection, update checks, auto-update and image pruning, and selects for the vulnerability scanner and the image prune mode. The Dockhand device gets a select for the default vulnerability scanner. Each appears once the token can read the setting. Changing an environment's scanner turns its **Vulnerability scanning** sensor on or off straight away, rather than at the next poll.
+- **Run schedules now, and pause them** — each schedule gets a **Run now** button and, where Dockhand allows it, an **Enabled** switch, so schedules are no longer read-only in Home Assistant. While a run is queued or running, its schedule is checked every 10 seconds, so the result shows soon after it ends.
+- **Pause button** for each container (disabled by default); turning the container's switch on resumes it.
+- **Pruning** — the `dockhand.prune` action deletes stopped containers and unused images, volumes or networks in an environment, and reports how much space it freed (administrators only). Each environment also gets **Prune** buttons for each kind, disabled by default since pruning deletes; the image one follows the environment's Image prune mode.
+- **`dockhand.recreate_container` action** — recreates a container from its current settings, optionally pulling its image again first, like saving it in Dockhand's editor. Administrators only.
+- **Live updates** — while any environment has Dockhand collecting activity or metrics (metrics are on by default), a container stopping, starting, turning unhealthy or being recreated shows in Home Assistant within seconds instead of at the next poll. An environment whose containers change without pause (one stuck restarting, a large deploy) is refreshed at most every 15 seconds. Polling continues as before and catches anything missed; the feed reconnects on its own after Dockhand restarts or its host loses power. Needs the `activity: view` permission on Dockhand Enterprise.
+- **Docker event entity per container**, like Home Assistant's Portainer integration: fires when a container starts, stops, dies (with its exit code), is killed, runs out of memory, restarts, pauses, resumes, is updated, or its health check passes, fails or starts, for automations. It comes from the live feed, so it's only available for environments Dockhand sends events for. Disabled by default.
+- **Dockhand device** — a device for the Dockhand server itself, named **Dockhand (*host*)**, showing its version (updated after an upgrade). Environments and the Schedules hub now appear connected through it. It has:
+  - an **update** entity saying whether a newer Dockhand release exists, from Dockhand's own check. It's there only while that check works: it needs an admin token when authentication is on, and Docker access to Dockhand's own container, which Hawser-only setups don't give it.
+  - a diagnostic **Live updates** sensor showing whether Dockhand's live feed is connected.
+  - **Event collection mode** and **Event poll interval** selects. While Dockhand polls for Docker events instead of streaming them, live updates and Docker event entities arrive late and some never do, so a repair says so; ignore it if you prefer polling, and it comes back only if the mode changes. Needs `settings: view` on Dockhand Enterprise to appear, and `settings: edit` to change.
+- **A container's version on its device** — the image's `org.opencontainers.image.version` label, or its tag, shown where a device shows its firmware, and kept up to date when the container moves to a new image.
+- **New container and stack attributes** — `system_container` (`true` for Dockhand's own container and Hawser agents) on the container State and stack Status sensors; Dockhand's tags (1.0.49+) there too, as `tags` and `tag_colors`, from tags assigned in Dockhand and from containers' `dockhand.tags` labels, merged the way Dockhand's own lists show them; and `exit_code` on a stopped container's State.
+- **Turn on an entity type for every environment, container or stack** — **Configure** has collapsed **Environment entities**, **Container entities** and **Stack entities** sections listing the entities that are disabled by default. Checking one turns it on everywhere, including on devices added later, except where you turned it off yourself; unchecking it turns it off everywhere again, including any you turned on by hand. **All of these** checks or unchecks a whole section.
+- **Repair issues go with the integration** — on Home Assistant 2026.11 and later, removing a Dockhand entry also removes its repair issues.
+- **Listed under Computers & network → NAS & servers, connecting over the network**: the category and connectivity Home Assistant uses to group integrations, as its Portainer integration does. Earlier Home Assistant versions ignore them.
+- **Docs: the cards' Dockhand dashboard**, which lays out every environment, stack and container without placing a card; **which Dockhand Enterprise permissions each feature needs**, what a Docker socket proxy in front of Dockhand has to allow, and why Dockhand's event collection should stay on Stream ([Configuration](https://github.com/raetha/ha-dockhand/blob/main/docs/configuration.md), [Data updates](https://github.com/raetha/ha-dockhand/blob/main/docs/data-updates.md)).
+
+### Changed
+
+- **Faster startup** — setup waits only for each environment's containers and stacks; images, volumes, networks, schedules, host details, precise update checks and Dockhand's version load right after, all at the same time, instead of one after another while Home Assistant's startup waits for every image's registry to be checked. Their entities show as unavailable for those first moments after a restart.
+- **Breaking: each volume is a device**, like containers and stacks, under its environment's Volumes group, with its driver as its model (**Local Volume**). Its entities are **Containers** (how many use it, the volume's old entity, which keeps its entity ID and history) and **Size**. Automations that use the volume entity's device, and device-based dashboards, need the new device.
+- **Breaking: one image entity per repository, as Dockhand's Images page shows them**, and its state is how many containers use it, like volumes and networks, rather than its tag. A pull updates the repository's entity instead of replacing it, so it keeps its history and now has long-term statistics. `jellyfin/jellyfin:latest` and `jellyfin/jellyfin:10.9` are one `jellyfin/jellyfin` entity, its containers counted once; its `tags` attribute holds the tags alone (`latest`, `10.9`), a new `containers` attribute names the containers, and `containers_using` is gone. Untagged images share one **Untagged** entity. Existing image entities become their repository's, keeping their entity IDs and history (where the old state, the tag, was a number such as `16`, it shows in the history graph up to the upgrade); where a repository had several, the others are removed, as are the old entities of untagged images.
+- **Breaking: networks are keyed by name**, so a network Compose recreates keeps its entity, history and statistics instead of getting a new one. Its `connected_containers` attribute is now `containers` (the names) and `addresses` (each container's address, empty rather than `""` while the container is stopped).
+- **Breaking: every list of container names is called `containers`** — on a stack's Containers sensor (was `container_names`), an image and a network, as on a volume. A stack Status's `type` attribute holds `internal`, `git` or `untracked` (was capitalised), shown translated, like the schedule Last status's `triggered_by`.
+- **Fewer requests to Dockhand** — an action re-reads only its own environment, actions on several containers at once share their refreshes, and the live feed skips a refresh a poll has already made. Installs that start together (Home Assistant's "update all", the cards' Update all, a script) go to Dockhand as one update job, followed by one precise update check instead of one per container. Scripts acting on several containers finish sooner and Dockhand does less work. Each update entity still shows its own progress and result, and Update all now shows progress on each container's update entity too. A container the job didn't update (blocked by findings, skipped, failed, or never reached) fails its own Install and is logged with Dockhand's reason, so it's still on record after the dashboard's error message is gone.
+- **Less work in Home Assistant on each poll** — entities find their container or stack without searching the whole list, a container's or stack's entities skip writing a state that hasn't changed, and the check for removed containers and stacks runs only when something changed. A host with a few hundred containers spends about a third as long on each poll as before.
+- **States are translated and listed** — container State and Health, stack Status and schedule Last status offer their states in automation editors and history, in your language; the schedule type attribute is translated too. A state Docker or Dockhand adds later shows as unknown until the integration knows it.
+- **Everything the integration shows is translated** — attribute names and values in the more-info dialog, units, error messages from actions, setup and polling, and the notes in update entities' release notes (pinned digests, held updates, newer tags, skipped versions). Release notes themselves are shown as Dockhand gives them.
+- **Attributes are always there** — an image's version, vendor, title and source, a schedule's last-run details, the Hawser agent's name and ID and the host's architecture are present even when empty, rather than coming and going. A container's `restart_count` is empty unless it's restarting, since Dockhand only counts restarts then; it used to read 0.
+- **Runtime controls are enabled when you turn their option on** — the memory, CPU and process limits and the restart policy were created disabled even with **Enable runtime controls** on. Ones you disabled yourself stay off.
+- **Update all is always there while update entities are on** — unavailable while nothing is pending, rather than appearing and disappearing, so automations and dashboards can rely on its entity ID.
+- **A stack's Running containers is 0 while nothing in it runs**, rather than unavailable, so automations and charts can compare it like any number. Its other resource sensors stay unavailable then, as Dockhand reports nothing for the stack.
+- **Uptime shows as a duration** — an environment's Uptime sensor uses Home Assistant's uptime device class, so tile cards and badges show "1 week" by default instead of "Last week". Its state is still the time of the last boot. Its icon is a clock (`mdi:clock-start`, as UniFi Network's uptime sensors use) rather than the restart icon the restart buttons use.
+- **Versions show without a leading "v"** — HACS shows release tags, which from this release are plain version numbers (`2.0.0`, test builds such as `2.0.1-dev.42`), like most other HACS repositories. Earlier releases keep their `v` tags.
+
+### Fixed
+
+- **A Git stack's Deploy / Sync from Git button was named in English only** — both names are now translated, Sync from Git in Dockhand's own wording where it has one. New buttons get an entity ID from "Deploy" whatever the stack's state when they're added, and the name and icon follow a deploy within a minute instead of ten.
+- **Diagnostics leave out more of what identifies your setup**, since they get attached to public bug reports: container labels repeated in Docker events (which can hold secrets such as reverse-proxy passwords), schedule logs, git repository URLs, host names and addresses (Docker networks' subnets, gateways and container addresses too), containers' command lines (which can hold passwords), mount paths, and the host part of the Dockhand address.
+- **An environment's Uptime sensor changed every 10 minutes** by a fraction of a second, adding a row to Home Assistant's database each time; it now changes only when the host reboots.
+- **An offline environment's Online sensor kept the online icon** — it now shows the Wi-Fi-off icon.
+- **Stacks and images could disappear while Docker was briefly unreachable** — Dockhand reports an empty list rather than an error when it can't reach Docker, so a short outage could remove an environment's stacks or images. Anything that disappears now has to still be missing on the next refresh before its device is removed, which also covers containers for an outage that starts mid-poll and a container briefly missing while it's recreated.
+- **Reconfiguring to a new URL** — the entry now takes on the new URL as its identity, so the old URL can be added again, and a URL already used by another Dockhand entry is refused. The entry's name follows the URL unless you've renamed it.
+- **Turning a paused container's switch on** now resumes it; it used to fail, since Docker can't start a paused container.
+- **Clear error when Dockhand denies an action** — with Dockhand Enterprise roles, an action the API token's user isn't allowed to do now says so, instead of showing a raw "API error 403".
+- **No deprecation warning in the log from Dockhand actions** on Home Assistant 2026.10 and later (`DeviceEntry.config_entries`).
+- **Runtime-change warnings from two Dockhand instances no longer replace each other** in Repairs when both have a container with the same name in an environment with the same number.
+- **An update entity could stay off for a newer version tag** when the image's version label and its tags number differently (a label `v2026.11.0`, tags like `4.0`): Home Assistant's version comparison called the newer tag older. Any newer tag or pending update Dockhand reports now turns the entity on.
+
+### Internal
+
+- The 1.8.0 migration that removed the separate containers and build cache disk size sensors is gone: 2.0.0 brings them back under the same unique IDs, and it was removing them again at every startup.
+- With debug logging on, each poll logs how long updating the entities and the registry cleanup took, beside Home Assistant's own fetch timing, so a slow install can show where the time goes without a profile; `docs/troubleshooting.md` says how.
+- Reviewed Dockhand 1.0.58: nothing to change; its 5-minute disk usage cache answers Finsys/dockhand#1885 (`docs/development.md` → Upstream compatibility).
+- `docs/backlog.md` tracks the requests filed with Dockhand: per-container vulnerability counts (Finsys/dockhand#1916), the poll-mode event fix (#1886) and hiding Dockhand's helper containers from its container list (#1911, so a vulnerability scan stops adding a device for a minute), all merged for Dockhand's next release, and the fix offered for #1501.
+- The debug log says why a container or stack device is kept when it's missing from a poll, including that it isn't confirmed gone yet, as while it's recreated.
+- `docs/backlog.md` records why images and networks have no devices of their own.
+- A push to `dev` publishes a test build only when something users install changed; running the Build workflow by hand on `dev` publishes one anyway. Test builds are numbered by test build, not by workflow run, so the numbers go up by one.
+- `docs/backlog.md` records why the cards aren't shipped inside the integration.
+- A poll benchmark (`tests/test_poll_benchmark.py`, skipped unless `DOCKHAND_BENCH` is set) for the performance item of a full review.
+- Upstream reviews also follow Home Assistant's Portainer integration (`docs/development.md` → Upstream compatibility).
+- `docs/backlog.md` records what the Portainer comparison left out (container start time and OOM flag, choosing environments), `UpdateFailedUnreachable` for when Home Assistant 2026.12 is the minimum, and specific action errors.
+- Test build notes link the changelog's docs and images on `dev`, where they are until the release puts them on `main`.
+- Release and test build notes say to install from Home Assistant's Marketplace (HACS on older versions) and how to turn on pre-releases there, instead of adding a HACS custom repository.
+- The full review checklist (`docs/audits.md`) covers tests, tooling and comments.
+- Tests share their coordinator, config entry and sample data helpers (`tests/conftest.py`), with sample containers and stacks shaped like Dockhand's own, and their docstrings say what each test protects rather than how bugs were found.
+- A test sets the integration up from one real Dockhand environment (sanitized, from a diagnostics download) and checks every entity gets a state.
+- Volume sensors read only Dockhand's own field names (the Docker-style `Name`/`UsedBy`/`Created` fallbacks never matched anything Dockhand sends), and test data for dashboard stats and volumes now has the shape Dockhand's API returns.
+- `docs/backlog.md`: the bulk-update entry, long since built (Update all), is gone.
+- The README is shorter: requirements, installation, setup and use cases, with configuration, devices and entities, actions and automations, data updates, and troubleshooting each on a page of its own under `docs/`.
+- Markdown is written one line per paragraph or list item, so GitHub's release pages and other renderers wrap it instead of breaking lines where the source did; CI checks it.
+- Docs: installing through Home Assistant's Marketplace (2026.11+), with its install link, and HACS for older versions.
+- The generated Dockhand API index (`docs/dockhand-api.md`) and its generator are gone: Dockhand now publishes `static/openapi.json`, and upstream reviews diff that between release tags.
+- Code comments trimmed to explain why, not how the code got here.
+- Percentage sensors use Home Assistant's `PERCENTAGE` unit constant (the same `%`).
+- Devices are described with `DeviceInfo(...)`, which Home Assistant 2026.11 made a dataclass; plain dictionaries are due to be deprecated.
+- Dead code found by CodeQL removed; ruff 0.17.5.
+- Fallbacks for Home Assistant before 2026.8's device registry calls removed.
+- Two tag tests no longer move the event loop's clock, which made one fail at random.
+- CI checks that released changelog sections are unchanged from `main`: two 2.0.0 entries had landed in 1.11.3's section on `dev`, and are back under Unreleased.
+- The full review checks the entity model against Home Assistant's current guidance (`docs/audits.md`, architecture §12).
+- `docs/architecture.md` and `docs/development.md` rewritten to state each rule and its reason without the development history (architecture from about 90 KB to 40 KB); the stale device class matrix, duplicated by the README's entity tables, is gone. The README names the **Check for image updates** button and the count sensors as Home Assistant shows them.
+- `docs/backlog.md` has a "Waiting on Dockhand" section: the requests filed with Dockhand, and what to change here when each is accepted or turned down.
+- `retired.py`: entities a release replaces are listed in one place (`RETIRED_ENTITIES`), which drives both their removal and the repair, so a later replacement only adds lines there (architecture §2).
+
 ## [1.11.3] - 2026-11-03
 
 ### Added
@@ -1392,7 +1506,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.0...HEAD
+[2.0.0]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...2.0.0
 [1.11.3]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...v1.11.3
 [1.11.2]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...v1.11.2
 [1.11.1]: https://github.com/raetha/ha-dockhand/compare/v1.11.0...v1.11.1

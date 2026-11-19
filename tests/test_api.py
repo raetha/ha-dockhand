@@ -18,7 +18,10 @@ from custom_components.dockhand.api import (
     DockhandAuthError,
     DockhandClient,
     DockhandError,
+    DockhandFailedError,
     DockhandNotFoundError,
+    DockhandPermissionError,
+    DockhandUnexpectedResponseError,
 )
 
 
@@ -66,6 +69,19 @@ async def test_request_401_raises_auth_error():
 async def test_request_4xx_raises_dockhand_error():
     with pytest.raises(DockhandError, match="404"):
         await _client(_session(_resp(404, text="nf")))._request("GET", "/api/x")
+
+
+async def test_request_5xx_raises_dockhand_error():
+    with pytest.raises(DockhandError, match="HTTP 500: boom") as exc_info:
+        await _client(_session(_resp(500, text="boom")))._request("GET", "/api/x")
+    assert type(exc_info.value) is DockhandError
+
+
+async def test_request_403_raises_permission_error():
+    with pytest.raises(DockhandPermissionError, match="403"):
+        await _client(_session(_resp(403, text="Permission denied")))._request(
+            "GET", "/api/x"
+        )
 
 
 async def test_request_404_raises_not_found_error():
@@ -286,6 +302,33 @@ async def test_get_volumes(client_with_mock_request):
     assert client_with_mock_request._request.call_args.args[1] == "/api/volumes?env=2"
 
 
+async def test_get_volume_sizes(client_with_mock_request):
+    """Docker's system df, keyed by volume name; a size Docker didn't work
+    out (-1) and entries that aren't volumes are left out."""
+    client_with_mock_request._request.return_value = {
+        "diskUsage": {
+            "Volumes": [
+                {"Name": "db_data", "UsageData": {"Size": 4096, "RefCount": 1}},
+                {"Name": "cache", "UsageData": {"Size": -1, "RefCount": 0}},
+                {"Name": "no_usage"},
+                "junk",
+            ]
+        }
+    }
+    r = await client_with_mock_request.async_get_volume_sizes(2)
+    assert client_with_mock_request._request.call_args.args[1] == (
+        "/api/system/disk?env=2"
+    )
+    assert r == {"db_data": 4096}
+
+
+async def test_get_volume_sizes_when_dockhand_skips_disk_usage(
+    client_with_mock_request,
+):
+    client_with_mock_request._request.return_value = {"diskUsage": None}
+    assert await client_with_mock_request.async_get_volume_sizes(2) == {}
+
+
 async def test_get_schedules_list(client_with_mock_request):
     client_with_mock_request._request.return_value = [{"id": "s1"}]
     r = await client_with_mock_request.async_get_schedules()
@@ -337,6 +380,129 @@ async def test_restart_container(action_client):
         "POST",
         "/api/containers/cid/restart?env=1",
     )
+
+
+@pytest.mark.parametrize("action", ["pause", "unpause"])
+async def test_pause_and_unpause_container(action_client, action: str):
+    await getattr(action_client, f"async_{action}_container")(1, "cid")
+    assert action_client._request.call_args.args == (
+        "POST",
+        f"/api/containers/cid/{action}?env=1",
+    )
+
+
+async def test_recreate_container_sends_the_current_name_and_image(action_client):
+    action_client._request.return_value = {"success": True, "id": "new"}
+    result = await action_client.async_recreate_container(
+        1, "cid", name="web", image="nginx:1", pull=True, start=False
+    )
+    assert result == {"success": True, "id": "new"}
+    call = action_client._request.call_args
+    assert call.args == ("POST", "/api/containers/cid/update?env=1")
+    assert call.kwargs["json"] == {
+        "name": "web",
+        "image": "nginx:1",
+        "repullImage": True,
+        "startAfterUpdate": False,
+    }
+
+
+async def test_recreate_container_tolerates_a_non_object_reply(action_client):
+    action_client._request.return_value = "ok"
+    assert (
+        await action_client.async_recreate_container(
+            1, "cid", name="web", image="nginx", pull=False, start=True
+        )
+        == {}
+    )
+
+
+@pytest.mark.parametrize(
+    ("resource", "all_images", "path"),
+    [
+        ("images", False, "/api/prune/images?env=1&dangling=true"),
+        ("images", True, "/api/prune/images?env=1&dangling=false"),
+        ("volumes", True, "/api/prune/volumes?env=1"),
+    ],
+)
+async def test_prune_returns_dockers_report(
+    action_client, resource: str, all_images: bool, path: str
+):
+    action_client._request.return_value = {
+        "success": True,
+        "result": {"SpaceReclaimed": 5},
+    }
+    report = await action_client.async_prune(1, resource, all_images=all_images)
+    assert report == {"SpaceReclaimed": 5}
+    assert action_client._request.call_args.args == ("POST", path)
+
+
+@pytest.mark.parametrize(
+    ("reply", "error", "message"),
+    [
+        ("not json", DockhandUnexpectedResponseError, "prune images"),
+        (
+            {"success": False, "error": "Failed to prune images"},
+            DockhandError,
+            "Failed to prune",
+        ),
+        ({"success": False}, DockhandFailedError, None),
+    ],
+)
+async def test_prune_raises_when_dockhand_reports_a_failure(
+    action_client, reply, error: type[Exception], message: str | None
+):
+    """Dockhand's own reason when it gives one; otherwise an error the action
+    turns into a translated message, so no English of ours reaches users."""
+    action_client._request.return_value = reply
+    with pytest.raises(error, match=message) as exc_info:
+        await action_client.async_prune(1, "images")
+    assert type(exc_info.value) is error
+
+
+async def test_prune_without_a_report(action_client):
+    action_client._request.return_value = {"success": True, "result": None}
+    assert await action_client.async_prune(1, "networks") == {}
+
+
+async def test_run_schedule(action_client):
+    action_client._request.return_value = {"success": True, "message": "ok"}
+    await action_client.async_run_schedule("image_prune", 3)
+    assert action_client._request.call_args.args == (
+        "POST",
+        "/api/schedules/image_prune/3/run",
+    )
+
+
+async def test_run_schedule_raises_when_the_task_fails(action_client):
+    action_client._request.return_value = {"success": False, "message": "No disk"}
+    with pytest.raises(DockhandError, match="No disk"):
+        await action_client.async_run_schedule("backup", 3)
+
+
+@pytest.mark.parametrize(
+    ("system", "path"),
+    [
+        (False, "/api/schedules/image_prune/3/toggle"),
+        (True, "/api/schedules/system/3/toggle"),
+    ],
+)
+async def test_toggle_schedule_returns_the_new_state(
+    action_client, system: bool, path: str
+):
+    action_client._request.return_value = {"success": True, "enabled": False}
+    assert (
+        await action_client.async_toggle_schedule("image_prune", 3, system=system)
+        is False
+    )
+    assert action_client._request.call_args.args == ("POST", path)
+
+
+@pytest.mark.parametrize("reply", [None, {"success": True}])
+async def test_toggle_schedule_rejects_an_unexpected_reply(action_client, reply):
+    action_client._request.return_value = reply
+    with pytest.raises(DockhandError):
+        await action_client.async_toggle_schedule("image_prune", 3)
 
 
 async def test_start_stack(action_client):
@@ -719,7 +885,7 @@ async def test_wrong_response_shape_is_a_dockhand_error(
     """A reply of the wrong JSON type fails the fetch cleanly instead of
     breaking whatever reads it later."""
     client_with_mock_request._request.return_value = wrong_shape
-    with pytest.raises(DockhandError, match="Unexpected response"):
+    with pytest.raises(DockhandUnexpectedResponseError):
         await getattr(client_with_mock_request, method)(*args)
 
 
@@ -810,3 +976,77 @@ async def test_check_self_update_url(client_with_mock_request):
 async def test_check_self_update_non_dict_becomes_empty(client_with_mock_request):
     client_with_mock_request._request.return_value = "Admin access required"
     assert await client_with_mock_request.async_check_self_update() == {}
+
+
+@pytest.mark.parametrize(
+    ("call", "path"),
+    [
+        (lambda c: c.async_get_tags(), "/api/tags"),
+        (lambda c: c.async_get_container_tags(3), "/api/container-tags?env=3"),
+        (lambda c: c.async_get_stack_tags(3), "/api/stack-tags?env=3"),
+    ],
+)
+async def test_tag_reads(action_client, call, path):
+    await call(action_client)
+    assert action_client._request.call_args.args == ("GET", path)
+
+
+async def test_environment_settings_requests(client_with_mock_request):
+    c = client_with_mock_request
+    calls = [
+        (
+            c.async_update_environment(5, collectMetrics=True),
+            "PUT",
+            "/api/environments/5",
+            {"collectMetrics": True},
+        ),
+        (
+            c.async_set_update_check_settings(
+                5,
+                {
+                    "enabled": True,
+                    "cron": "x",
+                    "autoUpdate": False,
+                    "minimumReleaseAgeHours": 3,
+                },
+            ),
+            "POST",
+            "/api/environments/5/update-check",
+            {"enabled": True, "cron": "x", "autoUpdate": False},
+        ),
+        (
+            c.async_set_image_prune_settings(5, {"enabled": False, "pruneMode": "all"}),
+            "POST",
+            "/api/environments/5/image-prune",
+            {"enabled": False, "pruneMode": "all"},
+        ),
+        (
+            c.async_set_scanner(5, "trivy"),
+            "POST",
+            "/api/settings/scanner",
+            {"scanner": "trivy", "envId": 5},
+        ),
+    ]
+    for call, method, path, body in calls:
+        await call
+        assert c._request.call_args.args == (method, path)
+        assert c._request.call_args.kwargs["json"] == body
+
+
+async def test_environment_settings_reads(client_with_mock_request):
+    c = client_with_mock_request
+    c._request.return_value = {"settings": {"enabled": True, "pruneMode": "all"}}
+    assert (await c.async_get_image_prune_settings(5))["pruneMode"] == "all"
+    assert c._request.call_args.args[1] == "/api/environments/5/image-prune"
+    c._request.return_value = {"settings": {"scanner": "both"}}
+    assert await c.async_get_scanner_setting(5) == "both"
+    assert (
+        c._request.call_args.args[1] == "/api/settings/scanner?env=5&settingsOnly=true"
+    )
+    await c.async_get_scanner_setting(None)
+    assert c._request.call_args.args[1] == "/api/settings/scanner?settingsOnly=true"
+    await c.async_set_scanner(None, "none")
+    assert c._request.call_args.kwargs["json"] == {"scanner": "none"}
+    c._request.return_value = "oops"
+    assert await c.async_get_image_prune_settings(5) == {}
+    assert await c.async_get_scanner_setting(5) is None

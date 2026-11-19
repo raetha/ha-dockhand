@@ -4,12 +4,14 @@ name: Build
 # release is one squash-merged pull request from `dev` into `main`.
 # Every push and pull request: changelog check, ruff, mypy, the full test suite (100% line
 # coverage), the quality scale rule check, hassfest and HACS validation.
-# Push to main: if manifest.json's version has no `v<version>` tag yet, tag it and publish the
+# Push to main: if manifest.json's version has no `<version>` tag yet, tag it and publish the
 # GitHub release (the changelog section as notes, dockhand.zip attached: HACS installs from it,
 # per hacs.json's zip_release), delete the test builds, then reset `dev` to `main` when they
 # hold the same files.
-# Push to dev: publish a test build as a GitHub pre-release (`v<next patch>-dev.<run>`, with that
-# version stamped into its zip's manifest.json), which HACS offers once the repository's
+# Push to dev: publish a test build as a GitHub pre-release (`<version>-dev.<n>`, counting test
+# builds of that version, or the next patch's while `dev` still holds the released version;
+# that version is stamped into its zip's
+# manifest.json), which HACS offers once the repository's
 # Pre-release switch is on; older test builds are deleted.
 
 on:
@@ -62,16 +64,22 @@ jobs:
           python-version: "3.14"
 
       # On dev the version is the expected next one, undated until the release pull request;
-      # into and on main it must have its dated section.
+      # into and on main it must have its dated section. Released sections must match main's.
       - name: Check the changelog
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          git fetch --quiet --depth=1 origin main
+          git show FETCH_HEAD:CHANGELOG.md > "$RUNNER_TEMP/main-changelog.md"
           if [ "$BASE_REF" = main ] || [ "$GITHUB_REF" = refs/heads/main ]; then
-            python3 scripts/release.py check --release
+            python3 scripts/release.py check --release --released-from "$RUNNER_TEMP/main-changelog.md"
           else
-            python3 scripts/release.py check
+            python3 scripts/release.py check --released-from "$RUNNER_TEMP/main-changelog.md"
           fi
+
+      # One line per paragraph or list item, so renderers wrap them (scripts/markdown.py).
+      - name: Check Markdown line breaks
+        run: python3 scripts/markdown.py --check $(git ls-files '*.md')
 
       - name: Install ruff (the version pinned in requirements_test.txt)
         run: pip install "$(grep -E '^ruff==' requirements_test.txt)"
@@ -148,14 +156,16 @@ jobs:
         run: |
           set -e
           version=$(python3 scripts/release.py version)
-          tag="v$version"
-          if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1; then
-            echo "$tag already exists: nothing to release"
+          # no leading "v": HACS shows tag names (releases up to 1.11.3 are tagged v<version>)
+          tag="$version"
+          if gh api "repos/$GH_REPO/git/ref/tags/$tag" >/dev/null 2>&1 ||
+             gh api "repos/$GH_REPO/git/ref/tags/v$tag" >/dev/null 2>&1; then
+            echo "$version is already released: nothing to release"
             exit 0
           fi
           python3 scripts/release.py package release/dockhand.zip
           python3 scripts/release.py notes "$version" > notes.md
-          gh release create "$tag" --target "$GITHUB_SHA" --title "Dockhand $tag" \
+          gh release create "$tag" --target "$GITHUB_SHA" --title "Dockhand $version" \
             --notes-file notes.md release/dockhand.zip
           echo "Released $tag"
 
@@ -163,7 +173,7 @@ jobs:
         run: |
           set -e
           gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |
-            { grep -E '^v[0-9.]+-dev\.[0-9]+$' || true; } | while read -r old; do
+            { grep -E '^v?[0-9.]+-dev\.[0-9]+$' || true; } | while read -r old; do
               gh release delete "$old" --yes --cleanup-tag
             done
 
@@ -191,7 +201,7 @@ jobs:
 
   test-build:
     needs: [validate, lint, tests, quality-scale]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    if: (github.event_name == 'push' || github.event_name == 'workflow_dispatch') && github.ref == 'refs/heads/dev'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -203,19 +213,46 @@ jobs:
         with:
           persist-credentials: false
 
+      # A push that changes nothing users install (docs, tests, CI) publishes no
+      # test build. Run the workflow by hand on dev to publish one anyway.
+      - name: Check whether anything that ships changed
+        id: ships
+        run: |
+          set -e
+          ships='^(custom_components/|hacs\.json$)'
+          last=$(gh api "repos/$GH_REPO/releases?per_page=100" \
+            --jq '[.[] | select(.prerelease) | .tag_name | select(test("^v?[0-9.]+-dev\\.[0-9]+$"))][0] // ""')
+          echo "last=$last" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ] || [ -z "$last" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # Any doubt (no comparison, too many files to list) publishes.
+          files=$(gh api "repos/$GH_REPO/compare/$last...$GITHUB_SHA" \
+            --jq 'if (.files | length) >= 300 or .status == "behind" or .status == "diverged" then "*" else .files[].filename end') || files='*'
+          if [ "$files" = '*' ] || grep -qE "$ships" <<<"$files"; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing that ships changed since $last: no test build." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Publish the test build
+        if: steps.ships.outputs.changed == 'true'
+        env:
+          LAST: ${{ steps.ships.outputs.last }}
         run: |
           set -e
           version=$(python3 scripts/release.py version)
-          if gh api "repos/$GH_REPO/git/ref/tags/v$version" >/dev/null 2>&1; then tagged=true; else tagged=false; fi
-          dev=$(python3 scripts/release.py dev-version "$GITHUB_RUN_NUMBER" "$tagged")
-          tag="v$dev"
+          if gh api "repos/$GH_REPO/git/ref/tags/$version" >/dev/null 2>&1 ||
+             gh api "repos/$GH_REPO/git/ref/tags/v$version" >/dev/null 2>&1; then tagged=true; else tagged=false; fi
+          dev=$(python3 scripts/release.py dev-version "$LAST" "$tagged")
+          tag="$dev"
           python3 scripts/release.py package release/dockhand.zip --version "$dev"
-          python3 scripts/release.py notes Unreleased --test-build "$GITHUB_RUN_NUMBER" > notes.md
+          python3 scripts/release.py notes Unreleased --test-build "${dev##*-dev.}" > notes.md
           gh release create "$tag" --target "$GITHUB_SHA" --prerelease \
             --title "Dockhand $tag (test build)" --notes-file notes.md release/dockhand.zip
           gh release list --limit 100 --json tagName,isPrerelease --jq '.[] | select(.isPrerelease) | .tagName' |
-            { grep -E '^v[0-9.]+-dev\.[0-9]+$' | grep -vx "$tag" || true; } | while read -r old; do
+            { grep -E '^v?[0-9.]+-dev\.[0-9]+$' | grep -vx "$tag" || true; } | while read -r old; do
               gh release delete "$old" --yes --cleanup-tag
             done
           echo "Published test build $tag"

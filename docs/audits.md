@@ -1,47 +1,67 @@
 # Audits
 
-Quality, security and housekeeping reviews of the integration, its tests and CI. Repeat when the
-owner asks for a full review; record each one below, newest first. The per-release quality scale
-review has its own log in [quality-scale.md](quality-scale.md).
+Quality, security and housekeeping reviews of the integration, its tests and CI. Repeat when the owner asks for a full review; record each one below, newest first. The per-release quality scale review has its own log in [quality-scale.md](quality-scale.md).
 
 ## Checklist for a full review
 
-1. **Open pull requests**, Dependabot's especially
-   (`gh api "repos/raetha/ha-dockhand/pulls?state=open"`; sessions have the REST API, not GraphQL,
-   so `gh pr list` fails). For each: read the diff; check its CI passed
-   (`gh api repos/raetha/ha-dockhand/commits/<sha>/check-runs`); for a GitHub Action, check the
-   pinned commit is the tag it claims
-   (`git ls-remote https://github.com/<owner>/<action> refs/tags/<tag>`); for a pip pin, its
-   release notes (PHCC and mypy follow Home Assistant core). Squash-merge good ones into `dev`
-   (`gh api -X PUT repos/raetha/ha-dockhand/pulls/<n>/merge -f merge_method=squash`), never into
-   `main`. Record any held back, and why.
-2. **Security alerts.** Sessions can't read the repository's code scanning, Dependabot or secret
-   scanning alerts (403): ask the owner for their titles, and run the checks here: `pip-audit -r
-   requirements_test.txt` (test-only; nothing ships), and CodeQL (the bundle from
-   `github/codeql-action` releases; `codeql database create --build-mode=none` over a copy of the
-   tracked files only, then `database analyze` with the `python-security-and-quality` and
-   `actions-security-and-quality` suites).
+1. **Open pull requests**, Dependabot's especially (`gh api "repos/raetha/ha-dockhand/pulls?state=open"`; sessions have the REST API, not GraphQL, so `gh pr list` fails). For each: read the diff; check its CI passed (`gh api repos/raetha/ha-dockhand/commits/<sha>/check-runs`); for a GitHub Action, check the pinned commit is the tag it claims (`git ls-remote https://github.com/<owner>/<action> refs/tags/<tag>`); for a pip pin, its release notes (PHCC and mypy follow Home Assistant core). Squash-merge good ones into `dev` (`gh api -X PUT repos/raetha/ha-dockhand/pulls/<n>/merge -f merge_method=squash`), never into `main`. Record any held back, and why.
+2. **Security alerts.** Sessions can't read the repository's code scanning, Dependabot or secret scanning alerts (403): ask the owner for their titles, and run the checks here: `pip-audit -r requirements_test.txt` (test-only; nothing ships), and CodeQL (the bundle from `github/codeql-action` releases; `codeql database create --build-mode=none` over a copy of the tracked files only, then `database analyze` with the `python-security-and-quality` and `actions-security-and-quality` suites).
 3. **Tests:** `bash scripts/run_tests.sh --full` (ruff, mypy, quality scale rules, 100% coverage).
-4. **Quality scale:** every rule in `quality_scale.yaml` still true of the code
-   ([quality-scale.md](quality-scale.md)).
-5. **Security of the design:** what the integration exposes (actions that start, stop, update or
-   redeploy containers; system container protection), what it validates from Dockhand's API,
-   diagnostics safe to post publicly (tokens, TLS keys and Docker label values redacted), nothing
-   secret in logs.
-6. **Workflows:** `contents: read` at the top, write only on the jobs that release or push;
-   actions pinned to commit SHAs; no `${{ }}` expansions inside `run:` scripts; no secrets used on
-   pull requests (`tests/test_workflows.py` checks the first three).
-7. **Leftovers:** finished experiments, migrations older than the downgrade rule needs
-   ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`,
-   `docs/development.md`, the README).
-8. **Record it:** a dated section below, and changelog lines for anything users notice.
+4. **Quality scale:** every rule in `quality_scale.yaml` still true of the code ([quality-scale.md](quality-scale.md)).
+5. **Security of the design:** what the integration exposes (actions that start, stop, update or redeploy containers; system container protection), what it validates from Dockhand's API, diagnostics safe to post publicly (tokens, TLS keys and Docker label values redacted), nothing secret in logs.
+6. **Workflows:** `contents: read` at the top, write only on the jobs that release or push; actions pinned to commit SHAs; no `${{ }}` expansions inside `run:` scripts; no secrets used on pull requests (`tests/test_workflows.py` checks the first three).
+7. **Entity model:** re-read Home Assistant's current entity guidance ("State and attributes", the entity naming and category pages on developers.home-assistant.io) and walk every entity against it and [architecture.md](architecture.md) §12: values that change on their own are their own sensors, not attributes; static facts in device info; attributes always present; nothing that changes on every poll in an attribute or a recorded state; names from the device, not a `name` attribute. Note new guidance in §12, and fix or propose what drifted (renaming a `translation_key` breaks the cards, so a conversion changes both repositories together).
+8. **Tests and tooling:** sample data in `tests/` shaped like Dockhand's (checked against Dockhand's source and `tests/fixtures/dockhand_environment.json`, which is refreshed from a new sanitized diagnostics download when Dockhand's responses change); test files use `tests/conftest.py`'s helpers rather than their own; nothing still tests removed behavior; `scripts/` still match the code. Comments in the code, tests and scripts explain why, never history.
+9. **Performance:** measure, don't just read. `DOCKHAND_BENCH=1 .venv/bin/pytest tests/test_poll_benchmark.py -s --no-cov` times one poll's listeners on a large host (`DOCKHAND_BENCH_COPIES` sets its size) and prints the slowest of the integration's functions; look for work that grows faster than the containers do, and for work every poll repeats that could be skipped. Also the requests per poll and how often each coordinator refreshes.
+10. **Leftovers:** finished experiments, migrations older than the downgrade rule needs ([architecture.md](architecture.md) §4), unused code, stale comments and docs (`CLAUDE.md`, `docs/development.md`, the README).
+11. **Record it:** a dated section below, and changelog lines for anything users notice.
+
+## 2026-11-18: final review for 2.0.0
+
+- Open pull requests: only the release pull request. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.5, mypy 2.4.1 and PHCC 0.13.375 (HA 2026.10.4) are still the newest; Home Assistant 2026.11.2 is a patch release with no PHCC yet. `pip-audit`: only pillow, test-only as before. CodeQL ran on the latest `dev` push and passed.
+- Upstream: no Dockhand release since 1.0.58 (reviewed 2026-11-16); `main` has only #1922 and #1923 (merged, waiting for Dockhand's next release; `docs/backlog.md`) and translations. Nothing new in Home Assistant's Portainer integration since 2026-11-14.
+- Changes since the 2026-11-15 review read through: volume devices and sizes, the image state and its `containers` attribute, the Uptime device class, setup waiting only for the fast data (with the schedule and disk sensor fixes it needed), event refresh spacing, debug timing, the per-poll index and skipped writes, and the translated Git stack button. Found: that button's Deploy / Sync from Git name and icon follow the stack's state from the fast data, but it only rewrote on the slow poll, so its name could lag a deploy by up to ten minutes; it now also listens to the fast data, rewriting only when the stack goes up or down (with a test, and a rename hook so it still renames in place).
+- Tests, ruff, mypy, quality scale rules: pass, 100% coverage. The poll benchmark: 192 containers and 6,147 entities take about 0.05 s per poll, as on 2026-11-16.
+- Entity model: the new entities follow §12 (sizes and counts are states; the image's container names are an attribute written with its count, not churning between polls).
+- Changelog re-read as release notes: **Faster startup** and **Faster setup** said the same thing and are one entry now; the Uptime fix named a sensor ("Host last boot") users no longer see.
+
+## 2026-11-15: final review for 2.0.0
+
+- Open pull requests: none. PHCC 0.13.375 (HA 2026.10.4) is still the newest, though Home Assistant 2026.11.1 is out; no Dockhand release since 1.0.57. `pip-audit`: only pillow, test-only as before. CodeQL runs on every pull request; the last ones passed.
+- Changes since the 2026-11-14 review: diagnostics redaction, the real-data fixture and test, a stack's Running containers at 0, the test cleanup (shared helpers, realistic sample data, docstrings), comments, the manifest's category and connectivity, release and test build notes (highlights, Marketplace install text, `dev` links in test builds), and the Portainer comparison's leftovers in the backlog. Tests, ruff, mypy, quality scale rules: pass, 100% coverage.
+- Quality scale release review recorded in `docs/quality-scale.md`; five `quality_scale.yaml` comments were stale.
+- Tests and tooling (the new checklist item): reviewed today with the cleanup; nothing further.
+- Changelog re-read as release notes: an outage removed stacks and images, not "image devices"; the manifest line moved below the features.
+- Missed, then found through #96: the checklist had no performance item and the review read the code rather than measuring it. Profiling a poll showed each entity scanning its environment's container list (containers × entities per poll) and the registry cleanup walking every device and entity on every poll; both fixed in #97 (0.38 s to 0.18 s per poll at 384 containers). The benchmark is now `tests/test_poll_benchmark.py`, and item 9 above runs it. Still built every poll: entity objects for entities that already exist, about a fifth of what remains, left as is since skipping them needs each platform's unique IDs before building.
+- Also checked whether 1.11.3's attributes made the recorder's work much bigger (#96): with the recorder on, resource stats on and stats changing every poll, 192 containers give about 2,500 state changes per poll in both 1.11.3 and 2.0.0 (the resource stats sensors, off by default). 1.11.3 writes about twice the attribute data (1.6 MB against 0.7 MB over four polls) through the same number of rows; the recorder writes them in its own thread, so it doesn't explain a frozen event loop.
+
+## 2026-11-14: review before releasing 2.0.0
+
+- Open pull requests: none. PHCC 0.13.375 (HA 2026.10.4) is still the newest; no Dockhand release since 1.0.57. `pip-audit`: only pillow, test-only as before.
+- CodeQL (Python): no security findings; the notes are the same unused-looking imports and `_LEGACY_CONF_*` names as yesterday.
+- Changes since the 2026-11-13 review checked: the retired-entity repairs (one per automation or script; the editor link now URL-encodes the automation's id, so an id with spaces or brackets can't break it, with a test), the Resume button's removal, and the README split into `docs/`. Tests, ruff, mypy, quality scale rules: pass, 100% coverage.
+- Changelog re-read as release notes: two lines still pointed at README sections that moved to `docs/`.
+- `docs/automations.md` lists pausing and resuming a container; `docs/backlog.md` tracks Finsys/dockhand#1501 (the new image's version for floating-tag updates).
+
+## 2026-11-13: full review
+
+- Open pull requests: none. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.4 → 0.17.5. PHCC 0.13.375 (HA 2026.10.4) is still the newest; no Dockhand release since 1.0.57 (main's three commits since don't touch the routes used here), and HA 2026.11.1 was reviewed on 2026-11-09.
+- `pip-audit`: only pillow (test-only, through Home Assistant's pin). CodeQL 2.27.4 (Python, Actions): no security findings. Its notes are imports and names it can't see used (tests, `_LEGACY_CONF_*`) and two empty `except` blocks, which now say why they're empty.
+- Workflows: top-level `contents: read` (`permissions: {}` for stale), write only on release, sync-dev and test-build, no credentials kept on checkouts outside sync-dev, `CI passed` covering every check job. The header comment's test-build version was out of date.
+- Tests, ruff, mypy, quality scale rules: pass, 100% coverage. The entity model still matches §12 (list attributes unrecorded, nothing churning).
+- Documentation: `architecture.md` rewritten from about 90 KB to 40 KB, keeping every rule and its reason without the history; two stale claims fixed (vulnerability counts are sensors, not attributes; the "Check for updates" button is always present). `development.md`'s testing and translation sections rewritten (a stale PHCC table and minimum HA version, duplicated paragraphs). `device-class-matrix.md` deleted: unlinked and missing most entities, which the README tables cover. The README names the Check for image updates button and the count sensors as Home Assistant shows them.
+
+## 2026-11-09: full review before testing 2.0.0
+
+- Open pull requests: none. Every action pin matches its tag and is the latest release; hassfest is on master's head. ruff 0.17.3 → 0.17.4. PHCC 0.13.375 (HA 2026.10.4) is still the newest.
+- `pip-audit`: only pillow (test-only, through Home Assistant's pin; fixed in 13.0, which HA's pin doesn't allow yet). CodeQL (Python, Actions): no security findings; unused names removed, the other notes are imports pytest needs or migration constants CodeQL can't see used.
+- Home Assistant 2026.11 (source and contributors blog): actions read the deprecated `DeviceEntry.config_entries`, logging a warning on 2026.10+; now feature-detected, with a regression test (reverted, failed, restored). Device info built with `DeviceInfo(...)` ahead of plain dictionaries being deprecated. Follow-ups the owner approved: repair issues linked to their config entry where HA supports it (2026.11+). `has_update` (2026.11) isn't needed, but looking at it found that HA's version comparison could turn an update entity off for a real newer tag; `version_is_newer` now treats any difference as an update, on every supported HA version.
+- Repair issues for runtime-change warnings now include the entry id, so two instances can't replace each other's.
+- `stale.yml` gets `permissions: {}` at the top like `build.yml`'s `contents: read`.
+- Tests, ruff, mypy, quality scale rules: pass, 100% coverage. Diagnostics still redact the token, labels, TLS keys and Hawser tokens; the event entity carries only the exit code.
 
 ## 2026-11-02: moved to the dev/main workflow
 
-- `ci.yml` and `release.yml` replaced by one `build.yml` (changelog check, ruff, mypy, pytest with
-  100% coverage, quality scale rules, hassfest, HACS validation; releases created by CI from
-  `main`; test builds from `dev`; sync-dev). Every action pinned to a commit SHA, verified against
-  its tag with `git ls-remote`; `hassfest` and `hacs/action` were on `@master`/`@main`, `stale.yml`
-  on a tag. `tests/test_workflows.py` now requires SHA pins and no expressions in `run:` scripts.
+- `ci.yml` and `release.yml` replaced by one `build.yml` (changelog check, ruff, mypy, pytest with 100% coverage, quality scale rules, hassfest, HACS validation; releases created by CI from `main`; test builds from `dev`; sync-dev). Every action pinned to a commit SHA, verified against its tag with `git ls-remote`; `hassfest` and `hacs/action` were on `@master`/`@main`, `stale.yml` on a tag. `tests/test_workflows.py` now requires SHA pins and no expressions in `run:` scripts.
 - ruff pinned in `requirements_test.txt` (was unpinned in CI); `scripts/` is linted too.
 - Dependabot targets `dev`. No pull requests were open.

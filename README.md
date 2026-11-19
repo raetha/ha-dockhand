@@ -1,7 +1,4 @@
-[![HACS Badge](https://img.shields.io/badge/HACS-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/default)
-[![Release](https://img.shields.io/github/v/release/raetha/ha-dockhand?style=for-the-badge)](https://github.com/raetha/ha-dockhand/releases)
-[![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/build.yml?branch=main&label=build&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/build.yml)
-[![Installs](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=blue&label=installs&cacheSeconds=3600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.dockhand.total)](https://analytics.home-assistant.io/custom_integrations.json)
+[![Marketplace](https://img.shields.io/badge/Marketplace-Default-41BDF5.svg?style=for-the-badge)](https://github.com/hacs/default) [![Release](https://img.shields.io/github/v/release/raetha/ha-dockhand?style=for-the-badge)](https://github.com/raetha/ha-dockhand/releases) [![Validation](https://img.shields.io/github/actions/workflow/status/raetha/ha-dockhand/build.yml?branch=main&label=build&style=for-the-badge)](https://github.com/raetha/ha-dockhand/actions/workflows/build.yml) [![Installs](https://img.shields.io/badge/dynamic/json?style=for-the-badge&color=blue&label=installs&cacheSeconds=3600&url=https://analytics.home-assistant.io/custom_integrations.json&query=$.dockhand.total)](https://analytics.home-assistant.io/custom_integrations.json)
 
 <p align="center">
   <img src="custom_components/dockhand/brand/logo.png" alt="Dockhand logo">
@@ -13,45 +10,47 @@ Monitor and control your Docker environments through **[Dockhand](https://dockha
 
 No cloud services are used. Supports **API token authentication** and works with Dockhand instances where authentication is disabled.
 
-Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards)** — nine Lovelace cards modeled on Dockhand's own UI (environments, stacks, containers, pending updates, vulnerabilities, schedules, and a whole-dashboard overview), built on top of the entities this integration provides.
+Want dashboard cards, not just entities? See **[ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards)** — nine Lovelace cards modeled on Dockhand's own UI (environments, stacks, containers, pending updates, vulnerabilities, schedules, and a whole-dashboard overview), built on top of the entities this integration provides, and a ready-made **[Dockhand dashboard](https://github.com/raetha/ha-dockhand-cards#dockhand-dashboard)** that lays them out for you, with a page for every environment and its stacks and containers.
+
+---
+
+## Requirements
+
+- Home Assistant 2026.8 or later
+- Dockhand ≥ 1.0.26 (for API token authentication; no-auth installs work on any version)
+- Some features need a newer Dockhand and simply don't appear on older ones: the stack **Updates available** sensor (1.0.37+) and stack resource stats (1.0.52+)
+- Dockhand reachable from the HA host
 
 ---
 
 ## Installation
 
-### HACS (Recommended)
+### Marketplace (Recommended)
 
-This integration is available in the default HACS catalog.
+Dockhand is in the default catalog of Home Assistant's **Marketplace**, built in from Home Assistant 2026.11 (it grew out of HACS, and uses the same catalog).
 
-1. Open HACS in Home Assistant
-2. Go to **Integrations**
-3. Find **Dockhand** in the integration list and install it
-4. Restart Home Assistant
+1. Go to **Settings → Marketplace**
+2. Find **Dockhand** and install it
+3. Restart Home Assistant
 
-[![Open your Home Assistant instance and open a repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=raetha&repository=ha-dockhand&category=integration)
+[![Open your Home Assistant instance and show Dockhand in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=raetha&repository=ha-dockhand&category=integration)
+
+**Home Assistant 2026.10 and older** have no Marketplace: install [HACS](https://hacs.xyz) yourself, then the steps are the same in HACS (**HACS → Integrations**, find Dockhand, download it, restart).
 
 ### Manual
 
-1. Download `dockhand.zip` from the [latest release](https://github.com/raetha/ha-dockhand/releases/latest)
-   and extract it into `<HA config>/custom_components/dockhand/` (create the folder; the zip holds
-   the integration's files directly)
+1. Download `dockhand.zip` from the [latest release](https://github.com/raetha/ha-dockhand/releases/latest) and extract it into `<HA config>/custom_components/dockhand/` (create the folder; the zip holds the integration's files directly)
 2. Restart Home Assistant
 
 ### Test builds
 
-Upcoming changes are published as test builds (pre-releases such as `v1.11.3-dev.42`) before
-they're released, for anyone willing to try them early. To get them through HACS:
+Upcoming changes are published as test builds (pre-releases such as `1.11.5-dev.42`) before they're released, for anyone willing to try them early:
 
-1. Go to **Settings → Devices & services → Entities**, search for the Dockhand **Pre-release**
-   switch that HACS creates (it's disabled by default), and enable it
-2. Turn the switch on. HACS then offers the latest test build as an update; install it and restart
-   Home Assistant
-3. To go back to releases, turn the switch off, then in HACS open Dockhand, choose **⋮ →
-   Redownload** and pick the latest release
+1. Turn on pre-releases for Dockhand: in the Marketplace, open Dockhand and use its **⋮** menu, or turn on the Dockhand **Pre-release** switch (**Settings → Devices & services → Entities**; it's disabled by default, so enable it first). On HACS only the switch is there.
+2. The latest test build is then offered as an update; install it and restart Home Assistant
+3. To go back to releases, turn pre-releases off again, then open Dockhand, choose **⋮ → Redownload** and pick the latest release
 
-Test builds show their own version (for example `1.11.3-dev.42`) in Home Assistant and in
-diagnostics, so include it when reporting a problem. The changes in a test build are listed in its
-[release notes](https://github.com/raetha/ha-dockhand/releases).
+Test builds show their own version (for example `1.11.3-dev.42`) in Home Assistant and in diagnostics, so include it when reporting a problem. The changes in a test build are listed in its [release notes](https://github.com/raetha/ha-dockhand/releases).
 
 ---
 
@@ -61,250 +60,9 @@ diagnostics, so include it when reporting a problem. The changes in a test build
 2. Search for **Dockhand**
 3. Enter the **API URL** (e.g. `http://dockhand.local:3000`) and SSL preference
 4. The integration probes the server. If authentication is enabled you'll be prompted for an **API token** — generate one in Dockhand under **Profile → API tokens**
-5. Set poll intervals and enable any optional features (schedules, images, volumes, networks, container updates). All of these can be changed later via **Configure**
+5. Enable any optional features (schedules, images, volumes, networks, container updates). All of these can be changed later via **Configure**
 
 To change the URL, SSL setting, or API token after setup, use **Reconfigure** (three-dot menu on the integration card)
-
----
-
-## Configuration parameters
-
-### Setup fields (entered once at install time)
-
-| Field | Description | Default |
-|---|---|---|
-| **API URL** | Full URL to your Dockhand server, e.g. `http://dockhand.local:3000` | — |
-| **Verify SSL certificate** | Validate the server's SSL/TLS certificate. Uncheck only if your Dockhand instance uses a self-signed certificate | on |
-| **API Token** | A Dockhand API token starting with `dh_`. Only prompted if the server requires authentication. Generate one under **Profile → API tokens** | — |
-
-### Options (adjustable via Configure)
-
-The following can be changed at any time via the **Configure** button on the integration card, without removing the integration. Changes take effect on the next coordinator refresh.
-
-| Field | Description | Default |
-|---|---|---|
-| **Fast poll interval** | How often (seconds) to refresh container states, stacks, and environment stats. Minimum: 10 | 60 |
-| **Slow poll interval** | How often (seconds) to refresh images, volumes, networks, and schedules. Minimum: 30 | 600 |
-| **Enable schedules** | Create entities for Dockhand scheduled tasks | off |
-| **Enable images** | Create entities for Docker images on each host | off |
-| **Enable volumes** | Create entities for Docker volumes on each host | off |
-| **Enable networks** | Create entities for Docker networks on each host | off |
-| **Enable update entities** | Create a Home Assistant `update` entity for every container, showing whether an image update is available. Turn this off if you manage updates another way and don't want Dockhand's containers appearing in HA's own update management (see [github.com/raetha/ha-dockhand/issues/23](https://github.com/raetha/ha-dockhand/issues/23)). Turning it off removes the env-level **Update all** button, since that would otherwise be a way to trigger real container updates from HA even with this off. **Check for updates** and **Enable precise update versions** below keep working regardless — checking for updates is read-only, and it still refreshes Dockhand's own cached values that other things (e.g. the stack "updates available" sensor) use either way | on |
-| **Enable precise update versions** | Update entities already exist for every container, showing an image tag and an `update-pending` status from Dockhand's own cached results — no extra API cost. This adds real registry queries on the interval below, upgrading those same entities to show precise version numbers (image digests) instead — but only while **Enable update entities** above is also on. It's also the only way updates to Dockhand itself and Hawser agents are found (see the notes at the end of [Stack](#stack-always-on-60-s)). The env-level **Check for updates** button doesn't depend on this at all (it always exists and always triggers a real check); this only controls whether *that check's result* also updates the precise-version display | off |
-| **Precise update check interval** | How often (seconds) the real registry queries above run. Each check queries the registry for every container — keep this infrequent (minimum: 300). Only relevant when **Enable precise update versions** is on | 86400 |
-| **Enable runtime controls** | Create `number`/`select` entities to change a stack-less container's memory limit, CPU limit, process limit, and restart policy live, without recreating it. Not available for Compose-managed containers. Costs one extra API call per stack-less container per slow poll | off |
-| **Enable container and stack stats** | Create the per-container CPU, memory, network, and block I/O sensors, plus Dockhand's totals for each stack (Dockhand 1.0.52+) — not created at all until this is on, same as Images/Volumes/Networks below. Also gates the underlying stats API call itself, not just entity creation. Off since it's a lot of entities most people don't need | off |
-
-### Reconfigure (change URL, SSL, or API token)
-
-Use **Reconfigure** (three-dot menu → Reconfigure) to change the **API URL**, **Verify SSL** setting, or **API Token**. The token field is pre-populated and masked — clear it to disable authentication (you will be re-prompted if the server still requires it), or enter a new value to rotate credentials. The integration re-probes the server on save.
-
----
-
-## Authentication
-
-### API token (recommended)
-When Dockhand authentication is enabled, the integration authenticates using a **Bearer token** (`dh_...`). Tokens do not expire by default (unless you set an expiry when generating), which means no periodic re-authentication prompts.
-
-To generate a token:
-1. Open the Dockhand UI and click your avatar in the sidebar
-2. Scroll to **API tokens**
-3. Click **Generate token**, give it a name, and optionally set an expiry
-4. Copy the token immediately — it is shown only once
-5. Paste it into the HA integration setup or re-authentication prompt
-
-> **Requires Dockhand ≥ 1.0.26.** Token authentication was introduced in 1.0.25 but had a bug with enterprise licences that was fixed in 1.0.26.
-
-### No-auth installs
-If Dockhand authentication is fully disabled, no token is needed. The integration detects this automatically during setup and skips the token prompt. If you later enable authentication in Dockhand, HA will surface a re-authentication prompt the next time a poll fails.
-
-### Re-authentication
-If a token is revoked or expires, the integration will surface a re-authentication notification in HA. Go to **Settings → Devices & Services → Dockhand → Re-authenticate**, generate a new token in Dockhand, and paste it in.
-
----
-
-## Device model
-
-The integration uses a **grouped device hierarchy** that keeps the device list manageable regardless of how many containers and stacks you have.
-
-```
-myenv                                       ← Environment device
-├── myenv – Containers                      ← Group device (freestanding containers only)
-│   └── myenv – Containers – mycontainer   ← Container device
-│       ├── switch  (primary — no suffix)
-│       ├── sensor.State
-│       ├── sensor.Health              ← only if container has a healthcheck
-│       ├── button.Restart
-│       ├── update                     ← if container updates enabled
-│       └── (diagnostic, disabled by default)
-│           ├── sensor.CPU usage
-│           ├── sensor.Memory usage
-│           ├── sensor.Memory usage %
-│           ├── sensor.Memory limit
-│           ├── sensor.Network in / Network out
-│           └── sensor.Disk read / Disk write
-├── myenv – Stacks                          ← Group device
-│   └── myenv – Stacks – mystack      ← Stack device
-│       ├── switch  (primary — no suffix)
-│       ├── sensor.Status
-│       ├── sensor.Containers
-│       ├── button.Restart
-│       └── (diagnostic, if container stats enabled; Dockhand 1.0.52+)
-│           └── sensor.CPU usage / Memory usage / … ← stack totals
-├── myenv – Networks  (if enabled)          ← Group device
-│   └── sensor.bridge                  ← one entity per network (no sub-devices)
-├── myenv – Volumes  (if enabled)           ← Group device
-│   └── sensor.myvolume                ← one entity per volume (no sub-devices)
-└── myenv – Images  (if enabled)            ← Group device
-    └── sensor.nginx                   ← one entity per image (no sub-devices)
-
-sensor.CPU usage, sensor.Memory usage, sensor.Containers  ← on env device
-binary_sensor.Online
-button.Check for updates
-button.Update all containers               ← if update entities enabled and something's pending
-
-Dockhand – Schedules  (if enabled)         ← Global hub device (not env-specific)
-└── Dockhand – Schedules – nightly-backup ← per-schedule device
-    ├── sensor.Next run
-    └── sensor.Last status
-```
-
-**Entity ID convention:** `<platform>.<env>_<type>_<name>_<attribute>` — for example `sensor.myenv_containers_mycontainer_state` or `switch.myenv_stacks_mystack`. The type segment (`containers`, `stacks`, `images`, etc.) makes entity_ids unambiguous even when a container and stack share the same name.
-
-Each device in the list shows its **Type** (`model` field), so it's easy to distinguish containers from stacks, and group devices from individual ones. Every device also has a direct **open in Dockhand** link that takes you straight to the corresponding page.
-
-Container and stack switches are **primary entities** — the entity name equals the device name with no suffix, following HA convention for the principal on/off control of a device.
-
-### Portainer users
-If you're also running the Portainer integration, note that this integration uses the same structural patterns — one environment device, child devices for containers and stacks, a control switch and `Restart` button per container and stack.
-
----
-
-## Entities reference
-
-### Environment (always on, 60 s)
-| Entity | Type | Notes |
-|---|---|---|
-| Online | binary_sensor | Connectivity device class. Attributes: `name` (environment display name), `connection_host`/`connection_port` (the environment's configured Docker connection endpoint, from `/api/environments`), `labels` (the tags you've assigned to the environment in Dockhand) |
-| Connection type | sensor | `socket` / `direct` / `hawser-standard` / `hawser-edge` — matches Dockhand's own connection-type indicator, including its icon per type |
-| CPU usage | sensor | %, with `cpu_count` (logical CPU count, from `GET /api/host`) and `top_containers` (top 5 by CPU — name/CPU%/memory%; only populated when **Enable container and stack stats** is on) attributes |
-| Memory usage | sensor | %, with used/total bytes attributes |
-| Containers running | sensor | with total/stopped/unhealthy attributes, and update counts: `pending_updates` (installable, excluding system containers), `pending_system_updates`, `pending_version_updates` (newer version tag only), `pending_pinned_digest_updates` (moved digest on a pinned image only), `pending_held_updates` (held for the minimum image age only) and `pending_updates_total` (every container whose update entity is on) |
-| Images | sensor | count of Docker images on the environment |
-| Image pruning | binary_sensor | whether automatic image pruning is enabled for this environment. Disabled by default |
-| Update all | button | Updates every container in the environment with a pending update in one batch (pull, scan if configured, recreate) — matches Dockhand's own "Update all" button exactly. Named "Update all containers" (a static name; Dockhand's own button shows a live "(N)" count, but a changing friendly name on a persistent entity reads as confusing churn in HA's own history, so ours doesn't). "Pending update" considers both the cheap cached check and, if enabled, the precise digest check — a container flagged by either counts. System containers are excluded from the count and from the update, same as Dockhand's own button. **Only exists while Enable update entities is on and there's at least one pending update** — this is the one thing that toggle actually gates besides entity display, since leaving it available with update entities disabled would be a backdoor to triggering real updates from HA |
-
-The following are sourced from `GET /api/host` (already polled every slow cycle for the Hawser version sensor — no extra API call) but are **disabled by default**, since they're niche/diagnostic. Enable the ones you want in **Settings → Entities**.
-
-| Entity | Type | Notes |
-|---|---|---|
-| Hawser agent version | sensor | Live-fetched from the agent for standard-mode Hawser connections. `agent_name`/`agent_id`/`last_seen` attributes shown only for edge-mode connections (the only mode Dockhand populates them for), sourced from `/api/environments` |
-| Host platform | sensor | OS platform, e.g. `linux`, with an `architecture` attribute, e.g. `x64` |
-| Docker version | sensor | Docker Engine server version |
-| Host last boot | sensor | Timestamp, computed from host uptime |
-
-Also disabled by default, but at no extra cost — the data's already part of the same `/api/dashboard/stats` call already polled every 60s:
-
-| Entity | Type | Notes |
-|---|---|---|
-| Disk usage | sensor | Total bytes across images, volumes, containers, and build cache, with each broken out as an attribute — matches Dockhand's own disk-usage breakdown |
-
-Also disabled by default, each sourced from its own gated API call — only fetched at all when the matching Dockhand setting is on for that environment, so an environment that doesn't use the feature never pays for the extra request:
-
-| Entity | Type | Notes |
-|---|---|---|
-| Activity events | sensor | Total event count, with a `today` attribute and a `recent_events` list attribute (last 10, each with container name/action/timestamp). Only polled when **Activity collection** is on for the environment in Dockhand |
-| Vulnerabilities | sensor | Total finding count from Dockhand's own vulnerability scanner, with `critical`/`high`/`medium`/`low` and `images_scanned`/`total_images` attributes. Only polled when **Vulnerability scanning** is on for the environment in Dockhand |
-
-### Container (always on, 60 s)
-| Entity | Type | Notes |
-|---|---|---|
-| State | sensor | running / exited / paused / etc. |
-| Health | sensor | healthy / unhealthy / starting. Only created for containers with a Docker healthcheck configured — enabled by default |
-| Container | switch | turn on = start, turn off = stop. **Not created for system containers** (Dockhand itself, or a Hawser agent) — see note below |
-| Restart | button | restarts running container (use Container to start stopped). **Not created for system containers** — see note below |
-| Update | update | Created automatically for every container, as long as **Enable update entities** is on (default on; see Options above) — whether or not Dockhand's scheduled update check is turned on for the environment. Shows the image tag as `installed_version`, and flips `latest_version` to `update-pending` as soon as a Dockhand update check (scheduled or manual) finds one, with no registry query of its own. Enable **Enable precise update versions** in Configure to also show real image-digest version numbers via periodic registry queries. Install triggers a scanned pull-and-recreate via Dockhand's `batch-update-stream` API (works at either tier — it only needs the container ID), honoring the environment's configured vulnerability blocking policy, and reports live install progress. Disabled for system containers and containers with `dockhand.update=false` label. When Dockhand also finds a newer version tag (one you'd move to by changing the container's image tag, so Install can't apply it), it's shown as `latest_version` only while nothing installable is pending, and is always available in the `newer_version` attribute, with `newer_version_bump` (`major`/`minor`/`patch`) and `newer_versions_count` (how many newer versions there are, including that one) beside it. Two more cases Install can't apply, shown the way Dockhand's own containers list shows them: for an image pinned to a digest (`image:tag@sha256:…`) whose tag has moved on (Dockhand 1.0.54+), the entity turns on with Install unavailable and `pinned_digest_moved: true`, since the pin has to be changed; and an update Dockhand is holding until the new image reaches its minimum image age (Dockhand 1.0.52+) turns it on with Install unavailable too, with `update_held_hours` counting down the hours left (0 once the wait is over, until Dockhand's next update check offers it as a normal update). Both turn off again as soon as Dockhand stops reporting them |
-| Memory limit, CPU limit, Process limit | number | Live in-place resource limits (0 = unlimited, except Process limit where -1 = unlimited, matching Docker's own convention). Stack-less (non-Compose) containers only. **Optional — enable via Configure**, disabled by default in the entity registry. **Not created for system containers** — see note below |
-| Restart policy | select | Live restart policy (`no`/`always`/`unless-stopped`/`on-failure`). Stack-less containers only. **Optional — enable via Configure**, disabled by default in the entity registry. **Not created for system containers** — see note below |
-| Auto update | switch | Toggles Dockhand's own scheduled auto-update check for this container (distinct from the Update entity above, which is manual/HA-triggered). Persisted by container name, survives recreation. Not gated behind Configure — always available, disabled by default in the entity registry. **Not created for system containers** — see note below |
-
-The following **diagnostic sensors** are created for every container while **Enable container and stack stats** is on (see Options above). They show as unavailable when the container is stopped or exited.
-
-| Entity | Type | Unit | Notes |
-|---|---|---|---|
-| CPU usage | sensor | % | Percentage of total host CPU capacity |
-| Memory usage | sensor | bytes (displayed in MiB) | Effective memory in use; page cache excluded. Includes `memory_cache_bytes` state attribute |
-| Memory usage % | sensor | % | Memory used relative to configured limit (or host RAM if no limit is set) |
-| Memory limit | sensor | bytes (displayed in MiB) | Configured container memory limit, or host RAM when unconstrained |
-| Network in | sensor | bytes (displayed in MiB) | Cumulative bytes received; resets to 0 on container restart |
-| Network out | sensor | bytes (displayed in MiB) | Cumulative bytes transmitted; resets to 0 on container restart |
-| Disk read | sensor | bytes (displayed in MiB) | Cumulative block I/O reads; resets to 0 on container restart |
-| Disk write | sensor | bytes (displayed in MiB) | Cumulative block I/O writes; resets to 0 on container restart |
-
-### Stack (always on, 60 s)
-| Entity | Type | Notes |
-|---|---|---|
-| Status | sensor | running / partial / stopped. The stack device's `model` (Internal Stack / Git Stack / Untracked Stack) shows why a stack does or doesn't have the git-stack entities below. "Untracked" matches Dockhand's own terminology for a stack it discovered but never created/adopted/git-tracked through its own UI |
-| Stack | switch | turn on = start, turn off = stop. **Not created for a stack containing a system container** — see note below |
-| Restart | button | restarts running stack (use Running to start stopped). **Not created for a stack containing a system container** — see note below |
-| Redeploy | button | pulls the latest image for each service and redeploys — matches Dockhand's own Redeploy popover exactly, including its own literal button title, with its default checkboxes (Pull images checked, Build images and Force recreate unchecked), so it behaves the same as clicking Redeploy in Dockhand's own UI without touching any options. Only recreates containers whose config actually changed (e.g. a new image digest) — doesn't force-recreate everything. **Internal stacks only** — git stacks have their own Deploy/Sync from Git button (below) with different mechanics; not created for Untracked stacks (no compose file location for Dockhand to redeploy from) or for a stack containing a system container |
-| Updates available | binary_sensor | on when any container in the stack has a pending image update, with an `update_count` attribute. Requires Dockhand 1.0.37+ — automatically not created on older versions, since this data isn't in the API response at all until then |
-| CPU usage, Memory usage, Memory limit, Network in, Network out, Disk read, Disk write | sensor | Diagnostic. The stack's totals exactly as Dockhand reports them (`GET /api/stack-stats`, the same numbers its own Stacks page shows), each with a `running_containers` attribute: everything summed over the stack's running containers except Memory limit, which is the largest single container limit. No memory percentage, since Dockhand doesn't report one for a stack. **Requires Dockhand 1.0.52+** — not created on older versions — and only created while **Enable container and stack stats** is on. Unavailable while none of the stack's containers is running |
-
-> **System containers.** Dockhand classifies its own management container and any Hawser remote agent as "system containers" — Dockhand's own UI hides start/stop/restart for these (and for any stack containing one), since taking them down can break Dockhand's ability to manage the host at all. Dockhand's API itself doesn't enforce this — only its UI does — so this integration enforces it independently: the Container/Stack switch, Restart button, container Auto update switch, and runtime controls (memory/CPU/process limits, restart policy) simply aren't created for a system container or a stack that contains one. Read-only entities (State, Health, resource sensors) are unaffected. A system container's Update entity still reports when a new image is available, but Dockhand's own scheduled update check skips system containers, so that is only detected by the environment's **Check for updates** button (or by **Enable precise update versions**, which runs that same check on its own schedule). A result from the button is kept until the container is recreated or the next check, but not across a Home Assistant restart.
-
-> **Updates for Dockhand and Hawser themselves depend on their image tag.** Dockhand only reports a newer image for its own container or a Hawser agent when the image's tag has moved on — so with a floating tag (`latest`, or a major-version tag) every new release shows up on that container's Update entity once **Enable precise update versions** runs, or after **Check for updates**. With a pinned version tag (`v1.0.53`, `0.2.50`) the tag never moves, and Dockhand never offers a newer version tag for a system container (it hides those from its own containers list too), so nothing is reported through the containers API. For Dockhand only, the integration fills that gap from Dockhand's own release check (the one behind its "update available" notice), which names the newest release: the Update entity on Dockhand's own container turns on with that version as `latest_version` and `newer_version`, Install unavailable. That check needs **Enable precise update versions**, an admin API token, and Dockhand able to inspect its own container — through its own Docker socket or an environment with a socket or direct connection that lists it. When Dockhand only reaches its hosts through Hawser it can't, so the check isn't made. Hawser has no equivalent check anywhere in Dockhand: **for reliable update notifications for Dockhand and Hawser, run them on a floating tag.**
-
-The following are created automatically whenever a stack is detected as **git-tracked** — no config option needed (it's one bulk API call per environment, not per-stack).
-
-| Entity | Type | Notes |
-|---|---|---|
-| Sync status | sensor | `pending`/`syncing`/`synced`/`error`. Attributes include last commit, sync error, auto-deploy, and webhook-enabled |
-| Last sync | sensor | Timestamp of the last git sync |
-| Sync error | binary_sensor | On when the last sync/deploy attempt failed |
-| Deploy / Sync from Git | button | Same underlying action either way (sync from git, then redeploy) — the name and icon change based on the stack's current status to match Dockhand's own labeling exactly: **"Deploy"** (rocket icon) while the stack is down (not yet deployed, or created but not started), **"Sync from Git"** (refresh icon) once it's up. Unlike the internal-stack Redeploy button above, this does **not** guarantee a fresh image pull or a forced recreate: whether containers actually get recreated depends on whether the git sync found real changes, and whether images get re-pulled depends on this git stack's own "repull images" setting in Dockhand (not something this integration can override per-press) — a Dockhand API limitation, not a choice made here. There's no separate check-only Sync button — Dockhand's own `deployGitStack()` always runs the identical sync step first regardless of whether a deploy follows, confirmed from source, so a standalone check-only action would add no real capability. *Dockhand's own terminology/iconography here may change in a future version; if you notice this drift from what Dockhand itself calls it, that's worth flagging.* |
-| Auto deploy | switch | Toggles the stack's own scheduled sync+redeploy job. Disabled by default in the entity registry |
-
-### Network (optional, 600 s)
-
-One entity per network, living under the **{env} – Networks** group device.
-
-| Entity | Type | Notes |
-|---|---|---|
-| *network-name* | sensor | Named for the network (e.g. `bridge`); state is connected container count; attributes include driver, scope, subnet, and connected container names/IPs |
-
-### Volume (optional, 600 s)
-
-One entity per volume, living under the **{env} – Volumes** group device.
-
-| Entity | Type | Notes |
-|---|---|---|
-| *volume-name* | sensor | Named for the volume; state is connected container count (0 = unused/dangling); attributes include in_use bool, container list, driver, scope, mountpoint, labels, and created timestamp |
-
-### Schedule (optional, 600 s)
-
-Two entities per schedule, parented to a per-schedule device under the **Schedules** hub. The per-schedule device structure is preserved to future-proof for Dockhand API additions (run-now, enable/disable).
-
-| Entity | Type | Notes |
-|---|---|---|
-| Next run | sensor | TIMESTAMP device class; suitable for time-based automation triggers. Attributes include cron expression, enabled state, environment name, and schedule type |
-| Last status | sensor | DIAGNOSTIC; string value (`success`, `failed`, etc.) — use a `state` trigger for clean failure-alert automations. Attributes include triggered_by, triggered_at, duration_ms, error_message |
-
-> Schedules are **read-only**. Dockhand does not expose a run-now API endpoint, so no action button is provided. The per-schedule device is kept for when this changes.
-
----
-
-## Container and Stack controls
-
-| What you want | How to do it |
-|---|---|
-| Start a stopped container | Turn **Container** switch **on** |
-| Stop a running container | Turn **Container** switch **off** |
-| Start a stopped stack | Turn **Stack** switch **on** |
-| Stop a running stack | Turn **Stack** switch **off** |
-| Restart a container or stack | Press **Restart** button |
-
-The Restart button only works when the container or stack is already running — Docker cannot restart a stopped one. If a container has stopped unexpectedly, turn the **Container** switch on first, then use **Restart** if needed.
 
 ---
 
@@ -314,142 +72,17 @@ The Restart button only works when the container or stack is already running —
 - **Fix the common cases automatically.** Restart a container that has been unhealthy for a few minutes, or start one that a host reboot left stopped.
 - **Keep on top of updates.** See pending image updates next to Home Assistant's own updates, install them from there, or get a weekly reminder of stacks with updates waiting.
 - **Watch resources.** Chart a host's or a container's CPU and memory over time with Home Assistant's history, and alert when a stack's memory use creeps up.
-- **Put your Docker hosts on a dashboard.** The companion [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) show environments, stacks, containers, updates and vulnerabilities the way Dockhand does.
-
-## Example automations
-
-The entity IDs below follow the [entity ID convention](#device-model) for an environment named `myenv` with a stand-alone container named `traefik`; use your own from **Settings → Entities**.
-
-**Notify when a container stops**
-
-```yaml
-automation:
-  - alias: "Alert when traefik stops"
-    triggers:
-      - trigger: state
-        entity_id: sensor.myenv_containers_traefik_state
-        to: exited
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          title: "Container down"
-          message: "traefik has stopped"
-```
-
-**Restart a container that stays unhealthy** (the Health sensor exists only for containers with a Docker healthcheck)
-
-```yaml
-automation:
-  - alias: "Restart traefik when unhealthy"
-    triggers:
-      - trigger: state
-        entity_id: sensor.myenv_containers_traefik_health
-        to: unhealthy
-        for:
-          minutes: 5
-    actions:
-      - action: button.press
-        target:
-          entity_id: button.myenv_containers_traefik_restart
-```
-
-**Notify when a Docker host goes offline**
-
-```yaml
-automation:
-  - alias: "Alert when myenv is offline"
-    triggers:
-      - trigger: state
-        entity_id: binary_sensor.myenv_online
-        to: "off"
-        for:
-          minutes: 2
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          title: "Docker host offline"
-          message: "Dockhand can't reach myenv"
-```
+- **Put your Docker hosts on a dashboard.** The companion [ha-dockhand-cards](https://github.com/raetha/ha-dockhand-cards) show environments, stacks, containers, updates and vulnerabilities the way Dockhand does; add their **Dockhand dashboard** (Add dashboard → Community dashboards) for all of it at once, without placing a card.
 
 ---
 
-## Data Updates
+## Documentation
 
-Dockhand uses three polling coordinators with independent intervals:
-
-**Fast coordinator** (default 60 s, configurable) fetches:
-- Environment dashboard stats for all environments in a single API call (CPU, memory, container/stack/image/volume/network counts, whether update-check is enabled)
-- Full container list with state, image, and label details
-- Full stack list with status and container counts
-- Container resource stats for all running containers per environment in a single bulk API call (`GET /api/containers/stats?env=N`) — one call per environment regardless of container count. Stopped, exited, or created containers are absent from this response; their stats sensors show unavailable until running again
-- A cheap, no-registry-query check of Dockhand's own cached pending-update flags, for every environment — this is what powers the `update-pending` status on update entities
-
-**Slow coordinator** (default 600 s, configurable) fetches:
-- Per-environment detailed data for optional features: Images, Networks, Volumes, runtime controls
-- Git stack sync status, host info (platform/arch/Docker version/uptime), and container auto-update settings — always fetched, no config option needed, since these are single cheap bulk calls per environment
-- Global schedule list
-- A handful of fields with no other source (image-prune enabled, Hawser agent identity, configured connection host/port)
-
-**Update coordinator** (default 86400 s / 24 h, configurable) — only active when **Enable precise update versions** is turned on. Update entities themselves exist for every container as long as **Enable update entities** is on (default on), and this coordinator is purely additive for them — it only upgrades their version display from an image tag to a precise digest, never gates whether they exist. It has nothing to do with the env-level **Check for updates** button's own existence — that button always exists and always calls Dockhand's real check-updates API directly, whether or not this coordinator is running; if this coordinator *is* running, the button's result also updates it:
-- Per-environment image update availability via `POST /api/containers/check-updates`, which performs real registry queries against each container's image source. Kept infrequent to avoid unnecessary load on the Docker host. The **Check for updates** button on every environment device (always present, regardless of any option) triggers an immediate check on demand — and, if **Enable update entities** is on, its result also refreshes the cheap Tier 1 status immediately rather than waiting for the next 60-second poll.
-
-Entities update automatically when their coordinator refreshes. If a whole poll fails (Dockhand unreachable, say), that coordinator's entities become unavailable until the next successful one; the failure is logged once, and so is the recovery. If only part of a poll fails — one environment, or one optional fetch — only the entities that depend on that part become unavailable, and devices are never removed because of a failed fetch. All three coordinators handle token errors transparently — a 401 response surfaces a re-authentication notification in HA rather than silently retrying.
-
-Nothing is pushed from Dockhand: a change (a container stopping, say) shows up on the next fast poll, so within 60 seconds by default. Every poll is a handful of requests per environment; lowering the intervals mainly adds load on Dockhand and the Docker hosts behind it, which is why the precise update check (real registry queries) has a 5-minute minimum and defaults to once a day.
-
-## Troubleshooting
-
-**Cannot connect**
-Check the API URL is reachable from the HA host. If authentication is enabled, confirm your API token starts with `dh_` and was copied in full.
-
-**Entity IDs have a `_2` or `_3` suffix after a container or image update**
-Image sensors specifically now avoid this in the common case: when a container update causes two images to briefly claim the same tag (the newly-pulled one, and the old one not yet marked untagged), the integration waits for that to settle — usually resolved within a poll cycle or two — rather than creating a colliding entity. If you still see a suffix (a device or entity type not covered by that handling, or an unusually long-lived ambiguity), it means HA created a new entity while an old one with the same natural ID still technically existed at that moment. Once the old object is gone and the integration has reloaded or polled, go to **Settings → Devices & Services → ⋮ → Recreate entity IDs** on the Dockhand integration card to reclaim the clean ID — HA will rename any suffixed entity whose "natural" ID is now free. Any automations or dashboard cards referencing the suffixed ID will need to be updated after the rename.
-
-**No entities appear after setup**
-Check HA logs for errors containing `dockhand`. Ensure the user account has permission to view all environments.
-
-**A device for a container or stack you've removed is still there**
-Devices are removed automatically once Dockhand confirms the container, stack or environment is gone, but kept while that can't be confirmed — the environment is offline, or its last fetch failed — so a brief outage never deletes anything. If one is left behind (an environment deleted while offline, say), open the device and use **Delete** in its three-dot menu. Deleting is refused for a device Dockhand still reports, since the next poll would only bring it back.
-
-**No update shown for Dockhand or a Hawser agent**
-Check the image tag those containers run. With a pinned version tag, Dockhand itself never reports a newer one for them through its containers API; see the note on updates for Dockhand and Hawser under [Stack](#stack-always-on-60-s). Moving them to a floating tag such as `latest` is the reliable fix. The integration's diagnostics download lists what Dockhand last reported for each system container (`system_containers`) and what Dockhand's own release check found (`self_update`).
-
-**Schedules show but no "run" button**
-Intentional — the Dockhand API has no run-now endpoint for schedules. The per-schedule device structure is preserved for when this is added.
-
----
-
-## Requirements
-
-- Home Assistant 2026.3 or later (requires Python 3.14)
-- Dockhand ≥ 1.0.26 (for API token authentication; no-auth installs work on any version)
-- Some features need a newer Dockhand and simply don't appear on older ones: the stack **Updates available** sensor (1.0.37+) and stack resource stats (1.0.52+)
-- Dockhand reachable from the HA host
-
----
-
-## Known limitations
-
-- **No push updates.** Dockhand's API is polled, so changes appear on the next poll (see [Data Updates](#data-updates)).
-- **Schedules are read-only.** Dockhand's API has no way to run a schedule now, or to enable or disable one.
-- **Restart only works on running containers and stacks.** Docker can't restart a stopped one; turn its switch on instead.
-- **Runtime controls only for stand-alone containers.** Memory, CPU and process limits and the restart policy can't be changed live for a Compose-managed container, since the stack's own compose file would put them back.
-- **Pinned-version Dockhand and Hawser images get limited update notices.** Dockhand never reports a newer version tag for its own container or a Hawser agent. A pinned Dockhand is covered by Dockhand's own release check where it can see its own container; a pinned Hawser isn't covered at all. See the notes at the end of [Stack](#stack-always-on-60-s) — a floating tag avoids both.
-- **No controls for system containers.** Dockhand's own container and Hawser agents (and stacks containing one) get no start/stop/restart switch, button or runtime controls, matching Dockhand's own UI. Dockhand's scheduled update check skips them too, so their updates are found only by **Check for updates**.
-- **Install can't move a container to a newer version tag.** When Dockhand reports a newer tag (say `2.0` while you run `1.9`), moving to it means changing the image tag in the container's or stack's configuration; Install only applies updates to the tag you already use.
-- **Install can't update an image pinned to a digest.** A container running `image:tag@sha256:…` always gets exactly that image. When the tag moves on, its update entity says so (`pinned_digest_moved`), but the update is changing the pin in its compose file.
-- **Git stack deploys follow the stack's own settings.** Whether a deploy pulls fresh images is the git stack's "repull images" setting in Dockhand; it can't be overridden per press.
-- **Resource stats only for running containers.** Stopped containers' CPU, memory, network and disk sensors are unavailable, as Dockhand reports nothing for them.
-- **Containers labelled `dockhand.hidden=true` never appear**, since Dockhand leaves them out of its API.
-
----
-
-## Notes
-
-- All data is fetched locally — no external cloud services
-- Only the API token is stored in the HA config entry; no username or password is ever stored
-- Disable **Verify SSL certificate** only if using a self-signed certificate on the Dockhand server
-- **To exclude a container or stack from HA entirely**, the cleanest approach is to add the `dockhand.hidden=true` Docker label — it is filtered at the Dockhand API level so those containers never appear in HA at all. If you want the container visible in Dockhand but not in HA, disable the device in HA instead: go to **Settings → Devices & Services → Dockhand**, find the device, and use the three-dot menu → **Disable**. Disabling a device disables all of its entities at once and survives integration reloads. To act on many devices at once, use the **Devices** tab filter to narrow the list (e.g. filter by integration = Dockhand), then select multiple rows and use the bulk action menu.
+- **[Configuration](https://github.com/raetha/ha-dockhand/blob/main/docs/configuration.md)**: setup fields and options, API tokens, and the Dockhand permissions a token needs
+- **[Devices and entities](https://github.com/raetha/ha-dockhand/blob/main/docs/entities.md)**: how devices are grouped, and every entity for the Dockhand server, environments, containers, stacks, images, volumes, networks and schedules
+- **[Actions and automations](https://github.com/raetha/ha-dockhand/blob/main/docs/automations.md)**: `dockhand.prune` and `dockhand.recreate_container`, container and stack controls, and example automations
+- **[Data updates](https://github.com/raetha/ha-dockhand/blob/main/docs/data-updates.md)**: what refreshes when, live updates, and refreshing on your own schedule
+- **[Troubleshooting and known limitations](https://github.com/raetha/ha-dockhand/blob/main/docs/troubleshooting.md)**
 
 ---
 
@@ -477,11 +110,8 @@ To remove the Dockhand integration from Home Assistant:
 2. Find the **Dockhand** integration card and click on it.
 3. Click the three-dot menu (⋮) and select **Delete**.
 
-All devices, entities, and configuration data created by this integration will be removed
-automatically. No edits to `configuration.yaml` are required. Any automations or dashboard
-cards referencing Dockhand entities should be updated or removed manually.
+All devices, entities, and configuration data created by this integration will be removed automatically. No edits to `configuration.yaml` are required. Any automations or dashboard cards referencing Dockhand entities should be updated or removed manually.
 
-### Uninstalling via HACS
+### Uninstalling via the Marketplace (or HACS)
 
-After deleting the integration from Settings, go to **HACS → Integrations**, find
-**Dockhand**, and click **Remove**. Restart Home Assistant when prompted.
+After deleting the integration from Settings, go to **Settings → Marketplace** (or **HACS → Integrations** on 2026.10 and older), find **Dockhand**, and remove it. Restart Home Assistant when prompted.

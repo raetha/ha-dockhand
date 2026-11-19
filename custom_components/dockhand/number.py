@@ -58,6 +58,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import DockhandConfigEntry
 from .const import CONF_API_URL, CONF_ENABLE_RUNTIME_CONTROLS, DOMAIN
 from .coordinator import DockhandFastCoordinator, DockhandSlowCoordinator
+from .entity_defaults import enabling_chosen
 from .helpers import (
     _all_envs,
     _compose_project,
@@ -65,6 +66,8 @@ from .helpers import (
     _device_id_container,
     _find_container,
     already_registered,
+    async_dockhand_action,
+    create_issue,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -82,6 +85,9 @@ async def async_setup_entry(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    async_add_entities = enabling_chosen(
+        entry.entry_id, entry.options, async_add_entities
+    )
     data = entry.runtime_data
 
     def _opt(key: str, default: Any) -> Any:
@@ -168,7 +174,6 @@ class _BaseRuntimeControlNumber(
 
     _attr_has_entity_name = True
     _attr_entity_category = EntityCategory.CONFIG
-    _attr_entity_registry_enabled_default = False
     _attr_mode = NumberMode.BOX
 
     def __init__(
@@ -197,7 +202,7 @@ class _BaseRuntimeControlNumber(
 
     def _container(self) -> dict | None:
         return _find_container(
-            self._fast_coordinator.data, self._env_id, self._container_name
+            self._fast_coordinator, self._env_id, self._container_name
         )
 
     def _runtime_config(self) -> dict:
@@ -231,24 +236,19 @@ class _BaseRuntimeControlNumber(
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            client = self._fast_coordinator.client
-            response = await client.async_update_container_runtime(
+        response = await async_dockhand_action(
+            self._fast_coordinator.client.async_update_container_runtime(
                 self._env_id, c["id"], {field: api_value}
             )
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        )
 
         warnings = response.get("warnings") or []
         if warnings:
-            ir.async_create_issue(
+            create_issue(
                 self.hass,
-                DOMAIN,
-                f"runtime_update_warning_{self._env_id}_{self._container_name}_{field}",
+                self._entry_id,
+                f"runtime_update_warning_{self._entry_id}_{self._env_id}_"
+                f"{self._container_name}_{field}",
                 is_fixable=False,
                 is_persistent=False,
                 severity=ir.IssueSeverity.WARNING,
@@ -350,10 +350,11 @@ class DockhandContainerMemoryLimitNumber(_BaseRuntimeControlNumber):
                 )
             self._optimistic_value = previous_memory
             self.async_write_ha_state()
-            ir.async_create_issue(
+            create_issue(
                 self.hass,
-                DOMAIN,
-                f"runtime_memory_reverted_{self._env_id}_{self._container_name}",
+                self._entry_id,
+                f"runtime_memory_reverted_{self._entry_id}_{self._env_id}_"
+                f"{self._container_name}",
                 is_fixable=False,
                 is_persistent=False,
                 severity=ir.IssueSeverity.WARNING,

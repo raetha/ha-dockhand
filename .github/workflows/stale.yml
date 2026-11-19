@@ -5,6 +5,8 @@ on:
     - cron: "0 6 * * 1"   # every Monday at 06:00 UTC
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   stale:
     runs-on: ubuntu-24.04

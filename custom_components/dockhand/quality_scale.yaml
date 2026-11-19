@@ -2,23 +2,28 @@ rules:
   # ── Bronze ────────────────────────────────────────────────────────────────
 
   action-setup:
-    status: exempt
+    status: done
     comment: >
-      No custom service actions are registered.
+      dockhand.prune and dockhand.recreate_container are registered once in
+      async_setup (services.py), as admin-only actions, and resolve their
+      target device's config entry at call time, refusing one that isn't
+      loaded (entry_not_loaded).
 
   appropriate-polling:
     status: done
     comment: >
-      All three coordinators use DataUpdateCoordinator with user-configurable
-      intervals. Fast coordinator defaults to 60 s (stats, containers, stacks,
+      Every coordinator uses DataUpdateCoordinator with a fixed interval
+      (not user-configurable). Fast coordinator every 60 s (stats, containers, stacks,
       container and stack resource stats, pending-update flags); slow coordinator
-      defaults to 600 s (images, volumes, networks, schedules, git stacks,
+      every 600 s (images, volumes, networks, schedules, git stacks,
       host info, container auto-update settings, runtime controls, and
       env_meta — the handful of fields only /api/environments has: image-prune
       enabled, Hawser agent identity, configured connection host/port);
-      update coordinator (Tier 2 only, optional) defaults to 86400 s /
-      24 h (registry update checks — deliberately infrequent to avoid
-      unnecessary load on the Docker host). Dashboard stats are fetched in a
+      update coordinator (Tier 2 only, optional) every 24 h (registry update checks — deliberately infrequent to avoid
+      unnecessary load on the Docker host); version coordinator (Dockhand's
+      own version and its self-update check) every 6 h. Dockhand's live
+      feed refreshes an environment between polls when something changes,
+      skipping a refresh a poll has already made. Dashboard stats are fetched in a
       single API call per fast poll cycle rather than one call per environment.
       Container resource stats are fetched via a single bulk API call per
       environment (GET /api/containers/stats?env=N) rather than one call per
@@ -44,14 +49,13 @@ rules:
     status: done
     comment: >
       Full UI config flow: async_step_user (URL and SSL), async_step_token
-      (shown only when the server returns 401), async_step_setup_options (poll
-      intervals and feature flags, so everything is set up front),
+      (shown only when the server returns 401), async_step_setup_options (feature
+      flags, so everything is set up front),
       async_step_reauth_confirm, async_step_reconfigure (URL, SSL, token), and
       an options flow. Every field has a data_description. entry.data holds
       only the connection details; everything the options flow sets lives in
       entry.options (settings older releases stored in entry.data are moved
-      by the schema migration). Poll interval fields enforce minimums, and the
-      token field uses a password TextSelector.
+      by the schema migration). The token field uses a password TextSelector.
 
   config-flow-test-coverage:
     status: done
@@ -71,9 +75,11 @@ rules:
       async_get_clientsession.
 
   docs-actions:
-    status: exempt
+    status: done
     comment: >
-      No custom service actions registered.
+      docs/automations.md "Actions" documents both actions, their fields,
+      the prune response and an example automation; services.yaml and
+      strings.json describe every field.
 
   docs-conditions:
     status: exempt
@@ -96,7 +102,7 @@ rules:
     status: done
     comment: >
       README has a Removal section describing how to delete via the HA UI and
-      uninstall via HACS.
+      uninstall via the Marketplace or HACS.
 
   docs-triggers:
     status: exempt
@@ -164,14 +170,16 @@ rules:
   action-exceptions:
     status: done
     comment: >
-      The integration registers no service actions of its own, but the rule
-      also covers platform actions, and it has those: buttons (restart,
-      redeploy, git deploy, check for updates, update all), switches
-      (container and stack running, auto update, git auto deploy), numbers
-      and the select (runtime controls), and update install. Every one raises
-      HomeAssistantError with a translation key when the action fails
-      (action_failed, carrying Dockhand's error) or its container or git
-      stack is gone (container_not_found, git_stack_not_found).
+      The two service actions and every platform action (buttons: restart,
+      pause, redeploy, git deploy, check for updates, update all,
+      schedule run; switches: container and stack running, auto update, git
+      auto deploy, schedule enabled; numbers and the select; update install)
+      go through helpers.async_dockhand_action, which raises
+      HomeAssistantError with a translation key: permission_denied for a 403,
+      action_failed (carrying Dockhand's error) otherwise. A missing
+      container or git stack raises container_not_found/git_stack_not_found,
+      and the service actions raise ServiceValidationError for a bad target
+      (invalid_target, entry_not_loaded, system_container).
 
   config-entry-unloading:
     status: done
@@ -182,11 +190,11 @@ rules:
   docs-configuration-parameters:
     status: done
     comment: >
-      README "Configuration parameters" documents every setup field (API URL,
-      SSL verification, API token) and every option (fast and slow poll
-      intervals, the schedules/images/volumes/networks switches, update
-      entities, precise update versions and their check interval, runtime
-      controls, container and stack stats), plus what Reconfigure changes.
+      docs/configuration.md documents every setup field (API URL,
+      SSL verification, API token) and every option (the
+      schedules/images/volumes/networks switches, update entities, precise
+      update versions, runtime controls, container and stack stats), plus what
+      Reconfigure changes.
 
   docs-installation-parameters:
     status: done
@@ -254,14 +262,15 @@ rules:
     comment: >
       All device registration is centralised in helpers.py via two functions:
       _ensure_env_devices (env hub, Containers/Stacks/Networks/Images/Volumes
-      group devices, and individual stack devices) and _ensure_hub_devices
+      group devices, and individual stack and volume devices) and _ensure_hub_devices
       (Schedules hub and per-schedule devices). Both functions are called from
       _register_devices at startup and from coordinator listeners on live
       updates, ensuring device attributes are always consistent. Device
       hierarchy: Environment hub → Containers/Stacks/Networks/Images/Volumes
-      group → individual container/stack devices (env-prefixed names).
-      Images, networks, and volumes are entities directly under their group
-      device — no per-resource sub-devices. Schedules hub is a top-level
+      group → individual container/stack/volume devices (env-prefixed names).
+      Images and networks are entities directly under their group device:
+      their IDs change with every pull or recreate, so devices would churn.
+      Schedules hub is a top-level
       device with one per-schedule child device.
 
   diagnostics:
@@ -270,9 +279,12 @@ rules:
       diagnostics.py implements async_get_config_entry_diagnostics. Returns
       redacted config entry data, per-environment summary counts, full fast
       and slow coordinator snapshots, and an update-check summary (system
-      container results and Dockhand's own release check). api_token is redacted from config data;
-      labels, tlsKey, and hawserToken are redacted from coordinator snapshots
-      (labels routinely carry secrets such as reverse-proxy auth hashes;
+      container results and Dockhand's own release check). api_token and the
+      API URL's host are redacted from config data; labels (and Docker events'
+      actorAttributes, which repeat them), schedule logs, git repository URLs,
+      host names, addresses, environment hosts and mount paths, tlsKey and
+      hawserToken from coordinator snapshots (labels routinely carry secrets
+      such as reverse-proxy auth hashes;
       tlsKey/hawserToken are defense-in-depth for env_meta, which only ever
       extracts specific named fields from /api/environments and never stores
       its raw response — this redaction covers the case where either secret
@@ -291,30 +303,33 @@ rules:
   docs-data-update:
     status: done
     comment: >
-      README "Data Updates" explains the three coordinators (what each fetches,
-      default and minimum intervals), that nothing is pushed so changes appear
-      on the next fast poll, the load lower intervals put on Dockhand and the
-      Docker hosts, what becomes unavailable when all or part of a poll fails,
-      and how token errors surface as re-authentication.
+      docs/data-updates.md explains the four coordinators and the live feed
+      (what each fetches, and their fixed intervals), how to refresh on your
+      own schedule with
+      polling off and homeassistant.update_entity, what becomes unavailable
+      when all or part of a poll fails, and how token errors surface as
+      re-authentication.
 
   docs-examples:
     status: done
     comment: >
-      README "Example automations" has several ready-to-adapt YAML examples:
+      docs/automations.md "Example automations" has ready-to-adapt YAML examples:
       notify when a container stops, restart a container that stays unhealthy,
       and notify when a Docker host goes offline.
 
   docs-known-limitations:
     status: done
     comment: >
-      README "Known limitations" lists what the integration can't do and why:
-      polling only, read-only schedules, restart needing a running container,
-      runtime controls only for stand-alone containers, no controls for system
+      docs/troubleshooting.md "Known limitations" lists what the integration
+      can't do and why: live updates needing Dockhand to watch events, Poll
+      event collection, schedules that can't be paused or run, no build-cache
+      pruning, runtime controls only for stand-alone containers, pinned
+      Dockhand and Hawser images, no controls for system
       containers, Install not moving to a newer version tag, no updates for
       digest-pinned images, git stack deploy
       following the stack's own repull setting, stats only for running
-      containers, and hidden containers. "Requirements" covers which features
-      need which Dockhand version.
+      containers, and hidden containers. README "Requirements" covers which
+      features need which Dockhand version.
 
   docs-supported-devices:
     status: done
@@ -326,17 +341,18 @@ rules:
   docs-supported-functions:
     status: done
     comment: >
-      README includes a comprehensive entity reference table covering all
+      docs/entities.md has an entity reference table covering all
       platforms and entity categories, with notes on which are disabled by
       default.
 
   docs-troubleshooting:
     status: done
     comment: >
-      README "Troubleshooting" covers connection errors, entity IDs with a
+      docs/troubleshooting.md covers connection errors, entity IDs with a
       suffix after an update, no entities after setup, leftover devices and
-      how to delete them, and why schedules have no run button. Authentication
-      problems are covered under "Re-authentication".
+      how to delete them, missing Dockhand and Hawser updates, and why some
+      schedules have no run button. Authentication problems are covered in
+      docs/configuration.md "Re-authentication".
 
   docs-use-cases:
     status: done
@@ -386,68 +402,61 @@ rules:
   entity-disabled-by-default:
     status: done
     comment: >
-      Niche or verbose entities are disabled by default via
-      _attr_entity_registry_enabled_default = False: disk usage,
-      activity events, Hawser agent version (and its
-      agent_name/agent_id/last_seen attributes, edge-mode only), the
-      config-mirror binary sensors (activity collection, metrics collection,
-      vulnerability scanning, update checks, auto update, image pruning),
-      the host info sensors (platform, Docker version, last
-      boot — all share one base class's flag), the container auto-update
-      switch, and the git stack auto-deploy switch. The
-      container Health sensor is enabled by default — it is only ever
-      created when the container has a Docker healthcheck configured, so
-      it is never permanently unavailable. The container Image sensor was
-      removed in 1.6.0 (image name is an attribute on the State sensor).
-      Note: the container resource stats sensors (CPU usage, memory usage,
-      memory usage %, memory limit, network in, network out, disk read,
-      disk write) are a stronger case than "disabled by default" — they
-      are not created at all unless "Enable container and stack stats" is on, same
-      pattern as enable_images/enable_volumes/enable_networks, so turning
-      the option off removes them via the existing cleanup system rather
-      than just leaving them disabled in the registry.
+      Niche, verbose or destructive entities are disabled by default, all
+      listed in entity_defaults.py's OPTIONAL_ENTITIES by device kind:
+      vulnerability scanning, activity events and disk usage (with their
+      parts), vulnerability counts, the prune buttons, pinned-digest and held
+      update counts, the Hawser and host info sensors, a container's Docker
+      event entity, Pause button and auto-update switch, and a git stack's
+      auto-deploy switch. Configure's bulk sections turn a type on for every
+      device. The container Health sensor is enabled: it only exists when the
+      container has a healthcheck. The container and stack resource stats,
+      images, volumes, networks, schedules and runtime controls go further:
+      they aren't created at all unless their option is on, so turning it off
+      removes them through the cleanup.
 
   entity-translations:
     status: done
     comment: >
-      All statically-named entities use _attr_translation_key referencing entries
-      in strings.json and translations/*.json. Dynamic-name entities (image repo,
-      network name, volume name) use self._attr_name in __init__ since their
-      names are data-driven. Translation keys are defined for English plus
-      all machine-translated locales in translations/.
+      Every entity has a translation_key in strings.json and every locale:
+      names, states, units and attribute names and values. Entities named
+      after Docker objects (an image's repository, a network, a volume) take
+      that name from _attr_name, since it's data, and the rest (unit, icon,
+      attributes) from their translation key; the untagged-images entity's
+      name is translated. tests/test_real_data.py checks every attribute
+      has a translated name.
 
   exception-translations:
     status: done
     comment: >
-      All entity action methods (async_press in button.py, async_turn_on /
-      async_turn_off in switch.py, async_install in update.py) catch API
-      errors and re-raise as HomeAssistantError with translation_domain=
-      "dockhand" and a translation_key referencing entries in strings.json.
-      The defined exception keys are action_failed (wraps the API error
-      message via a {error} placeholder), container_not_found (raised
-      when the coordinator no longer has the container at action time), and
-      git_stack_not_found (the same case for git stack sync/deploy actions).
-      Config flow errors use translated error keys (cannot_connect,
-      invalid_auth) via strings.json.
+      Every exception users can see is raised with translation_domain=
+      "dockhand" and a translation key: HomeAssistantError from actions and
+      buttons (async_dockhand_action in helpers.py maps each API error to
+      one: permission_denied, token_invalid, unexpected_response,
+      dockhand_failed, cannot_connect, action_failed with Dockhand's own
+      message), ServiceValidationError from service actions, and
+      ConfigEntryNotReady, ConfigEntryAuthFailed and UpdateFailed from setup
+      and the coordinators. Text shown in update entities' release notes
+      comes from the "common" section of the translations. Dockhand's own
+      messages and release notes are passed through as Dockhand gives them.
 
   icon-translations:
     status: done
     comment: >
-      icons.json provides MDI icons for all sensor, binary_sensor, button,
-      switch, number, and select entities via _attr_translation_key. Includes
-      state-specific icons for container State (running/stopped/paused), Health
-      (healthy/unhealthy/starting), and Stack Status (running/partial/stopped).
-      The update platform intentionally has no icon entry — HA's frontend always
-      displays the integration icon for update entities regardless of icons.json,
-      matching standard HA behavior. Per the quality scale docs, icons should not
-      override the platform default when context is identical.
+      icons.json provides MDI icons for every sensor, binary_sensor, button,
+      switch, number, select and event entity via _attr_translation_key, with
+      state-specific icons where the state changes the meaning (container
+      State and Health, stack Status, Online, connection type, settings
+      switches). The update platform has no icon entry: Home Assistant's
+      frontend shows the integration icon for update entities whatever
+      icons.json says.
 
   reconfiguration-flow:
     status: done
     comment: >
       async_step_reconfigure implemented. Allows changing API URL, SSL setting,
-      and API token without removing the integration. Poll intervals and feature
-      flags are managed separately via the Options flow (Configure button).
+      and API token without removing the integration. Feature flags are managed
+      separately via the Options flow (Configure button).
 
   repair-issues:
     status: done
@@ -456,16 +465,21 @@ rules:
       the condition clears): fetch_failed_top_level and fetch_failed_env when
       part of a poll keeps failing (naming the resources affected, so users
       see why some entities are unavailable); runtime_update_warning when
-      Dockhand returns warnings for a live resource-limit change; and
+      Dockhand returns warnings for a live resource-limit change;
       runtime_memory_reverted when lowering a memory limit stopped the
-      container and the integration put the previous limit back.
+      container and the integration put the previous limit back;
+      event_collection_poll while Dockhand polls for Docker events instead of
+      streaming them; and retired_entities_automation and
+      retired_entities_script, one per automation or script still using an
+      entity a release replaced, linking to its editor (retired.py).
 
   stale-devices:
     status: done
     comment: >
       _cleanup_stale_registry removes devices and entities Dockhand no longer
       reports, on every coordinator update and once at startup. Container and
-      stack devices are keyed by name, so recreation doesn't orphan them.
+      stack devices are keyed by name, so recreation doesn't orphan them;
+      volume devices too, and they also go when volumes are turned off.
       Anything it can't confirm is gone is kept: an offline environment's
       devices, or those of a fetch that failed this cycle. For those,
       async_remove_config_entry_device lets the user delete the device by

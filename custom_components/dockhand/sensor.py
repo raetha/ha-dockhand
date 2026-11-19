@@ -1,5 +1,4 @@
-import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, override
@@ -11,13 +10,13 @@ from homeassistant.components.sensor import (
     SensorEntityDescription,
     SensorStateClass,
 )
-from homeassistant.const import EntityCategory, UnitOfInformation
+from homeassistant.const import PERCENTAGE, EntityCategory, UnitOfInformation
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import DockhandConfigEntry
+from . import DockhandConfigEntry, tags
 from .const import (
     CONF_API_URL,
     CONF_ENABLE_IMAGES,
@@ -32,8 +31,14 @@ from .coordinator import (
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
 )
-from .entity import DockhandContainerEntity, DockhandStackEntity
+from .entity import (
+    DockhandContainerEntity,
+    DockhandScheduleEntity,
+    DockhandStackEntity,
+)
+from .entity_defaults import enabling_chosen
 from .helpers import (
+    UNTAGGED_IMAGES,
     _actionable_pending_update_container_ids,
     _all_envs,
     _container_has_healthcheck,
@@ -41,22 +46,26 @@ from .helpers import (
     _container_has_pending_update,
     _container_has_pinned_digest_only,
     _container_has_version_suggestion_only,
+    _container_inputs,
     _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
     _env_device,
+    _env_index,
     _find_git_stack,
-    _image_display_name,
     _image_group_device,
     _network_group_device,
-    _sched_device,
-    _sched_key,
     _stack_device,
-    _volume_group_device,
+    _stack_has_system_container,
+    _volume_device,
     already_registered,
+    image_groups,
+    image_tag,
+    image_unique_id,
+    network_unique_id,
+    short_image_id,
+    tag_repository,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 def _parse_dt(value: str | int | float | None) -> datetime | None:
@@ -91,6 +100,9 @@ async def async_setup_entry(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    async_add_entities = enabling_chosen(
+        entry.entry_id, entry.options, async_add_entities
+    )
     fast: DockhandFastCoordinator = entry.runtime_data.fast_coordinator
     slow: DockhandSlowCoordinator = entry.runtime_data.slow_coordinator
     update_coordinator: DockhandUpdateCoordinator | None = (
@@ -121,6 +133,9 @@ async def async_setup_entry(
             hass, known_ids, domain, unique_id, pending_readd_ids=pending_readd_ids
         )
 
+    def _unregistered(entities: Sequence[SensorEntity]) -> list[SensorEntity]:
+        return [e for e in entities if not _already_registered("sensor", e.unique_id)]
+
     def _build_fast_entities() -> list[SensorEntity]:
         """Return new fast-coordinator entities not yet registered."""
         _ensure_fast_group_devices()
@@ -130,18 +145,13 @@ async def async_setup_entry(
             stats = env_data.get("stats") or {}
             env_name = stats.get("name", f"Environment {env_id}")
 
-            # Per-env sensors — created once per environment
-            # Per-env sensors — created once per environment. Checked via
-            # the first entity's own unique_id, matching this file's other
-            # multi-entity-per-key groups (schedules, git stacks) — they're
-            # always created/removed together, so one representative check
-            # is enough to gate the whole group.
-            connection_type_sensor = DockhandEnvConnectionTypeSensor(
-                fast, entry.entry_id, env_id, env_name, base_url
-            )
-            if not _already_registered("sensor", connection_type_sensor.unique_id):
-                new += [
-                    connection_type_sensor,
+            # Every entity checked on its own, so a sensor added in a later
+            # release is created for environments that already have the rest.
+            new += _unregistered(
+                [
+                    DockhandEnvConnectionTypeSensor(
+                        fast, entry.entry_id, env_id, env_name, base_url
+                    ),
                     DockhandEnvCpuSensor(
                         fast, slow, entry.entry_id, env_id, env_name, base_url
                     ),
@@ -149,12 +159,7 @@ async def async_setup_entry(
                         fast, entry.entry_id, env_id, env_name, base_url
                     ),
                     DockhandEnvContainerCountSensor(
-                        fast,
-                        update_coordinator,
-                        entry.entry_id,
-                        env_id,
-                        env_name,
-                        base_url,
+                        fast, entry.entry_id, env_id, env_name, base_url
                     ),
                     DockhandEnvStacksSensor(
                         fast, entry.entry_id, env_id, env_name, base_url
@@ -174,7 +179,20 @@ async def async_setup_entry(
                     DockhandEnvActivityEventsSensor(
                         fast, slow, entry.entry_id, env_id, env_name, base_url
                     ),
+                    *(
+                        DockhandEnvValueSensor(
+                            fast,
+                            update_coordinator,
+                            entry.entry_id,
+                            env_id,
+                            env_name,
+                            base_url,
+                            description,
+                        )
+                        for description in ENV_VALUE_SENSORS
+                    ),
                 ]
+            )
 
             # Per-container sensors
             for container in env_data.get("containers") or []:
@@ -196,20 +214,8 @@ async def async_setup_entry(
                     new.append(state_sensor)
 
                 # Resource stats sensors — only created at all when "Enable
-                # container stats" is on, same pattern as enable_images/
-                # enable_volumes/enable_networks below: not created-but-
-                # disabled, genuinely not instantiated, so turning the
-                # option off lets the existing central cleanup system
-                # remove any that already exist, the same way it already
-                # does for those other toggles. Checked via its own
-                # representative entity, independent of state_sensor above
-                # — nesting this inside that check (as an earlier version
-                # of this code did) meant turning "Enable container and stack stats"
-                # on for a container that already existed before that
-                # point would never create its stats sensors until an HA
-                # restart, the exact same class of staleness the
-                # known_health_keys comment above already called out for
-                # health sensors specifically, just not caught here too.
+                # container stats" is on, so turning the option off lets the
+                # registry cleanup remove them.
                 if enable_resource_stats:
                     cpu_sensor = DockhandContainerCpuSensor(
                         fast,
@@ -220,10 +226,19 @@ async def async_setup_entry(
                         container,
                         enable_resource_stats,
                     )
-                    if not _already_registered("sensor", cpu_sensor.unique_id):
-                        new += [
+                    new += _unregistered(
+                        [
                             cpu_sensor,
                             DockhandContainerMemoryUsageSensor(
+                                fast,
+                                entry.entry_id,
+                                env_id,
+                                env_name,
+                                base_url,
+                                container,
+                                enable_resource_stats,
+                            ),
+                            DockhandContainerMemoryCacheSensor(
                                 fast,
                                 entry.entry_id,
                                 env_id,
@@ -287,6 +302,7 @@ async def async_setup_entry(
                                 enable_resource_stats,
                             ),
                         ]
+                    )
 
             # Per-stack sensors
             for stack in env_data.get("stacks") or []:
@@ -300,8 +316,18 @@ async def async_setup_entry(
                             fast, entry.entry_id, env_id, env_name, base_url, stack
                         ),
                     ]
-                # Same gating and representative-entity check as the
-                # container stats sensors above, plus Dockhand having the
+                # Alongside the Updates available binary sensor (Dockhand
+                # 1.0.37+).
+                if "updatesAvailable" in stack:
+                    new += _unregistered(
+                        [
+                            DockhandStackUpdateCountSensor(
+                                fast, entry.entry_id, env_id, env_name, base_url, stack
+                            )
+                        ]
+                    )
+                # Same gating as the container stats sensors above, plus
+                # Dockhand having the
                 # stack stats endpoint at all (stack_stats is None
                 # otherwise — see the fast coordinator).
                 if enable_resource_stats and env_data.get("stack_stats") is not None:
@@ -317,8 +343,7 @@ async def async_setup_entry(
                         )
                         for description in STACK_STATS_SENSORS
                     ]
-                    if not _already_registered("sensor", stats_sensors[0].unique_id):
-                        new += stats_sensors
+                    new += _unregistered(stats_sensors)
 
         return new
 
@@ -415,36 +440,40 @@ async def async_setup_entry(
                         slow, entry.entry_id, env_id, env_name, base_url
                     ),
                 ]
+            new += _unregistered(
+                [
+                    DockhandEnvVulnerabilityCountSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url, field
+                    )
+                    for field in VULNERABILITY_SENSORS
+                ]
+            )
+            if fast_stats.get("connectionType") == "hawser-edge":
+                new += _unregistered(
+                    [
+                        DockhandEnvHawserLastSeenSensor(
+                            slow, entry.entry_id, env_id, env_name, base_url
+                        )
+                    ]
+                )
 
             if enable_images:
-                images_list = env_data.get("images") or []
-                # A container upgrade momentarily produces two images under
-                # the same repo:tag — the freshly-pulled one, and the old
-                # one it's replacing, which hasn't been marked untagged in
-                # Dockhand's own data yet (that usually resolves by the very
-                # next poll). Creating a brand-new entity for either one
-                # while both still claim the same tag would collide with
-                # whichever entity gets added first, forcing an ugly
-                # auto-suffixed "_2" entity_id that doesn't self-heal
-                # without a manual "recreate entity ids" action. Detect
-                # any tag currently claimed by more than one image and
-                # defer creating entities for all of them — normal,
-                # unambiguous images are never affected, and a real
-                # collision resolves itself within a poll cycle or two
-                # once Dockhand's data catches up.
-                tag_counts: dict[str, int] = {}
-                for image in images_list:
-                    tag = _image_display_name(image)
-                    tag_counts[tag] = tag_counts.get(tag, 0) + 1
-                for image in images_list:
-                    image_sensor = DockhandImageSensor(
-                        slow, entry.entry_id, env_id, env_name, base_url, image
+                for repository in image_groups(env_data.get("images") or []):
+                    image_sensor = (
+                        DockhandUntaggedImagesSensor
+                        if repository == UNTAGGED_IMAGES
+                        else DockhandImageSensor
+                    )(
+                        slow,
+                        fast,
+                        entry.entry_id,
+                        env_id,
+                        env_name,
+                        base_url,
+                        repository,
                     )
-                    if _already_registered("sensor", image_sensor.unique_id):
-                        continue
-                    if tag_counts.get(_image_display_name(image), 0) > 1:
-                        continue
-                    new.append(image_sensor)
+                    if not _already_registered("sensor", image_sensor.unique_id):
+                        new.append(image_sensor)
 
             if enable_networks:
                 for network in env_data.get("networks") or []:
@@ -466,6 +495,11 @@ async def async_setup_entry(
                     )
                     if not _already_registered("sensor", volume_sensor.unique_id):
                         new.append(volume_sensor)
+                    size_sensor = DockhandVolumeSizeSensor(
+                        slow, entry.entry_id, env_id, env_name, base_url, volume
+                    )
+                    if not _already_registered("sensor", size_sensor.unique_id):
+                        new.append(size_sensor)
 
             for git_stack in env_data.get("git_stacks") or []:
                 git_sync_sensor = DockhandGitStackSyncStatusSensor(
@@ -601,9 +635,15 @@ class BaseFastContainerStatsSensor(BaseFastContainerSensor):
     def available(self) -> bool:
         return super().available and self._container_stats() is not None
 
+    @override
+    def _update_inputs(self) -> Any:
+        return _container_inputs(
+            self.coordinator, self._env_id, self._container_name, stats=True
+        )
+
 
 def _resolve_container_names(
-    container_ids: list[str], env_data: dict[str, Any]
+    container_ids: list[str], id_to_name: dict[str, str]
 ) -> list[str]:
     """Resolve a list of raw container IDs to their current names, against
     an environment's own full container list. Falls back to the ID itself
@@ -619,8 +659,6 @@ def _resolve_container_names(
     attribute, and an unsorted list is harder to skim at a glance,
     especially for a stack with many containers.
     """
-    env_containers = env_data.get("containers") or []
-    id_to_name = {c.get("id"): c.get("name") for c in env_containers if c.get("id")}
     names = [id_to_name.get(cid, cid) for cid in container_ids]
     return sorted(names, key=str.lower)
 
@@ -665,7 +703,7 @@ class DockhandEnvConnectionTypeSensor(BaseFastEnvSensor):
 
 class DockhandEnvCpuSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "cpu_usage"
     _unrecorded_attributes = frozenset({"top_containers"})
@@ -734,7 +772,7 @@ class DockhandEnvCpuSensor(BaseFastEnvSensor):
 
 class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "memory_usage"
 
@@ -755,27 +793,188 @@ class DockhandEnvMemPercentSensor(BaseFastEnvSensor):
         mem = (self._stats().get("metrics") or {}).get("memoryPercent")
         return round(mem, 2) if mem is not None else None
 
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        m = self._stats().get("metrics") or {}
-        used, total = m.get("memoryUsed"), m.get("memoryTotal")
-        return {
-            "memory_used_bytes": used,
-            "memory_total_bytes": total,
-        }
-
 
 class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
-    """Containers sensor — state is total count, all sub-states as attributes.
-
-    unique_id kept as containers_running for backwards compatibility with
-    any existing automations referencing the old entity.
-    """
+    """Every container in the environment; each state has its own sensor
+    (ENV_VALUE_SENSORS). The unique ID's `containers_running` predates that
+    and is kept so existing entities stay."""
 
     _attr_translation_key = "containers"
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._attr_unique_id = f"{self._entry_id}_{env_id}_containers_running"
+
+    @property
+    @override
+    def native_value(self) -> int | None:
+        return (self._stats().get("containers") or {}).get("total")
+
+
+def _pending_update_counts(
+    env_data: dict[str, Any], update_env_data: dict[str, Any] | None
+) -> dict[str, int]:
+    """An environment's containers with an update, by kind. `installable` is
+    what the bulk update would touch (the same helper the Update all button
+    uses, so system containers are never in it); `system` is system
+    containers with one, shown but never bulk-updated; `version_tag`,
+    `pinned_digest` and `held` are update entities that are on without an
+    install to offer. `total` is every update entity that's on, the number
+    the Updates card shows."""
+    pending_ids = env_data.get("pending_update_container_ids") or set()
+    containers = env_data.get("containers") or []
+    details = env_data.get("pending_update_details") or {}
+    installable = len(
+        _actionable_pending_update_container_ids(
+            containers, pending_ids, update_env_data, details
+        )
+    )
+
+    def _count(check: Callable[..., bool], *args: Any) -> int:
+        return sum(1 for c in containers if check(c, *args))
+
+    with_update = _count(_container_has_pending_update, pending_ids, update_env_data)
+    version_tag = _count(
+        _container_has_version_suggestion_only,
+        pending_ids,
+        details,
+        update_env_data,
+    )
+    pinned = _count(
+        _container_has_pinned_digest_only, pending_ids, details, update_env_data
+    )
+    held = _count(
+        _container_has_held_update_only, pending_ids, details, update_env_data
+    )
+    return {
+        "installable": installable,
+        "system": with_update - installable,
+        "version_tag": version_tag,
+        "pinned_digest": pinned,
+        "held": held,
+        "total": with_update + version_tag + pinned + held,
+    }
+
+
+@dataclass(frozen=True, kw_only=True)
+class DockhandEnvValueDescription(SensorEntityDescription):
+    """One number about an environment from the fast poll. `key` ends the
+    unique ID; `value_fn` gets the environment's fast data and the
+    precise-update data (None while that option is off)."""
+
+    value_fn: Callable[[dict[str, Any], dict[str, Any] | None], Any]
+
+
+def _stat(group: str, field: str) -> Callable[[dict, dict | None], Any]:
+    return lambda env, _: ((env.get("stats") or {}).get(group) or {}).get(field)
+
+
+def _updates(kind: str) -> Callable[[dict, dict | None], Any]:
+    return lambda env, update_env: _pending_update_counts(env, update_env)[kind]
+
+
+def _size(*path: str) -> Callable[[dict, dict | None], Any]:
+    def _value(env: dict, _: dict | None) -> int | None:
+        value: Any = env.get("stats") or {}
+        for key in path:
+            value = value.get(key) if isinstance(value, dict) else None
+        return value if isinstance(value, int) else None
+
+    return _value
+
+
+def _count_description(
+    key: str, translation_key: str, value_fn: Callable, enabled: bool = True
+) -> DockhandEnvValueDescription:
+    return DockhandEnvValueDescription(
+        key=key,
+        translation_key=translation_key,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=enabled,
+        value_fn=value_fn,
+    )
+
+
+def _bytes_description(
+    key: str, translation_key: str, value_fn: Callable, enabled: bool = True
+) -> DockhandEnvValueDescription:
+    return DockhandEnvValueDescription(
+        key=key,
+        translation_key=translation_key,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        state_class=SensorStateClass.MEASUREMENT,
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.MEBIBYTES,
+        entity_registry_enabled_default=enabled,
+        value_fn=value_fn,
+    )
+
+
+# Unique ID suffixes here must not start with a word the registry cleanup
+# dispatches on (container, image, update, stack, …): they rely on the
+# environment device's removal, like the other environment sensors.
+ENV_VALUE_SENSORS: tuple[DockhandEnvValueDescription, ...] = (
+    *(
+        _count_description(
+            f"{state}_containers", f"containers_{state}", _stat("containers", state)
+        )
+        for state in ("running", "stopped", "paused", "restarting", "unhealthy")
+    ),
+    *(
+        _count_description(f"{state}_stacks", f"stacks_{state}", _stat("stacks", state))
+        for state in ("running", "partial", "stopped")
+    ),
+    _count_description("pending_updates", "pending_updates", _updates("total")),
+    _count_description(
+        "installable_updates", "installable_updates", _updates("installable")
+    ),
+    _count_description("system_updates", "system_updates", _updates("system")),
+    _count_description(
+        "version_tag_updates", "version_tag_updates", _updates("version_tag")
+    ),
+    _count_description(
+        "pinned_digest_updates",
+        "pinned_digest_updates",
+        _updates("pinned_digest"),
+        enabled=False,
+    ),
+    _count_description("held_updates", "held_updates", _updates("held"), False),
+    _bytes_description("memory_used", "memory_used", _size("metrics", "memoryUsed")),
+    _bytes_description("memory_total", "memory_total", _size("metrics", "memoryTotal")),
+    _bytes_description(
+        "images_size", "disk_usage_images", _size("images", "totalSize"), False
+    ),
+    _bytes_description(
+        "containers_size", "disk_usage_containers", _size("containersSize"), False
+    ),
+    _bytes_description(
+        "volumes_size", "disk_usage_volumes", _size("volumes", "totalSize"), False
+    ),
+    _bytes_description(
+        "build_cache_size", "disk_usage_build_cache", _size("buildCacheSize"), False
+    ),
+    _count_description(
+        "events_today", "activity_events_today", _stat("events", "today"), False
+    ),
+)
+
+
+class DockhandEnvValueSensor(BaseFastEnvSensor):
+    """A count or size about the environment, from Dockhand's dashboard
+    stats and container list (ENV_VALUE_SENSORS)."""
+
+    entity_description: DockhandEnvValueDescription
 
     def __init__(
         self,
@@ -785,128 +984,25 @@ class DockhandEnvContainerCountSensor(BaseFastEnvSensor):
         env_id: int,
         env_name: str,
         base_url: str,
+        description: DockhandEnvValueDescription,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        # Precise-update data is read when the fast poll updates this
+        # entity, not on its own (longer) schedule.
         self._update_coordinator = update_coordinator
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_containers_running"
+        self.entity_description = description
+        self._attr_unique_id = f"{entry_id}_{env_id}_{description.key}"
 
     @property
     @override
-    def native_value(self) -> int | None:
-        return (self._stats().get("containers") or {}).get("total")
-
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        c = self._stats().get("containers") or {}
-        # Four related but distinct counts, kept structurally separate
-        # rather than one attribute trying to serve two different
-        # purposes:
-        #
-        # - pending_updates: containers eligible for an actual bulk
-        #   update right now — computed with
-        #   _actionable_pending_update_container_ids() (helpers.py), the
-        #   exact same function this integration's own bulk-update
-        #   button uses to decide both whether to exist and what to
-        #   actually send to Dockhand's batch-update API. This name is
-        #   deliberately the "plain," unqualified one: anything reading
-        #   `pending_updates` and assuming it represents what a bulk
-        #   action would touch is correct, not subtly wrong. This
-        #   excludes system containers by construction, not by
-        #   convention — see that helper's own docstring.
-        # - pending_system_updates: system containers only, with their
-        #   own pending update — informational, never bulk-actionable.
-        #   A system container's own pending update is real and worth
-        #   surfacing (individually actionable via its own update
-        #   entity), just never something this integration will ever
-        #   offer to bulk-update, or silently fold into a count that
-        #   might be mistaken for one.
-        # - pending_version_updates: containers whose only signal is a
-        #   semver "newer version tag" suggestion — their update entity is
-        #   on, but Install is withheld (the tag must be re-pinned).
-        # - pending_updates_total: the sum of all three — exactly the
-        #   number of update entities that are on, for display/counting
-        #   (e.g. ha-dockhand-cards' Updates card, whose own per-
-        #   container rows already include system containers, uses this
-        #   one to decide whether it has anything to show).
-        #
-        # Previously a single pending_updates attribute tried to serve
-        # both the "what can I bulk-update" and "how many things need
-        # attention" questions at different points in this attribute's
-        # own history — first by relaying Dockhand's own
-        # stats.containers.pendingUpdates (undercounted system
-        # containers for *either* purpose), then, briefly, by counting
-        # every container regardless of system status (correct for the
-        # display purpose, but meant a consumer had no way to tell "this
-        # number is safe to treat as bulk-actionable" from "it isn't"
-        # without separately knowing which convention this attribute
-        # happened to follow this release). Splitting the two meanings
-        # into differently-named attributes removes that ambiguity
-        # instead of documenting around it.
-        env_data = _coordinator_env(self.coordinator.data, self._env_id)
-        pending_ids = env_data.get("pending_update_container_ids") or set()
-        env_containers = env_data.get("containers") or []
-        update_env_data = (
+    def native_value(self) -> Any:
+        env = _coordinator_env(self.coordinator.data, self._env_id)
+        update_env = (
             _coordinator_env(self._update_coordinator.data, self._env_id)
             if self._update_coordinator is not None
             else None
         )
-        # Refresh timing: this entity only actively subscribes to the
-        # fast coordinator (BaseFastEnvSensor's own CoordinatorEntity
-        # base) — update_coordinator's own poll cycle can complete
-        # without pushing a refresh here, so a Tier 2 change is only
-        # picked up the next time the fast coordinator happens to poll,
-        # not the instant Tier 2 itself updates. Same accepted tradeoff
-        # as DockhandEnvCpuSensor's cpu_count attribute (also read
-        # opportunistically from a coordinator this entity doesn't
-        # subscribe to) — the fast coordinator's own interval is short
-        # enough that this bounded delay isn't worth the complexity of
-        # subscribing to two coordinators for one attribute.
-        pending_details = env_data.get("pending_update_details") or {}
-        actionable_ids = _actionable_pending_update_container_ids(
-            env_containers, pending_ids, update_env_data, pending_details
-        )
-        pending_with_update = sum(
-            1
-            for container in env_containers
-            if _container_has_pending_update(container, pending_ids, update_env_data)
-        )
-        version_only = sum(
-            1
-            for container in env_containers
-            if _container_has_version_suggestion_only(
-                container, pending_ids, pending_details, update_env_data
-            )
-        )
-        pinned_only = sum(
-            1
-            for container in env_containers
-            if _container_has_pinned_digest_only(
-                container, pending_ids, pending_details, update_env_data
-            )
-        )
-        held_only = sum(
-            1
-            for container in env_containers
-            if _container_has_held_update_only(
-                container, pending_ids, pending_details, update_env_data
-            )
-        )
-        return {
-            "running": c.get("running"),
-            "stopped": c.get("stopped"),
-            "paused": c.get("paused"),
-            "restarting": c.get("restarting"),
-            "unhealthy": c.get("unhealthy"),
-            "pending_updates": len(actionable_ids),
-            "pending_system_updates": pending_with_update - len(actionable_ids),
-            "pending_version_updates": version_only,
-            "pending_pinned_digest_updates": pinned_only,
-            "pending_held_updates": held_only,
-            "pending_updates_total": (
-                pending_with_update + version_only + pinned_only + held_only
-            ),
-        }
+        return self.entity_description.value_fn(env, update_env)
 
 
 class DockhandEnvStacksSensor(BaseFastEnvSensor):
@@ -930,16 +1026,6 @@ class DockhandEnvStacksSensor(BaseFastEnvSensor):
     def native_value(self) -> int | None:
         return (self._stats().get("stacks") or {}).get("total")
 
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        s = self._stats().get("stacks") or {}
-        return {
-            "running": s.get("running"),
-            "partial": s.get("partial"),
-            "stopped": s.get("stopped"),
-        }
-
 
 class DockhandEnvImagesSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -962,14 +1048,6 @@ class DockhandEnvImagesSensor(BaseFastEnvSensor):
     def native_value(self) -> int | None:
         return (self._stats().get("images") or {}).get("total")
 
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        size = (self._stats().get("images") or {}).get("totalSize")
-        return {
-            "total_size_bytes": size,
-        }
-
 
 class DockhandEnvVolumesSensor(BaseFastEnvSensor):
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -991,14 +1069,6 @@ class DockhandEnvVolumesSensor(BaseFastEnvSensor):
     @override
     def native_value(self) -> int | None:
         return (self._stats().get("volumes") or {}).get("total")
-
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        size = (self._stats().get("volumes") or {}).get("totalSize")
-        return {
-            "total_size_bytes": size,
-        }
 
 
 class DockhandEnvNetworksSensor(BaseFastEnvSensor):
@@ -1024,18 +1094,9 @@ class DockhandEnvNetworksSensor(BaseFastEnvSensor):
 
 
 class DockhandEnvDiskUsageSensor(BaseFastEnvSensor):
-    """Consolidated disk usage — state is the total across images, volumes,
-    containers, and build cache; each is also broken out as an attribute.
-
-    Replaces the earlier separate containers_disk_usage/build_cache_size
-    sensors (both still unreleased, so no migration needed) — Dockhand's own
-    /api/dashboard/stats response already includes all four pieces
-    (images.totalSize, volumes.totalSize, containersSize, buildCacheSize,
-    sourced from a single `docker system df`-equivalent call, always run
-    unless the operator has set SKIP_DF_COLLECTION), so one sensor covering
-    the whole breakdown is both more useful and no more expensive than the
-    two it replaces.
-    """
+    """Docker's disk usage for the environment: images, containers,
+    volumes and build cache together, from Dockhand's dashboard stats. Each
+    part has its own sensor (ENV_VALUE_SENSORS)."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_entity_registry_enabled_default = False
@@ -1076,21 +1137,10 @@ class DockhandEnvDiskUsageSensor(BaseFastEnvSensor):
     def native_value(self) -> int:
         return sum(self._sizes())
 
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        images_size, volumes_size, containers_size, build_cache_size = self._sizes()
-        return {
-            "images_size_bytes": images_size,
-            "volumes_size_bytes": volumes_size,
-            "containers_size_bytes": containers_size,
-            "build_cache_size_bytes": build_cache_size,
-        }
-
 
 class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
-    """Activity events sensor — state is the running total, today's count
-    and a capped recent-events list are attributes.
+    """Activity events sensor — state is the running total (today's count
+    has its own sensor), with the most recent events as an attribute.
 
     recent_events is sourced from the slow coordinator (GET /api/activity,
     600s cadence, gated on collectActivity — see coordinator.py) rather
@@ -1129,7 +1179,6 @@ class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
     @property
     @override
     def extra_state_attributes(self) -> dict[str, Any]:
-        e = self._stats().get("events") or {}
         slow_data = self._slow_coordinator.data or {}
         env = _coordinator_env(slow_data, self._env_id)
         # None (not []) when this specific fetch failed — distinguishes
@@ -1152,7 +1201,7 @@ class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
                 for ev in raw_events
                 if isinstance(ev, dict)
             ][:10]
-        return {"today": e.get("today"), "recent_events": recent_events}
+        return {"recent_events": recent_events}
 
 
 # --------------------------------------------------------------------------- #
@@ -1160,10 +1209,40 @@ class DockhandEnvActivityEventsSensor(BaseFastEnvSensor):
 # --------------------------------------------------------------------------- #
 
 
+# Docker's container states (Engine API ContainerState.Status) and health
+# statuses; anything else Dockhand ever reports reads as unknown.
+CONTAINER_STATES = [
+    "created",
+    "running",
+    "paused",
+    "restarting",
+    "removing",
+    "exited",
+    "dead",
+]
+CONTAINER_HEALTH_STATES = ["healthy", "unhealthy", "starting"]
+# Dockhand's stack statuses (stacks.ts, stack-status.ts).
+STACK_STATES = ["running", "partial", "restarting", "stopped", "created"]
+# Dockhand's ScheduleStatus (db.ts).
+SCHEDULE_STATUSES = [
+    "queued",
+    "running",
+    "success",
+    "failed",
+    "skipped",
+    "warning",
+    "error",
+    "cancelled",
+    "stale",
+]
+
+
 class DockhandContainerStateSensor(BaseFastContainerSensor):
     """Container state sensor — aligned with Portainer's sensor.container_state."""
 
     _attr_translation_key = "state"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = CONTAINER_STATES
 
     def __init__(
         self,
@@ -1182,8 +1261,8 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
     @property
     @override
     def native_value(self) -> str | None:
-        c = self._container()
-        return c.get("state") if c else None
+        state = (self._container() or {}).get("state")
+        return state if state in CONTAINER_STATES else None
 
     @property
     @override
@@ -1191,14 +1270,24 @@ class DockhandContainerStateSensor(BaseFastContainerSensor):
         c = self._container()
         if not c:
             return {}
+        restarting = c.get("state") == "restarting"
+        # Not Docker's status text ("Up 3 hours"): it changes every minute
+        # on its own, and would write a new state to the database each time.
         return {
-            "name": self._container_name,
-            "status": c.get("status"),
             "image": c.get("image"),
-            "restart_count": c.get("restartCount"),
+            # Dockhand only counts restarts for a container restarting now.
+            "restart_count": c.get("restartCount") if restarting else None,
+            "exit_code": c.get("exitCode") if c.get("state") == "exited" else None,
             "networks": {
                 n: i.get("ipAddress") for n, i in (c.get("networks") or {}).items()
             },
+            # Dockhand's own infrastructure: Dockhand itself or a Hawser agent.
+            "system_container": bool(c.get("systemContainer")),
+            **tags.attributes(
+                _coordinator_env(self.coordinator.data, self._env_id)
+                .get("container_tags", {})
+                .get(self._container_name, [])
+            ),
         }
 
 
@@ -1213,6 +1302,8 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_translation_key = "health"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = CONTAINER_HEALTH_STATES
 
     def __init__(
         self,
@@ -1231,12 +1322,8 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
     @property
     @override
     def native_value(self) -> str | None:
-        c = self._container()
-        return c.get("health") if c else None
-
-
-# DockhandContainerImageSensor was removed in 1.6.0 — the image name is
-# already surfaced as the `image` attribute on DockhandContainerStateSensor.
+        health = (self._container() or {}).get("health")
+        return health if health in CONTAINER_HEALTH_STATES else None
 
 
 # --------------------------------------------------------------------------- #
@@ -1261,7 +1348,7 @@ class DockhandContainerCpuSensor(BaseFastContainerStatsSensor):
     """Container CPU usage as a percentage of total host CPU capacity."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "container_cpu_percent"
 
@@ -1328,21 +1415,47 @@ class DockhandContainerMemoryUsageSensor(BaseFastContainerStatsSensor):
         usage = s.get("memoryUsage")
         return int(usage) if usage is not None else None
 
+
+class DockhandContainerMemoryCacheSensor(BaseFastContainerStatsSensor):
+    """Container page cache in bytes, left out of its memory usage."""
+
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "container_memory_cache"
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+        stats_enabled: bool,
+    ) -> None:
+        super().__init__(
+            coordinator, entry_id, env_id, env_name, base_url, container, stats_enabled
+        )
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_container_{self._container_name}_memory_cache"
+        )
+
     @property
     @override
-    def extra_state_attributes(self) -> dict[str, Any]:
+    def native_value(self) -> int | None:
         s = self._container_stats()
-        if not s:
-            return {}
-        cache = s.get("memoryCache")
-        return {"memory_cache_bytes": int(cache) if cache is not None else None}
+        cache = s.get("memoryCache") if s else None
+        return int(cache) if cache is not None else None
 
 
 class DockhandContainerMemoryPercentSensor(BaseFastContainerStatsSensor):
     """Container memory usage as a percentage of its configured limit."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "%"
+    _attr_native_unit_of_measurement = PERCENTAGE
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_translation_key = "container_memory_percent"
 
@@ -1568,6 +1681,8 @@ class DockhandContainerBlockWriteSensor(BaseFastContainerStatsSensor):
 
 class DockhandStackStatusSensor(BaseFastStackSensor):
     _attr_translation_key = "status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = STACK_STATES
 
     def __init__(
         self,
@@ -1586,8 +1701,8 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
     @property
     @override
     def native_value(self) -> str | None:
-        s = self._stack()
-        return s.get("status") if s else None
+        status = (self._stack() or {}).get("status")
+        return status if status in STACK_STATES else None
 
     @property
     @override
@@ -1596,29 +1711,15 @@ class DockhandStackStatusSensor(BaseFastStackSensor):
         if not s:
             return {}
         source_type = s.get("sourceType")
-        type_map = {"internal": "Internal", "git": "Git", "external": "Untracked"}
-        type_label = (
-            type_map.get(source_type, "Untracked")
-            if isinstance(source_type, str)
-            else "Untracked"
-        )
-        # Dockhand's own "containers" field on a stack is a list of raw
-        # container IDs (verified against Dockhand's source,
-        # src/lib/server/stacks.ts), not names — resolved here against
-        # the environment's full container list so this attribute is
-        # actually useful to read at a glance, rather than a list of
-        # opaque IDs. Falls back to the ID itself if a container isn't
-        # found in the current list for any reason (e.g. a container
-        # that's been removed since the stack's own list was last
-        # refreshed) — better than silently dropping it from the list.
-        container_ids = s.get("containers") or []
         env_data = _coordinator_env(self.coordinator.data, self._env_id)
-        container_names = _resolve_container_names(container_ids, env_data)
         return {
-            "name": self._stack_name,
-            "type": type_label,
-            "container_count": len(container_ids),
-            "container_names": container_names,
+            # Dockhand's own words in its stacks list: a stack it didn't
+            # create is "Untracked" there. Translated like a state.
+            "type": source_type if source_type in ("internal", "git") else "untracked",
+            "system_container": _stack_has_system_container(
+                self.coordinator, self._env_id, s
+            ),
+            **tags.attributes(env_data.get("stack_tags", {}).get(self._stack_name, [])),
         }
 
 
@@ -1655,9 +1756,41 @@ class DockhandStackContainerCountSensor(BaseFastStackSensor):
         s = self._stack()
         if not s:
             return {}
-        container_ids = s.get("containers") or []
-        env_data = _coordinator_env(self.coordinator.data, self._env_id)
-        return {"container_names": _resolve_container_names(container_ids, env_data)}
+        id_to_name = _env_index(self.coordinator, self._env_id).container_names
+        return {
+            "containers": _resolve_container_names(
+                s.get("containers") or [], id_to_name
+            )
+        }
+
+
+class DockhandStackUpdateCountSensor(BaseFastStackSensor):
+    """How many of the stack's containers have an update, as Dockhand
+    counts them."""
+
+    _attr_translation_key = "stack_pending_updates"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        stack: dict,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url, stack)
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_stack_{self._stack_name}_update_count"
+        )
+
+    @property
+    @override
+    def native_value(self) -> int | None:
+        count = (self._stack() or {}).get("updateCount")
+        return count if isinstance(count, int) else None
 
 
 # --------------------------------------------------------------------------- #
@@ -1721,6 +1854,9 @@ class DockhandStackStatsDescription(SensorEntityDescription):
     percentage: Dockhand doesn't report one for a stack."""
 
     value_fn: Callable[[dict[str, Any]], float | int | None]
+    # The value while none of the stack's containers runs (Dockhand then
+    # leaves the stack out); None makes the sensor unavailable instead.
+    none_running: int | None = None
 
 
 def _round2(value: Any) -> float | None:
@@ -1735,9 +1871,16 @@ STACK_STATS_SENSORS: tuple[DockhandStackStatsDescription, ...] = (
     DockhandStackStatsDescription(
         key="cpu_percent",
         translation_key="stack_cpu_percent",
-        native_unit_of_measurement="%",
+        native_unit_of_measurement=PERCENTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         value_fn=lambda t: _round2(t.get("cpuPercent")),
+    ),
+    DockhandStackStatsDescription(
+        key="running_containers",
+        translation_key="stack_running_containers",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda t: t.get("runningCount"),
+        none_running=0,
     ),
     DockhandStackStatsDescription(
         key="memory_usage",
@@ -1801,9 +1944,9 @@ class DockhandStackStatsSensor(BaseFastStackSensor):
     reports it (GET /api/stack-stats, 1.0.52+) — the stack-level
     counterpart of the container stats sensors, created and removed with
     the same "Enable container and stack stats" option, and only where Dockhand has
-    the endpoint. Unavailable while none of the stack's containers is
-    running (Dockhand leaves such a stack out), like a stopped container's
-    own stats sensors."""
+    the endpoint. While none of the stack's containers is running, Dockhand
+    leaves the stack out: Running containers is then 0, and the rest are
+    unavailable, like a stopped container's own stats sensors."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     entity_description: DockhandStackStatsDescription
@@ -1824,30 +1967,35 @@ class DockhandStackStatsSensor(BaseFastStackSensor):
             f"{entry_id}_{env_id}_stack_{self._stack_name}_{description.key}"
         )
 
+    def _stack_stats(self) -> dict[str, Any] | None:
+        """Every stack's totals, or None when Dockhand couldn't be asked."""
+        stats: dict[str, Any] | None = _coordinator_env(
+            self.coordinator.data, self._env_id
+        ).get("stack_stats")
+        return stats
+
     def _totals(self) -> dict[str, Any] | None:
-        stack_stats = _coordinator_env(self.coordinator.data, self._env_id).get(
-            "stack_stats"
-        )
-        return (stack_stats or {}).get(self._stack_name)
+        return (self._stack_stats() or {}).get(self._stack_name)
 
     @property
     @override
     def available(self) -> bool:
-        return super().available and self._totals() is not None
+        if not super().available:
+            return False
+        if self._totals() is not None:
+            return True
+        return (
+            self.entity_description.none_running is not None
+            and self._stack_stats() is not None
+        )
 
     @property
     @override
     def native_value(self) -> float | int | None:
         totals = self._totals()
-        return self.entity_description.value_fn(totals) if totals else None
-
-    @property
-    @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        totals = self._totals()
-        if not totals or totals.get("runningCount") is None:
-            return {}
-        return {"running_containers": totals["runningCount"]}
+        if totals is None:
+            return self.entity_description.none_running
+        return self.entity_description.value_fn(totals)
 
 
 # --------------------------------------------------------------------------- #
@@ -1863,13 +2011,11 @@ class DockhandEnvHawserVersionSensor(BaseSlowEnvSensor):
     call; for hawser-edge it falls back to Dockhand's own persisted
     value.
 
-    agent_name/agent_id/last_seen attributes come from /api/environments'
-    env_meta (see coordinator.py — only the four needed fields are
-    extracted from that response, never the raw one with its decrypted
-    secrets) since /api/host doesn't have them. Only shown when /api/host
-    confirms this environment is actually hawser-edge — the only mode
-    Dockhand ever populates them for — rather than displaying them as
-    permanently empty for the far more common standard-mode case.
+    agent_name/agent_id attributes come from /api/environments' env_meta
+    (see coordinator.py — only the needed fields are extracted from that
+    response, never the raw one with its decrypted secrets) since
+    /api/host doesn't have them. Dockhand only fills them in for Hawser
+    Edge; they're None otherwise.
     """
 
     _attr_translation_key = "hawser_agent_version"
@@ -1898,15 +2044,40 @@ class DockhandEnvHawserVersionSensor(BaseSlowEnvSensor):
 
     @property
     @override
-    def extra_state_attributes(self) -> dict[str, Any] | None:
-        if self._host_env().get("connectionType") != "hawser-edge":
-            return None
+    def extra_state_attributes(self) -> dict[str, Any]:
         meta = self._env_data().get("env_meta") or {}
         return {
             "agent_name": meta.get("hawserAgentName"),
             "agent_id": meta.get("hawserAgentId"),
-            "last_seen": meta.get("hawserLastSeen"),
         }
+
+
+class DockhandEnvHawserLastSeenSensor(BaseSlowEnvSensor):
+    """When the environment's Hawser Edge agent last checked in, the only
+    connection type Dockhand records it for. It changes on every poll, so
+    it's off by default: each change is a row in the database."""
+
+    _attr_translation_key = "hawser_last_seen"
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._attr_unique_id = f"{self._entry_id}_{env_id}_hawser_last_seen"
+
+    @property
+    @override
+    def native_value(self) -> datetime | None:
+        meta = self._env_data().get("env_meta") or {}
+        return _parse_dt(meta.get("hawserLastSeen"))
 
 
 class DockhandEnvVulnerabilitiesSensor(BaseSlowEnvSensor):
@@ -1917,8 +2088,8 @@ class DockhandEnvVulnerabilitiesSensor(BaseSlowEnvSensor):
     reads from — this is Dockhand's cached aggregation, not a fresh scan
     trigger, so polling it every 600s costs nothing extra server-side.
 
-    State is the total finding count; severity breakdown and scan
-    coverage are attributes, same pattern as containers/stacks sensors.
+    State is the total finding count; each severity, and how many images
+    have been scanned, have their own sensors (VULNERABILITY_SENSORS).
     """
 
     _attr_translation_key = "vulnerabilities"
@@ -1946,18 +2117,42 @@ class DockhandEnvVulnerabilitiesSensor(BaseSlowEnvSensor):
     def native_value(self) -> int | None:
         return self._summary().get("total")
 
+
+# Dockhand's vulnerability summary field → translation key.
+VULNERABILITY_SENSORS = {
+    "critical": "vulnerabilities_critical",
+    "high": "vulnerabilities_high",
+    "medium": "vulnerabilities_medium",
+    "low": "vulnerabilities_low",
+    "imagesScanned": "images_scanned",
+}
+
+
+class DockhandEnvVulnerabilityCountSensor(DockhandEnvVulnerabilitiesSensor):
+    """One count from the vulnerability summary: findings of one severity,
+    or the images scanned so far."""
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        field: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url)
+        self._field = field
+        self._attr_translation_key = VULNERABILITY_SENSORS[field]
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_{VULNERABILITY_SENSORS[field]}"
+        )
+
     @property
     @override
-    def extra_state_attributes(self) -> dict[str, Any]:
-        s = self._summary()
-        return {
-            "critical": s.get("critical"),
-            "high": s.get("high"),
-            "medium": s.get("medium"),
-            "low": s.get("low"),
-            "images_scanned": s.get("imagesScanned"),
-            "total_images": s.get("totalImages"),
-        }
+    def native_value(self) -> int | None:
+        value = self._summary().get(self._field)
+        return value if isinstance(value, int) else None
 
 
 class BaseSlowEnvHostSensor(BaseSlowEnvSensor):
@@ -2011,11 +2206,9 @@ class DockhandEnvPlatformSensor(BaseSlowEnvHostSensor):
         # reasoning as cpu_count on the CPU usage sensor: one more static
         # fact about the same underlying host doesn't need its own entity.
         # Unlike architecture, Docker version and host uptime stay as
-        # their own sensors — Raetha's call: version data is commonly
-        # exposed as its own entity elsewhere, useful directly on a
-        # dashboard without a template helper or markdown card.
-        arch = self._host().get("arch")
-        return {"architecture": arch} if arch is not None else {}
+        # their own sensors: version data is commonly its own entity
+        # elsewhere, and usable on a dashboard without a template.
+        return {"architecture": self._host().get("arch")}
 
 
 class DockhandEnvDockerVersionSensor(BaseSlowEnvHostSensor):
@@ -2047,25 +2240,19 @@ class DockhandEnvDockerVersionSensor(BaseSlowEnvHostSensor):
 
 class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
     """Host uptime, computed from Node's os.uptime() (seconds since boot)
-    at the moment /api/host was called, expressed as a boot-time
-    TIMESTAMP rather than a raw duration — matches the convention HA's
-    own System Monitor integration uses for the same concept, and lets
-    HA's own per-entity "Display as: Relative time" setting show it as
-    "2 days ago" / "3 weeks ago" natively — no new device_class or
-    server-side duration formatting needed, HA already does this
-    conversion for any TIMESTAMP sensor when the user opts into it.
+    at the moment /api/host was called, as the boot time: Home Assistant's
+    UPTIME device class, whose state is the time of the last boot. Cards
+    then show it as a duration ("1 week") by default rather than as a past
+    time ("last week").
 
-    Named/keyed as "uptime" (translation_key), matching Dockhand's own
-    API field name, even though the underlying value is a timestamp —
-    "Uptime" is the more intuitive label for what this represents.
-
-    Recomputed fresh each poll rather than cached — tiny (sub-second)
-    drift between polls is expected and not worth smoothing over, since
-    it reflects the actual precision of the underlying uptime figure.
+    Uptime and the clock are read at slightly different moments, so the
+    boot time computed from them moves by a fraction of a second every
+    poll; the UPTIME device class keeps the state unless it moves by more
+    than a minute (a reboot), so no new state is written each poll.
     """
 
     _attr_translation_key = "uptime"
-    _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_device_class = SensorDeviceClass.UPTIME
 
     def __init__(
         self,
@@ -2087,148 +2274,110 @@ class DockhandEnvLastBootSensor(BaseSlowEnvHostSensor):
         return dt_util.utcnow() - timedelta(seconds=uptime_seconds)
 
 
+def _image_created(image: dict) -> int:
+    created = image.get("created")
+    return created if isinstance(created, int) else 0
+
+
 class DockhandImageSensor(BaseSlowEnvSensor):
-    """Entity for a single Docker image, living under the Images group device.
+    """An image repository, one entity under the Images group device, as
+    Dockhand's Images page lists it: `jellyfin/jellyfin` whatever its tags
+    and however often it's pulled, so the entity and its statistics last.
 
-    One entity per image — no individual image devices. The entity name is the
-    repository portion of the primary tag (e.g. "cloudflare/cloudflared") and
-    the state is the tag portion (e.g. "latest", "2.1.0"). For untagged images
-    the name is the short hash ID and the state is None. All image metadata
-    (size, digests, OCI labels, created, containers_using) is surfaced as
-    extra_state_attributes.
-
-    name is a live @property, not a value fixed at construction — see its
-    docstring for why (a container upgrade producing a same-name-but-new-
-    entity collision on this being static, once shipped, once caught).
-
-    API shape (confirmed from /api/images): camelCase fields, created is a
-    Unix timestamp integer, containers is always an int (0 = unused).
+    The state is how many containers use any of its images, each image
+    counted once (Dockhand's own sum; 0 means unused, a candidate for
+    pruning). Its tags, digests and the newest image's details are
+    attributes. Named after the repository; the translation key gives the
+    unit and icon.
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_has_entity_name = True
-    _attr_icon = "mdi:package-variant-closed"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_translation_key = "image"
 
     def __init__(
         self,
         coordinator: DockhandSlowCoordinator,
+        fast_coordinator: DockhandFastCoordinator,
         entry_id: str,
         env_id: int,
         env_name: str,
         base_url: str,
-        image: dict,
+        repository: str,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
-        raw_id = image.get("id") or ""
-        # Strip "sha256:" prefix — store just the 64-char hex for lookups
-        self._image_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-        # Fallback repo name if a live lookup ever comes back empty (image
-        # gone entirely — shouldn't normally happen while this entity still
-        # exists, but avoids a blank name in that edge case).
-        primary_tag = _image_display_name(image)  # e.g. "cloudflare/cloudflared:latest"
-        self._image_repo_fallback = (
-            primary_tag.rsplit(":", 1)[0] if ":" in primary_tag else primary_tag
+        self._fast_coordinator = fast_coordinator
+        self._repository = repository
+        self._attr_unique_id = image_unique_id(self._entry_id, env_id, repository)
+        self._attr_name = repository
+
+    def _images(self) -> list[dict]:
+        """Its images, newest first, as Dockhand sorts a repository's tags."""
+        images = image_groups(self._env_data().get("images") or []).get(
+            self._repository, []
         )
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_image_{self._image_id}"
-
-    def _image(self) -> dict | None:
-        for img in self._env_data().get("images") or []:
-            raw_id = img.get("id") or ""
-            short_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-            if short_id == self._image_id and isinstance(img, dict):
-                return img
-        return None
+        return sorted(images, key=_image_created, reverse=True)
 
     @property
     @override
-    def name(self) -> str:
-        """Recomputed from live data on every access — NOT fixed at
-        construction. The unique_id is hash-based and this entity object
-        is reused indefinitely for the same hash (see the dedup pattern
-        in async_setup_entry), so a static name would go stale the moment
-        this image's tag changes: a container upgrade pulls a new image
-        under the same repo:tag, the old image (this one) loses that tag
-        and becomes just a hash — if the name were fixed at construction,
-        this entity would keep showing the old repo:tag forever, and
-        worse, would permanently occupy the entity_id slot the *new*
-        image's entity actually deserves, forcing it into an auto-
-        suffixed "_2" id that never self-heals without a manual
-        "recreate entity ids" action. Recomputing live means this
-        entity's name correctly becomes the short hash on the very next
-        poll after the tag moves elsewhere, freeing the slot naturally.
-        See also the tag-collision check in async_setup_entry, which
-        covers the (usually one extra poll cycle) window before that
-        happens, where the two images might briefly still agree on the
-        same tag.
-        """
-        img = self._image()
-        if img is None:
-            return self._image_repo_fallback
-        primary_tag = _image_display_name(img)
-        return primary_tag.rsplit(":", 1)[0] if ":" in primary_tag else primary_tag
-
-    @property
-    @override
-    def native_value(self) -> str | None:
-        """The tag portion of the primary tag, e.g. 'latest' or '2.1.0'."""
-        img = self._image()
-        if img is None:
+    def native_value(self) -> int | None:
+        images = self._images()
+        if not images:
             return None
-        tags = [t for t in (img.get("repoTags") or []) if t and t != "<none>:<none>"]
-        if not tags:
-            return None  # untagged image — no meaningful tag value
-        primary = str(tags[0])
-        return primary.rsplit(":", 1)[1] if ":" in primary else primary
+        counts = [img.get("containers") for img in images]
+        return sum(c for c in counts if isinstance(c, int) and c > 0)
 
     @property
     @override
     def extra_state_attributes(self) -> dict[str, Any]:
-        img = self._image()
-        if not img:
+        images = self._images()
+        if not images:
             return {}
-
-        # All tags — filter Docker placeholder for untagged layers
-        tags = [t for t in (img.get("repoTags") or []) if t and t != "<none>:<none>"]
-
-        # Digests — keep full digest string (algo:hex), trim nothing
-        digests = img.get("repoDigests") or []
-
-        size = img.get("size")
-        containers_using = img.get("containers")
-
-        # OCI standard labels contain useful metadata worth surfacing
-        labels = img.get("labels") or {}
-        oci_version = labels.get("org.opencontainers.image.version")
-        oci_vendor = labels.get("org.opencontainers.image.vendor")
-        oci_title = labels.get("org.opencontainers.image.title")
-        oci_source = labels.get("org.opencontainers.image.source")
-
-        # created is a Unix timestamp integer — convert to ISO 8601 UTC string
-        created_ts = img.get("created")
+        newest = images[0]
+        tags = [
+            image_tag(tag)
+            for img in images
+            for tag in img.get("repoTags") or []
+            if tag
+            and tag != "<none>:<none>"
+            and tag_repository(tag) == self._repository
+        ]
+        digests = [d for img in images for d in img.get("repoDigests") or [] if d]
+        labels = newest.get("labels") or {}
+        created_ts = newest.get("created")
         created_iso: str | None = None
         if isinstance(created_ts, int):
             try:
                 created_iso = dt_util.utc_from_timestamp(created_ts).isoformat()
-            except Exception:
+            except OverflowError, OSError, ValueError:
+                # Out of range for this platform: no creation date.
                 pass
-
-        attrs: dict[str, Any] = {
-            "tags": tags,
-            "digests": digests,
-            "size_bytes": size,
-            "created": created_iso,
-            "containers_using": containers_using,
+        sizes = [size for img in images if isinstance(size := img.get("size"), int)]
+        names_by_image = _env_index(
+            self._fast_coordinator, self._env_id
+        ).container_names_by_image
+        containers = {
+            name
+            for img in images
+            for name in names_by_image.get(short_image_id(img), [])
         }
-        # Only include OCI labels that are actually present
-        if oci_version:
-            attrs["version"] = oci_version
-        if oci_vendor:
-            attrs["vendor"] = oci_vendor
-        if oci_title:
-            attrs["title"] = oci_title
-        if oci_source:
-            attrs["source"] = oci_source
-        return attrs
+        return {
+            "tags": list(dict.fromkeys(tags)),
+            "digests": list(dict.fromkeys(digests)),
+            # The largest image's size, as Dockhand shows a repository's.
+            "size_bytes": max(sizes) if sizes else None,
+            "created": created_iso,
+            # Dockhand gives only counts; the names come from the containers
+            # list, matched by image ID as Dockhand counts them. Written only
+            # when the count is (each image refresh), so the list doesn't
+            # change on its own between them.
+            "containers": sorted(containers),
+            "version": labels.get("org.opencontainers.image.version"),
+            "vendor": labels.get("org.opencontainers.image.vendor"),
+            "title": labels.get("org.opencontainers.image.title"),
+            "source": labels.get("org.opencontainers.image.source"),
+        }
 
     @property
     @override
@@ -2243,20 +2392,47 @@ class DockhandImageSensor(BaseSlowEnvSensor):
         )
 
 
-class DockhandNetworkSensor(BaseSlowEnvSensor):
-    """Entity for a Docker network, living under the Networks group device.
+class DockhandUntaggedImagesSensor(DockhandImageSensor):
+    """Images with neither a tag nor a digest that names their repository,
+    together, as Dockhand's Images page lists them under `<none>`; named by
+    its translation."""
 
-    One entity per network — no individual network sub-devices. The entity name
-    is the network name and the state is the count of connected containers.
-    All network metadata (driver, scope, subnet, connected containers) is
-    surfaced as extra_state_attributes.
+    _attr_translation_key = "untagged_images"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        fast_coordinator: DockhandFastCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        repository: str = UNTAGGED_IMAGES,
+    ) -> None:
+        super().__init__(
+            coordinator,
+            fast_coordinator,
+            entry_id,
+            env_id,
+            env_name,
+            base_url,
+            UNTAGGED_IMAGES,
+        )
+        del self._attr_name
+
+
+class DockhandNetworkSensor(BaseSlowEnvSensor):
+    """A Docker network, one entity under the Networks group device, named
+    after it and identified by its name: Compose gives a network a new ID
+    each time it recreates it, and the entity and its statistics should
+    last. The state is how many containers are connected; the translation
+    key gives the unit and icon.
     """
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_native_unit_of_measurement = "containers"
     _attr_has_entity_name = True
-    _attr_icon = "mdi:lan"
+    _attr_translation_key = "network"
 
     def __init__(
         self,
@@ -2268,14 +2444,15 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         network: dict,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
-        self._network_id = network.get("id", "")
-        self._network_name = network.get("name", "")
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_network_{self._network_id}"
+        self._network_name = str(network.get("name") or "")
+        self._attr_unique_id = network_unique_id(
+            self._entry_id, env_id, self._network_name
+        )
         self._attr_name = self._network_name
 
     def _network(self) -> dict | None:
         for n in self._env_data().get("networks") or []:
-            if isinstance(n, dict) and n.get("id") == self._network_id:
+            if isinstance(n, dict) and n.get("name") == self._network_name:
                 return n
         return None
 
@@ -2292,8 +2469,9 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         if not n:
             return {}
         ipam = (n.get("ipam") or {}).get("config") or []
-        connected = {
-            i.get("name"): i.get("ipv4Address")
+        # Docker reports "" for a stopped container still attached.
+        addresses = {
+            i.get("name"): i.get("ipv4Address") or None
             for i in (n.get("containers") or {}).values()
             if i.get("name")
         }
@@ -2302,7 +2480,8 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
             "scope": n.get("scope"),
             "internal": n.get("internal"),
             "subnet": ipam[0].get("subnet") if ipam else None,
-            "connected_containers": connected,
+            "containers": sorted(addresses),
+            "addresses": dict(sorted(addresses.items())),
         }
 
     @property
@@ -2318,19 +2497,10 @@ class DockhandNetworkSensor(BaseSlowEnvSensor):
         )
 
 
-class DockhandVolumeSensor(BaseSlowEnvSensor):
-    """Entity for a Docker volume, living under the Volumes group device.
-
-    One entity per volume — no individual volume sub-devices. The state is the
-    container count (most actionable: 0 = unused/dangling candidate for pruning).
-    All volume metadata (in_use bool, driver, scope, mountpoint, labels, created,
-    container list) is surfaced as extra_state_attributes.
-    """
+class _BaseVolumeSensor(BaseSlowEnvSensor):
+    """An entity on a volume's own device, under the Volumes group."""
 
     _attr_entity_category = EntityCategory.DIAGNOSTIC
-    _attr_native_unit_of_measurement = "containers"
-    _attr_state_class = SensorStateClass.MEASUREMENT
-    _attr_icon = "mdi:database"
     _attr_has_entity_name = True
 
     def __init__(
@@ -2341,29 +2511,64 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         env_name: str,
         base_url: str,
         volume: dict,
+        suffix: str,
     ) -> None:
         super().__init__(coordinator, entry_id, env_id, env_name, base_url)
-        self._volume_name: str = volume.get("name") or volume.get("Name") or "unknown"
-        self._attr_unique_id = f"{self._entry_id}_{env_id}_volume_{self._volume_name}"
-        self._attr_name = self._volume_name
+        self._volume_name: str = volume.get("name") or "unknown"
+        self._driver = volume.get("driver")
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_volume_{self._volume_name}_{suffix}"
+        )
 
     def _volume(self) -> dict | None:
         for v in self._env_data().get("volumes") or []:
-            if (v.get("name") or v.get("Name")) == self._volume_name and isinstance(
-                v, dict
-            ):
+            if isinstance(v, dict) and v.get("name") == self._volume_name:
                 return v
         return None
 
     @property
     @override
+    def device_info(self) -> DeviceInfo:
+        return _volume_device(
+            getattr(self, "hass", None),
+            self._entry_id,
+            self._volume_name,
+            self._env_id,
+            self._env_name,
+            self._base_url,
+            self._driver,
+        )
+
+
+class DockhandVolumeSensor(_BaseVolumeSensor):
+    """How many containers use the volume: 0 means unused, a candidate for
+    pruning. The volume's fixed details (driver, scope, mountpoint, labels,
+    created) are attributes."""
+
+    _attr_translation_key = "volume_containers"
+    _attr_native_unit_of_measurement = "containers"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        volume: dict,
+    ) -> None:
+        super().__init__(
+            coordinator, entry_id, env_id, env_name, base_url, volume, "container_count"
+        )
+
+    @property
+    @override
     def native_value(self) -> int | None:
-        """Container count — 0 means unused/dangling, a pruning candidate."""
         v = self._volume()
         if not v:
             return None
-        used_by = v.get("usedBy") or v.get("UsedBy") or []
-        return len(used_by)
+        return len(v.get("usedBy") or [])
 
     @property
     @override
@@ -2371,10 +2576,9 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         v = self._volume()
         if not v:
             return {}
-        used_by = v.get("usedBy") or v.get("UsedBy") or []
-        # created timestamp — parse to ISO string if present
+        used_by = v.get("usedBy") or []
         created_iso: str | None = None
-        raw_created = v.get("created") or v.get("Created")
+        raw_created = v.get("created")
         if raw_created:
             try:
                 parsed = dt_util.parse_datetime(str(raw_created))
@@ -2384,24 +2588,51 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
         return {
             "in_use": len(used_by) > 0,
             "containers": used_by,
-            "driver": v.get("driver") or v.get("Driver"),
-            "scope": v.get("scope") or v.get("Scope"),
-            "mountpoint": v.get("mountpoint") or v.get("Mountpoint"),
-            "labels": v.get("labels") or v.get("Labels") or {},
+            "driver": v.get("driver"),
+            "scope": v.get("scope"),
+            "mountpoint": v.get("mountpoint"),
+            "labels": v.get("labels") or {},
             "created": created_iso,
         }
 
+
+class DockhandVolumeSizeSensor(_BaseVolumeSensor):
+    """A volume's size on disk, from Docker's `system df`
+    (`async_get_volume_sizes`); unavailable while Docker hasn't worked it
+    out or Dockhand skips disk usage."""
+
+    _attr_translation_key = "volume_size"
+    _attr_device_class = SensorDeviceClass.DATA_SIZE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = UnitOfInformation.BYTES
+    _attr_suggested_unit_of_measurement = UnitOfInformation.MEBIBYTES
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        volume: dict,
+    ) -> None:
+        super().__init__(
+            coordinator, entry_id, env_id, env_name, base_url, volume, "size"
+        )
+
+    def _size(self) -> int | None:
+        size = (self._env_data().get("volume_sizes") or {}).get(self._volume_name)
+        return size if isinstance(size, int) else None
+
     @property
     @override
-    def device_info(self) -> DeviceInfo:
-        """All volume entities live under the per-env Volumes group device."""
-        return _volume_group_device(
-            getattr(self, "hass", None),
-            self._entry_id,
-            self._env_id,
-            self._env_name,
-            self._base_url,
-        )
+    def available(self) -> bool:
+        return super().available and self._size() is not None
+
+    @property
+    @override
+    def native_value(self) -> int | None:
+        return self._size()
 
 
 # --------------------------------------------------------------------------- #
@@ -2409,50 +2640,8 @@ class DockhandVolumeSensor(BaseSlowEnvSensor):
 # --------------------------------------------------------------------------- #
 
 
-class _BaseScheduleSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorEntity):
+class _BaseScheduleSensor(DockhandScheduleEntity, SensorEntity):
     """Common base for per-schedule sensors."""
-
-    _attr_has_entity_name = True
-
-    def __init__(
-        self,
-        coordinator: DockhandSlowCoordinator,
-        entry_id: str,
-        sched: dict,
-        base_url: str,
-    ) -> None:
-        super().__init__(coordinator)
-        self._entry_id = entry_id
-        self._sched_id = sched["id"]
-        self._sched_type = sched["type"]
-        self._sched_name = sched["name"]
-        self._sched_env_id = sched.get("environmentId")
-        self._sched_env_name = sched.get("environmentName")
-        self._base_url = base_url
-
-    def _find(self) -> dict | None:
-        for s in (self.coordinator.data or {}).get("schedules") or []:
-            if (
-                isinstance(s, dict)
-                and s["id"] == self._sched_id
-                and s["type"] == self._sched_type
-            ):
-                return s
-        return None
-
-    @property
-    @override
-    def device_info(self) -> DeviceInfo:
-        return _sched_device(
-            getattr(self, "hass", None),
-            self._entry_id,
-            self._sched_id,
-            self._sched_type,
-            self._sched_name,
-            self._base_url,
-            environment_id=self._sched_env_id,
-            environment_name=self._sched_env_name,
-        )
 
 
 class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
@@ -2472,8 +2661,7 @@ class DockhandScheduleNextRunSensor(_BaseScheduleSensor):
         sched: dict,
         base_url: str,
     ) -> None:
-        super().__init__(coordinator, entry_id, sched, base_url)
-        self._attr_unique_id = f"{self._entry_id}_sched_{_sched_key(sched)}_next_run"
+        super().__init__(coordinator, entry_id, sched, base_url, "next_run")
 
     @property
     @override
@@ -2511,17 +2699,19 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
     matching this codebase's own precedent (DockhandStackStatusSensor,
     DockhandGitStackSyncStatusSensor — the closest existing analogs — are
     both primary, not diagnostic). This is the primary/comprehensive entity
-    for a schedule device: it carries the identity attributes (name,
-    description, is_system) alongside the scheduling ones already on
+    for a schedule device: it carries the identity attributes
+    (description, is_system; the name is the device's) alongside the
+    scheduling ones already on
     Next run (cron_expression, enabled, environment, schedule_type) —
-    duplicated rather than moved, since those shipped on Next run in an
-    earlier release and removing them could break an existing automation
-    or template depending on them; duplication here is safe (both read
+    duplicated rather than moved, since automations and templates may
+    read them from Next run; duplication here is safe (both read
     fresh from the same coordinator dict every update, unlike DeviceInfo
     fields, which is why that duplication was a bug and this one isn't).
     """
 
     _attr_translation_key = "last_status"
+    _attr_device_class = SensorDeviceClass.ENUM
+    _attr_options = SCHEDULE_STATUSES
 
     def __init__(
         self,
@@ -2530,16 +2720,15 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
         sched: dict,
         base_url: str,
     ) -> None:
-        super().__init__(coordinator, entry_id, sched, base_url)
-        self._attr_unique_id = f"{self._entry_id}_sched_{_sched_key(sched)}_last_status"
+        super().__init__(coordinator, entry_id, sched, base_url, "last_status")
 
     @property
     @override
     def native_value(self) -> str | None:
         s = self._find()
         if s:
-            last = s.get("lastExecution")
-            return last.get("status") if last else None
+            status = (s.get("lastExecution") or {}).get("status")
+            return status if status in SCHEDULE_STATUSES else None
         return None
 
     @property
@@ -2548,25 +2737,20 @@ class DockhandScheduleLastStatusSensor(_BaseScheduleSensor):
         s = self._find()
         if not s:
             return {}
-        attrs: dict[str, Any] = {
-            "name": s.get("name"),
+        last = s.get("lastExecution") or {}
+        return {
             "description": s.get("description"),
             "is_system": s.get("isSystem"),
             "cron_expression": s.get("cronExpression"),
             "enabled": s.get("enabled"),
             "environment": s.get("environmentName"),
             "schedule_type": s.get("type"),
+            "triggered_by": last.get("triggeredBy"),
+            "triggered_at": last.get("triggeredAt"),
+            "duration_ms": last.get("duration"),
+            "error_message": last.get("errorMessage"),
+            "updates_found": (last.get("details") or {}).get("updatesFound"),
         }
-        last = s.get("lastExecution")
-        if last:
-            attrs["triggered_by"] = last.get("triggeredBy")
-            attrs["triggered_at"] = last.get("triggeredAt")
-            attrs["duration_ms"] = last.get("duration")
-            attrs["error_message"] = last.get("errorMessage")
-            details = last.get("details") or {}
-            if "updatesFound" in details:
-                attrs["updates_found"] = details["updatesFound"]
-        return attrs
 
 
 # ===========================================================================
@@ -2604,7 +2788,7 @@ class BaseSlowGitStackSensor(CoordinatorEntity[DockhandSlowCoordinator], SensorE
         self._stack_name = git_stack.get("stackName", "")
 
     def _git_stack(self) -> dict[str, Any] | None:
-        return _find_git_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_git_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override

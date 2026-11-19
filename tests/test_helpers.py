@@ -8,7 +8,8 @@ Covers:
 - _env_device: name, connectionType as hw_version
 - group device helpers: network, volume, image
 - _sched_key / _sched_device
-- _image_display_name: tagged, untagged, multi-tag, empty
+- image_repositories / image_groups: Dockhand's Images page grouping
+- async_common_texts: the `common` translations
 - _container_has_healthcheck: all states
 - _compose_project: with/without label, None container
 - _ensure_env_devices: all device creation branches
@@ -20,9 +21,31 @@ from __future__ import annotations
 import pytest
 from unittest.mock import MagicMock
 
+from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
+
+from aiohttp import ClientConnectionError
+
+from custom_components.dockhand.api import (
+    DockhandAuthError,
+    DockhandError,
+    DockhandFailedError,
+    DockhandPermissionError,
+    DockhandUnexpectedResponseError,
+)
+from custom_components.dockhand.const import DOMAIN
 from custom_components.dockhand.helpers import (
+    UNTAGGED_IMAGES,
+    async_common_texts,
+    image_groups,
+    image_repositories,
+    image_tag,
+    tag_repository,
+    short_image_id,
+    async_dockhand_action,
     _actionable_pending_update_container_ids,
     _device_by_identifier,
+    create_issue,
     _all_envs,
     _compose_project,
     _container_device,
@@ -34,9 +57,11 @@ from custom_components.dockhand.helpers import (
     _coordinator_env,
     _ensure_env_devices,
     _ensure_hub_devices,
+    _find_container,
+    _find_git_stack,
+    _find_stack,
     _env_device,
     _env_settings_url,
-    _image_display_name,
     _image_group_device,
     _image_url,
     _image_version_label,
@@ -51,6 +76,7 @@ from custom_components.dockhand.helpers import (
     _stack_has_system_container,
     _stack_url,
     _volume_group_device,
+    _volume_model,
     _volume_url,
 )
 
@@ -79,16 +105,11 @@ def test_section_url_empty_base_returns_none():
 
 
 def test_section_url_strips_leading_and_trailing_whitespace():
-    """Regression test: a base_url with incidental leading/trailing
-    whitespace (e.g. from copy-pasting into the config flow's URL field)
-    used to produce a URL with a literal space embedded right before the
-    path segment (" http://host:3000 /containers") — invalid enough that
-    both new URL() and window.open() reject it outright in a browser,
-    silently breaking every "open in Dockhand" link this integration
-    sets with no visible error anywhere. The config flow now also strips
-    this at entry (see test_config_flow.py), but this defends existing
-    stored config entries that predate that fix too, since every
-    _*_url() helper in this file routes through _section_url."""
+    """A base URL stored with surrounding whitespace still gives valid
+    links: a space before the path breaks every "open in Dockhand" link
+    in the browser. The config flow strips it too (test_config_flow.py);
+    this covers entries saved before that, since every _*_url() helper
+    goes through _section_url."""
     assert (
         _section_url(" http://dh.test:3000 ", "containers")
         == "http://dh.test:3000/containers"
@@ -203,27 +224,6 @@ def mock_dr(monkeypatch):
 
     mock_hass = MagicMock()
     return registry_map, mock_hass
-
-
-# ---------------------------------------------------------------------------
-# _device_by_identifier
-# ---------------------------------------------------------------------------
-
-
-def test_device_by_identifier_uses_scoped_lookup_when_available():
-    """HA 2026.8+: the entry-scoped lookup, never the deprecated one."""
-    reg = MagicMock()
-    _device_by_identifier(reg, ("dockhand", "x"), ENTRY_ID)
-    reg.async_get_device_by_identifier.assert_called_once_with(
-        ("dockhand", "x"), ENTRY_ID
-    )
-    reg.async_get_device.assert_not_called()
-
-
-def test_device_by_identifier_falls_back_before_ha_2026_8():
-    reg = MagicMock(spec=["async_get_device"])
-    _device_by_identifier(reg, ("dockhand", "x"), ENTRY_ID)
-    reg.async_get_device.assert_called_once_with(identifiers={("dockhand", "x")})
 
 
 # ---------------------------------------------------------------------------
@@ -365,14 +365,8 @@ def test_sched_device_via_schedules_hub(mock_dr):
 
 
 def test_sched_device_env_scoped_name_uses_environment_prefix():
-    """Regression test: shipped bug in initial 1.9.0 device-hierarchy work —
-    via_device was made conditional on environment_id, but name was left
-    hardcoded to always start with "Dockhand", so every env-scoped schedule
-    device showed a misleading name even though it was correctly parented
-    under its own environment's group. Caught after release via a real
-    device name in a live instance; the original tests above never passed
-    environment_id/environment_name at all, so this branch had zero
-    coverage."""
+    """An environment's schedule device is named after the environment,
+    not "Dockhand", and sits under that environment's group."""
     info = _sched_device(
         None,
         ENTRY_ID,
@@ -424,12 +418,8 @@ def test_sched_device_env_scoped_falls_back_when_name_missing():
 
 
 def test_ensure_env_devices_schedule_name_uses_environment_prefix(hass):
-    """Integration-level companion to the _sched_device unit tests above —
-    confirms the fix actually propagates through _ensure_env_devices()
-    (the real call site, not just the factory in isolation). This is the
-    level the original bug shipped at: _sched_device()'s own unit tests
-    never exercised the env-scoped branch, but neither did any test at
-    this level, so the gap was actually two-layers deep."""
+    """The same through _ensure_env_devices(), the call site that
+    registers the devices."""
     entry = _make_entry(hass)
     schedules = [
         {
@@ -455,42 +445,71 @@ def test_ensure_env_devices_schedule_name_uses_environment_prefix(hass):
 
 
 # ---------------------------------------------------------------------------
-# _image_display_name
+# image_repositories / image_groups
 # ---------------------------------------------------------------------------
 
 
-def test_image_display_name_prefers_first_repo_tag():
-    assert (
-        _image_display_name({"repoTags": ["nginx:latest", "nginx:1.25"]})
-        == "nginx:latest"
-    )
+def test_an_image_belongs_to_each_repository_it_is_tagged_in():
+    image = {
+        "repoTags": ["jellyfin/jellyfin:latest", "jellyfin/jellyfin:10.11", "media:1"]
+    }
+    assert image_repositories(image) == ["jellyfin/jellyfin", "media"]
 
 
-def test_image_display_name_skips_none_tag():
-    result = _image_display_name(
-        {"repoTags": ["<none>:<none>"], "id": "sha256:abc123def456789"}
-    )
-    assert result == "abc123def456"
+def test_a_registry_port_is_part_of_the_repository():
+    assert image_repositories({"repoTags": ["registry.lan:5000/app:2"]}) == [
+        "registry.lan:5000/app"
+    ]
+    assert image_tag("registry.lan:5000/app:2") == "2"
+    assert tag_repository("registry.lan:5000/app") == "registry.lan:5000/app"
+    assert image_tag("registry.lan:5000/app") == "latest"
 
 
-def test_image_display_name_falls_back_to_short_id():
-    result = _image_display_name({"repoTags": [], "id": "sha256:deadbeef1234567890"})
-    assert result == "deadbeef1234"
+def test_an_untagged_image_belongs_to_the_repository_its_digest_names():
+    image = {"repoTags": ["<none>:<none>"], "repoDigests": ["nginx@sha256:abc"]}
+    assert image_repositories(image) == ["nginx"]
 
 
-def test_image_display_name_handles_empty_id():
-    result = _image_display_name({"repoTags": [], "id": ""})
-    assert result == "unknown"
+def test_an_image_with_neither_is_untagged():
+    assert image_repositories({"repoTags": [], "repoDigests": []}) == [UNTAGGED_IMAGES]
+    assert image_repositories({}) == [UNTAGGED_IMAGES]
 
 
-def test_image_display_name_handles_no_fields():
-    result = _image_display_name({})
-    assert result == "unknown"
+def test_two_tags_of_one_repository_are_one_group_and_each_image_counts_once():
+    """jellyfin/jellyfin:latest and :1.0 on two images, and a third image
+    tagged twice in the repository: one group of three images."""
+    images = [
+        {"id": "sha256:a", "repoTags": ["jellyfin/jellyfin:latest"]},
+        {"id": "sha256:b", "repoTags": ["jellyfin/jellyfin:1.0"]},
+        {
+            "id": "sha256:c",
+            "repoTags": ["jellyfin/jellyfin:10.11", "jellyfin/jellyfin:10"],
+        },
+        "not an image",
+    ]
+    groups = image_groups(images)
+    assert list(groups) == ["jellyfin/jellyfin"]
+    assert [short_image_id(i) for i in groups["jellyfin/jellyfin"]] == ["a", "b", "c"]
 
 
-def test_image_display_name_id_without_colon():
-    result = _image_display_name({"repoTags": [], "id": "deadbeef1234567890"})
-    assert result == "deadbeef1234"
+def test_short_image_id_without_a_prefix():
+    assert short_image_id({"id": "deadbeef"}) == "deadbeef"
+    assert short_image_id({}) == ""
+
+
+# ---------------------------------------------------------------------------
+# async_common_texts
+# ---------------------------------------------------------------------------
+
+
+async def test_common_texts_come_from_the_translations(hass):
+    text = await async_common_texts(hass)
+    assert text("release_notes_image", image="nginx:latest") == "Image: nginx:latest"
+
+
+async def test_common_texts_without_home_assistant_give_the_key():
+    text = await async_common_texts(None)
+    assert text("release_notes_image", image="x") == "release_notes_image"
 
 
 # ---------------------------------------------------------------------------
@@ -677,16 +696,9 @@ def _device_by_id_suffix(hass, entry, id_suffix: str):
 
 
 def test_ensure_env_devices_stack_model_reflects_source_type(hass):
-    """Regression test: _ensure_env_devices() is a SEPARATE device-
-    registration path from _stack_device()/BaseFastStackSensor's
-    device_info — it runs unconditionally on every coordinator update,
-    calling registry.async_get_or_create() directly, rather than going
-    through an entity at all. These two paths drifted out of sync once
-    already (this one kept a hardcoded generic "Stack" after
-    _stack_device() was updated to use sourceType), silently overwriting
-    the correct model within about one poll cycle of every reload — a
-    real bug shipped before being caught. This locks in that both stay
-    in sync."""
+    """_ensure_env_devices() registers stack devices on every update,
+    separately from the entities' device_info (_stack_device()): both
+    must give the same model, or each poll would overwrite the other's."""
     entry = _make_entry(hass)
     stacks = [{"name": "myapp", "sourceType": "git"}]
     _ensure_env_devices(
@@ -721,13 +733,8 @@ def test_ensure_env_devices_stack_model_untracked_when_source_type_absent(hass):
 
 
 def test_ensure_env_devices_stack_model_survives_repeated_calls(hass):
-    """The actual shape of the bug: _ensure_env_devices() is called on
-    every coordinator update (fast AND slow), not just once at entity
-    add time. A second call with the same (correct) data must not
-    regress the model — this is what would have caught the real bug,
-    since the hardcoded "Stack" value would have shown up on the very
-    next call after the first one happened to look right by coincidence
-    of call order."""
+    """_ensure_env_devices() runs on every coordinator update, so a second
+    call with the same data keeps the model the first one set."""
     entry = _make_entry(hass)
     stacks = [{"name": "myapp", "sourceType": "git"}]
     for _ in range(3):
@@ -887,10 +894,28 @@ def test_ensure_env_devices_creates_volumes_group_when_enabled(hass):
         "http://dh.test:3000",
         1,
         "myenv",
-        volumes=[{"Name": "mydata"}],
+        volumes=[{"name": "mydata", "usedBy": []}, {"driver": "local"}],
         enable_volumes=True,
     )
-    assert "env_1_Volumes" in _device_ids(hass, entry)
+    assert {"env_1_Volumes", "volume_1_mydata"} <= _device_ids(hass, entry)
+    registry = dr.async_get(hass)
+    volume = _device_by_identifier(
+        registry, (DOMAIN, f"{entry.entry_id}_volume_1_mydata"), entry.entry_id
+    )
+    group = _device_by_identifier(
+        registry, (DOMAIN, f"{entry.entry_id}_env_1_Volumes"), entry.entry_id
+    )
+    assert volume is not None and group is not None
+    assert volume.via_device_id == group.id
+    assert volume.model == "Volume"
+
+
+@pytest.mark.parametrize(
+    ("driver", "model"),
+    [("local", "Local Volume"), ("rclone", "rclone Volume"), (None, "Volume")],
+)
+def test_volume_model_is_its_driver(driver, model):
+    assert _volume_model(driver) == model
 
 
 def test_ensure_env_devices_is_idempotent(hass):
@@ -1057,22 +1082,66 @@ def test_ensure_env_devices_no_containers_group_when_all_compose_managed(hass):
 
 
 # ---------------------------------------------------------------------------
+# _find_container, _find_stack, _find_git_stack
+# ---------------------------------------------------------------------------
+
+
+def _lookup_coordinator(env: dict) -> MagicMock:
+    coordinator = MagicMock()
+    coordinator.data = {"environments": {1: env}}
+    return coordinator
+
+
+def test_find_by_name_skips_what_is_not_an_item():
+    web = {"id": "id-web", "name": "web"}
+    coordinator = _lookup_coordinator(
+        {
+            "containers": [None, {"id": "id-anon"}, web],
+            "stacks": ["junk", {"name": "app"}],
+            "git_stacks": [{"stackName": "site"}],
+        }
+    )
+    assert _find_container(coordinator, 1, "web") is web
+    assert _find_stack(coordinator, 1, "app") == {"name": "app"}
+    assert _find_git_stack(coordinator, 1, "site") == {"stackName": "site"}
+    assert _find_container(coordinator, 2, "web") is None
+
+
+def test_find_by_name_takes_the_first_of_a_duplicate_name():
+    first, second = {"id": "a", "name": "web"}, {"id": "b", "name": "web"}
+    coordinator = _lookup_coordinator({"containers": [first, second]})
+    assert _find_container(coordinator, 1, "web") is first
+
+
+def test_find_by_name_follows_a_poll():
+    """A poll replaces the coordinator's data, and the lookup follows it."""
+    coordinator = _lookup_coordinator({"containers": [{"name": "web"}]})
+    assert _find_container(coordinator, 1, "db") is None
+    coordinator.data = {"environments": {1: {"containers": [{"name": "db"}]}}}
+    assert _find_container(coordinator, 1, "db") == {"name": "db"}
+
+
+# ---------------------------------------------------------------------------
 # _stack_has_system_container
 # ---------------------------------------------------------------------------
 
 
+def _stack_check(stack, all_containers) -> bool:
+    coordinator = MagicMock()
+    coordinator.data = {"environments": {1: {"containers": all_containers}}}
+    return _stack_has_system_container(coordinator, 1, stack)
+
+
 def test_stack_has_system_container_true_when_member_is_system():
-    """stack['containers'] is a list of container IDs, not names —
-    confirmed from Dockhand's own source (stacks.ts populates it from a
-    Set matched against container.id). Using names here was a real bug
-    that shipped: this check silently never matched anything, for any
-    stack, ever, since IDs and names never overlap in practice."""
+    """stack['containers'] lists container IDs, not names (Dockhand's
+    stacks.ts fills it from container.id), so membership is checked by
+    ID."""
     stack = {"name": "infra", "containers": ["id-dockhand", "id-web"]}
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"},
         {"id": "id-web", "name": "web", "systemContainer": None},
     ]
-    assert _stack_has_system_container(stack, all_containers) is True
+    assert _stack_check(stack, all_containers) is True
 
 
 def test_stack_has_system_container_false_when_no_member_is_system():
@@ -1081,7 +1150,7 @@ def test_stack_has_system_container_false_when_no_member_is_system():
         {"id": "id-web", "name": "web", "systemContainer": None},
         {"id": "id-db", "name": "db", "systemContainer": None},
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 def test_stack_has_system_container_false_for_empty_container_list():
@@ -1089,11 +1158,11 @@ def test_stack_has_system_container_false_for_empty_container_list():
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 def test_stack_has_system_container_false_for_none_stack():
-    assert _stack_has_system_container(None, []) is False
+    assert _stack_check(None, []) is False
 
 
 def test_stack_has_system_container_false_when_ids_dont_match():
@@ -1104,18 +1173,17 @@ def test_stack_has_system_container_false_when_ids_dont_match():
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 def test_stack_has_system_container_ignores_name_collision_with_id():
-    """Regression guard for the exact bug: a container whose NAME
-    happens to equal another container's ID string must not produce a
-    false match — only real id-to-id equality counts."""
+    """A container whose name equals another container's ID string must
+    not match: only ID-to-ID equality counts."""
     stack = {"name": "myapp", "containers": ["dockhand"]}  # looks like a name!
     all_containers = [
         {"id": "id-dockhand", "name": "dockhand", "systemContainer": "dockhand"}
     ]
-    assert _stack_has_system_container(stack, all_containers) is False
+    assert _stack_check(stack, all_containers) is False
 
 
 # ---------------------------------------------------------------------------
@@ -1148,13 +1216,10 @@ def test_container_has_pending_update_false_for_no_container_id():
 
 
 def test_container_has_pending_update_ignores_stale_tier2_entry():
-    """The core staleness fix: a Tier 2 entry keyed under an id the
-    container no longer has (left over from before it was recreated by
-    an update) must not count — looking it up by the container's
-    *current* id makes a stale entry simply invisible, rather than
-    needing to be explicitly detected and discarded. Real bug: this
-    used to be a name-based scan, which kept a resolved update looking
-    pending for up to Tier 2's full poll interval."""
+    """A Tier 2 entry under an ID the container no longer has (from before
+    an update recreated it) doesn't count: looking up the container's
+    current ID leaves it out, where a lookup by name would keep a finished
+    update pending until Tier 2's next poll."""
     container = {"id": "id-web-new"}  # recreated since Tier 2 last ran
     update_env_data = {"id-web-old": {"containerName": "web", "hasUpdate": True}}
     assert _container_has_pending_update(container, set(), update_env_data) is False
@@ -1270,20 +1335,12 @@ def test_actionable_pending_update_container_ids_skips_containers_without_id():
 # explicit null, and a single accessor shared by all three coordinators
 # ---------------------------------------------------------------------------
 #
-# The actual bug (github.com/raetha/ha-dockhand/issues/20, and a live crash
-# reported in this same session): `dict.get(key, default)` only supplies
-# `default` when `key` is *absent*. If Dockhand's API sends that key present
-# with an explicit `null` — which it does for optional/runtime data, not
-# just when a value is omitted — `.get(key, {})` returns that `None`, and
-# the next chained `.get()`/`.items()`/`.values()` call crashes with
-# `AttributeError: 'NoneType' object has no attribute '...'`. These helpers
-# use `or` instead, which correctly substitutes the default for both cases.
-#
-# _coordinator_env and _all_envs were originally two pairs of near-identical
-# functions (_fast_env/_slow_env for the single-environment case) — merged
-# once the fast, slow, and update coordinators all ended up sharing the same
-# {"environments": {env_id: {...}}} top-level shape, since there was nothing
-# left for two separate functions to document that a shared one couldn't.
+# Dockhand sends some keys present but null rather than absent
+# (github.com/raetha/ha-dockhand/issues/20), and `dict.get(key, {})` only
+# supplies the default for an absent key: the next `.get()` would raise
+# AttributeError on None. These helpers use `or` instead, which covers both.
+# The fast, slow and update coordinators share one shape,
+# {"environments": {env_id: {...}}}, so one accessor serves all three.
 
 
 def test_coordinator_env_missing_key_entirely():
@@ -1292,14 +1349,12 @@ def test_coordinator_env_missing_key_entirely():
 
 
 def test_coordinator_env_environments_key_explicitly_null():
-    """The exact shape of the reported bug: "environments" present but
-    null, not absent."""
+    """ "environments" present but null, not absent."""
     assert _coordinator_env({"environments": None}, 1) == {}
 
 
 def test_coordinator_env_specific_env_id_explicitly_null():
-    """The exact shape of the live crash this session: an environment's
-    slice of coordinator data present but null."""
+    """An environment's slice of coordinator data present but null."""
     assert _coordinator_env({"environments": {1: None, 2: {"host": {}}}}, 1) == {}
 
 
@@ -1328,3 +1383,61 @@ def test_already_registered_without_a_unique_id_is_never_registered(hass):
     known: set[str] = set()
     assert already_registered(hass, known, "sensor", None) is False
     assert known == set()
+
+
+async def test_dockhand_action_returns_the_result():
+    async def ok() -> str:
+        return "done"
+
+    assert await async_dockhand_action(ok()) == "done"
+
+
+@pytest.mark.parametrize(
+    ("error", "translation_key"),
+    [
+        (DockhandPermissionError("403"), "permission_denied"),
+        (DockhandAuthError("401"), "token_invalid"),
+        (DockhandUnexpectedResponseError("shape"), "unexpected_response"),
+        (DockhandFailedError(), "dockhand_failed"),
+        (DockhandError("HTTP 500: boom"), "action_failed"),
+        (TimeoutError(), "cannot_connect"),
+        (ClientConnectionError(), "cannot_connect"),
+        (ValueError("bug"), "action_failed"),
+    ],
+)
+async def test_dockhand_action_turns_failures_into_user_errors(
+    error: Exception, translation_key: str
+):
+    async def fail() -> None:
+        raise error
+
+    with pytest.raises(HomeAssistantError) as exc_info:
+        await async_dockhand_action(fail())
+    assert exc_info.value.translation_key == translation_key
+    assert exc_info.value.__cause__ is error
+
+
+def test_create_issue_links_the_entry_where_home_assistant_can(monkeypatch):
+    calls = []
+
+    def current(hass, domain, issue_id, *, config_entry_id=None, **kwargs):
+        calls.append((domain, issue_id, config_entry_id))
+
+    monkeypatch.setattr(
+        "custom_components.dockhand.helpers.ir.async_create_issue", current
+    )
+    create_issue(MagicMock(), "entry_a", "x", is_fixable=False)
+    assert calls == [("dockhand", "x", "entry_a")]
+
+
+def test_create_issue_without_entry_links_before_2026_11(monkeypatch):
+    calls = []
+
+    def before(hass, domain, issue_id, *, is_fixable):
+        calls.append((domain, issue_id))
+
+    monkeypatch.setattr(
+        "custom_components.dockhand.helpers.ir.async_create_issue", before
+    )
+    create_issue(MagicMock(), "entry_a", "x", is_fixable=False)
+    assert calls == [("dockhand", "x")]

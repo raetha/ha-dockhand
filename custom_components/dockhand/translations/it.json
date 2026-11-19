@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Configura polling e funzionalità",
-        "description": "Imposta la frequenza di polling di Dockhand e i gruppi di entità opzionali da abilitare. Tutto questo può essere modificato in seguito tramite Configura.",
+        "title": "Scegli le funzionalità",
+        "description": "Scegli quali gruppi di entità facoltativi creare. Tutto può essere modificato in seguito tramite Configura.",
         "data": {
-          "poll_interval_fast": "Intervallo di polling rapido (secondi) — statistiche, container e stack",
-          "poll_interval_slow": "Intervallo di polling lento (secondi) — immagini, volumi, reti, pianificazioni",
           "enable_schedules": "Abilita sensori pianificazione",
           "enable_images": "Abilita sensori immagini",
           "enable_volumes": "Abilita sensori volumi",
           "enable_networks": "Abilita sensori reti",
           "enable_runtime_controls": "Abilita controlli runtime (avanzato)",
           "enable_resource_stats": "Abilita sensori CPU/memoria/rete/I-O disco per container e stack",
-          "poll_interval_precise_updates": "Intervallo di controllo degli aggiornamenti precisi (secondi)",
           "enable_update_entities": "Abilita entità di aggiornamento",
           "enable_precise_updates": "Abilita versioni di aggiornamento precise"
         },
         "data_description": {
-          "poll_interval_fast": "Con quale frequenza aggiornare le statistiche. Predefinito: 60. Minimo: 10.",
-          "poll_interval_slow": "Con quale frequenza aggiornare immagini, volumi, reti e pianificazioni. Predefinito: 600. Minimo: 30.",
           "enable_schedules": "Abilita i sensori per le pianificazioni di manutenzione Dockhand.",
           "enable_images": "Abilita i sensori per le immagini Docker per ogni ambiente.",
           "enable_volumes": "Abilita i sensori per i volumi Docker per ogni ambiente.",
           "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente.",
           "enable_runtime_controls": "Crea entità number/select per modificare in tempo reale i limiti di CPU, memoria e processi, e la policy di riavvio, di un container senza stack. Non disponibile per i container gestiti da Compose.",
           "enable_resource_stats": "Crea sensori di CPU, memoria, rete e I/O del disco per ogni container, più i totali di ogni stack. Disattivato per impostazione predefinita perché sono molte entità che la maggior parte delle persone non usa; disattivandolo vengono rimosse anche quelle già create.",
-          "poll_interval_precise_updates": "Con quale frequenza vengono eseguite le query al registro sopra indicate (secondi). Predefinito: 86400 (24 ore). Minimo: 300.",
           "enable_update_entities": "Crea un'entità di aggiornamento di Home Assistant per ogni container. Disattiva questa opzione se gestisci gli aggiornamenti in un altro modo e non vuoi che i container di Dockhand appaiano nella gestione aggiornamenti di HA. Nasconde anche il pulsante \"Aggiorna tutto\"; \"Controlla aggiornamenti\" continua comunque a funzionare.",
           "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. È anche l'unico modo per vedere lo stato di aggiornamento dei contenitori protetti di Dockhand stesso (Dockhand e Hawser) — Dockhand non espone mai il loro stato di aggiornamento tramite i normali dati di controllo aggiornamenti in cache. Richiede \"Abilita entità di aggiornamento\" sopra."
         }
@@ -80,7 +74,8 @@
     },
     "error": {
       "cannot_connect": "Impossibile connettersi a Dockhand. Controlla l'URL API e la connettività di rete.",
-      "invalid_auth": "Token API non valido. Assicurati di aver copiato il token completo che inizia con dh_."
+      "invalid_auth": "Token API non valido. Assicurati di aver copiato il token completo che inizia con dh_.",
+      "already_configured": "Questa istanza Dockhand è già configurata."
     },
     "abort": {
       "already_configured": "Questa istanza Dockhand è già configurata.",
@@ -91,33 +86,63 @@
   "options": {
     "step": {
       "init": {
-        "title": "Opzioni Dockhand",
-        "description": "Regola gli intervalli di polling e le sorgenti dati opzionali. Per modificare URL, SSL o il token API, usa Riconfigura.",
+        "title": "Opzioni di Dockhand",
+        "description": "Scegli quali gruppi di entità facoltativi creare. Per modificare URL, SSL o token API, usa invece Riconfigura.",
         "data": {
-          "poll_interval_fast": "Intervallo di polling rapido (secondi) — statistiche, container e stack",
-          "poll_interval_slow": "Intervallo di polling lento (secondi) — immagini, volumi, reti, pianificazioni",
           "enable_schedules": "Abilita sensori pianificazione",
           "enable_images": "Abilita sensori immagini",
           "enable_volumes": "Abilita sensori volumi",
           "enable_networks": "Abilita sensori reti",
           "enable_runtime_controls": "Abilita controlli runtime (avanzato)",
           "enable_resource_stats": "Abilita sensori CPU/memoria/rete/I-O disco per container e stack",
-          "poll_interval_precise_updates": "Intervallo di controllo degli aggiornamenti precisi (secondi)",
           "enable_update_entities": "Abilita entità di aggiornamento",
           "enable_precise_updates": "Abilita versioni di aggiornamento precise"
         },
         "data_description": {
-          "poll_interval_fast": "Con quale frequenza aggiornare le statistiche. Predefinito: 60. Minimo: 10.",
-          "poll_interval_slow": "Con quale frequenza aggiornare immagini, volumi, reti e pianificazioni. Predefinito: 600. Minimo: 30.",
           "enable_schedules": "Abilita i sensori per le pianificazioni di manutenzione Dockhand.",
           "enable_images": "Abilita i sensori per le immagini Docker per ogni ambiente.",
           "enable_volumes": "Abilita i sensori per i volumi Docker per ogni ambiente.",
           "enable_networks": "Abilita i sensori per le reti Docker per ogni ambiente.",
           "enable_runtime_controls": "Crea entità number/select per modificare in tempo reale i limiti di CPU, memoria e processi, e la policy di riavvio, di un container senza stack. Non disponibile per i container gestiti da Compose.",
           "enable_resource_stats": "Crea sensori di CPU, memoria, rete e I/O del disco per ogni container, più i totali di ogni stack. Disattivato per impostazione predefinita perché sono molte entità che la maggior parte delle persone non usa; disattivandolo vengono rimosse anche quelle già create.",
-          "poll_interval_precise_updates": "Con quale frequenza vengono eseguite le query al registro sopra indicate (secondi). Predefinito: 86400 (24 ore). Minimo: 300.",
           "enable_update_entities": "Crea un'entità di aggiornamento di Home Assistant per ogni container. Disattiva questa opzione se gestisci gli aggiornamenti in un altro modo e non vuoi che i container di Dockhand appaiano nella gestione aggiornamenti di HA. Nasconde anche il pulsante \"Aggiorna tutto\"; \"Controlla aggiornamenti\" continua comunque a funzionare.",
           "enable_precise_updates": "Aggiorna le entità di aggiornamento per mostrare numeri di versione precisi (digest immagine) tramite query periodiche al registro, invece di un semplice tag immagine. È anche l'unico modo per vedere lo stato di aggiornamento dei contenitori protetti di Dockhand stesso (Dockhand e Hawser) — Dockhand non espone mai il loro stato di aggiornamento tramite i normali dati di controllo aggiornamenti in cache. Richiede \"Abilita entità di aggiornamento\" sopra."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Entità degli ambienti",
+            "description": "Entità disattivate per impostazione predefinita, attivate per ogni ambiente, compresi quelli aggiunti in seguito.",
+            "data": {
+              "all": "Tutti",
+              "enabled": "Attiva per ogni ambiente"
+            },
+            "data_description": {
+              "all": "Seleziona per attivare tutti i tipi qui; deseleziona per disattivarli tutti.",
+              "enabled": "Selezionare un tipo lo attiva ovunque, tranne dove l'hai disattivato tu. Deselezionarlo lo disattiva di nuovo ovunque, compresi quelli che avevi attivato a mano."
+            }
+          },
+          "container_entities": {
+            "name": "Entità dei container",
+            "description": "Entità disattivate per impostazione predefinita, attivate per ogni container, compresi quelli aggiunti in seguito.",
+            "data": {
+              "all": "Tutti",
+              "enabled": "Attiva per ogni container"
+            },
+            "data_description": {
+              "all": "Seleziona per attivare tutti i tipi qui; deseleziona per disattivarli tutti.",
+              "enabled": "Selezionare un tipo lo attiva ovunque, tranne dove l'hai disattivato tu. Deselezionarlo lo disattiva di nuovo ovunque, compresi quelli che avevi attivato a mano."
+            }
+          },
+          "stack_entities": {
+            "name": "Entità degli stack",
+            "description": "Entità disattivate per impostazione predefinita, attivate per ogni stack, compresi quelli aggiunti in seguito.",
+            "data": {
+              "enabled": "Attiva per ogni stack"
+            },
+            "data_description": {
+              "enabled": "Selezionare un tipo lo attiva ovunque, tranne dove l'hai disattivato tu. Deselezionarlo lo disattiva di nuovo ovunque, compresi quelli che avevi attivato a mano."
+            }
+          }
         }
       }
     }
@@ -125,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "Utilizzo CPU"
+        "name": "Utilizzo CPU",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "CPU"
+          },
+          "top_containers": {
+            "name": "Container principali"
+          }
+        }
       },
       "memory_usage": {
         "name": "Utilizzo memoria"
@@ -149,28 +182,206 @@
         "name": "Utilizzo del disco"
       },
       "activity_events": {
-        "name": "Eventi di attività"
+        "name": "Eventi di attività",
+        "state_attributes": {
+          "recent_events": {
+            "name": "Eventi recenti"
+          }
+        }
       },
       "state": {
-        "name": "Stato"
+        "name": "Stato",
+        "state": {
+          "created": "Creato",
+          "running": "In esecuzione",
+          "paused": "In pausa",
+          "restarting": "Riavvio",
+          "removing": "Rimozione",
+          "exited": "Terminato",
+          "dead": "Morto"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "Codice di uscita"
+          },
+          "image": {
+            "name": "Immagine"
+          },
+          "networks": {
+            "name": "Reti"
+          },
+          "restart_count": {
+            "name": "Numero di riavvii"
+          },
+          "system_container": {
+            "name": "Container di sistema"
+          },
+          "tag_colors": {
+            "name": "Colori dei tag"
+          },
+          "tags": {
+            "name": "Tag"
+          }
+        }
       },
       "health": {
-        "name": "Salute"
+        "name": "Salute",
+        "state": {
+          "healthy": "Integro",
+          "unhealthy": "Non integro",
+          "starting": "Avvio"
+        }
       },
       "status": {
-        "name": "Stato"
+        "name": "Stato",
+        "state": {
+          "running": "In esecuzione",
+          "partial": "Parziale",
+          "restarting": "Riavvio",
+          "stopped": "Fermato",
+          "created": "Creato"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "Container di sistema"
+          },
+          "tag_colors": {
+            "name": "Colori dei tag"
+          },
+          "tags": {
+            "name": "Tag"
+          },
+          "type": {
+            "name": "Tipo",
+            "state": {
+              "internal": "Interno",
+              "git": "Git",
+              "untracked": "Non tracciato"
+            }
+          }
+        }
       },
       "containers_in_stack": {
-        "name": "Container"
+        "name": "Container",
+        "state_attributes": {
+          "containers": {
+            "name": "Container"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Versione agente Hawser"
+        "name": "Versione agente Hawser",
+        "state_attributes": {
+          "agent_id": {
+            "name": "ID agente"
+          },
+          "agent_name": {
+            "name": "Nome agente"
+          }
+        }
       },
       "next_run": {
-        "name": "Prossima esecuzione"
+        "name": "Prossima esecuzione",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Aggiornamento container",
+              "container_start": "Avvio container",
+              "container_stop": "Arresto container",
+              "git_stack_sync": "Sincronizzazione stack Git",
+              "system_cleanup": "Pulizia del sistema",
+              "env_update_check": "Controllo aggiornamenti dell’ambiente",
+              "image_prune": "Pulizia immagini",
+              "backup": "Backup",
+              "repo_prune": "Pulizia repository",
+              "repo_check": "Controllo repository",
+              "repo_verify": "Verifica repository",
+              "stack_deploy": "Distribuzione stack",
+              "deploy_log_reconcile": "Riconciliazione log di distribuzione",
+              "env_report": "Rapporto di stato"
+            },
+            "name": "Tipo"
+          },
+          "cron_expression": {
+            "name": "Espressione cron"
+          },
+          "enabled": {
+            "name": "Attivato"
+          },
+          "environment": {
+            "name": "Ambiente"
+          }
+        }
       },
       "last_status": {
-        "name": "Ultimo stato"
+        "name": "Ultimo stato",
+        "state": {
+          "queued": "In coda",
+          "running": "In esecuzione",
+          "success": "Riuscito",
+          "failed": "Non riuscito",
+          "skipped": "Saltato",
+          "warning": "Avviso",
+          "error": "Errore",
+          "cancelled": "Annullato",
+          "stale": "Obsoleto"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Aggiornamento container",
+              "container_start": "Avvio container",
+              "container_stop": "Arresto container",
+              "git_stack_sync": "Sincronizzazione stack Git",
+              "system_cleanup": "Pulizia del sistema",
+              "env_update_check": "Controllo aggiornamenti dell’ambiente",
+              "image_prune": "Pulizia immagini",
+              "backup": "Backup",
+              "repo_prune": "Pulizia repository",
+              "repo_check": "Controllo repository",
+              "repo_verify": "Verifica repository",
+              "stack_deploy": "Distribuzione stack",
+              "deploy_log_reconcile": "Riconciliazione log di distribuzione",
+              "env_report": "Rapporto di stato"
+            },
+            "name": "Tipo"
+          },
+          "cron_expression": {
+            "name": "Espressione cron"
+          },
+          "description": {
+            "name": "Descrizione"
+          },
+          "duration_ms": {
+            "name": "Durata (ms)"
+          },
+          "enabled": {
+            "name": "Attivato"
+          },
+          "environment": {
+            "name": "Ambiente"
+          },
+          "error_message": {
+            "name": "Messaggio di errore"
+          },
+          "is_system": {
+            "name": "Pianificazione di sistema"
+          },
+          "triggered_at": {
+            "name": "Avviato il"
+          },
+          "triggered_by": {
+            "name": "Avviato da",
+            "state": {
+              "cron": "Pianificata",
+              "manual": "Manuale",
+              "webhook": "Webhook"
+            }
+          },
+          "updates_found": {
+            "name": "Aggiornamenti trovati"
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "Utilizzo CPU"
@@ -224,13 +435,32 @@
           "syncing": "Sincronizzazione in corso",
           "synced": "Sincronizzato",
           "error": "Errore"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "Ultimo commit"
+          },
+          "sync_error": {
+            "name": "Errore di sincronizzazione"
+          },
+          "auto_update": {
+            "name": "Distribuzione automatica"
+          },
+          "webhook_enabled": {
+            "name": "Webhook attivato"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "Ultima sincronizzazione"
       },
       "host_platform": {
-        "name": "Piattaforma host"
+        "name": "Piattaforma host",
+        "state_attributes": {
+          "architecture": {
+            "name": "Architettura"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Versione Docker"
@@ -249,20 +479,273 @@
           "hawser-standard": "Agente Hawser (standard)",
           "hawser-edge": "Agente Hawser (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Container in esecuzione"
+      },
+      "containers_stopped": {
+        "name": "Container arrestati"
+      },
+      "containers_paused": {
+        "name": "Container in pausa"
+      },
+      "containers_restarting": {
+        "name": "Container in riavvio"
+      },
+      "containers_unhealthy": {
+        "name": "Container non integri"
+      },
+      "stacks_running": {
+        "name": "Stack in esecuzione"
+      },
+      "stacks_partial": {
+        "name": "Stack parzialmente in esecuzione"
+      },
+      "stacks_stopped": {
+        "name": "Stack arrestati"
+      },
+      "pending_updates": {
+        "name": "Aggiornamenti in sospeso"
+      },
+      "installable_updates": {
+        "name": "Aggiornamenti installabili"
+      },
+      "system_updates": {
+        "name": "Aggiornamenti dei container di sistema"
+      },
+      "version_tag_updates": {
+        "name": "Tag di versione più recenti"
+      },
+      "pinned_digest_updates": {
+        "name": "Aggiornamenti di digest fissato"
+      },
+      "held_updates": {
+        "name": "Aggiornamenti trattenuti"
+      },
+      "memory_used": {
+        "name": "Memoria utilizzata"
+      },
+      "memory_total": {
+        "name": "Memoria totale"
+      },
+      "disk_usage_images": {
+        "name": "Spazio su disco delle immagini"
+      },
+      "disk_usage_containers": {
+        "name": "Spazio su disco dei container"
+      },
+      "disk_usage_volumes": {
+        "name": "Spazio su disco dei volumi"
+      },
+      "disk_usage_build_cache": {
+        "name": "Spazio su disco della cache di build"
+      },
+      "volume_containers": {
+        "name": "Container",
+        "state_attributes": {
+          "containers": {
+            "name": "Container"
+          },
+          "created": {
+            "name": "Creato"
+          },
+          "driver": {
+            "name": "Driver"
+          },
+          "in_use": {
+            "name": "In uso"
+          },
+          "labels": {
+            "name": "Etichette"
+          },
+          "mountpoint": {
+            "name": "Punto di montaggio"
+          },
+          "scope": {
+            "name": "Ambito"
+          }
+        }
+      },
+      "volume_size": {
+        "name": "Dimensione"
+      },
+      "activity_events_today": {
+        "name": "Eventi di attività oggi"
+      },
+      "vulnerabilities_critical": {
+        "name": "Vulnerabilità critiche"
+      },
+      "vulnerabilities_high": {
+        "name": "Vulnerabilità alte"
+      },
+      "vulnerabilities_medium": {
+        "name": "Vulnerabilità medie"
+      },
+      "vulnerabilities_low": {
+        "name": "Vulnerabilità basse"
+      },
+      "images_scanned": {
+        "name": "Immagini scansionate"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser visto l'ultima volta"
+      },
+      "container_memory_cache": {
+        "name": "Cache di memoria"
+      },
+      "stack_running_containers": {
+        "name": "Container in esecuzione"
+      },
+      "stack_pending_updates": {
+        "name": "Aggiornamenti in sospeso"
+      },
+      "image": {
+        "unit_of_measurement": "container",
+        "state_attributes": {
+          "containers": {
+            "name": "Container"
+          },
+          "created": {
+            "name": "Creato"
+          },
+          "digests": {
+            "name": "Digest"
+          },
+          "size_bytes": {
+            "name": "Dimensione (byte)"
+          },
+          "source": {
+            "name": "Origine"
+          },
+          "tags": {
+            "name": "Tag"
+          },
+          "title": {
+            "name": "Titolo"
+          },
+          "vendor": {
+            "name": "Fornitore"
+          },
+          "version": {
+            "name": "Versione"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "Senza tag",
+        "unit_of_measurement": "container",
+        "state_attributes": {
+          "containers": {
+            "name": "Container"
+          },
+          "created": {
+            "name": "Creato"
+          },
+          "digests": {
+            "name": "Digest"
+          },
+          "size_bytes": {
+            "name": "Dimensione (byte)"
+          },
+          "source": {
+            "name": "Origine"
+          },
+          "tags": {
+            "name": "Tag"
+          },
+          "title": {
+            "name": "Titolo"
+          },
+          "vendor": {
+            "name": "Fornitore"
+          },
+          "version": {
+            "name": "Versione"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "container",
+        "state_attributes": {
+          "addresses": {
+            "name": "Indirizzi"
+          },
+          "containers": {
+            "name": "Container"
+          },
+          "driver": {
+            "name": "Driver"
+          },
+          "internal": {
+            "name": "Interna"
+          },
+          "scope": {
+            "name": "Ambito"
+          },
+          "subnet": {
+            "name": "Sottorete"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "Online"
+        "name": "Online",
+        "state_attributes": {
+          "connection_host": {
+            "name": "Host"
+          },
+          "connection_port": {
+            "name": "Porta"
+          },
+          "labels": {
+            "name": "Etichette"
+          }
+        }
+      },
+      "vulnerability_scanning": {
+        "name": "Scansione vulnerabilità"
+      },
+      "git_stack_sync_error": {
+        "name": "Errore di sincronizzazione",
+        "state_attributes": {
+          "sync_error": {
+            "name": "Errore di sincronizzazione"
+          }
+        }
+      },
+      "stack_updates_available": {
+        "name": "Aggiornamenti disponibili",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "Container con aggiornamenti"
+          }
+        }
+      },
+      "live_updates": {
+        "name": "Aggiornamenti in tempo reale",
+        "state_attributes": {
+          "in_use": {
+            "name": "In uso"
+          }
+        }
+      }
+    },
+    "switch": {
+      "container_auto_update": {
+        "name": "Aggiornamento automatico"
+      },
+      "git_stack_auto_deploy": {
+        "name": "Distribuzione automatica"
+      },
+      "schedule_enabled": {
+        "name": "Abilitata"
       },
       "activity_logging": {
         "name": "Raccolta attività"
       },
       "metrics_collection": {
         "name": "Raccolta metriche"
-      },
-      "vulnerability_scanning": {
-        "name": "Scansione vulnerabilità"
       },
       "update_checks": {
         "name": "Controllo aggiornamenti"
@@ -272,20 +755,6 @@
       },
       "image_pruning": {
         "name": "Pulizia immagini"
-      },
-      "git_stack_sync_error": {
-        "name": "Errore di sincronizzazione"
-      },
-      "stack_updates_available": {
-        "name": "Aggiornamenti disponibili"
-      }
-    },
-    "switch": {
-      "container_auto_update": {
-        "name": "Aggiornamento automatico"
-      },
-      "git_stack_auto_deploy": {
-        "name": "Distribuzione automatica"
       }
     },
     "button": {
@@ -298,11 +767,32 @@
       "git_stack_deploy": {
         "name": "Distribuisci"
       },
+      "git_stack_sync": {
+        "name": "Sincronizza da Git"
+      },
       "stack_deploy": {
         "name": "Ridistribuisci"
       },
       "env_bulk_update": {
         "name": "Aggiorna tutti i container"
+      },
+      "pause": {
+        "name": "Metti in pausa"
+      },
+      "schedule_run": {
+        "name": "Esegui ora"
+      },
+      "prune_images": {
+        "name": "Elimina immagini inutilizzate"
+      },
+      "prune_containers": {
+        "name": "Elimina container arrestati"
+      },
+      "prune_networks": {
+        "name": "Elimina reti inutilizzate"
+      },
+      "prune_volumes": {
+        "name": "Elimina volumi inutilizzati"
       }
     },
     "number": {
@@ -325,6 +815,73 @@
           "unless-stopped": "Salvo se arrestato",
           "on-failure": "In caso di errore"
         }
+      },
+      "vulnerability_scanner": {
+        "name": "Scanner di vulnerabilità",
+        "state": {
+          "none": "Nessuno",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype e Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Modalità pulizia immagini",
+        "state": {
+          "dangling": "Solo immagini orfane",
+          "all": "Tutte le immagini inutilizzate"
+        }
+      },
+      "default_vulnerability_scanner": {
+        "name": "Scanner di vulnerabilità predefinito",
+        "state": {
+          "none": "Nessuno",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype e Trivy"
+        }
+      },
+      "event_collection_mode": {
+        "name": "Modalità di raccolta eventi",
+        "state": {
+          "stream": "Stream",
+          "poll": "Polling"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Intervallo di polling degli eventi",
+        "state": {
+          "30": "30 secondi",
+          "60": "60 secondi",
+          "120": "120 secondi",
+          "300": "300 secondi"
+        }
+      }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Evento Docker",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Terminato",
+              "health_status_healthy": "Controllo di integrità superato",
+              "health_status_starting": "Controllo di integrità in avvio",
+              "health_status_unhealthy": "Controllo di integrità non riuscito",
+              "kill": "Terminato forzatamente",
+              "oom": "Memoria esaurita",
+              "pause": "In pausa",
+              "restart": "Riavviato",
+              "start": "Avviato",
+              "stop": "Fermato",
+              "unpause": "Ripreso",
+              "update": "Aggiornato"
+            }
+          },
+          "exit_code": {
+            "name": "Codice di uscita"
+          }
+        }
       }
     }
   },
@@ -335,8 +892,47 @@
     "container_not_found": {
       "message": "Container non trovato — potrebbe essere stato rimosso"
     },
+    "entry_not_loaded": {
+      "message": "Questa istanza di Dockhand non è caricata. Controllala in Impostazioni → Dispositivi e servizi."
+    },
     "git_stack_not_found": {
       "message": "Stack git non trovato — potrebbe essere stato rimosso"
+    },
+    "invalid_target": {
+      "message": "Questo dispositivo non è un ambiente o un container Dockhand utilizzabile da questa azione."
+    },
+    "permission_denied": {
+      "message": "Dockhand ha rifiutato: l'utente del token API non ha il permesso necessario. Controlla il ruolo dell'utente in Dockhand."
+    },
+    "system_container": {
+      "message": "Il container di Dockhand stesso e gli agenti Hawser non possono essere ricreati da Home Assistant."
+    },
+    "session_auth_unsupported": {
+      "message": "Questa voce accede con un cookie di sessione, che non è più supportato. Usa Riconfigura per inserire un token API (Profilo → Token API in Dockhand)."
+    },
+    "setup_failed": {
+      "message": "Impossibile caricare i dati da Dockhand: {error}"
+    },
+    "update_failed": {
+      "message": "Impossibile aggiornare da Dockhand: {error}"
+    },
+    "token_invalid": {
+      "message": "Il token API di Dockhand non è valido o è stato revocato. Riautentica l'integrazione in Impostazioni → Dispositivi e servizi."
+    },
+    "stack_not_found": {
+      "message": "Stack non trovato: potrebbe essere stato rimosso"
+    },
+    "no_pending_updates": {
+      "message": "Non ci sono aggiornamenti da installare"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand ha segnalato un errore senza indicarne il motivo. I suoi log potrebbero dire di più."
+    },
+    "unexpected_response": {
+      "message": "Dockhand ha dato una risposta che questa integrazione non capisce. Verifica che Dockhand sia aggiornato."
+    },
+    "cannot_connect": {
+      "message": "Impossibile raggiungere Dockhand. Verifica che sia in esecuzione e che Home Assistant possa raggiungerlo."
     }
   },
   "issues": {
@@ -355,6 +951,109 @@
     "runtime_memory_reverted": {
       "title": "Limite di memoria ripristinato automaticamente per {container}",
       "description": "Il container \"{container}\" ha smesso di funzionare poco dopo l'abbassamento del suo limite di memoria, il che può accadere quando il nuovo limite è inferiore all'utilizzo effettivo del container e il kernel lo applica immediatamente. Il limite di memoria è stato ripristinato automaticamente al suo valore precedente ({memory_bytes} byte). Controlla i log e lo stato di salute attuale del container in Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand interroga gli eventi Docker",
+      "description": "Dockhand raccoglie gli eventi Docker con un polling ogni {interval} secondi invece di riceverli in stream. Per {environments}, gli aggiornamenti in tempo reale e le entità degli eventi Docker possono arrivare fino a {interval} secondi in ritardo e, con un intervallo superiore a 30 secondi, alcuni eventi non arrivano mai: ogni polling legge solo gli ultimi 30 secondi. Per riceverli in stream, imposta Modalità di raccolta eventi del dispositivo Dockhand su Stream (in Dockhand: Settings → General → Activity event collection mode). Se preferisci il polling, ignora questo problema: torna solo dopo un passaggio a Stream e di nuovo a Polling."
+    },
+    "retired_entities_automation": {
+      "title": "{name} usa entità Dockhand sostituite",
+      "description": "Dockhand ha sostituito alcune delle sue entità con entità nuove, e l’automazione {link} usa ancora entità vecchie. Modificala in modo che usi le nuove entità (entità vecchia → entità nuova):\n\n{entities}\n\nQuesta riparazione scompare quando non le usa più."
+    },
+    "retired_entities_script": {
+      "title": "{name} usa entità Dockhand sostituite",
+      "description": "Dockhand ha sostituito alcune delle sue entità con entità nuove, e lo script {link} usa ancora entità vecchie. Modificalo in modo che usi le nuove entità (entità vecchia → entità nuova):\n\n{entities}\n\nQuesta riparazione scompare quando non le usa più."
     }
+  },
+  "services": {
+    "prune": {
+      "name": "Rimuovi risorse inutilizzate",
+      "description": "Elimina le risorse Docker inutilizzate in un ambiente Dockhand e riporta cosa è stato rimosso.",
+      "fields": {
+        "device_id": {
+          "name": "Ambiente",
+          "description": "L'ambiente Dockhand da ripulire."
+        },
+        "resources": {
+          "name": "Risorse",
+          "description": "Cosa eliminare."
+        },
+        "all_images": {
+          "name": "Tutte le immagini inutilizzate",
+          "description": "Elimina anche le immagini con tag che nessun container usa, non solo quelle orfane (senza tag)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Ricrea container",
+      "description": "Ricrea un container dalla sua configurazione attuale, come salvandolo nell'editor di Dockhand, scaricando facoltativamente prima la sua immagine.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "Il container da ricreare."
+        },
+        "pull": {
+          "name": "Scarica immagine",
+          "description": "Scarica di nuovo prima l'immagine del container, per ottenere un'immagine più recente con lo stesso tag."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Container arrestati",
+        "images": "Immagini",
+        "volumes": "Volumi inutilizzati",
+        "networks": "Reti inutilizzate"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "vulnerability_scanning": "Scansione vulnerabilità",
+        "activity_events": "Eventi di attività",
+        "disk_usage": "Utilizzo del disco",
+        "vulnerabilities": "Vulnerabilità",
+        "prune_images": "Elimina immagini inutilizzate",
+        "prune_containers": "Elimina container arrestati",
+        "prune_networks": "Elimina reti inutilizzate",
+        "prune_volumes": "Elimina volumi inutilizzati",
+        "pinned_digest_updates": "Aggiornamenti di digest fissato",
+        "held_updates": "Aggiornamenti trattenuti",
+        "hawser_agent_version": "Versione agente Hawser",
+        "hawser_last_seen": "Hawser visto l'ultima volta",
+        "host_docker_version": "Versione Docker",
+        "host_platform": "Piattaforma host",
+        "uptime": "Tempo di attività"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Evento Docker",
+        "pause": "Metti in pausa",
+        "container_auto_update": "Aggiornamento automatico"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Distribuzione automatica"
+      }
+    }
+  },
+  "common": {
+    "release_notes_image": "Immagine: {image}",
+    "newer_tag_available": "È disponibile un tag di versione più recente: **{tag}**.",
+    "newer_tag_also_available": "È disponibile anche un tag di versione più recente: **{tag}**. Per passarci, aggiorna il tag nel file compose o nella configurazione del container.",
+    "newer_tag_advisory_only": "È solo un avviso: il container è vincolato al tag attuale, quindi Installa non lo porterà a questa versione. Per aggiornare, cambia il tag nel file compose o nella configurazione del container.",
+    "release_notes_truncated": "… (troncato)",
+    "versions_skipped": "_{count} versione/i saltata/e lungo il percorso._",
+    "view_full_release_notes": "Visualizza le note di rilascio complete",
+    "view_release_notes": "Visualizza le note di rilascio",
+    "pinned_to_digest": "**Vincolato a un digest.** Il tag dell'immagine punta a un nuovo digest, ma questo container è vincolato a quello vecchio. Per aggiornarlo, cambia il digest nel file compose o nel comando di avvio; Installa scaricherebbe di nuovo solo l'immagine vincolata.",
+    "update_held": "**Aggiornamento trattenuto:** mancano {hours} ora/e all'età minima dell'immagine impostata in Dockhand. Dopo potrà essere installato.",
+    "update_held_until_check": "**Aggiornamento trattenuto:** la nuova immagine ha raggiunto l'età minima impostata in Dockhand. Potrà essere installato al prossimo controllo degli aggiornamenti di Dockhand (o dopo **Controlla aggiornamenti immagini**).",
+    "scanner_may_block_update": "Questo ambiente analizza le immagini alla ricerca di vulnerabilità prima dell'aggiornamento. In base alla policy configurata, questo aggiornamento può essere bloccato se i risultati superano la soglia.",
+    "system_container_update": "Questo è un container di sistema e deve essere aggiornato direttamente sull'host Docker.",
+    "updates_disabled_by_label": "Aggiornamenti disattivati tramite l'etichetta `dockhand.update=false`."
   }
 }

@@ -24,9 +24,12 @@ from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
+    DockhandVersionCoordinator,
     _safe_list,
     _unwrap,
 )
+
+from .conftest import container
 
 # ---------------------------------------------------------------------------
 # Fixtures / helpers
@@ -35,11 +38,19 @@ from custom_components.dockhand.coordinator import (
 ENV1 = {"id": 1, "name": "local"}
 ENV2 = {"id": 2, "name": "remote"}
 STATS1 = {"name": "local", "cpu": 10.5, "containers": {"running": 2, "stopped": 1}}
-CONTAINER1 = {"id": "abc", "name": "web", "state": "running", "labels": {}}
+CONTAINER1 = container("web", id="abc")
 STACK1 = {"name": "myapp", "status": "running", "containers": 2}
 IMAGE1 = {"id": "sha256:deadbeef", "size": 104857600}
 NETWORK1 = {"id": "net1", "name": "bridge", "containers": {}}
-VOLUME1 = {"Name": "mydata", "UsageData": {"Size": 10485760}}
+VOLUME1 = {
+    "name": "mydata",
+    "driver": "local",
+    "mountpoint": "/var/lib/docker/volumes/mydata/_data",
+    "scope": "local",
+    "created": "2026-01-02T03:04:05Z",
+    "labels": {},
+    "usedBy": [],
+}
 
 
 def _make_client(
@@ -77,22 +88,21 @@ def _make_client(
     c.async_get_git_stacks = AsyncMock(return_value=[])
     c.async_get_auto_update_settings = AsyncMock(return_value={})
     c.async_get_pending_updates = AsyncMock(return_value=[])
+    c.async_get_tags = AsyncMock(return_value={"tags": []})
+    c.async_get_container_tags = AsyncMock(return_value={})
+    c.async_get_stack_tags = AsyncMock(return_value={})
     return c
 
 
 def _fast(hass: HomeAssistant, client, config=None, entry=None):
-    return DockhandFastCoordinator(
-        hass, client, config or {"poll_interval_fast": 30}, entry=entry
-    )
+    return DockhandFastCoordinator(hass, client, config or {}, entry=entry)
 
 
 def _update_coord(hass: HomeAssistant, client, fast_coordinator=None):
     if fast_coordinator is None:
         fast_coordinator = MagicMock()
         fast_coordinator.data = {"environments": {1: {"stats": {"name": "local"}}}}
-    return DockhandUpdateCoordinator(
-        hass, client, fast_coordinator, {"poll_interval_precise_updates": 86400}
-    )
+    return DockhandUpdateCoordinator(hass, client, fast_coordinator, {})
 
 
 def _slow(hass: HomeAssistant, client, config=None, fast_coordinator=None):
@@ -108,7 +118,6 @@ def _slow(hass: HomeAssistant, client, config=None, fast_coordinator=None):
         client,
         config
         or {
-            "poll_interval_slow": 300,
             "enable_images": True,
             "enable_networks": True,
             "enable_volumes": True,
@@ -282,22 +291,262 @@ async def test_fast_containers_failure_returns_empty(hass: HomeAssistant):
     assert coord.data["environments"][1]["containers"] == []
 
 
+@pytest.mark.parametrize("key", ["containers", "stacks"])
+async def test_fast_empty_list_needs_two_polls(hass: HomeAssistant, key: str):
+    """Dockhand answers HTTP 200 [] when Docker can't be reached, so an
+    empty list only counts once a second poll agrees."""
+    client = _make_client(
+        containers=[CONTAINER1], stacks=[{"name": "web"}], stats=STATS1
+    )
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == set()
+
+    getattr(client, f"async_get_{key}").return_value = []
+    client.async_get_all_dashboard_stats.return_value = [
+        {**STATS1, "id": 1, key: {"total": 0}}
+    ]
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert env["unconfirmed"] == {key}
+    assert key not in env["fetch_failures"]
+
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == set()
+
+
+async def test_fast_a_missing_container_needs_a_second_refresh(hass: HomeAssistant):
+    """A container being recreated drops out of the list for a moment."""
+    other = {**CONTAINER1, "id": "def", "name": "db"}
+    client = _make_client(containers=[CONTAINER1, other])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert "containers" not in coord.data["environments"][1]["unconfirmed"]
+
+    client.async_get_containers.return_value = [other]
+    await coord.async_refresh_environment(1)
+    assert "containers" in coord.data["environments"][1]["unconfirmed"]
+
+    client.async_get_containers.return_value = [CONTAINER1, other]
+    await coord.async_refresh_environment(1)
+    assert "containers" not in coord.data["environments"][1]["unconfirmed"]
+
+    client.async_get_containers.return_value = [other]
+    await coord.async_refresh()
+    await coord.async_refresh()
+    assert "containers" not in coord.data["environments"][1]["unconfirmed"]
+
+
+async def test_fast_a_different_disappearance_restarts_the_wait(hass: HomeAssistant):
+    a, b, c = ({**CONTAINER1, "id": n, "name": n} for n in ("a", "b", "c"))
+    client = _make_client(containers=[a, b, c])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    client.async_get_containers.return_value = [a, b]
+    await coord.async_refresh()
+    client.async_get_containers.return_value = [a]
+    await coord.async_refresh()
+    assert "containers" in coord.data["environments"][1]["unconfirmed"]
+    await coord.async_refresh()
+    assert "containers" not in coord.data["environments"][1]["unconfirmed"]
+
+
+async def test_fast_empty_list_never_confirmed_while_dockhand_counts_some(
+    hass: HomeAssistant,
+):
+    client = _make_client(containers=[], stats={**STATS1, "containers": {"total": 3}})
+    coord = _fast(hass, client)
+    for _ in range(3):
+        await coord.async_refresh()
+        assert "containers" in coord.data["environments"][1]["unconfirmed"]
+
+
+async def test_fast_empty_list_unconfirmed_on_first_poll(hass: HomeAssistant):
+    """Nothing to compare against at startup, so even an environment that
+    really has no stacks waits one poll before its stacks count as empty."""
+    client = _make_client(stacks=[])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == {"stacks"}
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == set()
+
+
+async def test_fast_empty_list_guard_resets_when_items_return(hass: HomeAssistant):
+    client = _make_client(stacks=[])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    client.async_get_stacks.return_value = [{"name": "web"}]
+    await coord.async_refresh()
+    client.async_get_stacks.return_value = []
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == {"stacks"}
+
+
+async def test_fast_failed_fetch_is_not_also_unconfirmed(hass: HomeAssistant):
+    client = _make_client()
+    client.async_get_stacks = AsyncMock(side_effect=Exception("timeout"))
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert "stacks" in env["fetch_failures"]
+    assert "stacks" not in env["unconfirmed"]
+
+
+async def test_slow_empty_images_need_two_polls(hass: HomeAssistant):
+    client = _make_client()
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == set()
+    client.async_get_images.return_value = []
+    client.async_get_images.side_effect = None
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == {"images"}
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == set()
+
+
+async def test_slow_empty_images_unconfirmed_while_dockhand_counts_some(
+    hass: HomeAssistant,
+):
+    fast = MagicMock()
+    fast.data = {
+        "environments": {1: {"stats": {"name": "local", "images": {"total": 4}}}}
+    }
+    client = _make_client()
+    client.async_get_images = AsyncMock(return_value=[])
+    coord = _slow(hass, client, fast_coordinator=fast)
+    await coord.async_refresh()
+    await coord.async_refresh()
+    assert coord.data["environments"][1]["unconfirmed"] == {"images"}
+
+
+async def test_refresh_environment_updates_only_that_environment(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1, {"id": 2, "name": "remote"}])
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    before_other = coord.data["environments"][2]
+    stats_before = coord.data["environments"][1]["stats"]
+    listener = MagicMock()
+    coord.async_add_listener(listener)
+    client.async_get_all_dashboard_stats.reset_mock()
+
+    stopped = {**CONTAINER1, "state": "exited"}
+    client.async_get_containers = AsyncMock(return_value=[stopped])
+    await coord.async_refresh_environment(1)
+
+    assert coord.data["environments"][1]["containers"] == [stopped]
+    assert coord.data["environments"][1]["stats"] is stats_before
+    assert coord.data["environments"][2] is before_other
+    client.async_get_containers.assert_awaited_once_with(1)
+    client.async_get_all_dashboard_stats.assert_not_called()
+    listener.assert_called()
+
+
+async def test_refresh_environment_without_data_is_a_no_op(hass: HomeAssistant):
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh_environment(1)
+    client.async_get_containers.assert_not_called()
+
+
+async def test_refresh_environment_loses_to_a_full_poll(hass: HomeAssistant):
+    """A full poll that completes while a single-environment refresh is in
+    flight has newer data, so the older single-environment result is
+    dropped."""
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+
+    release = asyncio.Event()
+    stale = {**CONTAINER1, "state": "exited"}
+
+    async def slow_containers(env_id: int) -> list[dict]:
+        await release.wait()
+        return [stale]
+
+    client.async_get_containers = AsyncMock(side_effect=slow_containers)
+    task = hass.async_create_task(coord.async_refresh_environment(1))
+    await asyncio.sleep(0)
+    client.async_get_containers = AsyncMock(return_value=[CONTAINER1])
+    await coord.async_refresh()
+    release.set()
+    await task
+    assert coord.data["environments"][1]["containers"] == [CONTAINER1]
+
+
+async def test_concurrent_environment_refreshes_share_fetches(hass: HomeAssistant):
+    """Callers arriving while a refresh runs all join one refresh queued
+    behind it, which starts only after they arrived."""
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+
+    release = asyncio.Event()
+    calls: list[int] = []
+
+    async def slow_containers(env_id: int) -> list[dict]:
+        calls.append(env_id)
+        await release.wait()
+        return [CONTAINER1]
+
+    client.async_get_containers = AsyncMock(side_effect=slow_containers)
+    first = hass.async_create_task(coord.async_refresh_environment(1))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert calls == [1]  # the first refresh is under way
+    later = [
+        hass.async_create_task(coord.async_refresh_environment(1)) for _ in range(5)
+    ]
+    for _ in range(3):
+        await asyncio.sleep(0)
+    assert calls == [1]  # the rest wait for it
+    release.set()
+    await asyncio.gather(first, *later)
+    assert calls == [1, 1]
+    # Nothing left queued: the next caller starts a fresh refresh.
+    await coord.async_refresh_environment(1)
+    assert calls == [1, 1, 1]
+
+
+async def test_a_failed_shared_refresh_reaches_every_caller(hass: HomeAssistant):
+    client = _make_client()
+    coord = _fast(hass, client)
+    await coord.async_refresh()
+    with patch.object(
+        coord, "_async_refresh_environment_now", AsyncMock(side_effect=OSError("down"))
+    ):
+        results = await asyncio.gather(
+            coord.async_refresh_environment(1),
+            coord.async_refresh_environment(1),
+            return_exceptions=True,
+        )
+    assert [type(r) for r in results] == [OSError, OSError]
+
+
+async def test_fetched_since_tracks_the_fetch_behind_the_data(hass: HomeAssistant):
+    client = _make_client(envs=[ENV1, {"id": 2, "name": "remote"}])
+    coord = _fast(hass, client)
+    assert not coord.fetched_since(1, 0)
+    before_poll = hass.loop.time()
+    await coord.async_refresh()
+    after_poll = hass.loop.time()
+    assert coord.fetched_since(1, before_poll - 1)
+    assert not coord.fetched_since(1, after_poll)
+    await coord.async_refresh_environment(1)
+    assert coord.fetched_since(1, after_poll)
+    assert not coord.fetched_since(2, after_poll)
+
+
 async def test_fast_stats_failure_does_not_clear_environments(hass: HomeAssistant):
-    """/api/dashboard/stats (no env param) is the fast coordinator's only
-    source of which environments exist — no separate /api/environments
-    call. If it fails entirely (e.g. DNS resolution failure reaching
-    Dockhand), this must fail the update (last_update_success=False,
-    coordinator.data left at its last-known-good value) rather than
-    silently succeed with an empty dict — an empty-but-successful result
-    previously fed "zero stacks/containers for every environment" through
-    every downstream consumer that trusts non-empty coordinator data as
-    authoritative, including _cleanup_stale_registry's "fast data must be
-    non-empty" guard (empty *all_stats* still produced a non-empty
-    *fast_coordinator.data*, since _fetch_env ran per known env_id
-    regardless — the guard didn't catch this). A transient/total outage
-    should leave everything in place (entities go unavailable via
-    last_update_success) until it resolves, never look like every stack
-    and container just disappeared."""
+    """/api/dashboard/stats is the fast coordinator's only source of which
+    environments exist. If it fails entirely (Dockhand unreachable), the
+    update fails and the last good data stays, rather than succeeding
+    with no environments: cleanup trusts successful data, so an outage
+    would look like every stack and container had disappeared. Entities go
+    unavailable instead until it recovers."""
     client = _make_client()
     client.async_get_all_dashboard_stats = AsyncMock(side_effect=Exception("timeout"))
     coord = _fast(hass, client)
@@ -349,7 +598,7 @@ async def test_fast_pending_updates_fetched_when_scheduled_check_disabled(
             }
         ]
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     client.async_get_pending_updates.assert_called_once_with(1)
     env_data = coord.data["environments"][1]
@@ -374,7 +623,7 @@ async def test_fast_pending_updates_fetched_when_update_check_enabled(
             }
         ]
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     client.async_get_pending_updates.assert_called_once_with(1)
     env_data = coord.data["environments"][1]
@@ -393,7 +642,7 @@ async def test_fast_pending_updates_fetched_when_update_check_enabled(
 async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistant):
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
     client.async_get_pending_updates = AsyncMock(side_effect=Exception("timeout"))
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     env_data = coord.data["environments"][1]
     assert env_data["pending_update_container_ids"] == set()
@@ -403,14 +652,10 @@ async def test_fast_pending_updates_failure_returns_empty_set(hass: HomeAssistan
 async def test_fast_pending_updates_semver_only_row_excluded_from_ids(
     hass: HomeAssistant,
 ):
-    """A row with hasImageUpdate=False but a newerVersion suggestion is a
-    real, previously-unnoticed case: Dockhand's own scheduled update-check
-    job persists a row here for semver-only suggestions too (no actionable
-    digest update). Such a row must NOT contribute to
-    pending_update_container_ids (that set means "actionable"), but its
-    newerVersion must still be reachable via pending_update_details — this
-    is the fix for the over-inclusion bug this whole feature branch
-    uncovered."""
+    """Dockhand's scheduled update check also stores a row for a newer
+    semver tag with no new image (hasImageUpdate False). It isn't
+    actionable, so it stays out of pending_update_container_ids, but its
+    newerVersion is still reachable through pending_update_details."""
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
     newer_version = {"tag": "16.4-alpine", "bump": "minor", "skipped": ["16.4-alpine"]}
     client.async_get_pending_updates = AsyncMock(
@@ -426,7 +671,7 @@ async def test_fast_pending_updates_semver_only_row_excluded_from_ids(
             }
         ]
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     env_data = coord.data["environments"][1]
     assert env_data["pending_update_container_ids"] == set()
@@ -464,7 +709,7 @@ async def test_fast_pending_updates_mixed_actionable_and_semver_only_rows(
             },
         ]
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     env_data = coord.data["environments"][1]
     assert env_data["pending_update_container_ids"] == {"abc"}
@@ -472,9 +717,16 @@ async def test_fast_pending_updates_mixed_actionable_and_semver_only_rows(
     assert env_data["pending_update_details"]["def"]["hasImageUpdate"] is False
 
 
-async def test_fast_update_interval_from_config(hass: HomeAssistant):
-    coord = _fast(hass, _make_client(envs=[]), config={"poll_interval_fast": 90})
-    assert coord.update_interval == timedelta(seconds=90)
+@pytest.mark.parametrize(
+    "stored", [{}, {"poll_interval_fast": 10, "poll_interval_slow": 30}]
+)
+async def test_poll_intervals_are_fixed(hass: HomeAssistant, stored: dict):
+    """Home Assistant doesn't let users set polling intervals, and a value
+    left in an entry by an older release is ignored."""
+    client = _make_client(envs=[])
+    assert _fast(hass, client, config=stored).update_interval == timedelta(minutes=1)
+    assert _slow(hass, client, config=stored).update_interval == timedelta(minutes=10)
+    assert _update_coord(hass, client).update_interval == timedelta(hours=24)
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +743,7 @@ async def test_merge_pending_updates_from_check_builds_both_fields(
     pending_update_details (every item), same split _fetch_env applies
     to the periodic pending-updates poll."""
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
 
     newer_version = {"tag": "9.0", "bump": "major", "skipped": ["9.0"]}
@@ -530,7 +782,7 @@ async def test_merge_pending_updates_from_check_noop_when_env_missing(
     hass: HomeAssistant,
 ):
     client = _make_client(envs=[ENV1])
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     # env 999 was never fetched — merging into it must be a silent no-op,
     # not raise or fabricate an environment entry.
@@ -544,7 +796,7 @@ async def test_merge_pending_updates_from_check_ignores_items_without_id(
     hass: HomeAssistant,
 ):
     client = _make_client(envs=[ENV1], stats={**STATS1, "updateCheckEnabled": True})
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     coord.async_merge_pending_updates_from_check(
         1, [{"containerName": "web", "hasUpdate": True}]
@@ -554,13 +806,7 @@ async def test_merge_pending_updates_from_check_ignores_items_without_id(
     assert env_data["pending_update_details"] == {}
 
 
-SYSTEM_CONTAINER = {
-    "id": "sys1",
-    "name": "dockhand",
-    "state": "running",
-    "labels": {},
-    "systemContainer": "dockhand",
-}
+SYSTEM_CONTAINER = container("dockhand", id="sys1", systemContainer="dockhand")
 
 
 async def test_system_container_check_result_survives_next_poll(
@@ -576,7 +822,7 @@ async def test_system_container_check_result_survives_next_poll(
     client.async_get_pending_updates = AsyncMock(
         return_value=[{"containerId": "abc", "hasImageUpdate": True}]
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
 
     coord.async_merge_pending_updates_from_check(
@@ -608,7 +854,7 @@ async def test_system_container_check_result_dropped_once_container_recreated(
         stats={**STATS1, "updateCheckEnabled": True},
         containers=[CONTAINER1, SYSTEM_CONTAINER],
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     coord.async_merge_pending_updates_from_check(
         1, [{"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"}]
@@ -636,7 +882,7 @@ async def test_system_container_check_result_kept_when_containers_fetch_fails(
         stats={**STATS1, "updateCheckEnabled": True},
         containers=[CONTAINER1, SYSTEM_CONTAINER],
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     coord.async_merge_pending_updates_from_check(
         1, [{"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"}]
@@ -657,7 +903,7 @@ async def test_new_check_without_system_update_clears_stored_result(
         stats={**STATS1, "updateCheckEnabled": True},
         containers=[CONTAINER1, SYSTEM_CONTAINER],
     )
-    coord = _fast(hass, client, config={"poll_interval_fast": 30})
+    coord = _fast(hass, client)
     await coord.async_refresh()
     coord.async_merge_pending_updates_from_check(
         1, [{"containerId": "sys1", "hasUpdate": True, "systemContainer": "dockhand"}]
@@ -732,7 +978,6 @@ async def test_slow_all_features_disabled(hass: HomeAssistant):
         hass,
         client,
         config={
-            "poll_interval_slow": 300,
             "enable_images": False,
             "enable_networks": False,
             "enable_volumes": False,
@@ -753,7 +998,6 @@ async def test_slow_only_images_enabled(hass: HomeAssistant):
         hass,
         client,
         config={
-            "poll_interval_slow": 300,
             "enable_images": True,
             "enable_networks": False,
             "enable_volumes": False,
@@ -850,7 +1094,7 @@ async def test_slow_runtime_controls_inspects_stackless_containers_only(
     coord = _slow(
         hass,
         client,
-        config={"poll_interval_slow": 300, "enable_runtime_controls": True},
+        config={"enable_runtime_controls": True},
     )
     await coord.async_refresh()
 
@@ -877,7 +1121,7 @@ async def test_slow_runtime_controls_inspect_failure_omits_container(
     coord = _slow(
         hass,
         client,
-        config={"poll_interval_slow": 300, "enable_runtime_controls": True},
+        config={"enable_runtime_controls": True},
     )
     await coord.async_refresh()
     assert coord.data["environments"][1]["runtime_config"] == {}
@@ -1027,12 +1271,9 @@ async def test_slow_vulnerabilities_malformed_response_defaults_to_empty_dict(
 
 
 async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
-    """The real bug this whole file's _unwrap tracking exists for: a
-    failed images fetch (DNS failure, timeout, 5xx — anything) must not
-    look identical to "this environment genuinely has zero images." Both
-    conditions previously produced images == [] with no way to tell them
-    apart; fetch_failures is what makes that distinction visible to
-    downstream cleanup logic (__init__.py's _build_live_sets)."""
+    """A failed images fetch must not look like an environment with no
+    images: fetch_failures tells them apart for cleanup
+    (__init__.py's _build_live_sets)."""
     client = _make_client(envs=[ENV1])
     client.async_get_images = AsyncMock(side_effect=Exception("timeout"))
     coord = _slow(hass, client)
@@ -1044,14 +1285,10 @@ async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):
 async def test_slow_schedules_api_failure_recorded_not_silently_empty(
     hass: HomeAssistant,
 ):
-    """The actual reported incident: a transient schedules-fetch failure
-    (the report's own suspicion: DNS resolution failing intermittently)
-    used to become schedules: [] with the coordinator still reporting
-    success — indistinguishable from "there really are zero schedules
-    now" — which caused every existing schedule device and its entities
-    to be wrongly treated as confirmed-deleted by cleanup. This is the
-    top-level fetch_failures set (schedules is fetched once, not
-    per-environment, unlike images/networks/volumes above)."""
+    """A failed schedules fetch (an intermittent DNS failure in a real
+    report) is recorded in the top-level fetch_failures, not taken as
+    "no schedules": otherwise cleanup would delete every schedule device.
+    Schedules are fetched once, not per environment like images."""
     client = _make_client(envs=[ENV1])
     client.async_get_schedules = AsyncMock(
         side_effect=Exception("Name or service not known")
@@ -1090,8 +1327,9 @@ async def test_slow_auth_error_raises_update_failed_with_message(hass: HomeAssis
     client = _make_client()
     client.async_get_environments = AsyncMock(side_effect=DockhandAuthError("expired"))
     coord = _slow(hass, client)
-    with pytest.raises(UpdateFailed, match="reauth"):
+    with pytest.raises(UpdateFailed) as exc_info:
         await coord._async_update_data()
+    assert exc_info.value.translation_key == "token_invalid"
 
 
 async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):
@@ -1108,11 +1346,6 @@ async def test_slow_general_error_raises_update_failed(hass: HomeAssistant):
     coord = _slow(hass, client, fast_coordinator=fast_mock)
     with pytest.raises(UpdateFailed):
         await coord._async_update_data()
-
-
-async def test_slow_update_interval_from_config(hass: HomeAssistant):
-    coord = _slow(hass, _make_client(envs=[]), config={"poll_interval_slow": 1200})
-    assert coord.update_interval == timedelta(seconds=1200)
 
 
 # ---------------------------------------------------------------------------
@@ -1156,14 +1389,9 @@ async def test_update_coord_new_env_failure_is_empty_not_missing(hass: HomeAssis
 async def test_async_check_environment_only_touches_its_own_environment(
     hass: HomeAssistant,
 ):
-    """The actual design fix from this session: a per-environment "Check
-    for updates" button used to trigger a full coordinator refresh
-    (async_refresh()), which always checks every environment in one
-    gather — so pressing environment 1's button silently also re-checked
-    every other environment too, a real mismatch between what the
-    button's device implies and what pressing it actually does.
-    async_check_environment() is genuinely scoped: checking environment 1
-    must leave environment 2's already-known data completely untouched."""
+    """An environment's Check for updates button checks that environment
+    only, as its device implies: async_check_environment() leaves every
+    other environment's data untouched."""
     client = _make_client()
     client.async_check_container_updates = AsyncMock(
         return_value=[{"containerId": "abc", "hasUpdate": True}]
@@ -1238,7 +1466,6 @@ def _slow_with_entry(
         client,
         config
         or {
-            "poll_interval_slow": 300,
             "enable_images": True,
             "enable_schedules": True,
         },
@@ -1463,12 +1690,9 @@ async def test_fast_pending_updates_keep_pinned_digests_and_held_updates(
 # Update coordinator — Dockhand's own release, via /api/self-update/check
 # ---------------------------------------------------------------------------
 
-DOCKHAND_CONTAINER = {
-    "id": "dh1",
-    "name": "dockhand",
-    "image": "fnsys/dockhand:v1.0.53",
-    "systemContainer": "dockhand",
-}
+DOCKHAND_CONTAINER = container(
+    "dockhand", id="dh1", image="fnsys/dockhand:v1.0.53", systemContainer="dockhand"
+)
 DOCKHAND_ROW = {
     "containerId": "dh1",
     "containerName": "dockhand",
@@ -1732,3 +1956,82 @@ def test_self_update_newer_version_needs_a_tag(response):
 )
 def test_version_bump_unknown(current, new):
     assert coordinator_module._version_bump(current, new) is None
+
+
+async def test_schedule_run_in_progress_is_followed_until_it_ends(
+    hass: HomeAssistant,
+):
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import (
+        async_fire_time_changed,
+    )
+
+    running = {"id": 7, "type": "image_prune", "lastExecution": {"status": "running"}}
+    done = {"id": 7, "type": "image_prune", "lastExecution": {"status": "success"}}
+    client = _make_client(schedules=[running])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    assert coord.data["schedules"] == [running]
+    client.async_get_environments.reset_mock()
+
+    # Only the schedules are fetched again, until the run is over.
+    client.async_get_schedules = AsyncMock(side_effect=[[running], [done]])
+    for _ in range(3):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow()
+            + timedelta(seconds=coordinator_module.SCHEDULE_RUN_POLL + 1),
+        )
+        await hass.async_block_till_done()
+    assert coord.data["schedules"] == [done]
+    assert client.async_get_schedules.await_count == 2
+    client.async_get_environments.assert_not_called()
+    await coord.async_shutdown()
+
+
+async def test_schedule_refresh_keeps_data_when_it_fails(hass: HomeAssistant):
+    running = {"id": 7, "type": "image_prune", "lastExecution": {"status": "queued"}}
+    client = _make_client(schedules=[running])
+    coord = _slow(hass, client)
+    await coord.async_refresh()
+    client.async_get_schedules = AsyncMock(side_effect=Exception("timeout"))
+    await coord.async_refresh_schedules()
+    assert coord.data["schedules"] == [running]
+    # Still followed, and stopped on shutdown.
+    assert coord._unsub_run_poll is not None
+    await coord.async_shutdown()
+    assert coord._unsub_run_poll is None
+
+
+async def test_schedule_refresh_does_nothing_without_schedules(hass: HomeAssistant):
+    client = _make_client()
+    coord = _slow(hass, client, config={"enable_schedules": False})
+    await coord.async_refresh_schedules()
+    client.async_get_schedules.assert_not_called()
+
+
+async def test_listener_and_cleanup_timing_logged_at_debug(
+    hass: HomeAssistant, caplog: pytest.LogCaptureFixture
+):
+    """Where a slow poll's time goes, without a profile."""
+    import logging
+
+    from custom_components.dockhand import _cleanup_stale_registry
+
+    coord = DockhandVersionCoordinator(hass, MagicMock())
+    coord.async_add_listener(lambda: None)
+    entry = MagicMock()
+    entry.title = "Dockhand"
+    entry.runtime_data.fast_coordinator.data = {"environments": {}}
+
+    caplog.set_level(logging.INFO, logger="custom_components.dockhand")
+    coord.async_update_listeners()
+    _cleanup_stale_registry(hass, entry)
+    assert "listeners in" not in caplog.text
+    assert "registry cleanup" not in caplog.text
+
+    caplog.set_level(logging.DEBUG, logger="custom_components.dockhand")
+    coord.async_update_listeners()
+    _cleanup_stale_registry(hass, entry)
+    assert "1 listeners in" in caplog.text
+    assert "registry cleanup for Dockhand took" in caplog.text

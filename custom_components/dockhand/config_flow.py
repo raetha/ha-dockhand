@@ -4,8 +4,12 @@ from typing import Any, override
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import section
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.selector import (
+    SelectSelector,
+    SelectSelectorConfig,
+    SelectSelectorMode,
     TextSelector,
     TextSelectorConfig,
     TextSelectorType,
@@ -24,9 +28,7 @@ from .const import (
     CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_UPDATE_ENTITIES,
     CONF_ENABLE_VOLUMES,
-    CONF_POLL_INTERVAL_FAST,
-    CONF_POLL_INTERVAL_PRECISE_UPDATES,
-    CONF_POLL_INTERVAL_SLOW,
+    CONF_ENABLED_ENTITIES,
     CONF_VERIFY_SSL,
     DEFAULT_ENABLE_IMAGES,
     DEFAULT_ENABLE_NETWORKS,
@@ -36,29 +38,17 @@ from .const import (
     DEFAULT_ENABLE_SCHEDULES,
     DEFAULT_ENABLE_UPDATE_ENTITIES,
     DEFAULT_ENABLE_VOLUMES,
-    DEFAULT_POLL_INTERVAL_FAST,
-    DEFAULT_POLL_INTERVAL_PRECISE_UPDATES,
-    DEFAULT_POLL_INTERVAL_SLOW,
     DOMAIN,
-    MIN_POLL_INTERVAL_FAST,
-    MIN_POLL_INTERVAL_PRECISE_UPDATES,
-    MIN_POLL_INTERVAL_SLOW,
     SCHEMA_MINOR_VERSION,
     SCHEMA_VERSION,
 )
+from .entity_defaults import OPTIONAL_ENTITIES, async_apply_choice, chosen
+from .helpers import ha_schema
 
 DEFAULT_VERIFY_SSL = True
 
 
-def _form(schema: vol.Schema) -> Any:
-    """A form schema in whatever type this Home Assistant's forms take.
-
-    From 2026.10 Home Assistant validates forms with probatio and makes
-    `import voluptuous` load probatio, so at runtime these schemas already
-    are probatio schemas; only the static types differ. Voluptuous stays
-    while the minimum Home Assistant version predates probatio.
-    """
-    return schema
+_form = ha_schema
 
 
 def _connection_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
@@ -106,18 +96,49 @@ def _token_schema() -> vol.Schema:
     )
 
 
+def _entity_sections(options: Mapping[str, Any]) -> dict[Any, Any]:
+    """One collapsed section per device kind: the disabled-by-default entity
+    types to turn on for every device of that kind (entity_defaults.py),
+    with an "All" box where there's more than one, since Home Assistant's
+    checkbox list has no select all."""
+    current = chosen(options)
+    return {
+        vol.Optional(f"{kind}_entities"): section(
+            _form(
+                vol.Schema(
+                    {
+                        **(
+                            {
+                                vol.Optional(
+                                    "all", default=current[kind] == set(keys)
+                                ): bool
+                            }
+                            if len(keys) > 1
+                            else {}
+                        ),
+                        vol.Optional(
+                            "enabled", default=[k for k in keys if k in current[kind]]
+                        ): SelectSelector(
+                            SelectSelectorConfig(
+                                options=list(keys),
+                                multiple=True,
+                                mode=SelectSelectorMode.LIST,
+                                translation_key=f"{kind}_entities",
+                            )
+                        ),
+                    }
+                )
+            ),
+            {"collapsed": True},
+        )
+        for kind, keys in OPTIONAL_ENTITIES.items()
+    }
+
+
 def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
     d = defaults or {}
     return vol.Schema(
         {
-            vol.Optional(
-                CONF_POLL_INTERVAL_FAST,
-                default=d.get(CONF_POLL_INTERVAL_FAST, DEFAULT_POLL_INTERVAL_FAST),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_POLL_INTERVAL_FAST)),
-            vol.Optional(
-                CONF_POLL_INTERVAL_SLOW,
-                default=d.get(CONF_POLL_INTERVAL_SLOW, DEFAULT_POLL_INTERVAL_SLOW),
-            ): vol.All(vol.Coerce(int), vol.Range(min=MIN_POLL_INTERVAL_SLOW)),
             vol.Optional(
                 CONF_ENABLE_SCHEDULES,
                 default=d.get(CONF_ENABLE_SCHEDULES, DEFAULT_ENABLE_SCHEDULES),
@@ -140,17 +161,8 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_ENABLE_RESOURCE_STATS, DEFAULT_ENABLE_RESOURCE_STATS
                 ),
             ): bool,
-            # Placed directly above enable_precise_updates and
-            # poll_interval_precise_updates, which are both refinements of this
-            # one — they have no effect at all when this is off. Was briefly
-            # grouped via a HA section() (in an unreleased 1.8.1 dev build) to
-            # make that relationship obvious, but reverted (see docs/backlog.md
-            # "Group update options via section()")
-            # after two different translation-structure attempts both failed to
-            # render field labels/help text correctly in a live instance and the
-            # actual cause couldn't be confirmed — not worth the schema-version
-            # churn for a grouping that doesn't work yet. The relationship is
-            # communicated via field order and description text only for now.
+            # Directly above enable_precise_updates, which refines it. Not
+            # grouped with section(): see docs/backlog.md.
             vol.Optional(
                 CONF_ENABLE_UPDATE_ENTITIES,
                 default=d.get(
@@ -163,20 +175,8 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
                     CONF_ENABLE_PRECISE_UPDATES, DEFAULT_ENABLE_PRECISE_UPDATES
                 ),
             ): bool,
-            vol.Optional(
-                CONF_POLL_INTERVAL_PRECISE_UPDATES,
-                default=d.get(
-                    CONF_POLL_INTERVAL_PRECISE_UPDATES,
-                    DEFAULT_POLL_INTERVAL_PRECISE_UPDATES,
-                ),
-            ): vol.All(
-                vol.Coerce(int), vol.Range(min=MIN_POLL_INTERVAL_PRECISE_UPDATES)
-            ),
-            # Deliberately last: a genuinely advanced setting (exposes
-            # write-capable number/select entities that change a
-            # container's actual runtime config), unlike everything above
-            # it, which is either a poll-interval tweak or a read-only
-            # visibility toggle for data most users want fairly often.
+            # Last: the only setting that adds controls which change a
+            # container's configuration.
             vol.Optional(
                 CONF_ENABLE_RUNTIME_CONTROLS,
                 default=d.get(
@@ -185,6 +185,10 @@ def _options_schema(defaults: dict[str, Any] | None = None) -> vol.Schema:
             ): bool,
         }
     )
+
+
+def _unique_id(api_url: str) -> str:
+    return api_url.rstrip("/").lower()
 
 
 class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -229,8 +233,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # this integration ever sets, silently breaking every
             # "open in Dockhand" link without any visible error anywhere.
             user_input[CONF_API_URL] = user_input[CONF_API_URL].strip()
-            unique_id = user_input[CONF_API_URL].rstrip("/").lower()
-            await self.async_set_unique_id(unique_id)
+            await self.async_set_unique_id(_unique_id(user_input[CONF_API_URL]))
             self._abort_if_unique_id_configured()
 
             verify_ssl = user_input.get(CONF_VERIFY_SSL, True)
@@ -239,7 +242,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             try:
                 await client.async_probe()
                 # Probe succeeded with no token — auth is disabled.
-                # Proceed to options step to collect poll/feature preferences.
+                # Proceed to the options step to collect feature preferences.
                 self._confirmed_data = user_input
                 return await self.async_step_setup_options()
             except DockhandAuthError:
@@ -278,12 +281,8 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._confirmed_data = merged
                     return await self.async_step_setup_options()
 
-                # Reconfigure, the only other way here: update its entry.
-                # __init__.py's update listener reloads it.
-                self.hass.config_entries.async_update_entry(
-                    self._get_reconfigure_entry(), data=merged
-                )
-                return self.async_abort(reason="reconfigure_successful")
+                # Reconfigure, the only other way here.
+                return self._finish_reconfigure(merged)
 
             except DockhandAuthError:
                 errors["base"] = "invalid_auth"
@@ -334,13 +333,13 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------ #
-    # Step 3: poll intervals and optional features (initial setup only)
+    # Step 3: optional features (initial setup only)
     # ------------------------------------------------------------------ #
 
     async def async_step_setup_options(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Collect poll intervals and feature flags during initial setup.
+        """Collect feature flags during initial setup.
 
         Stores them directly into entry.options so the Options flow can
         present and edit them without touching entry.data.
@@ -357,7 +356,7 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     # ------------------------------------------------------------------ #
-    # Reconfigure (change URL, SSL, or token; behaviour/poll in Options)
+    # Reconfigure (change URL, SSL, or token; features in Options)
     # ------------------------------------------------------------------ #
 
     async def async_step_reconfigure(
@@ -369,48 +368,78 @@ class DockhandConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         - Leave as-is or change it → probe with that token
         - Clear it → probe without auth; if server still requires auth, route
           to the token step so the user can re-enter one
-        Polling intervals and feature flags live in the Options flow.
+        Feature flags live in the Options flow.
         """
         errors: dict[str, str] = {}
-        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
-        if user_input is not None and entry:
+        entry = self._get_reconfigure_entry()
+        if user_input is not None:
             user_input[CONF_API_URL] = user_input[CONF_API_URL].strip()
             submitted_token = (user_input.get(CONF_API_TOKEN) or "").strip()
-
             probe_data = {
                 CONF_API_URL: user_input[CONF_API_URL],
                 CONF_VERIFY_SSL: user_input.get(CONF_VERIFY_SSL, True),
                 **({CONF_API_TOKEN: submitted_token} if submitted_token else {}),
             }
-            verify_ssl = probe_data.get(CONF_VERIFY_SSL, True)
-            session = async_get_clientsession(self.hass, verify_ssl=verify_ssl)
-            client = DockhandClient(session, probe_data)
-            try:
-                await client.async_probe()
-                # Probe succeeded — save exactly what was submitted.
-                # If token was cleared and probe passed, auth is disabled; strip it.
-                updated = {**entry.data, **probe_data}
-                if not submitted_token:
-                    updated.pop(CONF_API_TOKEN, None)
-                # async_update_entry() alone triggers a reload via
-                # __init__.py's update listener now — an explicit reload
-                # here would be redundant.
-                self.hass.config_entries.async_update_entry(entry, data=updated)
-                return self.async_abort(reason="reconfigure_successful")
-            except DockhandAuthError:
-                # Auth still required — prompt for token.
-                self._connection_data = probe_data
-                self._flow_origin = "reconfigure"
-                return await self.async_step_token()
-            except Exception:
-                errors["base"] = "cannot_connect"
+            if self._url_used_elsewhere(user_input[CONF_API_URL]):
+                errors["base"] = "already_configured"
+            else:
+                session = async_get_clientsession(
+                    self.hass, verify_ssl=probe_data[CONF_VERIFY_SSL]
+                )
+                try:
+                    await DockhandClient(session, probe_data).async_probe()
+                except DockhandAuthError:
+                    self._connection_data = probe_data
+                    self._flow_origin = "reconfigure"
+                    return await self.async_step_token()
+                except Exception:
+                    errors["base"] = "cannot_connect"
+                else:
+                    # A cleared token that still probes fine means auth is off.
+                    updated = {**entry.data, **probe_data}
+                    if not submitted_token:
+                        updated.pop(CONF_API_TOKEN, None)
+                    return self._finish_reconfigure(updated)
 
-        defaults = entry.data if entry else {}
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_form(_reconfigure_schema(defaults)),
+            data_schema=_form(_reconfigure_schema(user_input or dict(entry.data))),
             errors=errors,
         )
+
+    def _url_used_elsewhere(self, api_url: str) -> bool:
+        """Whether another Dockhand entry already uses this URL."""
+        own = self._get_reconfigure_entry().entry_id
+        return any(
+            other.entry_id != own and other.unique_id == _unique_id(api_url)
+            for other in self._async_current_entries(include_ignore=False)
+        )
+
+    def _finish_reconfigure(
+        self, data: dict[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Save new connection settings. The unique ID follows the URL so the
+        old URL can be added again; the title does too, unless the user has
+        renamed the entry. __init__.py's update listener reloads it."""
+        entry = self._get_reconfigure_entry()
+        title = entry.title
+        if title == entry.data.get(CONF_API_URL):
+            title = data[CONF_API_URL]
+        self.hass.config_entries.async_update_entry(
+            entry, data=data, unique_id=_unique_id(data[CONF_API_URL]), title=title
+        )
+        return self.async_abort(reason="reconfigure_successful")
+
+
+def _chosen_in_section(
+    answer: Mapping[str, Any], keys: tuple[str, ...], before: set[str]
+) -> list[str]:
+    """The types chosen in one section. Changing "All" wins over the list:
+    checked, every type; unchecked, none. Otherwise the list decides."""
+    was_all = before == set(keys)
+    if "all" in answer and answer["all"] != was_all:
+        return list(keys) if answer["all"] else []
+    return list(answer.get("enabled") or [])
 
 
 class DockhandOptionsFlow(config_entries.OptionsFlow):
@@ -421,8 +450,22 @@ class DockhandOptionsFlow(config_entries.OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+            options = dict(user_input)
+            before = chosen(self._entry.options)
+            options[CONF_ENABLED_ENTITIES] = {
+                kind: _chosen_in_section(
+                    options.pop(f"{kind}_entities", {}), keys, before[kind]
+                )
+                for kind, keys in OPTIONAL_ENTITIES.items()
+            }
+            async_apply_choice(
+                self.hass, self._entry.entry_id, self._entry.options, options
+            )
+            return self.async_create_entry(title="", data=options)
         defaults = dict(self._entry.options)
         return self.async_show_form(
-            step_id="init", data_schema=_form(_options_schema(defaults))
+            step_id="init",
+            data_schema=_form(
+                _options_schema(defaults).extend(_entity_sections(defaults))
+            ),
         )

@@ -40,8 +40,8 @@ grep -q '^## \[Unreleased\]' "$CHANGELOG" || fail "no '## [Unreleased]' section 
 if grep -qF "## [$VERSION]" "$CHANGELOG"; then
   fail "$CHANGELOG already has a [$VERSION] section — already bumped?"
 fi
-PREV_TAG=$(grep -oE '^\[Unreleased\]: .*/compare/v[0-9]+\.[0-9]+\.[0-9]+\.\.\.HEAD' "$CHANGELOG" \
-  | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -1 || true)
+PREV_TAG=$(grep -oE '^\[Unreleased\]: .*/compare/v?[0-9]+\.[0-9]+\.[0-9]+\.\.\.HEAD' "$CHANGELOG" \
+  | grep -oE 'v?[0-9]+\.[0-9]+\.[0-9]+' | tail -1 || true)
 [ -n "$PREV_TAG" ] || fail "could not read the previous tag from the [Unreleased] compare link"
 
 DIRTY=""
@@ -65,8 +65,8 @@ awk -v ver="$VERSION" -v date="$DATE" -v prev="$PREV_TAG" -v repo="$REPO_URL" '
     print; print ""; print "## [" ver "] - " date; heading = 1; next
   }
   /^\[Unreleased\]: / && !links {
-    print "[Unreleased]: " repo "/compare/v" ver "...HEAD"
-    print "[" ver "]: " repo "/compare/" prev "...v" ver
+    print "[Unreleased]: " repo "/compare/" ver "...HEAD"
+    print "[" ver "]: " repo "/compare/" prev "..." ver
     links = 1; next
   }
   { print }
@@ -87,5 +87,5 @@ cat "$TMP_CHANGELOG" > "$CHANGELOG"
   fi
   echo ""
   echo "  Review CHANGELOG.md, commit, and open the release pull request (dev -> main)."
-  echo "  CI tags v$VERSION and publishes the release when it's merged; don't tag by hand."
+  echo "  CI tags $VERSION and publishes the release when it's merged; don't tag by hand."
 } || true

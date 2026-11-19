@@ -2,7 +2,7 @@
 Tests for ContainerUpdateEntity and helpers (update.py).
 
 Two-tier architecture: Tier 1 (always on) is sourced entirely from the
-fast coordinator; Tier 2 (CONF_ENABLE_UPDATES, via update_coordinator,
+fast coordinator; Tier 2 (CONF_ENABLE_PRECISE_UPDATES, via update_coordinator,
 optionally None) layers precise digest data on top.
 
 Covers:
@@ -11,7 +11,7 @@ Covers:
   cache signal) and Tier 2 (real digests, prioritized over Tier 1 signals)
 - available: container in fast data, container missing, env missing,
   coordinator unhealthy (last_update_success=False)
-- release_summary: always None (no longer populated, consistent with HACS)
+- release_summary: always None, as HACS leaves it
 - async_release_notes: image name, ha-alert types verified (warning/info),
   scanner info note, system container warning, update disabled, no
   container, scanner+system combo, systemContainer priority over
@@ -37,17 +37,25 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from custom_components.dockhand.const import CONF_ENABLE_UPDATE_ENTITIES
 from custom_components.dockhand.coordinator import (
     DockhandFastCoordinator,
     DockhandUpdateCoordinator,
 )
+from custom_components.dockhand.installs import (
+    DockhandInstaller,
+    InstallSkipped,
+    install_signal,
+)
 from custom_components.dockhand.update import (
     ContainerUpdateEntity,
     _short_digest,
     async_setup_entry,
 )
+
+from .conftest import container, fast_coordinator, update_coordinator
 
 # ---------------------------------------------------------------------------
 # Test data
@@ -59,14 +67,7 @@ ENV_NAME = "myenv"
 CONTAINER_NAME = "nginx"
 CONTAINER_ID = "abc123def456"
 
-CONTAINER_NORMAL = {
-    "id": CONTAINER_ID,
-    "name": CONTAINER_NAME,
-    "state": "running",
-    "image": "nginx:latest",
-    "labels": {},
-    "systemContainer": None,
-}
+CONTAINER_NORMAL = container(CONTAINER_NAME, id=CONTAINER_ID, image="nginx:latest")
 CONTAINER_SYSTEM = {
     **CONTAINER_NORMAL,
     "image": "ghcr.io/finsys/hawser:latest",
@@ -141,9 +142,8 @@ def _make_fast_coord(
     pending_ids: set | None = None,
     pending_update_details: dict | None = None,
 ) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {
-        "environments": {
+    coord = fast_coordinator(
+        {
             ENV_ID: {
                 "containers": containers
                 if containers is not None
@@ -159,37 +159,29 @@ def _make_fast_coord(
                 "pending_update_details": pending_update_details or {},
             }
         }
+    )
+    coord.client.async_start_batch_update_stream.return_value = "job-1"
+    coord.client.async_get_update_check_settings.return_value = {
+        "vulnerabilityCriteria": "critical_high"
     }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    coord.client = MagicMock()
-    coord.client.async_start_batch_update_stream = AsyncMock(return_value="job-1")
-    coord.client.async_get_update_check_settings = AsyncMock(
-        return_value={"vulnerabilityCriteria": "critical_high"}
-    )
-    coord.client.async_get_version_notes = AsyncMock(
-        return_value=VERSION_NOTES_RESPONSE
-    )
+    coord.client.async_get_version_notes.return_value = VERSION_NOTES_RESPONSE
     # Default: job completes immediately in "done" status with one progress
     # line reporting 100%, matching a successful single-container update.
-    coord.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "done",
-                        "current": 1,
-                        "total": 1,
-                    }
+    coord.client.async_get_job.return_value = {
+        "status": "done",
+        "lines": [
+            {
+                "data": {
+                    "type": "progress",
+                    "containerId": CONTAINER_ID,
+                    "step": "done",
+                    "current": 1,
+                    "total": 1,
                 }
-            ],
-            "result": {"summary": {"total": 1, "success": 1}},
-        }
-    )
+            }
+        ],
+        "result": {"summary": {"total": 1, "success": 1}},
+    }
     return coord
 
 
@@ -197,14 +189,7 @@ def _make_update_coord(item: dict | None = None) -> MagicMock:
     """Tier 2 mock. item=None means "no data for this container yet" (not
     the same as update_coordinator=None, which means Tier 2 disabled
     entirely — see _make_entity's update_coordinator=... override)."""
-    coord = MagicMock(spec=DockhandUpdateCoordinator)
-    coord.data = {
-        "environments": {ENV_ID: {CONTAINER_ID: item}} if item else {ENV_ID: {}}
-    }
-    coord.last_update_success = True
-    coord.async_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
+    return update_coordinator({ENV_ID: {CONTAINER_ID: item} if item else {}})
 
 
 _UNSET = object()
@@ -233,6 +218,7 @@ def _make_entity(
         env_id=ENV_ID,
         env_name=ENV_NAME,
         container_name=CONTAINER_NAME,
+        installer=MagicMock(spec=DockhandInstaller),
     )
 
 
@@ -357,11 +343,9 @@ def test_tier2_latest_version_new_digest_when_update_available():
 
 
 def test_tier2_latest_version_falls_back_to_raw_tag_when_new_digest_missing():
-    """hasUpdate=True with no real digest attached — the fix for bug #2:
-    falls back to the container's raw image tag (distinguishable from
-    installed_version, which here is the currentDigest-derived short
-    digest), not to installed_version itself (which would falsely read
-    as "up to date")."""
+    """hasUpdate with no new digest: the latest version is the image's
+    tag, not installed_version (the current digest), which would read as
+    up to date."""
     item = {**ITEM_HAS_UPDATE, "newDigest": ""}
     entity = _make_entity(item)
     assert entity.installed_version == "53bb1e23fb30"
@@ -429,15 +413,13 @@ def test_latest_version_pending_cache_beats_absent_newer_version():
 
 
 # ---------------------------------------------------------------------------
-# _check_updates_item — Tier 1 / Tier 2 merge (bug #1/#2 fix)
+# _check_updates_item — Tier 1 / Tier 2 merge
 # ---------------------------------------------------------------------------
 
 
 def test_check_updates_item_tier1_only_no_tier2_at_all():
-    """Tier 2 entirely disabled — the merged item is built purely from
-    Tier 1's pending_update_details, and hasUpdate/newerVersion still
-    surface. This is the fix for bug #1/#2: previously returned {}
-    unconditionally whenever update_coordinator was None."""
+    """Without Tier 2 the item comes from Tier 1's pending_update_details
+    alone, and still carries hasUpdate and newerVersion."""
     entity = _make_entity(
         update_coordinator=None,
         pending_update_details={
@@ -543,7 +525,7 @@ def test_check_updates_item_empty_when_container_missing():
 
 
 # ---------------------------------------------------------------------------
-# latest_version — raw-tag-vs-sentinel fix (bug #2)
+# latest_version — raw tag or sentinel
 # ---------------------------------------------------------------------------
 
 
@@ -699,7 +681,7 @@ def test_install_offered_when_newer_version_but_pending_cache_flags_it():
 
 
 def test_release_summary_always_none():
-    # release_summary is no longer populated — consistent with HACS convention.
+    # Left empty, as HACS leaves it.
     # Image name and warnings appear in async_release_notes instead.
     assert _make_entity(containers=[CONTAINER_NORMAL]).release_summary is None
     assert (
@@ -1033,7 +1015,7 @@ async def test_release_notes_newer_version_truncates_long_body():
 
 
 # ---------------------------------------------------------------------------
-# async_release_notes — pending update with no newerVersion tag (bug #1 fix)
+# async_release_notes — pending update with no newerVersion tag
 # ---------------------------------------------------------------------------
 
 
@@ -1048,10 +1030,9 @@ async def test_release_notes_no_changelog_section_when_nothing_pending():
 
 
 async def test_release_notes_changelog_link_for_pending_update_without_tag():
-    """The bug #1 fix: hasUpdate=True (via Tier 1's merge, no digest, no
-    newerVersion tag) — version-notes is still called, with an EMPTY
-    versions list, and a bare changelog link is shown if Dockhand
-    resolves one."""
+    """An update with no digest and no newer tag still asks version-notes
+    (with no versions), and shows a changelog link if Dockhand finds
+    one."""
     entity = _make_entity(
         update_coordinator=None,
         pending_update_details={
@@ -1173,302 +1154,10 @@ def test_handle_coordinator_update_refreshes_features():
     entity = _make_entity(containers=[CONTAINER_NORMAL])
     # Simulate the container becoming system-classified on the next poll.
     entity.coordinator.data["environments"][ENV_ID]["containers"] = [CONTAINER_SYSTEM]
+    entity.coordinator.data = {**entity.coordinator.data}
     with patch.object(entity, "async_write_ha_state"):
         entity._handle_coordinator_update()
     assert UpdateEntityFeature.INSTALL not in entity._attr_supported_features
-
-
-# ---------------------------------------------------------------------------
-# async_install
-# ---------------------------------------------------------------------------
-
-
-async def _install(entity, **kwargs):
-    """Run async_install with async_write_ha_state patched out.
-
-    The entity is never added to hass in these unit tests, so the real
-    async_write_ha_state would raise — every async_install test needs this,
-    since async_install now writes state at start, on each progress line,
-    and in its finally block.
-    """
-    with patch.object(entity, "async_write_ha_state"):
-        await entity.async_install(version=None, backup=False, **kwargs)
-
-
-async def test_async_install_starts_batch_update_stream():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    await _install(entity)
-    entity.coordinator.client.async_start_batch_update_stream.assert_called_once_with(
-        ENV_ID, [CONTAINER_ID], vulnerability_criteria="critical_high"
-    )
-
-
-async def test_async_install_works_with_tier2_entirely_disabled():
-    """Install never needs a digest — only the container ID — so it works
-    the same whether or not update_coordinator exists at all."""
-    entity = _make_entity(update_coordinator=None)
-    await _install(entity)
-    entity.coordinator.client.async_start_batch_update_stream.assert_called_once_with(
-        ENV_ID, [CONTAINER_ID], vulnerability_criteria="critical_high"
-    )
-
-
-async def test_async_install_polls_job_until_done():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    await _install(entity)
-    entity.coordinator.client.async_get_job.assert_called_with("job-1")
-
-
-async def test_async_install_raises_when_dockhand_skips_the_container():
-    """Dockhand 1.0.53+ skips some containers inside a job it still reports
-    as done (e.g. the one it reaches the environment through). Install must
-    not look like it worked, and should still refresh."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    message = "Skipping nginx - Dockhand reaches this environment through it"
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "skipped",
-                        "success": True,
-                        "message": message,
-                    }
-                }
-            ],
-            "result": {"summary": {"total": 1, "success": 0, "skipped": 1}},
-        }
-    )
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await _install(entity)
-    assert exc_info.value.translation_placeholders == {"error": message}
-    entity.coordinator.async_refresh.assert_awaited()
-    assert entity._attr_in_progress is False
-
-
-async def test_async_install_reports_progress_percentage():
-    """update_percentage is derived from the known step pipeline
-    (pulling/scanning/creating/done), not Dockhand's current/total —
-    those are a batch-index counter (current = i+1 over
-    containerIds.length) that's always 1/1 for our single-container
-    calls, and would incorrectly read as 100% on the very first progress
-    line otherwise. Reset to None once the install finishes."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    percentages_seen = []
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "pulling",
-                        "current": 1,
-                        "total": 1,
-                    }
-                },
-            ],
-        }
-    )
-    with patch.object(
-        entity,
-        "async_write_ha_state",
-        side_effect=lambda: percentages_seen.append(entity._attr_update_percentage),
-    ):
-        await entity.async_install(version=None, backup=False)
-    # 0 (start), 20 (pulling step), then None (finally block resets it)
-    assert 20 in percentages_seen
-    assert 100 not in percentages_seen  # the current/total=1/1 bug this replaced
-    assert entity._attr_update_percentage is None
-    assert entity._attr_in_progress is False
-
-
-async def test_async_install_percentage_increases_through_full_pipeline():
-    """Regression test for the current/total=1/1 bug: with scanning
-    enabled, percentage should climb through pulling -> scanning ->
-    creating -> done, never jumping to 100 early."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    percentages_seen = []
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {"data": {"type": "start", "total": 1}},
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "pulling",
-                        "current": 1,
-                        "total": 1,
-                    }
-                },
-                {
-                    "data": {
-                        "type": "scan_start",
-                        "containerId": CONTAINER_ID,
-                        "step": "scanning",
-                        "current": 1,
-                        "total": 1,
-                    }
-                },
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "creating",
-                        "current": 1,
-                        "total": 1,
-                    }
-                },
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "done",
-                        "current": 1,
-                        "total": 1,
-                        "success": True,
-                    }
-                },
-            ],
-        }
-    )
-    with patch.object(
-        entity,
-        "async_write_ha_state",
-        side_effect=lambda: percentages_seen.append(entity._attr_update_percentage),
-    ):
-        await entity.async_install(version=None, backup=False)
-    non_none = [p for p in percentages_seen if p is not None]
-    assert non_none == sorted(non_none)
-    assert 20 in non_none  # pulling
-    assert 45 in non_none  # scanning
-    assert 75 in non_none  # creating
-    assert 100 in non_none  # done
-
-
-async def test_async_install_percentage_ignores_events_without_known_step():
-    """pull_log/scan_log/scan_complete events have no 'step' field —
-    should be silently ignored rather than clearing/erroring."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {
-                    "data": {
-                        "type": "progress",
-                        "containerId": CONTAINER_ID,
-                        "step": "pulling",
-                        "current": 1,
-                        "total": 1,
-                    }
-                },
-                {
-                    "data": {
-                        "type": "pull_log",
-                        "containerId": CONTAINER_ID,
-                        "pullStatus": "Downloading",
-                    }
-                },
-            ],
-        }
-    )
-    with patch.object(entity, "async_write_ha_state"):
-        await entity.async_install(version=None, backup=False)
-    # Just confirming no exception — pull_log's lack of a "step" key must
-    # not crash _STEP_PERCENTAGES.get() or regress the percentage.
-
-
-async def test_async_install_requests_refresh_after_update():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    await _install(entity)
-    entity.coordinator.async_refresh.assert_called_once()
-
-
-async def test_async_install_also_refreshes_tier2_when_present():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    update_coord = entity._update_coordinator
-    await _install(entity)
-    update_coord.async_refresh.assert_called_once()
-
-
-async def test_async_install_skips_tier2_refresh_when_disabled():
-    entity = _make_entity(update_coordinator=None)
-    await _install(entity)  # must not raise trying to refresh None
-
-
-async def test_async_install_raises_not_found_when_container_gone():
-    entity = _make_entity(containers=[])
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await _install(entity)
-    assert exc_info.value.translation_key == "container_not_found"
-
-
-async def test_async_install_raises_action_failed_on_api_error():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_start_batch_update_stream = AsyncMock(
-        side_effect=Exception("connection refused")
-    )
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await _install(entity)
-    assert exc_info.value.translation_key == "action_failed"
-    assert entity._attr_in_progress is False
-
-
-async def test_async_install_raises_action_failed_when_blocked():
-    """A 'blocked' event (vulnerability criteria exceeded) surfaces as
-    action_failed with the block reason in the message."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "running",
-            "lines": [
-                {
-                    "data": {
-                        "type": "blocked",
-                        "containerId": CONTAINER_ID,
-                        "blockReason": "2 critical vulnerabilities found",
-                    }
-                }
-            ],
-        }
-    )
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await _install(entity)
-    assert exc_info.value.translation_key == "action_failed"
-    assert "critical vulnerabilities" in str(
-        exc_info.value.translation_placeholders["error"]
-    )
-
-
-async def test_async_install_raises_action_failed_on_job_error_status():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={"status": "error", "lines": [], "result": {"error": "boom"}}
-    )
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await _install(entity)
-    assert exc_info.value.translation_key == "action_failed"
-    assert "boom" in str(exc_info.value.translation_placeholders["error"])
-
-
-async def test_async_install_falls_back_to_default_criteria_on_settings_error():
-    """If fetching vulnerabilityCriteria fails, the update still proceeds
-    with vulnerability_criteria=None (Dockhand's own server-side default)."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_update_check_settings = AsyncMock(
-        side_effect=Exception("settings unavailable")
-    )
-    await _install(entity)
-    entity.coordinator.client.async_start_batch_update_stream.assert_called_once_with(
-        ENV_ID, [CONTAINER_ID], vulnerability_criteria=None
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -1490,9 +1179,8 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     """A fast coordinator + entry pair for async_setup_entry tests, with a
     capturable listener callback (mimics what
     fast_coordinator.async_add_listener(cb) would return/store)."""
-    fast_coord = MagicMock(spec=DockhandFastCoordinator)
-    fast_coord.data = {
-        "environments": {
+    fast_coord = fast_coordinator(
+        {
             ENV_ID: {
                 "containers": containers
                 if containers is not None
@@ -1503,7 +1191,7 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
                 },
             }
         }
-    }
+    )
     listeners = []
     fast_coord.async_add_listener = MagicMock(
         side_effect=lambda cb: (listeners.append(cb), lambda: None)[1]
@@ -1513,6 +1201,7 @@ def _make_setup_env(containers=None, update_check_enabled=True, options=None):
     entry.entry_id = ENTRY_ID
     entry.runtime_data.fast_coordinator = fast_coord
     entry.runtime_data.update_coordinator = None
+    entry.runtime_data.version_coordinator.self_update_usable = False
     entry.runtime_data.known_entity_ids = set()
     entry.runtime_data.pending_readd_entity_ids = set()
     entry.async_on_unload = MagicMock()
@@ -1589,21 +1278,10 @@ async def test_setup_entry_creates_entity_for_container_added_later(hass):
 
 
 async def test_entity_not_duplicated_within_the_same_session(hass):
-    """Within one continuous setup call's known_entity_ids, calling the
-    dynamic entity-creation path again with the same data must not try to
-    recreate what's already been added this session. See
-    test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it
-    below for the other half of this — and for why checking the real
-    entity registry instead of a session-scoped set (which is what
-    update.py's own 'seen' set was replaced with, alongside every other
-    platform's equivalent) was actually wrong, not just differently
-    named, the bug this whole file's own history already covers. Seeds
-    the registry directly between the two calls to stand in for what a
-    real (not mocked) add_entities call would have done as a side effect
-    of the first one — already_registered() now re-confirms a cache hit
-    is still actually registered, so without this the mock's lack of
-    real side effects would make the second call look like the entity
-    had vanished."""
+    """A poll with the same data doesn't add an entity the setup already
+    added (known_entity_ids). The registry is seeded between the calls,
+    as a real add would do, since already_registered() also checks the
+    entity is still registered."""
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -1625,17 +1303,10 @@ async def test_entity_not_duplicated_within_the_same_session(hass):
 async def test_entity_recreated_on_a_fresh_session_even_if_registry_remembers_it(
     hass,
 ):
-    """The actual regression this guards, and the one that shipped
-    briefly during development before being caught: entity creation must
-    never be gated on the real entity registry remembering a unique_id
-    from a *previous* session — the registry is deliberately persistent
-    across reloads and restarts, but the live entity object backing it is
-    not, and has to be freshly constructed and handed to
-    async_add_entities() on every single async_setup_entry call. Seed the
-    registry (simulating a previous session having created this), but
-    deliberately leave known_entity_ids alone (a fresh, empty one — as it
-    would genuinely be on a new session) and confirm it still gets
-    recreated regardless of what the registry remembers."""
+    """Each setup adds every entity again, even though the registry
+    remembers its unique ID from before: the registry outlives a reload,
+    the entity objects don't. A fresh known_entity_ids (a new session)
+    still creates the entity."""
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -1686,34 +1357,13 @@ async def test_entity_recreated_within_the_same_session_if_removed(hass):
 
 
 async def test_entity_not_double_scheduled_when_add_fires_twice_before_task_runs(hass):
-    """Regression: when cleanup removes an update entity from the registry
-    mid-session, the re-add path in already_registered() must not schedule
-    two concurrent async_add_entities calls for the same unique_id.
-
-    The race: async_add_entities() is fire-and-forget (HA schedules the
-    work as a task). If _add_new_entities fires a second time before the
-    first task has landed — e.g. because a second coordinator refresh
-    completes before the event-loop processes the first re-add task, which
-    is exactly what happens when multiple async_install() calls each
-    trigger coordinator.async_refresh() at nearly the same time — the
-    second call also sees the entity absent from the registry and schedules
-    another re-add. Both tasks eventually run; the second one finds the
-    entity already loaded in the platform and HA logs:
-      "Platform dockhand does not generate unique IDs. ID … already exists"
-
-    The fix (pending_readd_entity_ids in DockhandData): after the first
-    detection of "entity gone from registry," the key is added to the
-    dedicated pending_readd_entity_ids set. Subsequent calls that see the
-    same gap while the key is in pending_readd_ids return True (skip)
-    instead of False (re-add), so the second concurrent firing never
-    schedules a duplicate task. The primary key is never removed from
-    known_entity_ids — it accurately tracks "this session added this
-    entity" throughout.
-
-    Simulated here by calling _add_new_entities directly twice in sequence
-    with the entity absent from the registry between both calls, verifying
-    that async_add_entities is called exactly once (not twice).
-    """
+    """When cleanup removes an update entity mid-session, two quick refreshes
+    (several installs at once) must re-add it once: async_add_entities()
+    runs as a task, so the second refresh still finds it missing, and a
+    second add makes Home Assistant log "ID … already exists". The first
+    re-add marks it in pending_readd_entity_ids, and the second skips it;
+    known_entity_ids keeps it throughout. Simulated by calling
+    _add_new_entities twice with the entity absent both times."""
     from homeassistant.helpers import entity_registry as er
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -1800,7 +1450,7 @@ def test_pending_updates_total_matches_update_entities_that_are_on():
     update count; it must equal the number of update entities that are on
     (latest_version != installed_version), whatever mix of actionable,
     system and semver-only signals is present."""
-    from custom_components.dockhand.sensor import DockhandEnvContainerCountSensor
+    from custom_components.dockhand.sensor import _pending_update_counts
 
     containers = [
         {**CONTAINER_NORMAL, "id": "actionable", "name": "a"},
@@ -1847,78 +1497,24 @@ def test_pending_updates_total_matches_update_entities_that_are_on():
             env_id=ENV_ID,
             env_name=ENV_NAME,
             container_name=c["name"],
+            installer=MagicMock(spec=DockhandInstaller),
         )
         if entity.latest_version != entity.installed_version:
             on += 1
 
-    sensor = DockhandEnvContainerCountSensor(
-        fast, tier2, ENTRY_ID, ENV_ID, ENV_NAME, "http://dockhand"
+    counts = _pending_update_counts(
+        fast.data["environments"][ENV_ID], tier2.data["environments"][ENV_ID]
     )
-    attrs = sensor.extra_state_attributes
     assert on == 5
-    assert attrs["pending_updates_total"] == on
-    assert attrs["pending_updates"] == 2
-    assert attrs["pending_system_updates"] == 1
-    assert attrs["pending_version_updates"] == 2
+    assert counts["total"] == on
+    assert counts["installable"] == 2
+    assert counts["system"] == 1
+    assert counts["version_tag"] == 2
 
 
 # ---------------------------------------------------------------------------
 # Install: other containers' lines, a failed step, a job that never ends
 # ---------------------------------------------------------------------------
-
-
-async def test_async_install_ignores_other_containers_lines():
-    """A batch job's log covers every container in it; another container's
-    failure isn't this one's."""
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "done",
-            "lines": [
-                {"data": {"type": "progress", "step": "failed", "containerId": "x"}},
-                {"data": {"type": "progress", "step": "done", "containerId": None}},
-            ],
-        }
-    )
-    await _install(entity)
-    assert entity._attr_in_progress is False
-
-
-async def test_async_install_raises_when_the_update_step_fails():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={
-            "status": "running",
-            "lines": [
-                {
-                    "data": {
-                        "type": "progress",
-                        "step": "failed",
-                        "containerId": CONTAINER_ID,
-                        "error": "pull failed",
-                    }
-                }
-            ],
-        }
-    )
-    with pytest.raises(HomeAssistantError) as exc_info:
-        await _install(entity)
-    assert exc_info.value.translation_placeholders["error"] == "pull failed"
-
-
-async def test_async_install_times_out_on_a_job_that_never_finishes():
-    entity = _make_entity(ITEM_HAS_UPDATE)
-    entity.coordinator.client.async_get_job = AsyncMock(
-        return_value={"status": "running", "lines": []}
-    )
-    with (
-        patch("custom_components.dockhand.update._JOB_POLL_MAX_ATTEMPTS", 2),
-        patch("custom_components.dockhand.update.asyncio.sleep", AsyncMock()),
-        pytest.raises(HomeAssistantError) as exc_info,
-    ):
-        await _install(entity)
-    assert "timed out" in exc_info.value.translation_placeholders["error"]
-    assert entity._attr_in_progress is False
 
 
 def test_update_status_is_empty_for_a_container_without_an_id():
@@ -2094,25 +1690,101 @@ def test_system_container_found_by_a_check_button_press_offers_no_install():
 
 
 def test_system_container_found_by_a_check_is_not_bulk_updated():
-    from custom_components.dockhand.sensor import DockhandEnvContainerCountSensor
+    from custom_components.dockhand.sensor import _pending_update_counts
 
     fast = _make_fast_coord(
         containers=[CONTAINER_DOCKHAND_BY_ID], pending_ids={CONTAINER_ID}
     )
-    sensor = DockhandEnvContainerCountSensor(
-        fast,
-        _make_update_coord(ITEM_DOCKHAND_UPDATE),
-        ENTRY_ID,
-        ENV_ID,
-        ENV_NAME,
-        "http://dockhand",
+    update = _make_update_coord(ITEM_DOCKHAND_UPDATE)
+    counts = _pending_update_counts(
+        fast.data["environments"][ENV_ID], update.data["environments"][ENV_ID]
     )
-    attrs = sensor.extra_state_attributes
-    assert attrs["pending_updates"] == 0
-    assert attrs["pending_system_updates"] == 1
-    assert attrs["pending_updates_total"] == 1
+    assert counts["installable"] == 0
+    assert counts["system"] == 1
+    assert counts["total"] == 1
 
 
 def test_no_container_is_not_a_system_container():
     entity = _make_entity(containers=[])
     assert entity._is_system() is False
+
+
+# ---------------------------------------------------------------------------
+# Install goes through the environment's install queue (installs.py)
+# ---------------------------------------------------------------------------
+
+
+async def test_install_queues_the_current_container():
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    entity._installer.async_install = AsyncMock(return_value={CONTAINER_ID: None})
+    await entity.async_install(version=None, backup=False)
+    entity._installer.async_install.assert_awaited_once_with(ENV_ID, [CONTAINER_ID])
+
+
+async def test_install_raises_the_containers_outcome():
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    entity._installer.async_install = AsyncMock(
+        return_value={CONTAINER_ID: InstallSkipped("Skipping nginx")}
+    )
+    with pytest.raises(HomeAssistantError) as err:
+        await entity.async_install(version=None, backup=False)
+    assert err.value.translation_placeholders == {"error": "Skipping nginx"}
+
+
+async def test_install_raises_not_found_when_container_gone():
+    entity = _make_entity(ITEM_HAS_UPDATE, containers=[])
+    with pytest.raises(HomeAssistantError) as err:
+        await entity.async_install(version=None, backup=False)
+    assert err.value.translation_key == "container_not_found"
+    entity._installer.async_install.assert_not_called()
+
+
+def test_progress_comes_from_the_install_queue():
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    entity._installer.progress.return_value = None
+    assert entity.in_progress is False
+    assert entity.update_percentage is None
+    entity._installer.progress.return_value = 45
+    assert entity.in_progress is True
+    assert entity.update_percentage == 45
+    entity._installer.progress.assert_called_with(ENV_ID, CONTAINER_ID)
+
+
+def test_no_progress_without_a_container():
+    entity = _make_entity(ITEM_HAS_UPDATE, containers=[])
+    assert entity.in_progress is False
+    entity._installer.progress.assert_not_called()
+
+
+async def test_entity_redraws_on_its_environments_install_progress(hass):
+    entity = _make_entity(ITEM_HAS_UPDATE)
+    entity.hass = hass
+    with (
+        patch(
+            "homeassistant.helpers.update_coordinator.CoordinatorEntity.async_added_to_hass"
+        ),
+        patch.object(entity, "async_write_ha_state") as write,
+    ):
+        await entity.async_added_to_hass()
+        async_dispatcher_send(hass, install_signal(ENTRY_ID, ENV_ID))
+        async_dispatcher_send(hass, install_signal(ENTRY_ID, ENV_ID + 1))
+        await hass.async_block_till_done()
+    write.assert_called_once()
+
+
+def test_on_whenever_latest_differs_even_if_it_sorts_lower():
+    """An image's version label and its tags can number differently (a
+    label "v2026.11.0", tags "4.0"). Home Assistant's own comparison would
+    call Dockhand's newer tag older and turn the entity off; any latest
+    version that differs from the installed one is a signal here."""
+    container = {
+        **CONTAINER_NORMAL,
+        "labels": {"org.opencontainers.image.version": "v2026.11.0"},
+    }
+    item = {
+        **ITEM_UP_TO_DATE,
+        "newerVersion": {"tag": "4.0", "bump": "major", "skipped": ["4.0"]},
+    }
+    entity = _make_entity(item, containers=[container])
+    assert (entity.installed_version, entity.latest_version) == ("v2026.11.0", "4.0")
+    assert entity.state == "on"

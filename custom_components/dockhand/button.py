@@ -1,46 +1,53 @@
-import asyncio
 from typing import Any, override
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
+from homeassistant.helpers.typing import UNDEFINED, UndefinedType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import DockhandConfigEntry
 from .const import (
     CONF_API_URL,
+    CONF_ENABLE_SCHEDULES,
     CONF_ENABLE_UPDATE_ENTITIES,
     DEFAULT_ENABLE_UPDATE_ENTITIES,
+    DOMAIN,
 )
 from .coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
 )
-from .entity import DockhandContainerEntity, DockhandStackEntity
+from .entity import (
+    DockhandContainerEntity,
+    DockhandScheduleEntity,
+    DockhandStackEntity,
+)
+from .entity_defaults import enabling_chosen
 from .helpers import (
+    PRUNE_RESOURCES,
     _actionable_pending_update_container_ids,
     _all_envs,
     _coordinator_env,
     _env_device,
     _find_git_stack,
+    _find_stack,
+    _schedule_can_run,
     _stack_device,
     _stack_has_system_container,
     already_registered,
+    async_dockhand_action,
+    async_prune_environment,
 )
+from .installs import DockhandInstaller, summarize_failures
 
 # Reads come from the coordinators. Actions aren't limited: each is one
 # request to Dockhand, which queues the Docker work itself.
 PARALLEL_UPDATES = 0
-
-# Same values as update.py's _poll_job — one shared job-polling budget
-# across both platforms since Dockhand's job endpoint behaves identically
-# either way.
-_JOB_POLL_INTERVAL_SECONDS = 2
-_JOB_POLL_MAX_ATTEMPTS = 900  # 900 * 2s = 30 minutes
 
 
 async def async_setup_entry(
@@ -48,6 +55,9 @@ async def async_setup_entry(
     entry: DockhandConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
+    async_add_entities = enabling_chosen(
+        entry.entry_id, entry.options, async_add_entities
+    )
     fast: DockhandFastCoordinator = entry.runtime_data.fast_coordinator
     slow: DockhandSlowCoordinator = entry.runtime_data.slow_coordinator
     update_coordinator: DockhandUpdateCoordinator | None = (
@@ -55,12 +65,7 @@ async def async_setup_entry(
     )
     client = entry.runtime_data.client
     base_url: str = entry.data.get(CONF_API_URL, "")
-    # Tier 1's own pending-updates fetch isn't gated on this option (see
-    # __init__.py's _build_live_sets for why), so pending data can still
-    # be non-empty here even with the platform off — has_updatable below
-    # must check this explicitly, or the bulk button could reappear from
-    # Tier 1 data alone for a user who disabled update entities entirely
-    # (github.com/raetha/ha-dockhand/issues/23).
+    # Update entities off also means no Update all button (issue #23).
     update_entities_enabled = entry.options.get(
         CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES
     )
@@ -101,47 +106,36 @@ async def async_setup_entry(
             ):
                 new.append(check_updates_button)
 
-            # Bulk "Update all" button — conditionally present, not just
-            # conditionally enabled: only created while CONF_ENABLE_UPDATE_ENTITIES
-            # is on and there is at least one non-system-container pending
-            # update in this environment, matching Dockhand's own {#if
-            # updatableContainersCount > 0} gating for its own "Update all"
-            # button. Removed via the central cleanup system the moment
-            # that's no longer true.
-            #
-            # _actionable_pending_update_container_ids() already combines
-            # Tier 1 (pending_update_container_ids) and Tier 2
-            # (update_coordinator, when configured) via the shared
-            # _container_has_pending_update() helper — same definition of
-            # "needs an update" the update entities themselves use, so
-            # this can never disagree with what's actually shown per
-            # container — and excludes system containers, the same
-            # exclusion this button's own _updatable_container_ids()
-            # applies before actually sending anything to Dockhand's
-            # batch-update API. One shared function for both, rather than
-            # each independently rebuilding the same system-container
-            # exclusion inline, is what keeps a future change to either
-            # check from silently drifting out of sync with the other.
-            pending = env_data.get("pending_update_container_ids") or set()
-            env_containers = env_data.get("containers") or []
-            update_env_data = (
-                _coordinator_env(update_coordinator.data, env_id)
-                if update_coordinator is not None
-                else None
-            )
-            has_updatable = update_entities_enabled and bool(
-                _actionable_pending_update_container_ids(
-                    env_containers,
-                    pending,
-                    update_env_data,
-                    env_data.get("pending_update_details"),
+            # Prune buttons, disabled by default: pruning deletes things.
+            for resource in PRUNE_RESOURCES:
+                prune = DockhandEnvPruneButton(
+                    fast,
+                    slow,
+                    entry.runtime_data,
+                    entry.entry_id,
+                    env_id,
+                    env_name,
+                    base_url,
+                    resource,
                 )
-            )
-            if has_updatable:
+                if not already_registered(
+                    hass,
+                    known_ids,
+                    "button",
+                    prune.unique_id,
+                    pending_readd_ids=pending_readd_ids,
+                ):
+                    new.append(prune)
+
+            # Bulk "Update all" button: present while update entities are
+            # on, available only while something can be updated (Dockhand's
+            # own button disappears instead, but an entity that comes and
+            # goes breaks automations and history).
+            if update_entities_enabled:
                 bulk_button = DockhandEnvBulkUpdateButton(
                     fast,
                     update_coordinator,
-                    client,
+                    entry.runtime_data.installer,
                     entry.entry_id,
                     env_id,
                     env_name,
@@ -168,19 +162,29 @@ async def async_setup_entry(
                     base_url,
                     container,
                 )
-                if not already_registered(
-                    hass,
-                    known_ids,
-                    "button",
-                    restart_button.unique_id,
-                    pending_readd_ids=pending_readd_ids,
+                for button in (
+                    restart_button,
+                    DockhandContainerPauseButton(
+                        fast,
+                        client,
+                        entry.entry_id,
+                        env_id,
+                        env_name,
+                        base_url,
+                        container,
+                    ),
                 ):
-                    new.append(restart_button)
+                    if not already_registered(
+                        hass,
+                        known_ids,
+                        "button",
+                        button.unique_id,
+                        pending_readd_ids=pending_readd_ids,
+                    ):
+                        new.append(button)
 
             for stack in env_data.get("stacks") or []:
-                has_system = _stack_has_system_container(
-                    stack, env_data.get("containers") or []
-                )
+                has_system = _stack_has_system_container(fast, env_id, stack)
                 if not has_system:
                     stack_restart_button = DockhandStackRestartButton(
                         fast,
@@ -246,6 +250,21 @@ async def async_setup_entry(
                     pending_readd_ids=pending_readd_ids,
                 ):
                     new.append(git_deploy_button)
+        if entry.options.get(CONF_ENABLE_SCHEDULES, False):
+            for sched in (slow.data or {}).get("schedules") or []:
+                if sched.get("id") is None or not _schedule_can_run(sched):
+                    continue
+                run_button = DockhandScheduleRunButton(
+                    slow, client, entry.entry_id, sched, base_url
+                )
+                if not already_registered(
+                    hass,
+                    known_ids,
+                    "button",
+                    run_button.unique_id,
+                    pending_readd_ids=pending_readd_ids,
+                ):
+                    new.append(run_button)
         return new
 
     async_add_entities(_build_entities())
@@ -323,15 +342,45 @@ class DockhandContainerRestartButton(_BaseFastContainerButton):
                 translation_domain="dockhand",
                 translation_key="container_not_found",
             )
-        try:
-            await self._client.async_restart_container(self._env_id, c["id"])
-        except Exception as err:
+        await async_dockhand_action(
+            self._client.async_restart_container(self._env_id, c["id"])
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
+
+
+class DockhandContainerPauseButton(_BaseFastContainerButton):
+    """Freeze a running container's processes: offered only while it runs,
+    and off by default, since most people never pause a container. Turning
+    the container's switch on resumes it, so there's no Resume button."""
+
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+    _attr_translation_key = "pause"
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._attr_unique_id = (
+            f"{self._entry_id}_{self._env_id}_container_{self._container_name}_pause"
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        c = self._container()
+        return super().available and c is not None and c.get("state") == "running"
+
+    @override
+    async def async_press(self) -> None:
+        c = self._container()
+        if not c:
             raise HomeAssistantError(
                 translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+                translation_key="container_not_found",
+            )
+        await async_dockhand_action(
+            self._client.async_pause_container(self._env_id, c["id"])
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandStackRestartButton(_BaseFastStackButton):
@@ -359,15 +408,10 @@ class DockhandStackRestartButton(_BaseFastStackButton):
 
     @override
     async def async_press(self) -> None:
-        try:
-            await self._client.async_restart_stack(self._env_id, self._stack_name)
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
+        await async_dockhand_action(
+            self._client.async_restart_stack(self._env_id, self._stack_name)
+        )
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandStackDeployButton(_BaseFastStackButton):
@@ -402,32 +446,26 @@ class DockhandStackDeployButton(_BaseFastStackButton):
         if not self._stack():
             raise HomeAssistantError(
                 translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": "Stack not found"},
+                translation_key="stack_not_found",
             )
-        try:
-            result = await self._client.async_deploy_stack(
-                self._env_id, self._stack_name
-            )
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        result = await async_dockhand_action(
+            self._client.async_deploy_stack(self._env_id, self._stack_name)
+        )
         # Dockhand returns HTTP 200 with {"success": false, "error": "..."}
         # for an expected failure mode (e.g. compose file location not
         # configured) rather than an HTTP error — _request() wouldn't
         # raise on this, so check explicitly.
         if not result.get("success", True):
+            if error := result.get("error"):
+                raise HomeAssistantError(
+                    translation_domain="dockhand",
+                    translation_key="action_failed",
+                    translation_placeholders={"error": str(error)},
+                )
             raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={
-                    "error": result.get("error", "Stack deploy failed")
-                },
+                translation_domain="dockhand", translation_key="dockhand_failed"
             )
-        await self.coordinator.async_refresh()
+        await self.coordinator.async_refresh_environment(self._env_id)
 
 
 class DockhandEnvBulkUpdateButton(
@@ -438,13 +476,9 @@ class DockhandEnvBulkUpdateButton(
     "Update all" button exactly (confirmed from its frontend source:
     same endpoint, same non-system-container exclusion).
 
-    Conditionally present, not just conditionally enabled: only created
-    when there is at least one non-system-container pending update in
-    this environment (same as Dockhand's own `{#if updatableContainersCount
-    > 0}` gating for its "Update all" button) — removed via the central
-    cleanup system the moment there's nothing left to update, exactly
-    mirroring how the button disappears in Dockhand's own UI rather than
-    just going idle/disabled.
+    Present while update entities are on and available only while
+    something can be updated: Dockhand's own button disappears instead,
+    but an entity that comes and goes breaks automations and history.
 
     "Pending update" here means either Tier 1 (Dockhand's own cached
     pending-updates check) or Tier 2 (the optional precise digest-based
@@ -457,11 +491,9 @@ class DockhandEnvBulkUpdateButton(
     found and can't keep this button alive, or its own container list,
     past the point an update actually resolved.
 
-    Named "Update all containers" — a static name via translation_key,
-    not a live count in the name. An earlier version showed "Update all
-    (N)" matching Dockhand's own wording, but a changing friendly_name on
-    a persistent (not recreated) entity reads as confusing entity churn
-    in HA's own UI/history, so this reverted to a plain static name.
+    Named "Update all containers", without Dockhand's live "(N)" count: a
+    changing friendly_name on a persistent entity reads as churn in HA's
+    UI and history.
     """
 
     _attr_has_entity_name = True
@@ -472,7 +504,7 @@ class DockhandEnvBulkUpdateButton(
         self,
         fast_coordinator: DockhandFastCoordinator,
         update_coordinator: DockhandUpdateCoordinator | None,
-        client: Any,
+        installer: DockhandInstaller,
         entry_id: str,
         env_id: int,
         env_name: str,
@@ -480,7 +512,7 @@ class DockhandEnvBulkUpdateButton(
     ) -> None:
         super().__init__(fast_coordinator)
         self._update_coordinator = update_coordinator
-        self._client = client
+        self._installer = installer
         self._entry_id = entry_id
         self._env_id = env_id
         self._env_name = env_name
@@ -527,95 +559,25 @@ class DockhandEnvBulkUpdateButton(
     def device_info(self) -> DeviceInfo:
         return _env_device(self._entry_id, self._env_id, self._env_name, self._base_url)
 
-    async def _vulnerability_criteria(self) -> str | None:
-        """Same best-effort fetch-then-fall-back-to-Dockhand's-own-default
-        pattern as the per-container update entities in update.py."""
-        try:
-            settings = await self._client.async_get_update_check_settings(self._env_id)
-        except Exception:
-            return None
-        criteria = settings.get("vulnerabilityCriteria")
-        return str(criteria) if criteria else None
-
     @override
     async def async_press(self) -> None:
         container_ids = self._updatable_container_ids()
         if not container_ids:
             raise HomeAssistantError(
                 translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": "No pending updates"},
+                translation_key="no_pending_updates",
             )
-        try:
-            criteria = await self._vulnerability_criteria()
-            job_id = await self._client.async_start_batch_update_stream(
-                self._env_id, container_ids, vulnerability_criteria=criteria
+        names = {
+            c.get("id"): c.get("name") or c.get("id")
+            for c in _coordinator_env(self.coordinator.data, self._env_id).get(
+                "containers"
             )
-            await self._poll_job(job_id)
-        except HomeAssistantError:
-            raise
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
-        await self.coordinator.async_refresh()
-
-    async def _poll_job(self, job_id: str) -> None:
-        """Poll GET /api/jobs/{id} until the whole batch finishes.
-
-        Unlike update.py's per-entity _poll_job, this covers multiple
-        containers in one job with no single update_percentage to
-        report (ButtonEntity has no progress concept) — collects every
-        per-container failure/block across the batch and raises a
-        single summary error covering all of them, rather than stopping
-        at the first one, since a partial batch failure shouldn't hide
-        that other containers in the same press may have failed too.
-        """
-        failures: list[str] = []
-        for _ in range(_JOB_POLL_MAX_ATTEMPTS):
-            job = await self._client.async_get_job(job_id)
-
-            for line in job.get("lines") or []:
-                data = line.get("data") or {}
-                event_type = data.get("type")
-                if event_type == "blocked":
-                    reason = data.get("blockReason", "vulnerability findings")
-                    cid = data.get("containerId", "?")
-                    failures.append(f"{cid}: blocked ({reason})")
-                elif event_type == "progress" and data.get("step") == "failed":
-                    failures.append(
-                        f"{data.get('containerId', '?')}: {data.get('error', 'failed')}"
-                    )
-
-            status = job.get("status")
-            if status == "done":
-                if failures:
-                    raise HomeAssistantError(
-                        translation_domain="dockhand",
-                        translation_key="action_failed",
-                        translation_placeholders={
-                            "error": "; ".join(dict.fromkeys(failures))
-                        },
-                    )
-                return
-            if status == "error":
-                result = job.get("result") or {}
-                raise HomeAssistantError(
-                    translation_domain="dockhand",
-                    translation_key="action_failed",
-                    translation_placeholders={
-                        "error": result.get("error", "batch update failed")
-                    },
-                )
-            await asyncio.sleep(_JOB_POLL_INTERVAL_SECONDS)
-
-        raise HomeAssistantError(
-            translation_domain="dockhand",
-            translation_key="action_failed",
-            translation_placeholders={"error": "Timed out waiting for batch update"},
-        )
+            or []
+        }
+        # The same queue as the update entities, so they show their
+        # progress and an Install pressed meanwhile joins this job.
+        outcomes = await self._installer.async_install(self._env_id, container_ids)
+        summarize_failures(outcomes, lambda cid: str(names.get(cid, cid)))
 
 
 class DockhandCheckUpdatesButton(
@@ -645,41 +607,20 @@ class DockhandCheckUpdatesButton(
         pending_update_container_ids AND pending_update_details for this
         environment immediately, via
         DockhandFastCoordinator.async_merge_pending_updates_from_check()
-        — this is new: previously Tier 1 had no way to reflect a forced
-        check at all until its own next 60s poll happened to line up
-        with whatever Dockhand's own cache ended up holding. Also new:
-        the full per-container response (hasUpdate, newerVersion,
-        digests) is now passed straight through to that merge, rather
-        than collapsed into a lossy set of "has an update" container
-        ids first — a manual "Check for updates" press used to throw
-        away newerVersion/digest data before it ever reached Tier 1,
-        which meant a press could confirm a real update or a semver
-        suggestion in Dockhand's own UI while ha-dockhand's own update
-        entity still showed nothing until the next periodic poll.
+        — so a forced check shows at once rather than at the next poll.
+        The full per-container response (hasUpdate, newerVersion,
+        digests) goes to that merge, not just the ids with an update, so
+        newer-version suggestions show at once too.
 
       - Neither on: the check still runs (Dockhand's cache still gets
         refreshed), but nothing local captures the response — there's
         nothing configured to show it.
 
-    Attached to the environment device, and genuinely scoped to just
-    that environment. This wasn't the original design: pressing this
-    button used to call async_refresh() on the whole
-    DockhandUpdateCoordinator, which always checks every environment in
-    one gather — so pressing environment 1's button silently also
-    re-checked environments 2 and 3. That seemed like a reasonable "be
-    smart about it" shortcut at the time (Dockhand's own API doesn't
-    expose a bulk endpoint, but the coordinator conveniently already
-    gathers everything), but it's a real mismatch between what the
-    button's device implies and what pressing it actually does — a
-    button on environment 1's device visibly changing environment 3's
-    update state is a legitimately confusing side effect, not a clever
-    optimization. Reverted to matching Dockhand's own UI exactly, which
-    has no global "check everything" action either — it's
-    environment-by-environment there too. The Updates card's own "Check
-    for updates" button presses every environment's button in scope, so
-    the same end result (everything gets checked) is still available
-    when that's what's wanted — it's just no longer a hidden side effect
-    of pressing just one.
+    Attached to the environment device and scoped to that environment
+    only, like Dockhand's own UI, which has no "check everything" action
+    either: a button on one environment's device shouldn't change
+    another's update state. The Updates card's "Check for updates"
+    presses every environment's button in scope when that's wanted.
 
     Raises on failure — this is an explicit user action, and a failed
     check should tell the user it failed rather than silently doing
@@ -719,14 +660,9 @@ class DockhandCheckUpdatesButton(
 
     @override
     async def async_press(self) -> None:
-        try:
-            items = await self._client.async_check_container_updates(self._env_id)
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        items = await async_dockhand_action(
+            self._client.async_check_container_updates(self._env_id)
+        )
 
         if self._update_coordinator is not None:
             self._update_coordinator.async_merge_check_results(self._env_id, items)
@@ -740,6 +676,47 @@ class DockhandCheckUpdatesButton(
             # periodic 60s poll applies to pending-updates. See this
             # button's own docstring above.
             self.coordinator.async_merge_pending_updates_from_check(self._env_id, items)
+
+
+class DockhandEnvPruneButton(CoordinatorEntity[DockhandFastCoordinator], ButtonEntity):
+    """Prune one kind of unused resource in the environment, as the
+    dockhand.prune action does: stopped containers, images, networks or
+    volumes. Images follow the environment's Image prune mode (dangling
+    unless it's set to all), so the button does what Dockhand's own image
+    prune schedule would. Disabled by default, since pruning deletes:
+    volumes especially, with whatever data they hold."""
+
+    _attr_has_entity_name = True
+    _attr_entity_category = EntityCategory.CONFIG
+    _attr_entity_registry_enabled_default = False
+
+    def __init__(
+        self,
+        fast_coordinator: DockhandFastCoordinator,
+        slow_coordinator: DockhandSlowCoordinator,
+        data: Any,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        resource: str,
+    ) -> None:
+        super().__init__(fast_coordinator)
+        self._slow = slow_coordinator
+        self._data = data
+        self._env_id = env_id
+        self._resource = resource
+        self._attr_translation_key = f"prune_{resource}"
+        self._attr_unique_id = f"{entry_id}_{env_id}_prune_{resource}"
+        self._attr_device_info = _env_device(entry_id, env_id, env_name, base_url)
+
+    @override
+    async def async_press(self) -> None:
+        settings = _coordinator_env(self._slow.data, self._env_id).get("settings") or {}
+        mode = (settings.get("image_prune") or {}).get("pruneMode")
+        await async_prune_environment(
+            self._data, self._env_id, [self._resource], all_images=mode == "all"
+        )
 
 
 class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], ButtonEntity):
@@ -771,7 +748,7 @@ class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], Button
         self._stack_name = git_stack.get("stackName", "")
 
     def _git_stack(self) -> dict[str, Any] | None:
-        return _find_git_stack(self.coordinator.data, self._env_id, self._stack_name)
+        return _find_git_stack(self.coordinator, self._env_id, self._stack_name)
 
     @property
     @override
@@ -790,18 +767,10 @@ class _BaseSlowGitStackButton(CoordinatorEntity[DockhandSlowCoordinator], Button
 class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
     """Pull latest and redeploy the stack.
 
-    name and icon are live @properties matching Dockhand's own state-
-    dependent labeling exactly, confirmed from its frontend source:
-    "Deploy" + a rocket icon when the stack is down (status 'not
-    deployed' or 'created'), "Sync from Git" + a refresh icon otherwise
-    — both cases call the identical underlying action in Dockhand
-    (deployGitStackWithProgress), it's purely a cosmetic change for UX
-    clarity based on context, not two different operations. Our button
-    mirrors that same relabeling for the same reason.
-
-    If Dockhand ever changes this terminology or iconography, this needs
-    to be updated to match — check stacks/+page.svelte's conditional
-    around GitDeployProgressPopover on a future Dockhand version review.
+    Named and drawn as Dockhand's stacks list does for the stack's state
+    (stacks/+page.svelte, around GitDeployProgressPopover): "Deploy" with
+    a rocket while it's down ('not deployed' or 'created'), "Sync from
+    Git" with a refresh icon otherwise. Both call the same action.
     """
 
     _attr_translation_key = "git_stack_deploy"
@@ -814,20 +783,60 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
         self._attr_unique_id = (
             f"{self._entry_id}_{self._env_id}_stack_{self._stack_name}_git_deploy"
         )
+        self._written_down = False
 
     def _is_down(self) -> bool:
-        for s in (
-            _coordinator_env(self._fast_coordinator.data, self._env_id).get("stacks")
-            or []
-        ):
-            if s.get("name") == self._stack_name:
-                return s.get("status") in ("not deployed", "created")
-        return False
+        stack = _find_stack(self._fast_coordinator, self._env_id, self._stack_name)
+        return (stack or {}).get("status") in ("not deployed", "created")
+
+    @override
+    async def async_added_to_hass(self) -> None:
+        await super().async_added_to_hass()
+        # The stack's state comes with the fast data, not the slow data this
+        # entity follows: rewrite when it moves between down and up, so the
+        # name and icon follow a deploy within a poll rather than ten minutes.
+        self._written_down = self._is_down()
+        self.async_on_remove(
+            self._fast_coordinator.async_add_listener(self._handle_fast_update)
+        )
+
+    @callback
+    def async_entity_id_changed(self, old_entity_id: str) -> None:
+        # Nothing is keyed on entity_id: rename in place (HA 2026.11+), as
+        # event.py explains.
+        super().async_entity_id_changed(old_entity_id)  # type: ignore[misc, unused-ignore]
+
+    @callback
+    def _handle_fast_update(self) -> None:
+        if (down := self._is_down()) != self._written_down:
+            self._written_down = down
+            self.async_write_ha_state()
 
     @property
     @override
-    def name(self) -> str:
-        return "Deploy" if self._is_down() else "Sync from Git"
+    def name(self) -> str | UndefinedType | None:
+        # Translated: this entity's own name while the stack is down, the
+        # git_stack_sync entry's otherwise.
+        if not self.platform_data:
+            return UNDEFINED
+        translations = self.platform_data.platform_translations
+        if not self._is_down() and (
+            name := translations.get(
+                f"component.{DOMAIN}.entity.button.git_stack_sync.name"
+            )
+        ):
+            return name
+        return self._name_internal(None, translations)
+
+    @property
+    @override
+    def suggested_object_id(self) -> str | None:
+        # One entity ID, from the English "Deploy", whatever the stack's
+        # state or the language when the entity was added.
+        name = self._name_internal(
+            None, self.platform_data.object_id_platform_translations
+        )
+        return None if name is UNDEFINED else name
 
     @property
     @override
@@ -844,12 +853,34 @@ class DockhandGitStackDeployButton(_BaseSlowGitStackButton):
                 translation_domain="dockhand",
                 translation_key="git_stack_not_found",
             )
-        try:
-            await self._client.async_deploy_git_stack(gs["id"])
-        except Exception as err:
-            raise HomeAssistantError(
-                translation_domain="dockhand",
-                translation_key="action_failed",
-                translation_placeholders={"error": str(err)},
-            ) from err
+        await async_dockhand_action(self._client.async_deploy_git_stack(gs["id"]))
         await self.coordinator.async_refresh()
+
+
+class DockhandScheduleRunButton(DockhandScheduleEntity, ButtonEntity):
+    """Run a schedule once now, outside its own timing."""
+
+    _attr_translation_key = "schedule_run"
+
+    def __init__(
+        self,
+        coordinator: DockhandSlowCoordinator,
+        client: Any,
+        entry_id: str,
+        sched: dict[str, Any],
+        base_url: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, sched, base_url, "run")
+        self._client = client
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._find() is not None
+
+    @override
+    async def async_press(self) -> None:
+        await async_dockhand_action(
+            self._client.async_run_schedule(self._sched_type, self._sched_id)
+        )
+        await self.coordinator.async_refresh_schedules()

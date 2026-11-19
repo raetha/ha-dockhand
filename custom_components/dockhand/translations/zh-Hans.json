@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "配置轮询和功能",
-        "description": "设置轮询 Dockhand 的频率以及要启用的可选实体组。所有这些都可以在以后通过“配置”进行更改。",
+        "title": "选择功能",
+        "description": "选择要创建哪些可选实体组。以后都可以通过“配置”更改。",
         "data": {
-          "poll_interval_fast": "快速轮询间隔（秒）— 统计信息、容器和堆栈",
-          "poll_interval_slow": "慢速轮询间隔（秒）— 镜像、卷、网络、调度",
           "enable_schedules": "启用调度传感器",
           "enable_images": "启用镜像传感器",
           "enable_volumes": "启用卷传感器",
           "enable_networks": "启用网络传感器",
           "enable_runtime_controls": "启用运行时控制（高级）",
           "enable_resource_stats": "启用容器和堆栈的 CPU/内存/网络/磁盘 I/O 传感器",
-          "poll_interval_precise_updates": "精确更新检查间隔（秒）",
           "enable_update_entities": "启用更新实体",
           "enable_precise_updates": "启用精确的更新版本"
         },
         "data_description": {
-          "poll_interval_fast": "刷新统计信息的频率。默认值：60。最小值：10。",
-          "poll_interval_slow": "刷新镜像、卷、网络和调度的频率。默认值：600。最小值：30。",
           "enable_schedules": "启用 Dockhand 维护调度的传感器。",
           "enable_images": "启用每个环境的 Docker 镜像传感器。",
           "enable_volumes": "启用每个环境的 Docker 卷传感器。",
           "enable_networks": "启用每个环境的 Docker 网络传感器。",
           "enable_runtime_controls": "为无堆栈容器创建 number/select 实体，可实时更改其 CPU、内存和进程限制以及重启策略。不适用于由 Compose 管理的容器。",
           "enable_resource_stats": "为每个容器创建 CPU、内存、网络和磁盘 I/O 传感器，并为每个堆栈创建汇总。默认关闭，因为这会产生大量多数人不需要的实体；关闭后也会移除已创建的传感器。",
-          "poll_interval_precise_updates": "上方镜像仓库查询的执行频率（秒）。默认值：86400（24 小时）。最小值：300。",
           "enable_update_entities": "为每个容器创建一个 Home Assistant 更新实体。如果你以其他方式管理更新，且不希望 Dockhand 的容器出现在 HA 自身的更新管理中，可关闭此选项。这也会隐藏“全部更新”按钮；“检查更新”仍会照常工作。",
           "enable_precise_updates": "通过定期查询镜像仓库，将更新实体升级为显示精确的版本号（镜像摘要），而不仅仅是镜像标签。这也是查看 Dockhand 自身受保护容器（其自身和 Hawser）更新状态的唯一方式——Dockhand 从不通过常规的缓存更新检查数据公开它们的更新状态。需要先开启上方的“启用更新实体”。"
         }
@@ -80,7 +74,8 @@
     },
     "error": {
       "cannot_connect": "无法连接到 Dockhand。请检查 API URL 和网络连接。",
-      "invalid_auth": "无效的 API 令牌。请确保复制了以 dh_ 开头的完整令牌。"
+      "invalid_auth": "无效的 API 令牌。请确保复制了以 dh_ 开头的完整令牌。",
+      "already_configured": "此 Dockhand 实例已配置。"
     },
     "abort": {
       "already_configured": "此 Dockhand 实例已配置。",
@@ -92,32 +87,62 @@
     "step": {
       "init": {
         "title": "Dockhand 选项",
-        "description": "调整轮询间隔和可选数据源。要更改 URL、SSL 或 API 令牌，请改用“重新配置”。",
+        "description": "选择要创建哪些可选实体组。如需更改 URL、SSL 或 API 令牌，请改用“重新配置”。",
         "data": {
-          "poll_interval_fast": "快速轮询间隔（秒）— 统计信息、容器和堆栈",
-          "poll_interval_slow": "慢速轮询间隔（秒）— 镜像、卷、网络、调度",
           "enable_schedules": "启用调度传感器",
           "enable_images": "启用镜像传感器",
           "enable_volumes": "启用卷传感器",
           "enable_networks": "启用网络传感器",
           "enable_runtime_controls": "启用运行时控制（高级）",
           "enable_resource_stats": "启用容器和堆栈的 CPU/内存/网络/磁盘 I/O 传感器",
-          "poll_interval_precise_updates": "精确更新检查间隔（秒）",
           "enable_update_entities": "启用更新实体",
           "enable_precise_updates": "启用精确的更新版本"
         },
         "data_description": {
-          "poll_interval_fast": "刷新统计信息的频率。默认值：60。最小值：10。",
-          "poll_interval_slow": "刷新镜像、卷、网络和调度的频率。默认值：600。最小值：30。",
           "enable_schedules": "启用 Dockhand 维护调度的传感器。",
           "enable_images": "启用每个环境的 Docker 镜像传感器。",
           "enable_volumes": "启用每个环境的 Docker 卷传感器。",
           "enable_networks": "启用每个环境的 Docker 网络传感器。",
           "enable_runtime_controls": "为无堆栈容器创建 number/select 实体，可实时更改其 CPU、内存和进程限制以及重启策略。不适用于由 Compose 管理的容器。",
           "enable_resource_stats": "为每个容器创建 CPU、内存、网络和磁盘 I/O 传感器，并为每个堆栈创建汇总。默认关闭，因为这会产生大量多数人不需要的实体；关闭后也会移除已创建的传感器。",
-          "poll_interval_precise_updates": "上方镜像仓库查询的执行频率（秒）。默认值：86400（24 小时）。最小值：300。",
           "enable_update_entities": "为每个容器创建一个 Home Assistant 更新实体。如果你以其他方式管理更新，且不希望 Dockhand 的容器出现在 HA 自身的更新管理中，可关闭此选项。这也会隐藏“全部更新”按钮；“检查更新”仍会照常工作。",
           "enable_precise_updates": "通过定期查询镜像仓库，将更新实体升级为显示精确的版本号（镜像摘要），而不仅仅是镜像标签。这也是查看 Dockhand 自身受保护容器（其自身和 Hawser）更新状态的唯一方式——Dockhand 从不通过常规的缓存更新检查数据公开它们的更新状态。需要先开启上方的“启用更新实体”。"
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "环境实体",
+            "description": "默认关闭的实体，为每个环境开启，包括以后添加的环境。",
+            "data": {
+              "all": "全部",
+              "enabled": "为每个环境开启"
+            },
+            "data_description": {
+              "all": "勾选以开启此处的所有类型；取消勾选以全部关闭。",
+              "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
+            }
+          },
+          "container_entities": {
+            "name": "容器实体",
+            "description": "默认关闭的实体，为每个容器开启，包括以后添加的容器。",
+            "data": {
+              "all": "全部",
+              "enabled": "为每个容器开启"
+            },
+            "data_description": {
+              "all": "勾选以开启此处的所有类型；取消勾选以全部关闭。",
+              "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
+            }
+          },
+          "stack_entities": {
+            "name": "堆栈实体",
+            "description": "默认关闭的实体，为每个堆栈开启，包括以后添加的堆栈。",
+            "data": {
+              "enabled": "为每个堆栈开启"
+            },
+            "data_description": {
+              "enabled": "勾选某个类型会在所有地方开启它，但您自己关闭的除外。取消勾选会在所有地方再次关闭它，包括您手动开启的。"
+            }
+          }
         }
       }
     }
@@ -125,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "CPU 使用率"
+        "name": "CPU 使用率",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "CPU 数量"
+          },
+          "top_containers": {
+            "name": "占用最高的容器"
+          }
+        }
       },
       "memory_usage": {
         "name": "内存使用率"
@@ -149,28 +182,206 @@
         "name": "磁盘使用情况"
       },
       "activity_events": {
-        "name": "活动事件"
+        "name": "活动事件",
+        "state_attributes": {
+          "recent_events": {
+            "name": "最近事件"
+          }
+        }
       },
       "state": {
-        "name": "状态"
+        "name": "状态",
+        "state": {
+          "created": "已创建",
+          "running": "运行中",
+          "paused": "已暂停",
+          "restarting": "正在重启",
+          "removing": "正在移除",
+          "exited": "已退出",
+          "dead": "已失效"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "退出码"
+          },
+          "image": {
+            "name": "镜像"
+          },
+          "networks": {
+            "name": "网络"
+          },
+          "restart_count": {
+            "name": "重启次数"
+          },
+          "system_container": {
+            "name": "系统容器"
+          },
+          "tag_colors": {
+            "name": "标签颜色"
+          },
+          "tags": {
+            "name": "标签"
+          }
+        }
       },
       "health": {
-        "name": "健康状况"
+        "name": "健康状况",
+        "state": {
+          "healthy": "健康",
+          "unhealthy": "不健康",
+          "starting": "启动中"
+        }
       },
       "status": {
-        "name": "状态"
+        "name": "状态",
+        "state": {
+          "running": "运行中",
+          "partial": "部分运行",
+          "restarting": "正在重启",
+          "stopped": "已停止",
+          "created": "已创建"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "系统容器"
+          },
+          "tag_colors": {
+            "name": "标签颜色"
+          },
+          "tags": {
+            "name": "标签"
+          },
+          "type": {
+            "name": "类型",
+            "state": {
+              "internal": "内部",
+              "git": "Git",
+              "untracked": "未跟踪"
+            }
+          }
+        }
       },
       "containers_in_stack": {
-        "name": "容器"
+        "name": "容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Hawser 代理版本"
+        "name": "Hawser 代理版本",
+        "state_attributes": {
+          "agent_id": {
+            "name": "代理 ID"
+          },
+          "agent_name": {
+            "name": "代理名称"
+          }
+        }
       },
       "next_run": {
-        "name": "下次运行"
+        "name": "下次运行",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "容器更新",
+              "container_start": "容器启动",
+              "container_stop": "容器停止",
+              "git_stack_sync": "Git 堆栈同步",
+              "system_cleanup": "系统清理",
+              "env_update_check": "环境更新检查",
+              "image_prune": "镜像清理",
+              "backup": "备份",
+              "repo_prune": "仓库清理",
+              "repo_check": "仓库检查",
+              "repo_verify": "仓库校验",
+              "stack_deploy": "堆栈部署",
+              "deploy_log_reconcile": "部署日志核对",
+              "env_report": "状态报告"
+            },
+            "name": "类型"
+          },
+          "cron_expression": {
+            "name": "Cron 表达式"
+          },
+          "enabled": {
+            "name": "已启用"
+          },
+          "environment": {
+            "name": "环境"
+          }
+        }
       },
       "last_status": {
-        "name": "上次状态"
+        "name": "上次状态",
+        "state": {
+          "queued": "排队中",
+          "running": "运行中",
+          "success": "成功",
+          "failed": "失败",
+          "skipped": "已跳过",
+          "warning": "警告",
+          "error": "错误",
+          "cancelled": "已取消",
+          "stale": "已过时"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "容器更新",
+              "container_start": "容器启动",
+              "container_stop": "容器停止",
+              "git_stack_sync": "Git 堆栈同步",
+              "system_cleanup": "系统清理",
+              "env_update_check": "环境更新检查",
+              "image_prune": "镜像清理",
+              "backup": "备份",
+              "repo_prune": "仓库清理",
+              "repo_check": "仓库检查",
+              "repo_verify": "仓库校验",
+              "stack_deploy": "堆栈部署",
+              "deploy_log_reconcile": "部署日志核对",
+              "env_report": "状态报告"
+            },
+            "name": "类型"
+          },
+          "cron_expression": {
+            "name": "Cron 表达式"
+          },
+          "description": {
+            "name": "描述"
+          },
+          "duration_ms": {
+            "name": "耗时（毫秒）"
+          },
+          "enabled": {
+            "name": "已启用"
+          },
+          "environment": {
+            "name": "环境"
+          },
+          "error_message": {
+            "name": "错误信息"
+          },
+          "is_system": {
+            "name": "系统计划"
+          },
+          "triggered_at": {
+            "name": "触发时间"
+          },
+          "triggered_by": {
+            "name": "触发方式",
+            "state": {
+              "cron": "已计划",
+              "manual": "手动",
+              "webhook": "Webhook"
+            }
+          },
+          "updates_found": {
+            "name": "发现的更新"
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "CPU使用率"
@@ -224,13 +435,32 @@
           "syncing": "同步中",
           "synced": "已同步",
           "error": "错误"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "最近提交"
+          },
+          "sync_error": {
+            "name": "同步错误"
+          },
+          "auto_update": {
+            "name": "自动部署"
+          },
+          "webhook_enabled": {
+            "name": "已启用 Webhook"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "上次同步时间"
       },
       "host_platform": {
-        "name": "主机平台"
+        "name": "主机平台",
+        "state_attributes": {
+          "architecture": {
+            "name": "架构"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Docker 版本"
@@ -249,20 +479,273 @@
           "hawser-standard": "Hawser 代理（标准）",
           "hawser-edge": "Hawser 代理（边缘）"
         }
+      },
+      "containers_running": {
+        "name": "运行中的容器"
+      },
+      "containers_stopped": {
+        "name": "已停止的容器"
+      },
+      "containers_paused": {
+        "name": "已暂停的容器"
+      },
+      "containers_restarting": {
+        "name": "正在重启的容器"
+      },
+      "containers_unhealthy": {
+        "name": "不健康的容器"
+      },
+      "stacks_running": {
+        "name": "运行中的堆栈"
+      },
+      "stacks_partial": {
+        "name": "部分运行的堆栈"
+      },
+      "stacks_stopped": {
+        "name": "已停止的堆栈"
+      },
+      "pending_updates": {
+        "name": "待处理更新"
+      },
+      "installable_updates": {
+        "name": "可安装的更新"
+      },
+      "system_updates": {
+        "name": "系统容器更新"
+      },
+      "version_tag_updates": {
+        "name": "更新的版本标签"
+      },
+      "pinned_digest_updates": {
+        "name": "固定摘要更新"
+      },
+      "held_updates": {
+        "name": "暂缓的更新"
+      },
+      "memory_used": {
+        "name": "已用内存"
+      },
+      "memory_total": {
+        "name": "总内存"
+      },
+      "disk_usage_images": {
+        "name": "镜像磁盘用量"
+      },
+      "disk_usage_containers": {
+        "name": "容器磁盘用量"
+      },
+      "disk_usage_volumes": {
+        "name": "卷磁盘用量"
+      },
+      "disk_usage_build_cache": {
+        "name": "构建缓存磁盘用量"
+      },
+      "volume_containers": {
+        "name": "容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          },
+          "created": {
+            "name": "创建时间"
+          },
+          "driver": {
+            "name": "驱动"
+          },
+          "in_use": {
+            "name": "使用中"
+          },
+          "labels": {
+            "name": "标签"
+          },
+          "mountpoint": {
+            "name": "挂载点"
+          },
+          "scope": {
+            "name": "范围"
+          }
+        }
+      },
+      "volume_size": {
+        "name": "大小"
+      },
+      "activity_events_today": {
+        "name": "今日活动事件"
+      },
+      "vulnerabilities_critical": {
+        "name": "严重漏洞"
+      },
+      "vulnerabilities_high": {
+        "name": "高危漏洞"
+      },
+      "vulnerabilities_medium": {
+        "name": "中危漏洞"
+      },
+      "vulnerabilities_low": {
+        "name": "低危漏洞"
+      },
+      "images_scanned": {
+        "name": "已扫描镜像"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser 最后在线时间"
+      },
+      "container_memory_cache": {
+        "name": "内存缓存"
+      },
+      "stack_running_containers": {
+        "name": "运行中的容器"
+      },
+      "stack_pending_updates": {
+        "name": "待处理更新"
+      },
+      "image": {
+        "unit_of_measurement": "个容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          },
+          "created": {
+            "name": "创建时间"
+          },
+          "digests": {
+            "name": "摘要"
+          },
+          "size_bytes": {
+            "name": "大小（字节）"
+          },
+          "source": {
+            "name": "来源"
+          },
+          "tags": {
+            "name": "标签"
+          },
+          "title": {
+            "name": "标题"
+          },
+          "vendor": {
+            "name": "供应商"
+          },
+          "version": {
+            "name": "版本"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "无标签",
+        "unit_of_measurement": "个容器",
+        "state_attributes": {
+          "containers": {
+            "name": "容器"
+          },
+          "created": {
+            "name": "创建时间"
+          },
+          "digests": {
+            "name": "摘要"
+          },
+          "size_bytes": {
+            "name": "大小（字节）"
+          },
+          "source": {
+            "name": "来源"
+          },
+          "tags": {
+            "name": "标签"
+          },
+          "title": {
+            "name": "标题"
+          },
+          "vendor": {
+            "name": "供应商"
+          },
+          "version": {
+            "name": "版本"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "个容器",
+        "state_attributes": {
+          "addresses": {
+            "name": "地址"
+          },
+          "containers": {
+            "name": "容器"
+          },
+          "driver": {
+            "name": "驱动"
+          },
+          "internal": {
+            "name": "内部"
+          },
+          "scope": {
+            "name": "范围"
+          },
+          "subnet": {
+            "name": "子网"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "在线"
+        "name": "在线",
+        "state_attributes": {
+          "connection_host": {
+            "name": "主机"
+          },
+          "connection_port": {
+            "name": "端口"
+          },
+          "labels": {
+            "name": "标签"
+          }
+        }
+      },
+      "vulnerability_scanning": {
+        "name": "漏洞扫描"
+      },
+      "git_stack_sync_error": {
+        "name": "同步错误",
+        "state_attributes": {
+          "sync_error": {
+            "name": "同步错误"
+          }
+        }
+      },
+      "stack_updates_available": {
+        "name": "有可用更新",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "有更新的容器"
+          }
+        }
+      },
+      "live_updates": {
+        "name": "实时更新",
+        "state_attributes": {
+          "in_use": {
+            "name": "使用中"
+          }
+        }
+      }
+    },
+    "switch": {
+      "container_auto_update": {
+        "name": "自动更新"
+      },
+      "git_stack_auto_deploy": {
+        "name": "自动部署"
+      },
+      "schedule_enabled": {
+        "name": "已启用"
       },
       "activity_logging": {
         "name": "活动收集"
       },
       "metrics_collection": {
         "name": "指标收集"
-      },
-      "vulnerability_scanning": {
-        "name": "漏洞扫描"
       },
       "update_checks": {
         "name": "更新检查"
@@ -272,20 +755,6 @@
       },
       "image_pruning": {
         "name": "镜像清理"
-      },
-      "git_stack_sync_error": {
-        "name": "同步错误"
-      },
-      "stack_updates_available": {
-        "name": "有可用更新"
-      }
-    },
-    "switch": {
-      "container_auto_update": {
-        "name": "自动更新"
-      },
-      "git_stack_auto_deploy": {
-        "name": "自动部署"
       }
     },
     "button": {
@@ -298,11 +767,32 @@
       "git_stack_deploy": {
         "name": "部署"
       },
+      "git_stack_sync": {
+        "name": "从 Git 同步"
+      },
       "stack_deploy": {
         "name": "重新部署"
       },
       "env_bulk_update": {
         "name": "更新所有容器"
+      },
+      "pause": {
+        "name": "暂停"
+      },
+      "schedule_run": {
+        "name": "立即运行"
+      },
+      "prune_images": {
+        "name": "清理未使用的镜像"
+      },
+      "prune_containers": {
+        "name": "清理已停止的容器"
+      },
+      "prune_networks": {
+        "name": "清理未使用的网络"
+      },
+      "prune_volumes": {
+        "name": "清理未使用的卷"
       }
     },
     "number": {
@@ -325,6 +815,73 @@
           "unless-stopped": "除非手动停止",
           "on-failure": "失败时"
         }
+      },
+      "vulnerability_scanner": {
+        "name": "漏洞扫描器",
+        "state": {
+          "none": "无",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype 和 Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "镜像清理模式",
+        "state": {
+          "dangling": "仅悬空镜像",
+          "all": "所有未使用的镜像"
+        }
+      },
+      "default_vulnerability_scanner": {
+        "name": "默认漏洞扫描器",
+        "state": {
+          "none": "无",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype 和 Trivy"
+        }
+      },
+      "event_collection_mode": {
+        "name": "事件收集模式",
+        "state": {
+          "stream": "流式",
+          "poll": "轮询"
+        }
+      },
+      "event_poll_interval": {
+        "name": "事件轮询间隔",
+        "state": {
+          "30": "30 秒",
+          "60": "60 秒",
+          "120": "120 秒",
+          "300": "300 秒"
+        }
+      }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker 事件",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "已退出",
+              "health_status_healthy": "健康检查通过",
+              "health_status_starting": "健康检查启动中",
+              "health_status_unhealthy": "健康检查失败",
+              "kill": "已强制终止",
+              "oom": "内存不足",
+              "pause": "已暂停",
+              "restart": "已重启",
+              "start": "已启动",
+              "stop": "已停止",
+              "unpause": "已恢复",
+              "update": "已更新"
+            }
+          },
+          "exit_code": {
+            "name": "退出码"
+          }
+        }
       }
     }
   },
@@ -335,8 +892,47 @@
     "container_not_found": {
       "message": "未找到容器 — 它可能已被删除"
     },
+    "entry_not_loaded": {
+      "message": "该 Dockhand 实例未加载。请在“设置 → 设备与服务”中检查。"
+    },
     "git_stack_not_found": {
       "message": "未找到 Git 堆栈 — 可能已被移除"
+    },
+    "invalid_target": {
+      "message": "该设备不是此操作可用的 Dockhand 环境或容器。"
+    },
+    "permission_denied": {
+      "message": "Dockhand 拒绝了此操作：API 令牌对应的用户没有相应权限。请在 Dockhand 中检查该用户的角色。"
+    },
+    "system_container": {
+      "message": "无法从 Home Assistant 重建 Dockhand 自身的容器和 Hawser 代理。"
+    },
+    "session_auth_unsupported": {
+      "message": "此条目使用会话 Cookie 登录，已不再受支持。请通过“重新配置”输入 API 令牌（Dockhand 中的 个人资料 → API 令牌）。"
+    },
+    "setup_failed": {
+      "message": "无法从 Dockhand 加载数据：{error}"
+    },
+    "update_failed": {
+      "message": "无法从 Dockhand 更新：{error}"
+    },
+    "token_invalid": {
+      "message": "Dockhand 的 API 令牌无效或已被撤销。请在 设置 → 设备与服务 中重新验证此集成。"
+    },
+    "stack_not_found": {
+      "message": "未找到堆栈——它可能已被删除"
+    },
+    "no_pending_updates": {
+      "message": "没有可安装的更新"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand 报告失败，但未说明原因。其日志可能有更多信息。"
+    },
+    "unexpected_response": {
+      "message": "Dockhand 返回了此集成无法理解的响应。请检查 Dockhand 是否为最新版本。"
+    },
+    "cannot_connect": {
+      "message": "无法连接到 Dockhand。请检查它是否正在运行，以及 Home Assistant 能否访问它。"
     }
   },
   "issues": {
@@ -355,6 +951,109 @@
     "runtime_memory_reverted": {
       "title": "已自动恢复 {container} 的内存限制",
       "description": "容器 \"{container}\" 在其内存限制被降低后不久就停止运行，当新限制低于容器实际使用量时，内核会立即强制执行该限制，从而导致此情况。内存限制已自动恢复为先前的值（{memory_bytes} 字节）。请在 Dockhand 中检查该容器的日志和当前健康状态。"
+    },
+    "event_collection_poll": {
+      "title": "Dockhand 正在轮询 Docker 事件",
+      "description": "Dockhand 设置为每 {interval} 秒轮询一次 Docker 事件，而不是以流式接收。对于 {environments}，实时更新和 Docker 事件实体最多可能延迟 {interval} 秒；间隔超过 30 秒时，部分事件永远不会到达：每次轮询只读取最近 30 秒。要以流式接收，请将 Dockhand 设备上的“事件收集模式”设为“流式”（在 Dockhand 中：Settings → General → Activity event collection mode）。如果你更喜欢轮询，请忽略此问题：只有在切换到“流式”再切回“轮询”后才会再次出现。"
+    },
+    "retired_entities_automation": {
+      "title": "{name} 使用了已被替换的 Dockhand 实体",
+      "description": "Dockhand 已将部分实体替换为新实体，而自动化 {link} 仍在使用旧实体。请编辑它，改用新实体（旧实体 → 新实体）：\n\n{entities}\n\n当它不再使用这些实体时，此修复项会自动消失。"
+    },
+    "retired_entities_script": {
+      "title": "{name} 使用了已被替换的 Dockhand 实体",
+      "description": "Dockhand 已将部分实体替换为新实体，而脚本 {link} 仍在使用旧实体。请编辑它，改用新实体（旧实体 → 新实体）：\n\n{entities}\n\n当它不再使用这些实体时，此修复项会自动消失。"
     }
+  },
+  "services": {
+    "prune": {
+      "name": "清理未使用的资源",
+      "description": "删除某个 Dockhand 环境中未使用的 Docker 资源，并报告删除了哪些内容。",
+      "fields": {
+        "device_id": {
+          "name": "环境",
+          "description": "要清理的 Dockhand 环境。"
+        },
+        "resources": {
+          "name": "资源",
+          "description": "要删除的内容。"
+        },
+        "all_images": {
+          "name": "所有未使用的镜像",
+          "description": "同时删除没有容器使用的带标签镜像，而不仅仅是悬空（无标签）镜像。"
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "重建容器",
+      "description": "按容器当前配置重建容器，效果与在 Dockhand 编辑器中保存相同，可选先拉取其镜像。",
+      "fields": {
+        "device_id": {
+          "name": "容器",
+          "description": "要重建的容器。"
+        },
+        "pull": {
+          "name": "拉取镜像",
+          "description": "先重新拉取容器的镜像，以获取同一标签下的更新镜像。"
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "已停止的容器",
+        "images": "镜像",
+        "volumes": "未使用的卷",
+        "networks": "未使用的网络"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "vulnerability_scanning": "漏洞扫描",
+        "activity_events": "活动事件",
+        "disk_usage": "磁盘使用情况",
+        "vulnerabilities": "漏洞",
+        "prune_images": "清理未使用的镜像",
+        "prune_containers": "清理已停止的容器",
+        "prune_networks": "清理未使用的网络",
+        "prune_volumes": "清理未使用的卷",
+        "pinned_digest_updates": "固定摘要更新",
+        "held_updates": "暂缓的更新",
+        "hawser_agent_version": "Hawser 代理版本",
+        "hawser_last_seen": "Hawser 最后在线时间",
+        "host_docker_version": "Docker 版本",
+        "host_platform": "主机平台",
+        "uptime": "正常运行时间"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker 事件",
+        "pause": "暂停",
+        "container_auto_update": "自动更新"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "自动部署"
+      }
+    }
+  },
+  "common": {
+    "release_notes_image": "镜像：{image}",
+    "newer_tag_available": "有更新的版本标签可用：**{tag}**。",
+    "newer_tag_also_available": "另有更新的版本标签可用：**{tag}**。要切换到它，请在 compose 文件或容器配置中更新标签。",
+    "newer_tag_advisory_only": "此信息仅供参考——容器已固定在当前标签上，因此“安装”不会将其升级到此版本。要升级，请在 compose 文件或容器配置中更新标签。",
+    "release_notes_truncated": "……（已截断）",
+    "versions_skipped": "_中间跳过了 {count} 个版本。_",
+    "view_full_release_notes": "查看完整发行说明",
+    "view_release_notes": "查看发行说明",
+    "pinned_to_digest": "**已固定到摘要。** 镜像标签已指向新的摘要，但此容器固定在旧摘要上。要更新它，请在其 compose 文件或运行命令中更改摘要；“安装”只会重新拉取固定的镜像。",
+    "update_held": "**更新已暂缓：** 距离 Dockhand 中设置的镜像最短存在时间还剩 {hours} 小时。之后即可安装。",
+    "update_held_until_check": "**更新已暂缓：** 新镜像已达到 Dockhand 中设置的最短存在时间。Dockhand 下次检查更新后（或执行 **检查镜像更新** 后）即可安装。",
+    "scanner_may_block_update": "此环境会在更新前扫描镜像漏洞。根据所配置的策略，如果发现的问题超过阈值，此更新可能会被阻止。",
+    "system_container_update": "这是系统容器，必须直接在 Docker 主机上更新。",
+    "updates_disabled_by_label": "已通过 `dockhand.update=false` 标签禁用更新。"
   }
 }

@@ -23,53 +23,39 @@ from custom_components.dockhand.coordinator import (
     DockhandSlowCoordinator,
 )
 
+from .conftest import container, fast_coordinator, slow_coordinator
+
 ENV_ID = 1
 ENTRY_ID = "test_entry_id_select"
 CONTAINER_NAME = "nginx"
 CONTAINER_ID = "abc123"
 
-CONTAINER_STANDALONE = {
-    "id": CONTAINER_ID,
-    "name": CONTAINER_NAME,
-    "state": "running",
-    "labels": {},
-}
-CONTAINER_COMPOSE = {
-    "id": "def456",
-    "name": "compose-web",
-    "state": "running",
-    "labels": {"com.docker.compose.project": "myapp"},
-}
+CONTAINER_STANDALONE = container(CONTAINER_NAME, id=CONTAINER_ID)
+CONTAINER_COMPOSE = container("compose-web", stack="myapp", id="def456")
 
 
 def _make_fast_coord(containers=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {
-        "environments": {
+    coord = fast_coordinator(
+        {
             ENV_ID: {
                 "containers": containers
                 if containers is not None
                 else [CONTAINER_STANDALONE],
             }
         }
-    }
-    coord.client = MagicMock()
-    coord.client.async_update_container_runtime = AsyncMock(
-        return_value={"success": True, "warnings": []}
     )
-    coord.last_update_success = True
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
+    coord.client.async_update_container_runtime.return_value = {
+        "success": True,
+        "warnings": [],
+    }
     return coord
 
 
 def _make_slow_coord(runtime_config=None, fetch_failures=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandSlowCoordinator)
     env_data = {"runtime_config": runtime_config or {}}
     if fetch_failures is not None:
         env_data["fetch_failures"] = fetch_failures
-    coord.data = {"environments": {ENV_ID: env_data}}
-    coord.last_update_success = True
-    return coord
+    return slow_coordinator({ENV_ID: env_data})
 
 
 def _make_entity(runtime_config=None, containers=None):
@@ -99,6 +85,8 @@ async def test_setup_entry_skips_when_disabled():
     entry = MagicMock()
     entry.options = {}
     entry.data = {"enable_runtime_controls": False}
+    # No settings readable either.
+    entry.runtime_data.slow_coordinator.data = {}
     add_entities = MagicMock()
     await async_setup_entry(MagicMock(), entry, add_entities)
     add_entities.assert_not_called()
@@ -188,10 +176,15 @@ async def test_warnings_create_repair_issue():
         await entity.async_select_option("always")
     mock_issue.assert_called_once()
     assert mock_issue.call_args.kwargs["translation_key"] == "runtime_update_warning"
+    # Scoped to the config entry: two Dockhand instances can share an env id
+    # and container name.
+    assert mock_issue.call_args.args[2].startswith(
+        f"runtime_update_warning_{entity._entry_id}_"
+    )
 
 
-def test_disabled_by_default():
-    assert not _make_entity()._attr_entity_registry_enabled_default
+def test_enabled_by_default():
+    assert _make_entity().entity_registry_enabled_default
 
 
 def test_unique_id_format():

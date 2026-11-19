@@ -6,17 +6,97 @@ dependencies.  Platform modules (sensor.py etc.) are loaded lazily by HA and
 must never be imported by __init__.py or by each other.
 """
 
+import inspect
 import math
+from collections.abc import Awaitable, Callable, Iterable
 from datetime import datetime
 from typing import Any
+from urllib.parse import urlparse
+from weakref import WeakKeyDictionary
 
+from aiohttp import ClientError
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.translation import async_get_translations
 from homeassistant.util import dt as dt_util
 
+from .api import (
+    DockhandAuthError,
+    DockhandFailedError,
+    DockhandPermissionError,
+    DockhandUnexpectedResponseError,
+)
 from .const import DOMAIN
+
+
+def ha_schema(schema: Any) -> Any:
+    """A schema in whatever type this Home Assistant takes.
+
+    From 2026.10 Home Assistant validates with probatio and makes `import
+    voluptuous` load probatio, so at runtime these schemas already are
+    probatio schemas; only the static types differ. Voluptuous stays while
+    the minimum Home Assistant version predates probatio.
+    """
+    return schema
+
+
+async def async_dockhand_action[T](action: Awaitable[T]) -> T:
+    """Await a Dockhand call made for a user action, turning any failure
+    into an error Home Assistant shows to whoever triggered it."""
+    try:
+        return await action
+    except DockhandPermissionError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="permission_denied",
+        ) from err
+    except DockhandAuthError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="token_invalid"
+        ) from err
+    except DockhandUnexpectedResponseError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="unexpected_response"
+        ) from err
+    except DockhandFailedError as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="dockhand_failed"
+        ) from err
+    except (TimeoutError, ClientError) as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN, translation_key="cannot_connect"
+        ) from err
+    except Exception as err:
+        raise HomeAssistantError(
+            translation_domain=DOMAIN,
+            translation_key="action_failed",
+            translation_placeholders={"error": str(err)},
+        ) from err
+
+
+type Texts = Callable[..., str]
+
+
+async def async_common_texts(hass: HomeAssistant | None) -> Texts:
+    """The `common` section of this integration's translations, in Home
+    Assistant's language (English where a locale lacks a key), as a function
+    of a key and its placeholders. For text that has no translation route
+    of its own, such as an update entity's release notes."""
+    texts: dict[str, str] = {}
+    if hass is not None:
+        texts = await async_get_translations(
+            hass, hass.config.language, "common", {DOMAIN}
+        )
+    prefix = f"component.{DOMAIN}.common."
+
+    def text(key: str, **placeholders: object) -> str:
+        return texts.get(prefix + key, key).format(**placeholders)
+
+    return text
 
 
 def _device_entry_id(hass: Any, entry_id: str, identifier: str) -> str | None:
@@ -40,18 +120,20 @@ def _device_entry_id(hass: Any, entry_id: str, identifier: str) -> str | None:
 def _device_by_identifier(
     registry: dr.DeviceRegistry, identifier: tuple[str, str], config_entry_id: str
 ) -> dr.DeviceEntry | None:
-    """The device with this identifier in this config entry.
+    """The device with this identifier in this config entry (scoped, since
+    two Dockhand instances can share an identifier)."""
+    return registry.async_get_device_by_identifier(identifier, config_entry_id)
 
-    HA 2026.8 replaced async_get_device(identifiers=...) with the
-    entry-scoped async_get_device_by_identifier and logs a deprecation
-    warning for the old call (removed in 2027.8). Feature-detected so the
-    HA minimum can stay below 2026.8.
-    """
-    by_identifier = getattr(registry, "async_get_device_by_identifier", None)
-    if by_identifier is not None:
-        device: dr.DeviceEntry | None = by_identifier(identifier, config_entry_id)
-        return device
-    return registry.async_get_device(identifiers={identifier})
+
+def create_issue(
+    hass: HomeAssistant, entry_id: str, issue_id: str, **kwargs: Any
+) -> None:
+    """A repair issue of this config entry's, linked to it where Home
+    Assistant supports that (2026.11+) so it's removed with the entry.
+    Feature-detected so the HA minimum can stay below 2026.11."""
+    if "config_entry_id" in inspect.signature(ir.async_create_issue).parameters:
+        kwargs["config_entry_id"] = entry_id
+    ir.async_create_issue(hass, DOMAIN, issue_id, **kwargs)
 
 
 def already_registered(
@@ -66,13 +148,8 @@ def already_registered(
     `known_ids`, expected to be `entry.runtime_data.known_entity_ids`,
     a plain in-memory set created fresh every time async_setup_entry
     runs. That freshness is the whole point: it must reset on every
-    reload and restart, the same way local `known_*_ids` variables inside
-    each platform's own async_setup_entry always did before this existed
-    (sensor.py alone had ten separate copies; binary_sensor.py, button.py,
-    number.py, select.py, and switch.py each had their own too) — this
-    just consolidates that instead of duplicating it, exactly as
-    `_coordinator_env()` already did once before for a different
-    duplicated pattern (see that function's own docstring).
+    reload and restart, since every platform's entities are created afresh
+    then.
 
     On a cache *hit* (this session already added it), also confirms the
     entity is still actually in the real registry before trusting that —
@@ -80,24 +157,13 @@ def already_registered(
     for a container genuinely deleted, or incorrectly, if a bug like the
     one `fetch_failures` fixes ever recurs) without `known_ids` finding
     out, so a bare cache hit alone can't be trusted to still be true. On a
-    miss, no registry lookup happens at all — nothing to confirm for
-    something we're about to create anyway, and the common case (genuinely
-    new entity) stays exactly as cheap as it was.
+    miss, no registry lookup happens at all: the common case (a genuinely
+    new entity) stays cheap.
 
-    This is deliberately *not* the same mistake an earlier version of this
-    function made, which checked the registry as the *primary* signal —
-    see docs/architecture.md §9 for the full incident: that answered "did
-    this unique_id ever exist in *any* session," which persists across
-    reloads and restarts by design, and made every entity in the
-    integration look permanently registered after the first setup call.
-    Checking the registry here only ever confirms something *this specific
-    session* already added to `known_ids` itself — never used to decide
-    whether something is new, only to catch when something we already
-    consider live has stopped being live since we last checked. That
-    keeps `known_ids` self-correcting within a session (closing the
-    narrower gap the registry-based rewrite was originally trying to
-    solve) without reintroducing the cross-session mistake that rewrite
-    actually caused.
+    The registry is never the primary signal: it answers "did this
+    unique_id ever exist", which survives reloads and restarts, so every
+    entity would look already added after the first setup
+    (docs/architecture.md §9).
 
     Re-add deduplication (`pending_readd_ids`)
     ------------------------------------------
@@ -130,9 +196,8 @@ def already_registered(
     normally.
 
     Callers that cannot supply pending_readd_ids (pass None or omit it)
-    get the same behaviour as before this parameter was added: the
-    registry check still returns False on a miss, triggering a re-add.
-    They just don't get the duplicate-suppression guard for the narrow
+    still get False on a registry miss, triggering a re-add; they just
+    don't get the duplicate-suppression guard for the narrow
     window between "re-add scheduled" and "re-add landed." All platform
     call sites in this integration pass the real set.
     """
@@ -168,21 +233,14 @@ def already_registered(
     return False
 
 
-# Unique_id suffixes for the 8 container-stat sensors (CPU/memory/network/
+# Unique_id suffixes for the container stats sensors (CPU/memory/network/
 # block-I/O), matching how each builds self._attr_unique_id in sensor.py.
-# Consolidated here from three previously-separate copies (__init__.py,
-# migration.py, sensor.py) that had drifted subtly inconsistent — notably,
-# sensor.py's copy lacked the leading underscore migration.py's had, and
-# was passed straight to str.endswith() without adding one, which
-# happened to still work (a bare substring match rather than a real
-# suffix-boundary check) but wasn't doing what it looked like it was
-# doing. Each string here includes its own leading underscore so every
-# call site can use the plain, direct `uid.endswith(CONTAINER_STATS_SUFFIXES)`
-# form — str.endswith() natively accepts a tuple of alternatives — rather
-# than every caller needing to reconstruct the separator itself.
+# Each includes its leading underscore, so `uid.endswith(CONTAINER_STATS_SUFFIXES)`
+# matches a whole suffix rather than any trailing substring.
 CONTAINER_STATS_SUFFIXES = (
     "_cpu_percent",
     "_memory_usage",
+    "_memory_cache",
     "_memory_percent",
     "_memory_limit",
     "_network_rx",
@@ -191,11 +249,22 @@ CONTAINER_STATS_SUFFIXES = (
     "_block_write",
 )
 
-# The stack totals Dockhand reports (GET /api/stack-stats) — the container
-# set minus memory percent, which Dockhand doesn't give for a stack.
-STACK_STATS_SUFFIXES = tuple(
-    suffix for suffix in CONTAINER_STATS_SUFFIXES if suffix != "_memory_percent"
+# The stack totals Dockhand reports (GET /api/stack-stats): the container
+# set without memory cache and percent, which Dockhand doesn't give for a
+# stack, plus how many of its containers are running.
+STACK_STATS_SUFFIXES = (
+    *(
+        suffix
+        for suffix in CONTAINER_STATS_SUFFIXES
+        if suffix not in ("_memory_cache", "_memory_percent")
+    ),
+    "_running_containers",
 )
+
+# The entities on a volume's device, as `_BaseVolumeSensor` ends their
+# unique IDs. Every one has a suffix, so no volume's IDs can be mistaken for
+# another's whose name ends in one of them.
+VOLUME_SUFFIXES = ("container_count", "size")
 
 # "_memory_limit" here is a deliberate exact collision with a runtime
 # control entity of the same name (number.py) — disambiguated by entity
@@ -211,10 +280,8 @@ def _all_envs(data: dict[str, Any] | None) -> dict[int, dict[str, Any]]:
     Null-safe against Dockhand sending an explicit `null` rather than
     omitting a key — `(data or {}).get("environments") or {}`, not
     `data.get("environments", {})`, so an explicit null doesn't crash the
-    next `.items()`/`.keys()`/`.values()` call. Real, reported bug
-    (github.com/raetha/ha-dockhand/issues/20) that turned out broader
-    than the original report suspected — it hit an environment-level
-    sensor too, not just per-container ones.
+    next `.items()`/`.keys()`/`.values()` call
+    (github.com/raetha/ha-dockhand/issues/20).
     """
     return (data or {}).get("environments") or {}
 
@@ -227,69 +294,147 @@ def _coordinator_env(data: dict[str, Any] | None, env_id: int) -> dict[str, Any]
     Works identically for the fast, slow, and update coordinators — all
     three now share the same {"environments": {env_id: {...}}} top-level
     shape, so there's nothing coordinator-specific left for this function
-    to need to know. (Previously two near-identical functions, _fast_env
-    and _slow_env, kept separate on the reasoning that each name
-    documented which coordinator a call site expected. That reasoning
-    didn't hold up in practice: plenty of call sites had already stopped
-    calling either function and used a locally-unwrapped variable
-    instead, which undermined the "name as documentation" argument it was
-    kept for, while also being outright wrong in six of those places —
-    unwrapping "environments" a second time from something already
-    unwrapped, silently returning empty every time. One function that
-    isn't coordinator-specific removes the "which one do I call" question
-    entirely rather than relying on every call site getting a naming
-    convention right.)
+    to need to know. Use it rather than unwrapping "environments" by hand:
+    unwrapping twice silently returns nothing.
     """
     return _all_envs(data).get(env_id) or {}
 
 
-def _find_container(
-    coordinator_data: dict[str, Any] | None, env_id: int, container_name: str
-) -> dict | None:
-    """Look up one container's current dict by name, from a coordinator's
-    data — name-based since Docker enforces unique container names per
-    host, stable across container recreation (image updates).
+class _EnvIndex:
+    """One environment's containers and stacks keyed for lookup.
 
-    Was seven near-identical copies of this exact loop across
-    button.py/number.py/select.py/sensor.py/switch.py (×2)/update.py —
-    six equivalent, one (update.py's) already drifted to bypass
-    _coordinator_env() above and reimplement its equivalent manually via
-    _all_envs(...).get(env_id), found on a review specifically looking
-    for this pattern after a bug slipped through because two copies of a
-    different repeated pattern (this file's own already_registered()) had
-    drifted to different local variable names. Same lesson _coordinator_env's
-    own docstring already documents from _fast_env/_slow_env's history:
-    consolidating removes the "did every copy of this stay in sync"
-    question entirely, rather than relying on it.
+    Every entity looks its container or stack up on every poll, so a scan
+    of the environment's list per lookup grows with containers × entities;
+    this is built once per poll and environment instead. The first entry
+    wins on a duplicate name, as a scan would.
     """
-    for c in _coordinator_env(coordinator_data, env_id).get("containers") or []:
-        if isinstance(c, dict) and c.get("name") == container_name:
-            return c
-    return None
+
+    __slots__ = (
+        "container_names",
+        "container_names_by_image",
+        "containers",
+        "containers_by_id",
+        "git_stacks",
+        "stacks",
+        "system_container_ids",
+    )
+
+    def __init__(self, env: dict[str, Any]) -> None:
+        self.containers: dict[str, dict] = {}
+        self.containers_by_id: dict[str, dict] = {}
+        self.container_names: dict[str, str] = {}
+        self.system_container_ids: set[str] = set()
+        # Keyed by the image ID's hex, as image entities store it.
+        self.container_names_by_image: dict[str, list[str]] = {}
+        for c in env.get("containers") or []:
+            if not isinstance(c, dict):
+                continue
+            name = c.get("name")
+            if name is not None:
+                self.containers.setdefault(name, c)
+            image_id = c.get("imageId")
+            if isinstance(image_id, str) and image_id and isinstance(name, str):
+                self.container_names_by_image.setdefault(
+                    image_id.rsplit(":", 1)[-1], []
+                ).append(name)
+            if cid := c.get("id"):
+                self.containers_by_id.setdefault(cid, c)
+                if isinstance(name, str):
+                    self.container_names.setdefault(cid, name)
+                if c.get("systemContainer"):
+                    self.system_container_ids.add(cid)
+        self.stacks = _by_key(env.get("stacks"), "name")
+        self.git_stacks = _by_key(env.get("git_stacks"), "stackName")
+
+
+def _by_key(items: list | None, key: str) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for item in items or []:
+        if isinstance(item, dict) and (value := item.get(key)) is not None:
+            out.setdefault(value, item)
+    return out
+
+
+# Keyed by coordinator, holding the data object the indexes were built
+# from: coordinators replace their data rather than change it in place,
+# so a different object means a new poll and the indexes are rebuilt.
+_ENV_INDEXES: WeakKeyDictionary[Any, tuple[Any, dict[int, _EnvIndex]]] = (
+    WeakKeyDictionary()
+)
+
+
+def _env_index(coordinator: Any, env_id: int) -> _EnvIndex:
+    """The lookup index for one environment of a coordinator's current data."""
+    data = coordinator.data
+    cached = _ENV_INDEXES.get(coordinator)
+    if cached is None or cached[0] is not data:
+        cached = (data, {})
+        _ENV_INDEXES[coordinator] = cached
+    index = cached[1].get(env_id)
+    if index is None:
+        index = cached[1][env_id] = _EnvIndex(_coordinator_env(data, env_id))
+    return index
+
+
+def _find_container(coordinator: Any, env_id: int, container_name: str) -> dict | None:
+    """One container's current dict by name, from a coordinator's data.
+
+    Name-based since Docker enforces unique container names per host,
+    stable across container recreation (image updates). Every platform
+    looks containers up through this, so the lookup can't differ between
+    them.
+    """
+    return _env_index(coordinator, env_id).containers.get(container_name)
 
 
 def _find_git_stack(
-    coordinator_data: dict[str, Any] | None, env_id: int, stack_name: str
+    coordinator: Any, env_id: int, stack_name: str
 ) -> dict[str, Any] | None:
     """A git stack's current dict (slow coordinator) by its stack name."""
-    for gs in _coordinator_env(coordinator_data, env_id).get("git_stacks") or []:
-        if isinstance(gs, dict) and gs.get("stackName") == stack_name:
-            return gs
-    return None
+    return _env_index(coordinator, env_id).git_stacks.get(stack_name)
 
 
-def _find_stack(
-    coordinator_data: dict[str, Any] | None, env_id: int, stack_name: str
-) -> dict | None:
-    """Look up one stack's current dict by name, from a coordinator's
-    data — same reasoning as _find_container() above, four duplicated
-    copies instead of seven (binary_sensor.py/button.py/sensor.py/
-    switch.py), otherwise identical.
-    """
-    for s in _coordinator_env(coordinator_data, env_id).get("stacks") or []:
-        if isinstance(s, dict) and s.get("name") == stack_name:
-            return s
-    return None
+def _container_inputs(
+    coordinator: Any, env_id: int, name: str, *, stats: bool = False
+) -> tuple[Any, ...]:
+    """What a container's entities on the fast coordinator are worked out
+    from: its own entry and its tags, and its resource stats for the
+    sensors that show them (which change every poll, so the others leave
+    them out). Shared, so an entity that reads something new only needs it
+    added here; tests/test_update_inputs.py checks nothing is missing."""
+    env = _coordinator_env(coordinator.data, env_id)
+    inputs = (
+        _env_index(coordinator, env_id).containers.get(name),
+        (env.get("container_tags") or {}).get(name),
+    )
+    if stats:
+        return (*inputs, (env.get("container_stats") or {}).get(name))
+    return inputs
+
+
+def _stack_inputs(coordinator: Any, env_id: int, name: str) -> tuple[Any, ...]:
+    """What a stack's entities on the fast coordinator are worked out
+    from: its own entry, tags and stats, its containers' entries, and the
+    environment's pending updates (counted per stack)."""
+    env = _coordinator_env(coordinator.data, env_id)
+    index = _env_index(coordinator, env_id)
+    stack = index.stacks.get(name)
+    members = tuple(
+        index.containers_by_id.get(cid) for cid in (stack or {}).get("containers") or []
+    )
+    return (
+        stack,
+        members,
+        (env.get("stack_tags") or {}).get(name),
+        (env.get("stack_stats") or {}).get(name),
+        env.get("pending_update_container_ids"),
+        env.get("pending_update_details"),
+    )
+
+
+def _find_stack(coordinator: Any, env_id: int, stack_name: str) -> dict | None:
+    """One stack's current dict by name, from a coordinator's data."""
+    return _env_index(coordinator, env_id).stacks.get(stack_name)
 
 
 # --------------------------------------------------------------------------- #
@@ -372,6 +517,11 @@ def _schedules_url(base_url: str) -> str | None:
 # functions rather than building the strings inline.
 
 
+def _device_id_instance(entry_id: str) -> str:
+    """Identifier string for the Dockhand instance device."""
+    return f"{entry_id}_instance"
+
+
 def _device_id_env(entry_id: str, env_id: int) -> str:
     """Identifier string for an environment hub device."""
     return f"{entry_id}_env_{env_id}"
@@ -422,6 +572,11 @@ def _device_id_stack(entry_id: str, env_id: int, stack_name: str) -> str:
     return f"{entry_id}_stack_{env_id}_{stack_name}"
 
 
+def _device_id_volume(entry_id: str, env_id: int, volume_name: str) -> str:
+    """Identifier string for a volume device."""
+    return f"{entry_id}_volume_{env_id}_{volume_name}"
+
+
 def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
     """Identifier string for an individual schedule device."""
     return f"{entry_id}_schedule_{sched_id}_{sched_type}"
@@ -432,20 +587,59 @@ def _device_id_schedule(entry_id: str, sched_id: Any, sched_type: str) -> str:
 # --------------------------------------------------------------------------- #
 
 
+def instance_host(base_url: str) -> str | None:
+    """Host (and port, when given) of Dockhand's URL: what tells instances
+    apart, as the cards label them."""
+    parsed = urlparse(base_url)
+    if not parsed.hostname:
+        return None
+    return f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
+
+
+def _instance_device(entry_id: str, base_url: str) -> DeviceInfo:
+    """The Dockhand server itself, parent of its environments.
+
+    Named after its host rather than the entry's title, which is the whole
+    API URL. Registered in async_setup_entry before any other device and
+    never removed while the entry is loaded. Its software version is set
+    once the version coordinator has it (_update_instance_version).
+    """
+    host = instance_host(base_url)
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_instance(entry_id))},
+        name=f"Dockhand ({host})" if host else "Dockhand",
+        manufacturer="Dockhand",
+        model="Dockhand",
+        entry_type=DeviceEntryType.SERVICE,
+    )
+    if base_url:
+        info["configuration_url"] = base_url
+    return info
+
+
+def _under_instance(hass: Any, entry_id: str, info: DeviceInfo) -> DeviceInfo:
+    """`info` parented to the instance device. Only registration sets this:
+    an entity's device_info, which omits it, leaves it unchanged."""
+    parent_id = _device_entry_id(hass, entry_id, _device_id_instance(entry_id))
+    if parent_id is not None:
+        info["via_device_id"] = parent_id
+    return info
+
+
 def _env_device(
     entry_id: str, env_id: int, env_name: str, base_url: str, stats: dict | None = None
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_env(entry_id, env_id))},
-        "name": env_name,
-        "manufacturer": "Dockhand",
-        "model": "Environment",
-        "configuration_url": _env_settings_url(base_url, env_id),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_env(entry_id, env_id))},
+        name=env_name,
+        manufacturer="Dockhand",
+        model="Environment",
+        configuration_url=_env_settings_url(base_url, env_id),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     if stats:
         conn = stats.get("connectionType")
-        if conn:
+        if isinstance(conn, str) and conn:
             info["hw_version"] = conn
     return info
 
@@ -453,14 +647,14 @@ def _env_device(
 def _containers_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_containers_group(entry_id, env_id))},
-        "name": f"{env_name} – Containers",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _container_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_containers_group(entry_id, env_id))},
+        name=f"{env_name} – Containers",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_container_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -470,14 +664,14 @@ def _containers_group_device(
 def _stacks_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_stacks_group(entry_id, env_id))},
-        "name": f"{env_name} – Stacks",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _stack_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_stacks_group(entry_id, env_id))},
+        name=f"{env_name} – Stacks",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_stack_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -487,14 +681,14 @@ def _stacks_group_device(
 def _network_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_networks_group(entry_id, env_id))},
-        "name": f"{env_name} – Networks",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _network_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_networks_group(entry_id, env_id))},
+        name=f"{env_name} – Networks",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_network_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -504,15 +698,54 @@ def _network_group_device(
 def _volume_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_volumes_group(entry_id, env_id))},
-        "name": f"{env_name} – Volumes",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _volume_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_volumes_group(entry_id, env_id))},
+        name=f"{env_name} – Volumes",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_volume_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
+    if parent_id is not None:
+        info["via_device_id"] = parent_id
+    return info
+
+
+def _volume_model(driver: Any) -> str:
+    """A volume's driver is what kind of volume it is, as a stack's source
+    is for a stack, so it goes in the model."""
+    if not isinstance(driver, str) or not driver:
+        return "Volume"
+    if driver == "local":
+        return "Local Volume"
+    return f"{driver} Volume"
+
+
+def _volume_device(
+    hass: Any,
+    entry_id: str,
+    volume_name: str,
+    env_id: int,
+    env_name: str,
+    base_url: str,
+    driver: Any = None,
+) -> DeviceInfo:
+    """Device info for a volume, under the environment's Volumes group.
+
+    Name-based like containers: Docker volume names are unique per host and
+    a volume keeps its name for life."""
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_volume(entry_id, env_id, volume_name))},
+        name=f"{env_name} – Volumes – {volume_name}",
+        manufacturer="Dockhand",
+        model=_volume_model(driver),
+        configuration_url=_volume_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
+    parent_id = _device_entry_id(
+        hass, entry_id, _device_id_volumes_group(entry_id, env_id)
+    )
     if parent_id is not None:
         info["via_device_id"] = parent_id
     return info
@@ -544,16 +777,14 @@ def _container_device(
         parent_identifier = _device_id_stack(entry_id, env_id, stack_name)
     else:
         parent_identifier = _device_id_containers_group(entry_id, env_id)
-    info: DeviceInfo = {
-        "identifiers": {
-            (DOMAIN, _device_id_container(entry_id, env_id, container_name))
-        },
-        "name": f"{env_name} – Containers – {container_name}",
-        "manufacturer": "Dockhand",
-        "model": "Container",
-        "configuration_url": _container_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_container(entry_id, env_id, container_name))},
+        name=f"{env_name} – Containers – {container_name}",
+        manufacturer="Dockhand",
+        model="Container",
+        configuration_url=_container_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, parent_identifier)
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -597,16 +828,16 @@ def _stack_device(
     stacks that predate installing Dockhand were never explicitly
     recorded in its database.
     """
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_stack(entry_id, env_id, stack_name))},
-        "name": f"{env_name} – Stacks – {stack_name}",
-        "manufacturer": "Dockhand",
-        "model": _STACK_MODEL_BY_SOURCE_TYPE.get(
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_stack(entry_id, env_id, stack_name))},
+        name=f"{env_name} – Stacks – {stack_name}",
+        manufacturer="Dockhand",
+        model=_STACK_MODEL_BY_SOURCE_TYPE.get(
             source_type or "external", "Untracked Stack"
         ),
-        "configuration_url": _stack_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+        configuration_url=_stack_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(
         hass, entry_id, _device_id_stacks_group(entry_id, env_id)
     )
@@ -618,14 +849,14 @@ def _stack_device(
 def _image_group_device(
     hass: Any, entry_id: str, env_id: int, env_name: str, base_url: str
 ) -> DeviceInfo:
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_images_group(entry_id, env_id))},
-        "name": f"{env_name} – Images",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _image_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_images_group(entry_id, env_id))},
+        name=f"{env_name} – Images",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_image_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -647,18 +878,48 @@ def _schedule_group_device(
     group-of-entities, since individual schedule devices (via `_sched_device`)
     need to exist as their own devices regardless of this grouping.
     """
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_schedules_group(entry_id, env_id))},
-        "name": f"{env_name} – Schedules",
-        "manufacturer": "Dockhand",
-        "model": "Environment Group",
-        "configuration_url": _schedules_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_schedules_group(entry_id, env_id))},
+        name=f"{env_name} – Schedules",
+        manufacturer="Dockhand",
+        model="Environment Group",
+        configuration_url=_schedules_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, _device_id_env(entry_id, env_id))
     if parent_id is not None:
         info["via_device_id"] = parent_id
     return info
+
+
+# Schedule types Dockhand can't run on demand.
+_SCHEDULE_TYPES_WITHOUT_RUN = frozenset({"env_report", "stack_deploy"})
+# Schedule types whose Enabled switch is offered. Left out: container_update
+# and git_stack_sync (the container's Auto update and the git stack's Auto
+# deploy switches already control them), repo_* (Dockhand stops listing them
+# once off, so the switch would remove itself), env_report (no toggle route).
+_TOGGLEABLE_SCHEDULE_TYPES = frozenset(
+    {"container_start", "container_stop", "env_update_check", "image_prune", "backup"}
+)
+# Built-in cleanup jobs Dockhand lets you pause (by id); the rest always run.
+_TOGGLEABLE_SYSTEM_SCHEDULE_IDS = frozenset({1, 2, 4, 5})
+
+
+def _schedule_can_run(sched: dict) -> bool:
+    return sched.get("type") not in _SCHEDULE_TYPES_WITHOUT_RUN
+
+
+def _schedule_is_system_toggle(sched: dict) -> bool:
+    return (
+        sched.get("type") == "system_cleanup"
+        and sched.get("id") in _TOGGLEABLE_SYSTEM_SCHEDULE_IDS
+    )
+
+
+def _schedule_can_toggle(sched: dict) -> bool:
+    return sched.get(
+        "type"
+    ) in _TOGGLEABLE_SCHEDULE_TYPES or _schedule_is_system_toggle(sched)
 
 
 def _sched_device(
@@ -678,15 +939,8 @@ def _sched_device(
     env-scoped ones — matching `_schedule_group_device`'s own naming
     ("{env_name} – Schedules") rather than leaving every schedule device
     misleadingly prefixed "Dockhand" regardless of which environment (if
-    any) it actually belongs to. This was a real, shipped bug in the
-    initial 1.9.0 device-hierarchy work: `via_device` was made conditional
-    on `environment_id`, but `name` was never updated to match — every
-    env-scoped schedule kept showing "Dockhand – Schedules – …" even
-    though it was correctly parented under its own environment's group.
-    Caught after release via real device names in a live instance, not
-    caught by tests (none asserted on the name string, only identifiers/
-    via_device — see test_helpers.py for the regression coverage added
-    alongside this fix).
+    any) it actually belongs to. The name and the parent must change
+    together; test_helpers.py asserts both.
 
     `environment_id`/`environment_name` (from the schedule's own
     `environmentId`/`environmentName` fields, confirmed from Dockhand's
@@ -697,8 +951,7 @@ def _sched_device(
     name as their own prefix; global ones keep parenting to the flat
     `schedules_hub` and the "Dockhand" prefix. The device's own
     `identifiers` stay content-addressed by schedule id/type regardless of
-    environment, so both this and the via_device change are safe without a
-    migration (see architecture.md §0 — both call sites must use this
+    environment (see architecture.md §0 — both call sites must use this
     factory, never inline fields, or the two can silently drift apart on
     the next coordinator update).
     """
@@ -708,14 +961,14 @@ def _sched_device(
     else:
         parent_identifier = _device_id_schedules_hub(entry_id)
         prefix = "Dockhand"
-    info: DeviceInfo = {
-        "identifiers": {(DOMAIN, _device_id_schedule(entry_id, sched_id, sched_type))},
-        "name": f"{prefix} – Schedules – {sched_name}",
-        "manufacturer": "Dockhand",
-        "model": "Schedule",
-        "configuration_url": _schedules_url(base_url),
-        "entry_type": DeviceEntryType.SERVICE,
-    }
+    info = DeviceInfo(
+        identifiers={(DOMAIN, _device_id_schedule(entry_id, sched_id, sched_type))},
+        name=f"{prefix} – Schedules – {sched_name}",
+        manufacturer="Dockhand",
+        model="Schedule",
+        configuration_url=_schedules_url(base_url),
+        entry_type=DeviceEntryType.SERVICE,
+    )
     parent_id = _device_entry_id(hass, entry_id, parent_identifier)
     if parent_id is not None:
         info["via_device_id"] = parent_id
@@ -727,18 +980,73 @@ def _sched_device(
 # --------------------------------------------------------------------------- #
 
 
-def _image_display_name(image: dict) -> str:
-    """Return a human-readable name for an image.
+UNTAGGED_IMAGES = "<none>"
+"""The repository Dockhand's Images page puts images under when they have
+neither a tag nor a digest that names one."""
 
-    Prefer the first repoTag (e.g. 'traefik:latest'). Fall back to the
-    short 12-char hex ID for untagged/intermediate images.
-    API field confirmed camelCase: repoTags, id (with sha256: prefix).
-    """
+
+def image_repositories(image: dict) -> list[str]:
+    """The repositories an image belongs to, as Dockhand's Images page
+    groups them (`groupedImages` in routes/images/+page.svelte): each tag's
+    repository, or for an untagged image the repository its digest names,
+    or UNTAGGED_IMAGES."""
     tags = [t for t in (image.get("repoTags") or []) if t and t != "<none>:<none>"]
     if tags:
-        return str(tags[0])
-    raw_id = image.get("id") or ""
-    return raw_id.split(":")[-1][:12] if raw_id else "unknown"
+        return list(dict.fromkeys(tag_repository(t) for t in tags))
+    for digest in image.get("repoDigests") or []:
+        if isinstance(digest, str) and digest.find("@") > 0:
+            return [digest[: digest.index("@")]]
+    return [UNTAGGED_IMAGES]
+
+
+def image_groups(images: list) -> dict[str, list[dict]]:
+    """Each repository's images, each image once, as Dockhand lists them:
+    one entry per repository, whatever its tags or how often it's pulled."""
+    groups: dict[str, list[dict]] = {}
+    for image in images or []:
+        if not isinstance(image, dict):
+            continue
+        for repo in image_repositories(image):
+            group = groups.setdefault(repo, [])
+            if all(other.get("id") != image.get("id") for other in group):
+                group.append(image)
+    return groups
+
+
+def _tag_colon(tag: str) -> int:
+    """Where `repository:tag` splits, or -1: a colon before the last `/` is a
+    registry's port (`registry.lan:5000/app`), not a tag."""
+    colon = tag.rfind(":")
+    return colon if colon > max(tag.rfind("/"), 0) else -1
+
+
+def tag_repository(tag: str) -> str:
+    """The repository part of `repository:tag`."""
+    colon = _tag_colon(tag)
+    return tag[:colon] if colon > 0 else tag
+
+
+def image_tag(tag: str) -> str:
+    """The tag part of `repository:tag`."""
+    colon = _tag_colon(tag)
+    return tag[colon + 1 :] if colon > 0 else "latest"
+
+
+def short_image_id(image: dict) -> str:
+    """An image's ID without its `sha256:` prefix."""
+    raw_id = str(image.get("id") or "")
+    return raw_id.split(":")[-1] if ":" in raw_id else raw_id
+
+
+def image_unique_id(entry_id: str, env_id: int, repository: str) -> str:
+    """An image sensor's unique ID: by repository, so it lasts across pulls."""
+    return f"{entry_id}_{env_id}_image_{repository}"
+
+
+def network_unique_id(entry_id: str, env_id: int, name: str) -> str:
+    """A network sensor's unique ID: by name, since Compose gives a network a
+    new ID each time it recreates it."""
+    return f"{entry_id}_{env_id}_network_{name}"
 
 
 def _container_has_healthcheck(container: dict) -> bool:
@@ -752,11 +1060,12 @@ def _container_has_healthcheck(container: dict) -> bool:
     return bool(h) and h not in ("none", "unknown")
 
 
-_TRUTHY_LABEL_VALUES = {"true", "yes", "1"}
 _FALSY_LABEL_VALUES = {"false", "no", "0"}
 
 
-def _stack_has_system_container(stack: dict | None, all_containers: list) -> bool:
+def _stack_has_system_container(
+    coordinator: Any, env_id: int, stack: dict | None
+) -> bool:
     """True if any container belonging to this stack is a Dockhand
     system container (dockhand itself, or a Hawser agent).
 
@@ -772,10 +1081,7 @@ def _stack_has_system_container(stack: dict | None, all_containers: list) -> boo
     confirmed from Dockhand's own source (stacks.ts populates it via
     `Array.from(containerIds)`, where containerIds is a Set matched
     against `c.id`, not `c.name`). Matching against container_id here,
-    not container_name — this exact mismatch (comparing this list
-    against container names) was a real bug that shipped: stack-level
-    system-container detection silently never matched anything, for any
-    stack, ever.
+    not container_name: matching names would never find anything.
 
     Used to suppress destructive actions (restart, running switch) at the
     stack level for any stack that includes Dockhand's own infrastructure
@@ -787,15 +1093,8 @@ def _stack_has_system_container(stack: dict | None, all_containers: list) -> boo
     in it, including ones the user may not realize are Dockhand
     infrastructure.
     """
-    if not stack:
-        return False
-    stack_container_ids = set(stack.get("containers") or [])
-    if not stack_container_ids:
-        return False
-    for c in all_containers or []:
-        if c.get("id") in stack_container_ids and c.get("systemContainer"):
-            return True
-    return False
+    system_ids = _env_index(coordinator, env_id).system_container_ids
+    return any(cid in system_ids for cid in (stack or {}).get("containers") or [])
 
 
 def _container_has_pending_update(
@@ -809,10 +1108,7 @@ def _container_has_pending_update(
 
     Shared by the update entity (update.py) and the env-level bulk
     "Update all" button (button.py, __init__.py's cleanup) so both agree
-    on the exact same definition of "needs an update" — previously each
-    re-derived this independently and drifted (the button was Tier-1-only
-    while the entity preferred Tier 2, and Tier 2's own name-based lookup
-    could resurrect a since-recreated container's stale data).
+    on the exact same definition of "needs an update".
 
     update_env_data must already be keyed by container_id (the shape
     DockhandUpdateCoordinator's data is fetched in) and, critically, this
@@ -999,17 +1295,14 @@ def _container_is_bulk_update_eligible(
     update_env_data: dict[str, dict] | None = None,
 ) -> bool:
     """True unless this is a Dockhand system container (dockhand itself,
-    or a Hawser agent) — same `!container.systemContainer` check
-    Dockhand's own frontend applies before offering its "Update all"
-    button, and the same reasoning ha-dockhand's bulk-update button
-    already applied inline in two separate places before this was
-    pulled out as its own named check: bulk-updating infrastructure
-    containers like the update-checker itself is genuinely unsafe, not
-    just untidy. This function's only job is to answer that one
-    question — it deliberately says nothing about whether the container
-    has a pending update at all, so it composes with
-    _actionable_pending_update_container_ids() below rather than
-    duplicating that check.
+    or a Hawser agent) — same `!container.systemContainer` check Dockhand's own
+    frontend applies before offering its "Update all" button: bulk-updating
+    infrastructure containers like the update-checker itself is genuinely
+    unsafe, not just untidy. This function's only job is to answer that one
+    question — it deliberately says nothing about whether the container has a
+    pending update at all, so it composes with
+    _actionable_pending_update_container_ids() below rather than duplicating
+    that check.
 
     A single named predicate here, rather than each caller building its
     own `{c.get("id") for c in containers if c.get("systemContainer")}`
@@ -1107,6 +1400,20 @@ def _short_digest(digest: str) -> str:
     return sha_part[:12] if sha_part else str(digest)
 
 
+def _container_device_version(container: dict | None) -> str | None:
+    """The version on a container's device, as firmware is on a physical
+    one: the image's OCI version label when set, else its tag ("1.27",
+    "latest"). None for an image pinned by digest alone."""
+    version = _image_version_label((container or {}).get("labels"))
+    if version:
+        return version
+    image = str((container or {}).get("image") or "")
+    if not image or "@" in image:
+        return None
+    name, _, tag = image.rpartition(":")
+    return tag if name and "/" not in tag else "latest"
+
+
 def _container_installed_version(
     container: dict | None, update_item: dict | None
 ) -> str | None:
@@ -1188,14 +1495,16 @@ def _ensure_hub_devices(
     /api/schedules — filtering to global-only happens here.
     """
     registry = dr.async_get(hass)
-    registry.async_get_or_create(
-        config_entry_id=entry_id,
+    hub = DeviceInfo(
         identifiers={(DOMAIN, _device_id_schedules_hub(entry_id))},
         name="Dockhand – Schedules",
         manufacturer="Dockhand",
         model="Service",
         configuration_url=_schedules_url(base_url),
         entry_type=DeviceEntryType.SERVICE,
+    )
+    registry.async_get_or_create(
+        config_entry_id=entry_id, **_under_instance(hass, entry_id, hub)
     )
     for sched in schedules:
         if sched.get("id") is None or sched.get("environmentId") is not None:
@@ -1237,9 +1546,9 @@ def _ensure_env_devices(
 
     Handles per-environment devices only — the env hub and all its children
     (Containers group, Stacks group, individual stack devices, optional
-    Networks/Images/Volumes groups). Called once per environment on every
-    coordinator update. For hub-level (instance-wide) devices such as Schedules,
-    see _ensure_hub_devices.
+    Networks/Images/Volumes groups, volume devices). Called once per
+    environment on every coordinator update. For hub-level (instance-wide)
+    devices such as Schedules, see _ensure_hub_devices.
 
     This is the single source of truth for per-environment device registration.
     Both the initial setup path (_register_devices in __init__.py) and the
@@ -1261,14 +1570,12 @@ def _ensure_env_devices(
             _stack_device()/_stacks_group_device() factories entity device_info
             properties use — this function still runs on every coordinator
             update while entities' device_info only runs once at entity-add
-            time (see module docstring), but there is now only one place that
-            actually constructs the DeviceInfo fields, so the two call sites
-            can no longer drift out of sync the way they once did (a stack's
-            model briefly showing correctly after a reload, then reverting to
-            a stale hardcoded value on the next coordinator update).
+            time (see module docstring); sharing the factories keeps the two
+            from writing different values.
         networks / images / volumes: Slow coordinator resource lists. Each group
             device is only created when the corresponding enable_* flag is True
-            AND the list is non-empty.
+            AND the list is non-empty. Each volume also gets its own device
+            under the Volumes group.
         schedules: Schedules for this env only (caller filters the full
             /api/schedules list by `environmentId == env_id` before passing
             it in — genuinely global schedules, `environmentId is None`, are
@@ -1285,7 +1592,9 @@ def _ensure_env_devices(
     # as a separator — a hyphen could appear in the resource name itself.
     registry.async_get_or_create(
         config_entry_id=entry_id,
-        **_env_device(entry_id, env_id, env_name, base_url),
+        **_under_instance(
+            hass, entry_id, _env_device(entry_id, env_id, env_name, base_url)
+        ),
     )
 
     # ── Containers group — only when freestanding containers exist ───────────
@@ -1337,6 +1646,21 @@ def _ensure_env_devices(
             config_entry_id=entry_id,
             **_volume_group_device(hass, entry_id, env_id, env_name, base_url),
         )
+        for volume in volumes:
+            volume_name = volume.get("name")
+            if volume_name:
+                registry.async_get_or_create(
+                    config_entry_id=entry_id,
+                    **_volume_device(
+                        hass,
+                        entry_id,
+                        volume_name,
+                        env_id,
+                        env_name,
+                        base_url,
+                        volume.get("driver"),
+                    ),
+                )
 
     # ── Schedules group + individual schedule devices (env-scoped only) ──────
     # Global schedules (environmentId is None) are handled by
@@ -1363,3 +1687,33 @@ def _ensure_env_devices(
                     environment_name=env_name,
                 ),
             )
+
+
+# Docker's prune report field for each resource's deleted items.
+PRUNE_RESOURCES: dict[str, str] = {
+    "containers": "ContainersDeleted",
+    "images": "ImagesDeleted",
+    "volumes": "VolumesDeleted",
+    "networks": "NetworksDeleted",
+}
+
+
+async def async_prune_environment(
+    data: Any, env_id: int, resources: Iterable[str], all_images: bool
+) -> dict[str, int]:
+    """Prune `resources` in one environment (the dockhand.prune action and the
+    Prune buttons), then re-read what it changed. Returns the space freed and
+    how many of each resource were deleted."""
+    wanted = set(resources)
+    response = {"space_reclaimed": 0}
+    for resource, field in PRUNE_RESOURCES.items():
+        if resource not in wanted:
+            continue
+        report = await async_dockhand_action(
+            data.client.async_prune(env_id, resource, all_images=all_images)
+        )
+        response[f"{resource}_deleted"] = len(report.get(field) or [])
+        response["space_reclaimed"] += int(report.get("SpaceReclaimed") or 0)
+    await data.fast_coordinator.async_refresh_environment(env_id)
+    await data.slow_coordinator.async_refresh()
+    return response

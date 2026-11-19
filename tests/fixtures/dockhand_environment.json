@@ -1,0 +1,2698 @@
+{
+ "_about": "One environment of a real Dockhand 1.0.57 instance as ha-dockhand 2.0's coordinators hold it, from a diagnostics download, with names, addresses, paths, ids and finding counts replaced and some containers left out. tests/test_real_data.py sets the integration up from it.",
+ "dockhand_version": "1.0.57",
+ "fast": {
+  "environments": {
+   "4": {
+    "stats": {
+     "id": 4,
+     "name": "Atlas",
+     "host": "atlas.example.internal",
+     "port": 2376,
+     "icon": "globe",
+     "socketPath": "/var/run/docker.sock",
+     "collectActivity": true,
+     "collectMetrics": true,
+     "scannerEnabled": true,
+     "updateCheckEnabled": true,
+     "updateCheckAutoUpdate": false,
+     "labels": [],
+     "connectionType": "hawser-standard",
+     "online": true,
+     "containers": {
+      "total": 6,
+      "running": 6,
+      "stopped": 0,
+      "paused": 0,
+      "restarting": 0,
+      "unhealthy": 0,
+      "pendingUpdates": 0,
+      "pinnedDigest": 0,
+      "newerVersion": 0
+     },
+     "images": {
+      "total": 14,
+      "totalSize": 3777681762
+     },
+     "volumes": {
+      "total": 2,
+      "totalSize": 5207663034
+     },
+     "containersSize": 929731,
+     "buildCacheSize": 0,
+     "networks": {
+      "total": 7
+     },
+     "stacks": {
+      "total": 5,
+      "running": 5,
+      "partial": 0,
+      "stopped": 0
+     },
+     "metrics": {
+      "cpuPercent": 0.43142287770160465,
+      "memoryPercent": 11.708287487082721,
+      "memoryUsed": 960180224,
+      "memoryTotal": 8200859648
+     },
+     "events": {
+      "total": 173,
+      "today": 7
+     }
+    },
+    "containers": [
+     {
+      "id": "35074519a0792d33755be890c75f8c67713eba55026ac23e17feaf6d098569b8",
+      "name": "proxy",
+      "image": "docker.io/traefik:v3",
+      "imageId": "sha256:9dea75a4b0b4adda1cabd96db8fbb56cb87e6f155145b738a4e25d06dc18720d",
+      "state": "running",
+      "status": "Up 10 hours",
+      "created": 1794631440,
+      "ports": [
+       {
+        "IP": "",
+        "PrivatePort": 80,
+        "Type": "tcp"
+       },
+       {
+        "IP": "0.0.0.0",
+        "PrivatePort": 443,
+        "PublicPort": 443,
+        "Type": "tcp"
+       },
+       {
+        "IP": "::",
+        "PrivatePort": 443,
+        "PublicPort": 443,
+        "Type": "tcp"
+       },
+       {
+        "IP": "0.0.0.0",
+        "PrivatePort": 443,
+        "PublicPort": 443,
+        "Type": "udp"
+       },
+       {
+        "IP": "::",
+        "PrivatePort": 443,
+        "PublicPort": 443,
+        "Type": "udp"
+       }
+      ],
+      "networks": {
+       "socket-proxy": {
+        "ipAddress": "172.21.1.3"
+       },
+       "proxy": {
+        "ipAddress": "172.20.3.4"
+       }
+      },
+      "restartCount": 0,
+      "mounts": [
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/srv/docker/proxy/etc",
+        "destination": "/etc/traefik",
+        "mode": "rw",
+        "rw": true
+       }
+      ],
+      "labels": {
+       "com.docker.compose.project": "proxy",
+       "com.docker.compose.service": "proxy"
+      },
+      "command": "/entrypoint.sh traefik",
+      "systemContainer": null
+     },
+     {
+      "id": "b05e7641548604bd23d119a875b844b4faf27ac5c88ebb0055e0909d94c4336b",
+      "name": "db",
+      "image": "docker.io/mariadb:lts",
+      "imageId": "sha256:1daefcfc666ab47c866a331fb958aeb435b2a87230b27b2a09e1ff037d477454",
+      "state": "running",
+      "status": "Up 2 days (healthy)",
+      "created": 1794459112,
+      "ports": [
+       {
+        "IP": "",
+        "PrivatePort": 3306,
+        "Type": "tcp"
+       }
+      ],
+      "networks": {
+       "db": {
+        "ipAddress": "172.21.2.3"
+       }
+      },
+      "health": "healthy",
+      "restartCount": 0,
+      "mounts": [
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/srv/docker/db/config",
+        "destination": "/etc/mysql/conf.d",
+        "mode": "rw",
+        "rw": true
+       },
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/srv/docker/db/data",
+        "destination": "/var/lib/mysql",
+        "mode": "rw",
+        "rw": true
+       }
+      ],
+      "labels": {
+       "com.docker.compose.project": "db",
+       "com.docker.compose.service": "db"
+      },
+      "command": "docker-entrypoint.sh mariadbd",
+      "systemContainer": null
+     },
+     {
+      "id": "202e434ad6a5c3c2777d685fb026acff1a9d66b3d5ab6b8809a9422c327d003d",
+      "name": "blog",
+      "image": "docker.io/wordpress:latest",
+      "imageId": "sha256:bc98bcce49570ace647431fc6a40cdc63c5134021e1996a0ce7f2d201691990c",
+      "state": "running",
+      "status": "Up 2 days",
+      "created": 1794458921,
+      "ports": [
+       {
+        "IP": "",
+        "PrivatePort": 80,
+        "Type": "tcp"
+       }
+      ],
+      "networks": {
+       "db": {
+        "ipAddress": "172.21.2.4"
+       },
+       "proxy": {
+        "ipAddress": "172.20.3.3"
+       },
+       "blog": {
+        "ipAddress": "172.21.3.3"
+       }
+      },
+      "restartCount": 0,
+      "mounts": [
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/srv/docker/blog/html",
+        "destination": "/var/www/html",
+        "mode": "rw",
+        "rw": true
+       },
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/srv/docker/blog/php/blog.ini",
+        "destination": "/usr/local/etc/php/conf.d/blog.ini",
+        "mode": "rw",
+        "rw": true
+       }
+      ],
+      "labels": {
+       "com.docker.compose.project": "blog",
+       "com.docker.compose.service": "blog"
+      },
+      "command": "docker-entrypoint.sh apache2-foreground",
+      "systemContainer": null
+     },
+     {
+      "id": "789607c4ad9ceeca7ad8c2da8f7c028964a5f3f99f4179bf86192e3354487c8a",
+      "name": "hawser",
+      "image": "ghcr.io/finsys/hawser:latest",
+      "imageId": "sha256:0ba921da4a94b2eb7e69b7822ecaffe68dfd88aaa2ea3d7b19f903407038deef",
+      "state": "running",
+      "status": "Up 4 days (healthy)",
+      "created": 1793413444,
+      "ports": [
+       {
+        "IP": "0.0.0.0",
+        "PrivatePort": 2376,
+        "PublicPort": 2376,
+        "Type": "tcp"
+       },
+       {
+        "IP": "::",
+        "PrivatePort": 2376,
+        "PublicPort": 2376,
+        "Type": "tcp"
+       }
+      ],
+      "networks": {
+       "bridge": {
+        "ipAddress": "172.21.0.3"
+       }
+      },
+      "health": "healthy",
+      "restartCount": 0,
+      "mounts": [
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/srv/docker/hawser/stacks",
+        "destination": "/data/stacks",
+        "mode": "rw",
+        "rw": true
+       },
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/var/run/docker.sock",
+        "destination": "/var/run/docker.sock",
+        "mode": "rw",
+        "rw": true
+       }
+      ],
+      "labels": {},
+      "command": "/usr/local/bin/hawser",
+      "systemContainer": "hawser"
+     },
+     {
+      "id": "63a2640c1e2d84a90e37b9f937e65a018760cd2f397bd5b24208a8b847c9d274",
+      "name": "cache",
+      "image": "docker.io/valkey/valkey:latest",
+      "imageId": "sha256:71cf21854854eb7b0c18a46bfec06b551355c87118104fc9bdf8333f8d41caef",
+      "state": "running",
+      "status": "Up 4 days (healthy)",
+      "created": 1793102248,
+      "ports": [
+       {
+        "IP": "",
+        "PrivatePort": 6379,
+        "Type": "tcp"
+       }
+      ],
+      "networks": {
+       "blog": {
+        "ipAddress": "172.21.3.2"
+       }
+      },
+      "health": "healthy",
+      "restartCount": 0,
+      "mounts": [],
+      "labels": {
+       "com.docker.compose.project": "blog",
+       "com.docker.compose.service": "cache"
+      },
+      "command": "tini -- docker-entrypoint.sh valkey-server",
+      "systemContainer": null
+     },
+     {
+      "id": "7c30d246a299ba5b1dd37c44c459646b159549556a782e9a70d16a1c62a313c7",
+      "name": "socket-proxy",
+      "image": "ghcr.io/tecnativa/docker-socket-proxy:latest",
+      "imageId": "sha256:312c6da99b6e36177424c9339fd2c45593e7bebb27778eb4084b12d1cd915967",
+      "state": "running",
+      "status": "Up 4 days",
+      "created": 1785151827,
+      "ports": [],
+      "networks": {
+       "socket-proxy": {
+        "ipAddress": "172.21.1.2"
+       }
+      },
+      "restartCount": 0,
+      "mounts": [
+       {
+        "type": "bind",
+        "name": "",
+        "source": "/var/run/docker.sock",
+        "destination": "/var/run/docker.sock",
+        "mode": "rw",
+        "rw": true
+       }
+      ],
+      "labels": {
+       "com.docker.compose.project": "socket-proxy",
+       "com.docker.compose.service": "socket-proxy"
+      },
+      "command": "docker-entrypoint.sh haproxy -f /tmp/haproxy.cfg",
+      "systemContainer": null
+     }
+    ],
+    "stacks": [
+     {
+      "name": "proxy",
+      "containers": [
+       "35074519a0792d33755be890c75f8c67713eba55026ac23e17feaf6d098569b8"
+      ],
+      "containerDetails": [
+       {
+        "id": "35074519a0792d33755be890c75f8c67713eba55026ac23e17feaf6d098569b8",
+        "name": "proxy",
+        "service": "proxy",
+        "state": "running",
+        "status": "Up 10 hours",
+        "image": "docker.io/traefik:v3",
+        "ports": [
+         {
+          "publicPort": 443,
+          "privatePort": 443,
+          "type": "tcp",
+          "display": "443:443/tcp"
+         },
+         {
+          "publicPort": 443,
+          "privatePort": 443,
+          "type": "tcp",
+          "display": "443:443/tcp"
+         },
+         {
+          "publicPort": 443,
+          "privatePort": 443,
+          "type": "udp",
+          "display": "443:443/udp"
+         },
+         {
+          "publicPort": 443,
+          "privatePort": 443,
+          "type": "udp",
+          "display": "443:443/udp"
+         }
+        ],
+        "networks": [
+         {
+          "name": "socket-proxy",
+          "ipAddress": "172.21.1.3"
+         },
+         {
+          "name": "proxy",
+          "ipAddress": "172.20.3.4"
+         }
+        ],
+        "volumeCount": 1,
+        "restartCount": 0,
+        "created": 1794631440,
+        "labels": {
+         "com.docker.compose.project": "proxy",
+         "com.docker.compose.service": "proxy"
+        },
+        "updateAvailable": false,
+        "pinnedToDigest": false,
+        "coolingDown": false,
+        "newerVersion": null
+       }
+      ],
+      "labelTags": [],
+      "updatesAvailable": false,
+      "updateCount": 0,
+      "newerVersionCount": 0,
+      "coolingDownCount": 0,
+      "pinnedDigestCount": 0,
+      "status": "running",
+      "health": "none",
+      "sourceType": "git",
+      "icon": null
+     },
+     {
+      "name": "db",
+      "containers": [
+       "b05e7641548604bd23d119a875b844b4faf27ac5c88ebb0055e0909d94c4336b"
+      ],
+      "containerDetails": [
+       {
+        "id": "b05e7641548604bd23d119a875b844b4faf27ac5c88ebb0055e0909d94c4336b",
+        "name": "db",
+        "service": "db",
+        "state": "running",
+        "status": "Up 2 days (healthy)",
+        "health": "healthy",
+        "image": "docker.io/mariadb:lts",
+        "ports": [],
+        "networks": [
+         {
+          "name": "db",
+          "ipAddress": "172.21.2.3"
+         }
+        ],
+        "volumeCount": 2,
+        "restartCount": 0,
+        "created": 1794459112,
+        "labels": {
+         "com.docker.compose.project": "db",
+         "com.docker.compose.service": "db"
+        },
+        "updateAvailable": false,
+        "pinnedToDigest": false,
+        "coolingDown": false,
+        "newerVersion": null
+       }
+      ],
+      "labelTags": [],
+      "updatesAvailable": false,
+      "updateCount": 0,
+      "newerVersionCount": 0,
+      "coolingDownCount": 0,
+      "pinnedDigestCount": 0,
+      "status": "running",
+      "health": "healthy",
+      "sourceType": "git",
+      "icon": null
+     },
+     {
+      "name": "blog",
+      "containers": [
+       "202e434ad6a5c3c2777d685fb026acff1a9d66b3d5ab6b8809a9422c327d003d",
+       "63a2640c1e2d84a90e37b9f937e65a018760cd2f397bd5b24208a8b847c9d274"
+      ],
+      "containerDetails": [
+       {
+        "id": "202e434ad6a5c3c2777d685fb026acff1a9d66b3d5ab6b8809a9422c327d003d",
+        "name": "blog",
+        "service": "blog",
+        "state": "running",
+        "status": "Up 2 days",
+        "image": "docker.io/wordpress:latest",
+        "ports": [],
+        "networks": [
+         {
+          "name": "db",
+          "ipAddress": "172.21.2.4"
+         },
+         {
+          "name": "proxy",
+          "ipAddress": "172.20.3.3"
+         },
+         {
+          "name": "blog",
+          "ipAddress": "172.21.3.3"
+         }
+        ],
+        "volumeCount": 2,
+        "restartCount": 0,
+        "created": 1794458921,
+        "labels": {
+         "com.docker.compose.project": "blog",
+         "com.docker.compose.service": "blog"
+        },
+        "updateAvailable": false,
+        "pinnedToDigest": false,
+        "coolingDown": false,
+        "newerVersion": null
+       },
+       {
+        "id": "63a2640c1e2d84a90e37b9f937e65a018760cd2f397bd5b24208a8b847c9d274",
+        "name": "cache",
+        "service": "cache",
+        "state": "running",
+        "status": "Up 4 days (healthy)",
+        "health": "healthy",
+        "image": "docker.io/valkey/valkey:latest",
+        "ports": [],
+        "networks": [
+         {
+          "name": "blog",
+          "ipAddress": "172.21.3.2"
+         }
+        ],
+        "volumeCount": 0,
+        "restartCount": 0,
+        "created": 1793102248,
+        "labels": {
+         "com.docker.compose.project": "blog",
+         "com.docker.compose.service": "cache"
+        },
+        "updateAvailable": false,
+        "pinnedToDigest": false,
+        "coolingDown": false,
+        "newerVersion": null
+       }
+      ],
+      "labelTags": [],
+      "updatesAvailable": false,
+      "updateCount": 0,
+      "newerVersionCount": 0,
+      "coolingDownCount": 0,
+      "pinnedDigestCount": 0,
+      "status": "running",
+      "health": "healthy",
+      "sourceType": "git",
+      "icon": null
+     },
+     {
+      "name": "hawser",
+      "containers": [
+       "789607c4ad9ceeca7ad8c2da8f7c028964a5f3f99f4179bf86192e3354487c8a"
+      ],
+      "containerDetails": [
+       {
+        "id": "789607c4ad9ceeca7ad8c2da8f7c028964a5f3f99f4179bf86192e3354487c8a",
+        "name": "hawser",
+        "service": "hawser",
+        "state": "running",
+        "status": "Up 4 days (healthy)",
+        "health": "healthy",
+        "image": "ghcr.io/finsys/hawser:latest",
+        "ports": [
+         {
+          "publicPort": 2376,
+          "privatePort": 2376,
+          "type": "tcp",
+          "display": "2376:2376/tcp"
+         },
+         {
+          "publicPort": 2376,
+          "privatePort": 2376,
+          "type": "tcp",
+          "display": "2376:2376/tcp"
+         }
+        ],
+        "networks": [
+         {
+          "name": "bridge",
+          "ipAddress": "172.21.0.3"
+         }
+        ],
+        "volumeCount": 2,
+        "restartCount": 0,
+        "created": 1793413444,
+        "labels": {
+         "com.docker.compose.project": "hawser",
+         "com.docker.compose.service": "hawser"
+        },
+        "updateAvailable": false,
+        "pinnedToDigest": false,
+        "coolingDown": false,
+        "newerVersion": null
+       }
+      ],
+      "labelTags": [],
+      "updatesAvailable": false,
+      "updateCount": 0,
+      "newerVersionCount": 0,
+      "coolingDownCount": 0,
+      "pinnedDigestCount": 0,
+      "status": "running",
+      "health": "healthy"
+     },
+     {
+      "name": "socket-proxy",
+      "containers": [
+       "7c30d246a299ba5b1dd37c44c459646b159549556a782e9a70d16a1c62a313c7"
+      ],
+      "containerDetails": [
+       {
+        "id": "7c30d246a299ba5b1dd37c44c459646b159549556a782e9a70d16a1c62a313c7",
+        "name": "socket-proxy",
+        "service": "socket-proxy",
+        "state": "running",
+        "status": "Up 4 days",
+        "image": "ghcr.io/tecnativa/docker-socket-proxy:latest",
+        "ports": [],
+        "networks": [
+         {
+          "name": "socket-proxy",
+          "ipAddress": "172.21.1.2"
+         }
+        ],
+        "volumeCount": 1,
+        "restartCount": 0,
+        "created": 1785151827,
+        "labels": {
+         "com.docker.compose.project": "socket-proxy",
+         "com.docker.compose.service": "socket-proxy"
+        },
+        "updateAvailable": false,
+        "pinnedToDigest": false,
+        "coolingDown": false,
+        "newerVersion": null
+       }
+      ],
+      "labelTags": [],
+      "updatesAvailable": false,
+      "updateCount": 0,
+      "newerVersionCount": 0,
+      "coolingDownCount": 0,
+      "pinnedDigestCount": 0,
+      "status": "running",
+      "health": "none",
+      "sourceType": "git",
+      "icon": null
+     },
+     {
+      "name": "staging",
+      "containers": [],
+      "containerDetails": [],
+      "status": "created",
+      "sourceType": "git",
+      "icon": null
+     },
+     {
+      "name": "backup",
+      "containers": [],
+      "containerDetails": [],
+      "status": "created",
+      "sourceType": "git",
+      "icon": null
+     }
+    ],
+    "container_stats": {
+     "proxy": {
+      "id": "35074519a0792d33755be890c75f8c67713eba55026ac23e17feaf6d098569b8",
+      "name": "proxy",
+      "stack": "proxy",
+      "cpuPercent": 0,
+      "memoryUsage": 32018432,
+      "memoryRaw": 32886784,
+      "memoryCache": 868352,
+      "memoryLimit": 8200859648,
+      "memoryPercent": 0.39,
+      "networkRx": 42132783,
+      "networkTx": 10311326,
+      "blockRead": 13291520,
+      "blockWrite": 0
+     },
+     "db": {
+      "id": "b05e7641548604bd23d119a875b844b4faf27ac5c88ebb0055e0909d94c4336b",
+      "name": "db",
+      "stack": "db",
+      "cpuPercent": 0.03,
+      "memoryUsage": 244961280,
+      "memoryRaw": 283111424,
+      "memoryCache": 38150144,
+      "memoryLimit": 8200859648,
+      "memoryPercent": 2.99,
+      "networkRx": 115949281,
+      "networkTx": 458674649,
+      "blockRead": 1572864,
+      "blockWrite": 4096
+     },
+     "blog": {
+      "id": "202e434ad6a5c3c2777d685fb026acff1a9d66b3d5ab6b8809a9422c327d003d",
+      "name": "blog",
+      "stack": "blog",
+      "cpuPercent": 0.01,
+      "memoryUsage": 508518400,
+      "memoryRaw": 928796672,
+      "memoryCache": 420278272,
+      "memoryLimit": 8200859648,
+      "memoryPercent": 6.2,
+      "networkRx": 3756781217,
+      "networkTx": 960711503,
+      "blockRead": 7954432,
+      "blockWrite": 0
+     },
+     "hawser": {
+      "id": "789607c4ad9ceeca7ad8c2da8f7c028964a5f3f99f4179bf86192e3354487c8a",
+      "name": "hawser",
+      "stack": "hawser",
+      "cpuPercent": 1.42,
+      "memoryUsage": 10346496,
+      "memoryRaw": 25010176,
+      "memoryCache": 14663680,
+      "memoryLimit": 8200859648,
+      "memoryPercent": 0.13,
+      "networkRx": 291919214,
+      "networkTx": 4341211582,
+      "blockRead": 15130624,
+      "blockWrite": 0
+     },
+     "cache": {
+      "id": "63a2640c1e2d84a90e37b9f937e65a018760cd2f397bd5b24208a8b847c9d274",
+      "name": "cache",
+      "stack": "blog",
+      "cpuPercent": 0.53,
+      "memoryUsage": 11636736,
+      "memoryRaw": 22736896,
+      "memoryCache": 11100160,
+      "memoryLimit": 8200859648,
+      "memoryPercent": 0.14,
+      "networkRx": 1356152740,
+      "networkTx": 7195408866,
+      "blockRead": 16482304,
+      "blockWrite": 0
+     },
+     "socket-proxy": {
+      "id": "7c30d246a299ba5b1dd37c44c459646b159549556a782e9a70d16a1c62a313c7",
+      "name": "socket-proxy",
+      "stack": "socket-proxy",
+      "cpuPercent": 0,
+      "memoryUsage": 27103232,
+      "memoryRaw": 32260096,
+      "memoryCache": 5156864,
+      "memoryLimit": 8200859648,
+      "memoryPercent": 0.33,
+      "networkRx": 25321913,
+      "networkTx": 419127212,
+      "blockRead": 13725696,
+      "blockWrite": 12288
+     }
+    },
+    "stack_stats": {
+     "socket-proxy": {
+      "name": "socket-proxy",
+      "cpuPercent": 0,
+      "memoryUsage": 27103232,
+      "memoryLimit": 8200859648,
+      "networkRx": 25321913,
+      "networkTx": 419127212,
+      "blockRead": 13725696,
+      "blockWrite": 12288,
+      "runningCount": 1
+     },
+     "hawser": {
+      "name": "hawser",
+      "cpuPercent": 1.42,
+      "memoryUsage": 10346496,
+      "memoryLimit": 8200859648,
+      "networkRx": 291919214,
+      "networkTx": 4341211582,
+      "blockRead": 15130624,
+      "blockWrite": 0,
+      "runningCount": 1
+     },
+     "db": {
+      "name": "db",
+      "cpuPercent": 0.03,
+      "memoryUsage": 244961280,
+      "memoryLimit": 8200859648,
+      "networkRx": 115949281,
+      "networkTx": 458674649,
+      "blockRead": 1572864,
+      "blockWrite": 4096,
+      "runningCount": 1
+     },
+     "proxy": {
+      "name": "proxy",
+      "cpuPercent": 0.47,
+      "memoryUsage": 51896320,
+      "memoryLimit": 8200859648,
+      "networkRx": 117745205,
+      "networkTx": 91188843,
+      "blockRead": 13524992,
+      "blockWrite": 0,
+      "runningCount": 2
+     },
+     "blog": {
+      "name": "blog",
+      "cpuPercent": 0.54,
+      "memoryUsage": 520155136,
+      "memoryLimit": 8200859648,
+      "networkRx": 5112933957,
+      "networkTx": 8156120369,
+      "blockRead": 24436736,
+      "blockWrite": 0,
+      "runningCount": 2
+     }
+    },
+    "pending_update_container_ids": [],
+    "pending_update_details": {},
+    "container_tags": {},
+    "stack_tags": {},
+    "fetch_failures": [],
+    "unconfirmed": []
+   }
+  }
+ },
+ "slow": {
+  "environments": {
+   "4": {
+    "host": {
+     "hostname": "atlas",
+     "ipAddress": "192.0.2.10",
+     "platform": "Ubuntu 26.04.1 LTS",
+     "arch": "x86_64",
+     "cpus": 4,
+     "totalMemory": 8200859648,
+     "freeMemory": 0,
+     "uptime": 420046,
+     "dockerVersion": "29.9.3",
+     "dockerContainers": 6,
+     "dockerContainersRunning": 6,
+     "dockerImages": 14,
+     "environment": {
+      "id": 4,
+      "name": "Atlas",
+      "icon": "globe",
+      "socketPath": "/var/run/docker.sock",
+      "connectionType": "hawser-standard",
+      "hawserVersion": "0.2.53",
+      "highlightChanges": true
+     }
+    },
+    "images": [
+     {
+      "id": "sha256:9dea75a4b0b4adda1cabd96db8fbb56cb87e6f155145b738a4e25d06dc18720d",
+      "repoTags": [
+       "traefik:v3"
+      ],
+      "tags": [
+       "traefik:v3"
+      ],
+      "repoDigests": [
+       "traefik@sha256:86fa31eecaf78d2a506ea5c903de981623d4276b9f4a86effc237c5134b0319f"
+      ],
+      "size": 191797865,
+      "virtualSize": 191797865,
+      "created": 1794595931,
+      "labels": {},
+      "containers": 1
+     },
+     {
+      "id": "sha256:1daefcfc666ab47c866a331fb958aeb435b2a87230b27b2a09e1ff037d477454",
+      "repoTags": [
+       "mariadb:lts"
+      ],
+      "tags": [
+       "mariadb:lts"
+      ],
+      "repoDigests": [
+       "mariadb@sha256:df188dfee66c94f55894c8e14302941213c92fa29e6474197931c34621e5e0d4"
+      ],
+      "size": 341488204,
+      "virtualSize": 341488204,
+      "created": 1794439825,
+      "labels": {},
+      "containers": 1
+     },
+     {
+      "id": "sha256:bc98bcce49570ace647431fc6a40cdc63c5134021e1996a0ce7f2d201691990c",
+      "repoTags": [
+       "wordpress:latest"
+      ],
+      "tags": [
+       "wordpress:latest"
+      ],
+      "repoDigests": [
+       "wordpress@sha256:c4445f245771b3bfb2bdce42515580207ae7699147fbbf15d122a8f40df8dce5"
+      ],
+      "size": 788134047,
+      "virtualSize": 788134047,
+      "created": 1794438335,
+      "labels": {},
+      "containers": 1
+     },
+     {
+      "id": "sha256:d2dcb88d27dde07439c13ba7c125dfd1f1e38d2132bda69ead35a823f3f153d6",
+      "repoTags": [
+       "ghcr.io/anchore/grype:v0.121.3"
+      ],
+      "tags": [
+       "ghcr.io/anchore/grype:v0.121.3"
+      ],
+      "repoDigests": [
+       "ghcr.io/anchore/grype@sha256:de032f1dd30e5102f8c356721497c1020f105056fd1cd2ba2dafbe00b033c071"
+      ],
+      "size": 95495193,
+      "virtualSize": 95495193,
+      "created": 1794237209,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:dd0b9c19be5341ed23a828dbfe13fa82b443fbb9f98f6da2450a11fa52edb99b",
+      "repoTags": [
+       "ghcr.io/aquasecurity/trivy:0.76.2"
+      ],
+      "tags": [
+       "ghcr.io/aquasecurity/trivy:0.76.2"
+      ],
+      "repoDigests": [
+       "ghcr.io/aquasecurity/trivy@sha256:442e899149b9e171101a8a7efe6d2f899c0f71e3b1512d879c7111e724c57e2e"
+      ],
+      "size": 198308353,
+      "virtualSize": 198308353,
+      "created": 1793882881,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:d98fdec6f33cd2e62eb4a005c95222aa8dfdbf70faf68026d2d60768a5109c1e",
+      "repoTags": [
+       "ghcr.io/anchore/grype:v0.121.1"
+      ],
+      "tags": [
+       "ghcr.io/anchore/grype:v0.121.1"
+      ],
+      "repoDigests": [
+       "ghcr.io/anchore/grype@sha256:e978b7664dfa30f69a638609cf65b12e6de179060df62cf2fdbe985a5534cb86"
+      ],
+      "size": 95515673,
+      "virtualSize": 95515673,
+      "created": 1793640380,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:0ba921da4a94b2eb7e69b7822ecaffe68dfd88aaa2ea3d7b19f903407038deef",
+      "repoTags": [
+       "ghcr.io/finsys/hawser:latest"
+      ],
+      "tags": [
+       "ghcr.io/finsys/hawser:latest"
+      ],
+      "repoDigests": [
+       "ghcr.io/finsys/hawser@sha256:ac4a0c54b7f4755c651b2ab757b06086ca3cb53f22c8b346b0a255325e0f9c33"
+      ],
+      "size": 221487290,
+      "virtualSize": 221487290,
+      "created": 1793380955,
+      "labels": {},
+      "containers": 1
+     },
+     {
+      "id": "sha256:71cf21854854eb7b0c18a46bfec06b551355c87118104fc9bdf8333f8d41caef",
+      "repoTags": [
+       "valkey/valkey:latest"
+      ],
+      "tags": [
+       "valkey/valkey:latest"
+      ],
+      "repoDigests": [
+       "valkey/valkey@sha256:82fe9443986b30233c9ed639bc1796f15ec8851d4fbdb98afeed6b3a3f4bd85a"
+      ],
+      "size": 117864330,
+      "virtualSize": 117864330,
+      "created": 1793058327,
+      "labels": {},
+      "containers": 1
+     },
+     {
+      "id": "sha256:ab64f2a8d79a7e1e3ed5ffdd0c6a30e965c90878be0ed6eebd52b7c62bb99e6d",
+      "repoTags": [
+       "ghcr.io/anchore/grype:v0.121.0"
+      ],
+      "tags": [
+       "ghcr.io/anchore/grype:v0.121.0"
+      ],
+      "repoDigests": [
+       "ghcr.io/anchore/grype@sha256:3fbd7fd6d346439b6bd231148fb695e75ac46c68f83f06c6421b84bb81c9a240"
+      ],
+      "size": 96271715,
+      "virtualSize": 96271715,
+      "created": 1792441698,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:7d80e8bfe64f17a5acbefe6a5dab9ae385379135a2e0c326fcd88f3339ca95ac",
+      "repoTags": [
+       "ghcr.io/aquasecurity/trivy:0.76.0"
+      ],
+      "tags": [
+       "ghcr.io/aquasecurity/trivy:0.76.0"
+      ],
+      "repoDigests": [
+       "ghcr.io/aquasecurity/trivy@sha256:045d79a8dadeaded8c7d7ee9321535c9e6a0ce0ce398150f145a27262885b99a"
+      ],
+      "size": 196578886,
+      "virtualSize": 196578886,
+      "created": 1791978230,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:f98f96d03689eb686367ee33d1e466455a6f2acc16e40bb528077b5d34ef73c4",
+      "repoTags": [
+       "ghcr.io/anchore/grype:v0.120.1"
+      ],
+      "tags": [
+       "ghcr.io/anchore/grype:v0.120.1"
+      ],
+      "repoDigests": [
+       "ghcr.io/anchore/grype@sha256:23cf0abbf7960f353443b9b1b917bbcd863f52cfa902186c0361a4ebe1300675"
+      ],
+      "size": 95468899,
+      "virtualSize": 95468899,
+      "created": 1791319392,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:d8ee07f98df338625b7a92f6dd54143fc19e5a65444f2242b36df1ae734e161f",
+      "repoTags": [
+       "ghcr.io/anchore/grype:v0.120.0"
+      ],
+      "tags": [
+       "ghcr.io/anchore/grype:v0.120.0"
+      ],
+      "repoDigests": [
+       "ghcr.io/anchore/grype@sha256:0c7bd7ed7187b6a87de6bc28da8a1f417f701d41f6a8859457e9abe348636e50"
+      ],
+      "size": 90922339,
+      "virtualSize": 90922339,
+      "created": 1790950696,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:b0350cf5a78834e0e3b1c79518c6dc615dd3f389b2336d0d369396d74aca3f99",
+      "repoTags": [
+       "ghcr.io/aquasecurity/trivy:0.75.0"
+      ],
+      "tags": [
+       "ghcr.io/aquasecurity/trivy:0.75.0"
+      ],
+      "repoDigests": [
+       "ghcr.io/aquasecurity/trivy@sha256:ebf7bfd8c8cf2fe14728d5014c4a849eb364cd48fdee6e4b4e89d5402bb19063"
+      ],
+      "size": 194672277,
+      "virtualSize": 194672277,
+      "created": 1790861534,
+      "labels": {},
+      "containers": 0
+     },
+     {
+      "id": "sha256:312c6da99b6e36177424c9339fd2c45593e7bebb27778eb4084b12d1cd915967",
+      "repoTags": [
+       "ghcr.io/tecnativa/docker-socket-proxy:latest"
+      ],
+      "tags": [
+       "ghcr.io/tecnativa/docker-socket-proxy:latest"
+      ],
+      "repoDigests": [
+       "ghcr.io/tecnativa/docker-socket-proxy@sha256:2e503c3af3104ed131af518e55d218a10a1c3c025e7c74e5002daf0687d201ec"
+      ],
+      "size": 43470505,
+      "virtualSize": 43470505,
+      "created": 1785144517,
+      "labels": {},
+      "containers": 1
+     }
+    ],
+    "networks": [
+     {
+      "id": "f78295c7e8d684121c5434545387987c86ebc81872edf005e432b42dcea84c3b",
+      "name": "none",
+      "driver": "null",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": []
+      },
+      "containers": {}
+     },
+     {
+      "id": "a2b123fcf39faa204cdebd8893d95db067016fbd39f4cfb8929a5a6551aa9e8a",
+      "name": "bridge",
+      "driver": "bridge",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": [
+        {
+         "subnet": "172.21.0.0/24",
+         "gateway": "172.21.0.1"
+        }
+       ]
+      },
+      "containers": {
+       "20b46f892efa834bd33816599fb74650fd7305426b209d03b7cc5957f05481bd": {
+        "name": "hawser",
+        "ipv4Address": "172.21.0.3"
+       }
+      }
+     },
+     {
+      "id": "ea17e4be4853934a365cfd2472c776b2bab89fbc23fc6d66033b1d44d56a4531",
+      "name": "db",
+      "driver": "bridge",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": [
+        {
+         "subnet": "172.21.2.0/24",
+         "gateway": "172.21.2.1"
+        }
+       ]
+      },
+      "containers": {
+       "06a550ffa6dc1a98b9697382c8948e9b969fa79b4a72d02dd0c8fe3e9c9b92c5": {
+        "name": "db",
+        "ipv4Address": "172.21.2.3"
+       },
+       "6824ccf4212e9ccf271057b2a1dca2e71aa810b890e5428e156edae81cc6d4b3": {
+        "name": "blog",
+        "ipv4Address": "172.21.2.4"
+       }
+      }
+     },
+     {
+      "id": "007bcf26e97ed9d1a483e2193748dcbf5bba179a0f3e715ad098aafd03ca8138",
+      "name": "socket-proxy",
+      "driver": "bridge",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": [
+        {
+         "subnet": "172.21.1.0/24",
+         "gateway": "172.21.1.1"
+        }
+       ]
+      },
+      "containers": {
+       "4d6a403620b741156346926701aea3aa4f43022b0b767e0381b30777401b5857": {
+        "name": "proxy",
+        "ipv4Address": "172.21.1.3"
+       },
+       "efc7f169ad5a72006bb4a43340328e017da512e2c59d7db9057416f1a1ff6d39": {
+        "name": "socket-proxy",
+        "ipv4Address": "172.21.1.2"
+       }
+      }
+     },
+     {
+      "id": "6309e25efc1dd3af788292ab19cdc9ee118ea02445ba30c707f9a47990fe37a8",
+      "name": "proxy",
+      "driver": "bridge",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": [
+        {
+         "subnet": "172.20.3.0/24",
+         "gateway": "172.20.3.1"
+        }
+       ]
+      },
+      "containers": {
+       "4d6a403620b741156346926701aea3aa4f43022b0b767e0381b30777401b5857": {
+        "name": "proxy",
+        "ipv4Address": "172.20.3.4"
+       },
+       "6824ccf4212e9ccf271057b2a1dca2e71aa810b890e5428e156edae81cc6d4b3": {
+        "name": "blog",
+        "ipv4Address": "172.20.3.3"
+       }
+      }
+     },
+     {
+      "id": "a250777c019a74f190b5b64d0eb209fbe9f2c04ea64307ee609d90c4d7f11974",
+      "name": "blog",
+      "driver": "bridge",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": [
+        {
+         "subnet": "172.21.3.0/24",
+         "gateway": "172.21.3.1"
+        }
+       ]
+      },
+      "containers": {
+       "6824ccf4212e9ccf271057b2a1dca2e71aa810b890e5428e156edae81cc6d4b3": {
+        "name": "blog",
+        "ipv4Address": "172.21.3.3"
+       },
+       "854d372c3a2bb213f6d96b16682ec314831e8602891a1d25ab6029575ed28c37": {
+        "name": "cache",
+        "ipv4Address": "172.21.3.2"
+       }
+      }
+     },
+     {
+      "id": "65ab3745b466112ca8bb6fbb49ca81cb6eb81d3f3658a39b22c0ebdbb7a3bbd9",
+      "name": "host",
+      "driver": "host",
+      "scope": "local",
+      "internal": false,
+      "ipam": {
+       "driver": "default",
+       "config": []
+      },
+      "containers": {}
+     }
+    ],
+    "volumes": [
+     {
+      "name": "dockhand-grype-db",
+      "driver": "local",
+      "mountpoint": "/var/lib/docker/volumes/dockhand-grype-db/_data",
+      "scope": "local",
+      "created": "2026-11-10T23:56:39+00:00",
+      "labels": {},
+      "usedBy": []
+     },
+     {
+      "name": "dockhand-trivy-db",
+      "driver": "local",
+      "mountpoint": "/var/lib/docker/volumes/dockhand-trivy-db/_data",
+      "scope": "local",
+      "created": "2026-11-10T23:59:01+00:00",
+      "labels": {},
+      "usedBy": []
+     }
+    ],
+    "volume_sizes": {
+      "dockhand-grype-db": 3412881214,
+      "dockhand-trivy-db": 1794781820
+    },
+    "runtime_config": {},
+    "git_stacks": [
+     {
+      "id": 6,
+      "stackName": "socket-proxy",
+      "environmentId": 4,
+      "repositoryId": 1,
+      "branch": null,
+      "composePath": "socket-proxy/docker-compose.yml",
+      "envFilePath": null,
+      "autoUpdate": true,
+      "autoUpdateSchedule": "daily",
+      "autoUpdateCron": "0 3 * * *",
+      "webhookEnabled": false,
+      "contextDir": null,
+      "buildOnDeploy": false,
+      "noBuildCache": false,
+      "repullImages": false,
+      "forceRedeploy": false,
+      "lastSync": "2026-11-14T08:01:31.276Z",
+      "lastCommit": "4e1c0a7",
+      "syncStatus": "synced",
+      "syncError": null,
+      "createdAt": "2026-03-09 17:24:56",
+      "updatedAt": "2026-11-14T08:01:31.276Z",
+      "repository": {
+       "id": 1,
+       "name": "Stacks",
+       "url": "https://git.example.internal/example/stacks.git",
+       "branch": "main",
+       "credentialId": 1
+      },
+      "hasWebhookSecret": false
+     },
+     {
+      "id": 7,
+      "stackName": "db",
+      "environmentId": 4,
+      "repositoryId": 1,
+      "branch": null,
+      "composePath": "db/docker-compose.yml",
+      "envFilePath": null,
+      "autoUpdate": true,
+      "autoUpdateSchedule": "daily",
+      "autoUpdateCron": "0 3 * * *",
+      "webhookEnabled": false,
+      "contextDir": null,
+      "buildOnDeploy": false,
+      "noBuildCache": false,
+      "repullImages": false,
+      "forceRedeploy": false,
+      "lastSync": "2026-11-14T08:01:29.677Z",
+      "lastCommit": "4e1c0a7",
+      "syncStatus": "synced",
+      "syncError": null,
+      "createdAt": "2026-03-09 17:26:56",
+      "updatedAt": "2026-11-14T08:01:29.677Z",
+      "repository": {
+       "id": 1,
+       "name": "Stacks",
+       "url": "https://git.example.internal/example/stacks.git",
+       "branch": "main",
+       "credentialId": 1
+      },
+      "hasWebhookSecret": false
+     },
+     {
+      "id": 20,
+      "stackName": "staging",
+      "environmentId": 4,
+      "repositoryId": 1,
+      "branch": null,
+      "composePath": "backup/docker-compose.yml",
+      "envFilePath": null,
+      "autoUpdate": true,
+      "autoUpdateSchedule": "daily",
+      "autoUpdateCron": "0 3 * * *",
+      "webhookEnabled": false,
+      "contextDir": null,
+      "buildOnDeploy": false,
+      "noBuildCache": false,
+      "repullImages": false,
+      "forceRedeploy": false,
+      "lastSync": "2026-11-14T08:01:26.112Z",
+      "lastCommit": "4e1c0a7",
+      "syncStatus": "synced",
+      "syncError": null,
+      "createdAt": "2026-03-16 19:42:18",
+      "updatedAt": "2026-11-14T08:01:26.112Z",
+      "repository": {
+       "id": 1,
+       "name": "Stacks",
+       "url": "https://git.example.internal/example/stacks.git",
+       "branch": "main",
+       "credentialId": 1
+      },
+      "hasWebhookSecret": false
+     },
+     {
+      "id": 9,
+      "stackName": "proxy",
+      "environmentId": 4,
+      "repositoryId": 1,
+      "branch": null,
+      "composePath": "proxy/docker-compose.yml",
+      "envFilePath": null,
+      "autoUpdate": true,
+      "autoUpdateSchedule": "daily",
+      "autoUpdateCron": "0 3 * * *",
+      "webhookEnabled": false,
+      "contextDir": null,
+      "buildOnDeploy": false,
+      "noBuildCache": false,
+      "repullImages": false,
+      "forceRedeploy": false,
+      "lastSync": "2026-11-14T08:01:26.665Z",
+      "lastCommit": "4e1c0a7",
+      "syncStatus": "synced",
+      "syncError": null,
+      "createdAt": "2026-03-09 17:31:22",
+      "updatedAt": "2026-11-14T08:01:26.665Z",
+      "repository": {
+       "id": 1,
+       "name": "Stacks",
+       "url": "https://git.example.internal/example/stacks.git",
+       "branch": "main",
+       "credentialId": 1
+      },
+      "hasWebhookSecret": false
+     },
+     {
+      "id": 10,
+      "stackName": "blog",
+      "environmentId": 4,
+      "repositoryId": 1,
+      "branch": null,
+      "composePath": "blog/docker-compose.yml",
+      "envFilePath": null,
+      "autoUpdate": true,
+      "autoUpdateSchedule": "daily",
+      "autoUpdateCron": "0 3 * * *",
+      "webhookEnabled": false,
+      "contextDir": null,
+      "buildOnDeploy": false,
+      "noBuildCache": false,
+      "repullImages": false,
+      "forceRedeploy": false,
+      "lastSync": "2026-11-14T08:01:25.595Z",
+      "lastCommit": "4e1c0a7",
+      "syncStatus": "synced",
+      "syncError": null,
+      "createdAt": "2026-03-09 17:33:38",
+      "updatedAt": "2026-11-14T08:01:25.595Z",
+      "repository": {
+       "id": 1,
+       "name": "Stacks",
+       "url": "https://git.example.internal/example/stacks.git",
+       "branch": "main",
+       "credentialId": 1
+      },
+      "hasWebhookSecret": false
+     },
+     {
+      "id": 19,
+      "stackName": "backup",
+      "environmentId": 4,
+      "repositoryId": 1,
+      "branch": null,
+      "composePath": "backup/docker-compose.yml",
+      "envFilePath": null,
+      "autoUpdate": true,
+      "autoUpdateSchedule": "daily",
+      "autoUpdateCron": "0 3 * * *",
+      "webhookEnabled": false,
+      "contextDir": null,
+      "buildOnDeploy": false,
+      "noBuildCache": false,
+      "repullImages": false,
+      "forceRedeploy": false,
+      "lastSync": "2026-11-14T08:01:26.457Z",
+      "lastCommit": "4e1c0a7",
+      "syncStatus": "synced",
+      "syncError": null,
+      "createdAt": "2026-03-16 19:38:55",
+      "updatedAt": "2026-11-14T08:01:26.457Z",
+      "repository": {
+       "id": 1,
+       "name": "Stacks",
+       "url": "https://git.example.internal/example/stacks.git",
+       "branch": "main",
+       "credentialId": 1
+      },
+      "hasWebhookSecret": false
+     }
+    ],
+    "auto_update_settings": {},
+    "recent_events": [
+     {
+      "id": 13614,
+      "environmentId": 4,
+      "containerId": "3b1f748616f207e8fd9f30b18770ab32fdf65490159a5d00fe4f9fc492bdf20d",
+      "containerName": "proxy-old",
+      "image": "docker.io/traefik:v3",
+      "action": "destroy",
+      "actorAttributes": {
+       "name": "proxy-old",
+       "image": "docker.io/traefik:v3"
+      },
+      "timestamp": "2026-11-14T04:44:01.260Z",
+      "createdAt": "2026-11-14 04:44:01",
+      "environmentName": "Atlas",
+      "environmentIcon": "globe"
+     },
+     {
+      "id": 13613,
+      "environmentId": 4,
+      "containerId": "35074519a0792d33755be890c75f8c67713eba55026ac23e17feaf6d098569b8",
+      "containerName": "proxy",
+      "image": "docker.io/traefik:v3",
+      "action": "start",
+      "actorAttributes": {
+       "name": "proxy",
+       "image": "docker.io/traefik:v3",
+       "com.docker.compose.project": "proxy"
+      },
+      "timestamp": "2026-11-14T04:44:01.009Z",
+      "createdAt": "2026-11-14 04:44:01",
+      "environmentName": "Atlas",
+      "environmentIcon": "globe"
+     },
+     {
+      "id": 13612,
+      "environmentId": 4,
+      "containerId": "35074519a0792d33755be890c75f8c67713eba55026ac23e17feaf6d098569b8",
+      "containerName": "proxy",
+      "image": "docker.io/traefik:v3",
+      "action": "create",
+      "actorAttributes": {
+       "name": "proxy",
+       "image": "docker.io/traefik:v3",
+       "com.docker.compose.project": "proxy"
+      },
+      "timestamp": "2026-11-14T04:44:00.676Z",
+      "createdAt": "2026-11-14 04:44:00",
+      "environmentName": "Atlas",
+      "environmentIcon": "globe"
+     },
+     {
+      "id": 13611,
+      "environmentId": 4,
+      "containerId": "3b1f748616f207e8fd9f30b18770ab32fdf65490159a5d00fe4f9fc492bdf20d",
+      "containerName": "proxy-old",
+      "image": "docker.io/traefik:v3",
+      "action": "rename",
+      "actorAttributes": {
+       "name": "proxy-old",
+       "image": "docker.io/traefik:v3"
+      },
+      "timestamp": "2026-11-14T04:44:00.566Z",
+      "createdAt": "2026-11-14 04:44:00",
+      "environmentName": "Atlas",
+      "environmentIcon": "globe"
+     },
+     {
+      "id": 13610,
+      "environmentId": 4,
+      "containerId": "3b1f748616f207e8fd9f30b18770ab32fdf65490159a5d00fe4f9fc492bdf20d",
+      "containerName": "proxy",
+      "image": "docker.io/traefik:v3",
+      "action": "die",
+      "actorAttributes": {
+       "name": "proxy",
+       "image": "docker.io/traefik:v3",
+       "com.docker.compose.project": "proxy"
+      },
+      "timestamp": "2026-11-14T04:44:00.446Z",
+      "createdAt": "2026-11-14 04:44:00",
+      "environmentName": "Atlas",
+      "environmentIcon": "globe"
+     }
+    ],
+    "vulnerabilities": {
+     "total": 412,
+     "critical": 3,
+     "high": 41,
+     "medium": 205,
+     "low": 163,
+     "imagesScanned": 6,
+     "totalImages": 14
+    },
+    "settings": {
+     "image_prune": {
+      "enabled": true,
+      "cronExpression": "0 2 * * *",
+      "pruneMode": "dangling",
+      "lastPruned": "2026-11-14T07:00:01.029Z",
+      "lastResult": {
+       "spaceReclaimed": 183268102,
+       "imagesRemoved": 1
+      }
+     },
+     "scanner": "both"
+    },
+    "env_meta": {
+     "hawserAgentName": null,
+     "hawserAgentId": null,
+     "hawserLastSeen": null,
+     "connectionHost": "atlas.example.internal",
+     "connectionPort": 2376
+    },
+    "fetch_failures": [],
+    "unconfirmed": []
+   }
+  },
+  "schedules": [
+   {
+    "id": 6,
+    "type": "git_stack_sync",
+    "name": "Git sync: socket-proxy",
+    "entityName": "socket-proxy",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "daily",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T08:00:00.000Z",
+    "lastExecution": {
+     "id": 22432,
+     "scheduleType": "git_stack_sync",
+     "scheduleId": 6,
+     "environmentId": 4,
+     "entityName": "socket-proxy",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:02.732Z",
+     "startedAt": "2026-11-14T08:00:02.751Z",
+     "completedAt": "2026-11-14T08:01:31.487Z",
+     "duration": 88755,
+     "status": "skipped",
+     "errorMessage": null,
+     "details": {
+      "output": "No changes detected, skipping redeploy"
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:02"
+    },
+    "recentExecutions": [
+     {
+      "id": 22432,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 6,
+      "environmentId": 4,
+      "entityName": "socket-proxy",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:02.732Z",
+      "startedAt": "2026-11-14T08:00:02.751Z",
+      "completedAt": "2026-11-14T08:01:31.487Z",
+      "duration": 88755,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-14 08:00:02",
+      "logs": ""
+     },
+     {
+      "id": 22347,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 6,
+      "environmentId": 4,
+      "entityName": "socket-proxy",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T08:00:02.388Z",
+      "startedAt": "2026-11-13T08:00:02.404Z",
+      "completedAt": "2026-11-13T08:01:35.623Z",
+      "duration": 93235,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-13 08:00:02",
+      "logs": ""
+     }
+    ],
+    "isSystem": false
+   },
+   {
+    "id": 7,
+    "type": "git_stack_sync",
+    "name": "Git sync: db",
+    "entityName": "db",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "daily",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T08:00:00.000Z",
+    "lastExecution": {
+     "id": 22433,
+     "scheduleType": "git_stack_sync",
+     "scheduleId": 7,
+     "environmentId": 4,
+     "entityName": "db",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:02.895Z",
+     "startedAt": "2026-11-14T08:00:02.923Z",
+     "completedAt": "2026-11-14T08:01:29.940Z",
+     "duration": 87045,
+     "status": "skipped",
+     "errorMessage": null,
+     "details": {
+      "output": "No changes detected, skipping redeploy"
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:02"
+    },
+    "recentExecutions": [
+     {
+      "id": 22433,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 7,
+      "environmentId": 4,
+      "entityName": "db",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:02.895Z",
+      "startedAt": "2026-11-14T08:00:02.923Z",
+      "completedAt": "2026-11-14T08:01:29.940Z",
+      "duration": 87045,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-14 08:00:02",
+      "logs": ""
+     },
+     {
+      "id": 22348,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 7,
+      "environmentId": 4,
+      "entityName": "db",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T08:00:02.527Z",
+      "startedAt": "2026-11-13T08:00:02.556Z",
+      "completedAt": "2026-11-13T08:01:33.767Z",
+      "duration": 91240,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-13 08:00:02",
+      "logs": ""
+     }
+    ],
+    "isSystem": false
+   },
+   {
+    "id": 20,
+    "type": "git_stack_sync",
+    "name": "Git sync: staging",
+    "entityName": "staging",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "daily",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T08:00:00.000Z",
+    "lastExecution": {
+     "id": 22448,
+     "scheduleType": "git_stack_sync",
+     "scheduleId": 20,
+     "environmentId": 4,
+     "entityName": "staging",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:06.459Z",
+     "startedAt": "2026-11-14T08:00:06.565Z",
+     "completedAt": "2026-11-14T08:01:27.514Z",
+     "duration": 81055,
+     "status": "skipped",
+     "errorMessage": null,
+     "details": {
+      "output": "No changes detected, skipping redeploy"
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:06"
+    },
+    "recentExecutions": [
+     {
+      "id": 22448,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 20,
+      "environmentId": 4,
+      "entityName": "staging",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:06.459Z",
+      "startedAt": "2026-11-14T08:00:06.565Z",
+      "completedAt": "2026-11-14T08:01:27.514Z",
+      "duration": 81055,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-14 08:00:06",
+      "logs": ""
+     },
+     {
+      "id": 22356,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 20,
+      "environmentId": 4,
+      "entityName": "staging",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T08:00:04.301Z",
+      "startedAt": "2026-11-13T08:00:04.318Z",
+      "completedAt": "2026-11-13T08:01:34.322Z",
+      "duration": 90021,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-13 08:00:04",
+      "logs": ""
+     }
+    ],
+    "isSystem": false
+   },
+   {
+    "id": 9,
+    "type": "git_stack_sync",
+    "name": "Git sync: proxy",
+    "entityName": "proxy",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "daily",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T08:00:00.000Z",
+    "lastExecution": {
+     "id": 22435,
+     "scheduleType": "git_stack_sync",
+     "scheduleId": 9,
+     "environmentId": 4,
+     "entityName": "proxy",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:03.316Z",
+     "startedAt": "2026-11-14T08:00:03.337Z",
+     "completedAt": "2026-11-14T08:01:29.325Z",
+     "duration": 86009,
+     "status": "skipped",
+     "errorMessage": null,
+     "details": {
+      "output": "No changes detected, skipping redeploy"
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:03"
+    },
+    "recentExecutions": [
+     {
+      "id": 22435,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 9,
+      "environmentId": 4,
+      "entityName": "proxy",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:03.316Z",
+      "startedAt": "2026-11-14T08:00:03.337Z",
+      "completedAt": "2026-11-14T08:01:29.325Z",
+      "duration": 86009,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-14 08:00:03",
+      "logs": ""
+     },
+     {
+      "id": 22267,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 9,
+      "environmentId": 4,
+      "entityName": "proxy",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-12T08:00:08.791Z",
+      "startedAt": "2026-11-12T08:00:08.837Z",
+      "completedAt": "2026-11-12T08:03:49.332Z",
+      "duration": 220541,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-12 08:00:08",
+      "logs": ""
+     }
+    ],
+    "isSystem": false
+   },
+   {
+    "id": 10,
+    "type": "git_stack_sync",
+    "name": "Git sync: blog",
+    "entityName": "blog",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "daily",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T08:00:00.000Z",
+    "lastExecution": {
+     "id": 22436,
+     "scheduleType": "git_stack_sync",
+     "scheduleId": 10,
+     "environmentId": 4,
+     "entityName": "blog",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:03.531Z",
+     "startedAt": "2026-11-14T08:00:03.553Z",
+     "completedAt": "2026-11-14T08:01:29.132Z",
+     "duration": 85601,
+     "status": "skipped",
+     "errorMessage": null,
+     "details": {
+      "output": "No changes detected, skipping redeploy"
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:03"
+    },
+    "recentExecutions": [
+     {
+      "id": 22436,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 10,
+      "environmentId": 4,
+      "entityName": "blog",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:03.531Z",
+      "startedAt": "2026-11-14T08:00:03.553Z",
+      "completedAt": "2026-11-14T08:01:29.132Z",
+      "duration": 85601,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-14 08:00:03",
+      "logs": ""
+     },
+     {
+      "id": 22338,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 10,
+      "environmentId": 4,
+      "entityName": "blog",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T08:00:00.007Z",
+      "startedAt": "2026-11-13T08:00:00.046Z",
+      "completedAt": "2026-11-13T08:01:37.543Z",
+      "duration": 97536,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-13 08:00:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": false
+   },
+   {
+    "id": 19,
+    "type": "git_stack_sync",
+    "name": "Git sync: backup",
+    "entityName": "backup",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "daily",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T08:00:00.000Z",
+    "lastExecution": {
+     "id": 22426,
+     "scheduleType": "git_stack_sync",
+     "scheduleId": 19,
+     "environmentId": 4,
+     "entityName": "backup",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:00.425Z",
+     "startedAt": "2026-11-14T08:00:00.453Z",
+     "completedAt": "2026-11-14T08:01:28.466Z",
+     "duration": 88041,
+     "status": "skipped",
+     "errorMessage": null,
+     "details": {
+      "output": "No changes detected, skipping redeploy"
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22426,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 19,
+      "environmentId": 4,
+      "entityName": "backup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:00.425Z",
+      "startedAt": "2026-11-14T08:00:00.453Z",
+      "completedAt": "2026-11-14T08:01:28.466Z",
+      "duration": 88041,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-14 08:00:00",
+      "logs": ""
+     },
+     {
+      "id": 22355,
+      "scheduleType": "git_stack_sync",
+      "scheduleId": 19,
+      "environmentId": 4,
+      "entityName": "backup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T08:00:04.174Z",
+      "startedAt": "2026-11-13T08:00:04.195Z",
+      "completedAt": "2026-11-13T08:01:34.239Z",
+      "duration": 90065,
+      "status": "skipped",
+      "errorMessage": null,
+      "details": {
+       "output": "No changes detected, skipping redeploy"
+      },
+      "createdAt": "2026-11-13 08:00:04",
+      "logs": ""
+     }
+    ],
+    "isSystem": false
+   },
+   {
+    "id": 4,
+    "type": "image_prune",
+    "name": "Prune images: Atlas",
+    "entityName": "Atlas",
+    "description": "Prune dangling images only",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "0 2 * * *",
+    "nextRun": "2026-11-15T07:00:00.000Z",
+    "lastExecution": {
+     "id": 22422,
+     "scheduleType": "image_prune",
+     "scheduleId": 4,
+     "environmentId": 4,
+     "entityName": "Image prune: Atlas",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T07:00:00.499Z",
+     "startedAt": "2026-11-14T07:00:00.520Z",
+     "completedAt": "2026-11-14T07:00:01.182Z",
+     "duration": 683,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "pruneMode": "dangling",
+      "spaceReclaimed": 183268102,
+      "imagesRemoved": 1,
+      "deletedImages": [
+       "traefik@sha256:1dbf6a21c16a80c8ae9b7456b8c50da04de80b37645e4298796344539b16b465",
+       "sha256:9029f76fb4916bd6ef83d847c6c6057be91a1a22e0e06a0b091eccd718057685",
+       "sha256:7ea8ff86961d3cb4f62b55a6852a0ff088e1e05262acb9dca5081e1a15872ef0",
+       "sha256:5b23a7034678a7b736499f9e68e89874eac8ad24676fa6ec7925e040068e2106",
+       "sha256:77c7b559b5bbbe1d916120ab754a08041c8f1cb5d37a276a7630ffffe37faaa0"
+      ]
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 07:00:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22422,
+      "scheduleType": "image_prune",
+      "scheduleId": 4,
+      "environmentId": 4,
+      "entityName": "Image prune: Atlas",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T07:00:00.499Z",
+      "startedAt": "2026-11-14T07:00:00.520Z",
+      "completedAt": "2026-11-14T07:00:01.182Z",
+      "duration": 683,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "pruneMode": "dangling",
+       "spaceReclaimed": 183268102,
+       "imagesRemoved": 1,
+       "deletedImages": [
+        "traefik@sha256:1dbf6a21c16a80c8ae9b7456b8c50da04de80b37645e4298796344539b16b465",
+        "sha256:9029f76fb4916bd6ef83d847c6c6057be91a1a22e0e06a0b091eccd718057685",
+        "sha256:7ea8ff86961d3cb4f62b55a6852a0ff088e1e05262acb9dca5081e1a15872ef0",
+        "sha256:5b23a7034678a7b736499f9e68e89874eac8ad24676fa6ec7925e040068e2106",
+        "sha256:77c7b559b5bbbe1d916120ab754a08041c8f1cb5d37a276a7630ffffe37faaa0"
+       ]
+      },
+      "createdAt": "2026-11-14 07:00:00",
+      "logs": ""
+     },
+     {
+      "id": 22335,
+      "scheduleType": "image_prune",
+      "scheduleId": 4,
+      "environmentId": 4,
+      "entityName": "Image prune: Atlas",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T07:00:00.495Z",
+      "startedAt": "2026-11-13T07:00:00.506Z",
+      "completedAt": "2026-11-13T07:00:01.576Z",
+      "duration": 1081,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "pruneMode": "dangling",
+       "spaceReclaimed": 40209561,
+       "imagesRemoved": 1,
+       "deletedImages": [
+        "wordpress@sha256:faae772b4f06b3fe45dc32d1e07dcb2184b3c98139c40e57cf1b3668c983b92e",
+        "sha256:506abc594787d2a0831b4f75f9cc1c7cf9084afd88f509aa7c3aa3ba9c4889b0",
+        "sha256:2873a035d866a8587a305e98b9b37e6745d4ec7f030129bbc13c2d90936dd131"
+       ]
+      },
+      "createdAt": "2026-11-13 07:00:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": false,
+    "pruneMode": "dangling"
+   },
+   {
+    "id": 4,
+    "type": "env_update_check",
+    "name": "Update environment: Atlas",
+    "entityName": "Atlas",
+    "description": "Check containers for updates (notify only)",
+    "environmentId": 4,
+    "environmentName": "Atlas",
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "0 4 * * *",
+    "nextRun": "2026-11-15T09:00:00.000Z",
+    "lastExecution": {
+     "id": 22461,
+     "scheduleType": "env_update_check",
+     "scheduleId": 4,
+     "environmentId": 4,
+     "entityName": "Update: Atlas",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T09:00:00.574Z",
+     "startedAt": "2026-11-14T09:00:00.606Z",
+     "completedAt": "2026-11-14T09:00:11.897Z",
+     "duration": 11323,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "updatesFound": 0,
+      "containersChecked": 9,
+      "errors": 0
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 09:00:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22461,
+      "scheduleType": "env_update_check",
+      "scheduleId": 4,
+      "environmentId": 4,
+      "entityName": "Update: Atlas",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T09:00:00.574Z",
+      "startedAt": "2026-11-14T09:00:00.606Z",
+      "completedAt": "2026-11-14T09:00:11.897Z",
+      "duration": 11323,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "updatesFound": 0,
+       "containersChecked": 9,
+       "errors": 0
+      },
+      "createdAt": "2026-11-14 09:00:00",
+      "logs": ""
+     },
+     {
+      "id": 22287,
+      "scheduleType": "env_update_check",
+      "scheduleId": 4,
+      "environmentId": 4,
+      "entityName": "Update: Atlas",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-12T09:00:00.778Z",
+      "startedAt": "2026-11-12T09:00:00.794Z",
+      "completedAt": "2026-11-12T09:00:20.407Z",
+      "duration": 19633,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "updatesFound": 0,
+       "containersChecked": 9,
+       "errors": 1
+      },
+      "createdAt": "2026-11-12 09:00:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": false,
+    "autoUpdate": false,
+    "envHasScanning": true,
+    "vulnerabilityCriteria": null
+   },
+   {
+    "id": 2,
+    "type": "system_cleanup",
+    "name": "Container event cleanup",
+    "entityName": "Container event cleanup",
+    "description": "Removes container events older than 30 days",
+    "environmentId": null,
+    "environmentName": null,
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "30 3 * * *",
+    "nextRun": "2026-11-15T03:30:00.000Z",
+    "lastExecution": {
+     "id": 22458,
+     "scheduleType": "system_cleanup",
+     "scheduleId": 2,
+     "environmentId": null,
+     "entityName": "Container event cleanup",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:30:00.180Z",
+     "startedAt": "2026-11-14T08:30:00.215Z",
+     "completedAt": "2026-11-14T08:30:00.448Z",
+     "duration": 268,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "deletedCount": 68,
+      "retentionDays": 30
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:30:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22458,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 2,
+      "environmentId": null,
+      "entityName": "Container event cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:30:00.180Z",
+      "startedAt": "2026-11-14T08:30:00.215Z",
+      "completedAt": "2026-11-14T08:30:00.448Z",
+      "duration": 268,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "deletedCount": 68,
+       "retentionDays": 30
+      },
+      "createdAt": "2026-11-14 08:30:00",
+      "logs": ""
+     },
+     {
+      "id": 22283,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 2,
+      "environmentId": null,
+      "entityName": "Container event cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-12T08:30:00.287Z",
+      "startedAt": "2026-11-12T08:30:00.344Z",
+      "completedAt": "2026-11-12T08:30:00.577Z",
+      "duration": 290,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "deletedCount": 0,
+       "retentionDays": 30
+      },
+      "createdAt": "2026-11-12 08:30:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": true
+   },
+   {
+    "id": 1,
+    "type": "deploy_log_reconcile",
+    "name": "Deploy log reconcile",
+    "entityName": "Deploy log reconcile",
+    "description": "Reconciles deploy-log files on disk against stack_deploy run records",
+    "environmentId": null,
+    "environmentName": null,
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "0 4 * * *",
+    "nextRun": "2026-11-15T04:00:00.000Z",
+    "lastExecution": {
+     "id": 22459,
+     "scheduleType": "deploy_log_reconcile",
+     "scheduleId": 1,
+     "environmentId": null,
+     "entityName": "Deploy log reconcile",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T09:00:00.004Z",
+     "startedAt": "2026-11-14T09:00:00.028Z",
+     "completedAt": "2026-11-14T09:00:02.032Z",
+     "duration": 2028,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "filesFound": 39,
+      "recordsFound": 38,
+      "deletedFiles": 1,
+      "markedRecords": 0,
+      "skippedInProgress": 0,
+      "skippedRecent": 0,
+      "failed": 0
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 09:00:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22459,
+      "scheduleType": "deploy_log_reconcile",
+      "scheduleId": 1,
+      "environmentId": null,
+      "entityName": "Deploy log reconcile",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T09:00:00.004Z",
+      "startedAt": "2026-11-14T09:00:00.028Z",
+      "completedAt": "2026-11-14T09:00:02.032Z",
+      "duration": 2028,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "filesFound": 39,
+       "recordsFound": 38,
+       "deletedFiles": 1,
+       "markedRecords": 0,
+       "skippedInProgress": 0,
+       "skippedRecent": 0,
+       "failed": 0
+      },
+      "createdAt": "2026-11-14 09:00:00",
+      "logs": ""
+     },
+     {
+      "id": 22372,
+      "scheduleType": "deploy_log_reconcile",
+      "scheduleId": 1,
+      "environmentId": null,
+      "entityName": "Deploy log reconcile",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T09:00:00.307Z",
+      "startedAt": "2026-11-13T09:00:00.408Z",
+      "completedAt": "2026-11-13T09:00:02.783Z",
+      "duration": 2476,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "filesFound": 70,
+       "recordsFound": 39,
+       "deletedFiles": 31,
+       "markedRecords": 0,
+       "skippedInProgress": 0,
+       "skippedRecent": 0,
+       "failed": 0
+      },
+      "createdAt": "2026-11-13 09:00:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": true
+   },
+   {
+    "id": 4,
+    "type": "system_cleanup",
+    "name": "Scanner cache cleanup",
+    "entityName": "Scanner cache cleanup",
+    "description": "Removes scanner vulnerability database cache to reclaim disk space",
+    "environmentId": null,
+    "environmentName": null,
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "0 3 * * 0",
+    "nextRun": "2026-11-15T03:00:00.000Z",
+    "lastExecution": {
+     "id": 21913,
+     "scheduleType": "system_cleanup",
+     "scheduleId": 4,
+     "environmentId": null,
+     "entityName": "Scanner cache cleanup",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-08T08:00:07.548Z",
+     "startedAt": "2026-11-08T08:00:07.558Z",
+     "completedAt": "2026-11-08T08:01:32.010Z",
+     "duration": 84462,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "removedVolumes": [
+       "dockhand-grype-db",
+       "dockhand-trivy-db",
+       "dockhand-grype-db",
+       "dockhand-trivy-db",
+       "dockhand-grype-db",
+       "dockhand-trivy-db",
+       "dockhand-grype-db",
+       "dockhand-trivy-db"
+      ],
+      "removedDirs": [
+       "/app/data/scanner-cache/grype",
+       "/app/data/scanner-cache/trivy"
+      ]
+     },
+     "logs": "",
+     "createdAt": "2026-11-08 08:00:07"
+    },
+    "recentExecutions": [
+     {
+      "id": 21913,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 4,
+      "environmentId": null,
+      "entityName": "Scanner cache cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-08T08:00:07.548Z",
+      "startedAt": "2026-11-08T08:00:07.558Z",
+      "completedAt": "2026-11-08T08:01:32.010Z",
+      "duration": 84462,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "removedVolumes": [
+        "dockhand-grype-db",
+        "dockhand-trivy-db",
+        "dockhand-grype-db",
+        "dockhand-trivy-db",
+        "dockhand-grype-db",
+        "dockhand-trivy-db",
+        "dockhand-grype-db",
+        "dockhand-trivy-db"
+       ],
+       "removedDirs": [
+        "/app/data/scanner-cache/grype",
+        "/app/data/scanner-cache/trivy"
+       ]
+      },
+      "createdAt": "2026-11-08 08:00:07",
+      "logs": ""
+     },
+     {
+      "id": 21278,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 4,
+      "environmentId": null,
+      "entityName": "Scanner cache cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-01T08:00:05.603Z",
+      "startedAt": "2026-11-01T08:00:05.696Z",
+      "completedAt": "2026-11-01T08:01:30.213Z",
+      "duration": 84610,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "removedVolumes": [
+        "dockhand-grype-db",
+        "dockhand-trivy-db",
+        "dockhand-grype-db",
+        "dockhand-trivy-db",
+        "dockhand-grype-db",
+        "dockhand-trivy-db",
+        "dockhand-grype-db",
+        "dockhand-trivy-db"
+       ],
+       "removedDirs": [
+        "/app/data/scanner-cache/grype",
+        "/app/data/scanner-cache/trivy"
+       ]
+      },
+      "createdAt": "2026-11-01 08:00:05",
+      "logs": ""
+     }
+    ],
+    "isSystem": true
+   },
+   {
+    "id": 1,
+    "type": "system_cleanup",
+    "name": "Schedule execution cleanup",
+    "entityName": "Schedule execution cleanup",
+    "description": "Removes execution logs older than 30 days",
+    "environmentId": null,
+    "environmentName": null,
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "0 3 * * *",
+    "nextRun": "2026-11-15T03:00:00.000Z",
+    "lastExecution": {
+     "id": 22431,
+     "scheduleType": "system_cleanup",
+     "scheduleId": 1,
+     "environmentId": null,
+     "entityName": "Schedule execution cleanup",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T08:00:02.348Z",
+     "startedAt": "2026-11-14T08:00:02.385Z",
+     "completedAt": "2026-11-14T08:00:02.693Z",
+     "duration": 345,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "retentionDays": 30
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 08:00:02"
+    },
+    "recentExecutions": [
+     {
+      "id": 22431,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 1,
+      "environmentId": null,
+      "entityName": "Schedule execution cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T08:00:02.348Z",
+      "startedAt": "2026-11-14T08:00:02.385Z",
+      "completedAt": "2026-11-14T08:00:02.693Z",
+      "duration": 345,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "retentionDays": 30
+      },
+      "createdAt": "2026-11-14 08:00:02",
+      "logs": ""
+     },
+     {
+      "id": 22346,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 1,
+      "environmentId": null,
+      "entityName": "Schedule execution cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T08:00:02.264Z",
+      "startedAt": "2026-11-13T08:00:02.279Z",
+      "completedAt": "2026-11-13T08:00:02.362Z",
+      "duration": 98,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "retentionDays": 30
+      },
+      "createdAt": "2026-11-13 08:00:02",
+      "logs": ""
+     }
+    ],
+    "isSystem": true
+   },
+   {
+    "id": 3,
+    "type": "system_cleanup",
+    "name": "Volume helper cleanup",
+    "entityName": "Volume helper cleanup",
+    "description": "Cleans up temporary volume browser containers",
+    "environmentId": null,
+    "environmentName": null,
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "*/30 * * * *",
+    "nextRun": "2026-11-14T14:30:00.000Z",
+    "lastExecution": {
+     "id": 22474,
+     "scheduleType": "system_cleanup",
+     "scheduleId": 3,
+     "environmentId": null,
+     "entityName": "Volume helper cleanup",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T14:00:00.001Z",
+     "startedAt": "2026-11-14T14:00:00.038Z",
+     "completedAt": "2026-11-14T14:00:00.348Z",
+     "duration": 347,
+     "status": "success",
+     "errorMessage": null,
+     "details": null,
+     "logs": "",
+     "createdAt": "2026-11-14 14:00:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22474,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 3,
+      "environmentId": null,
+      "entityName": "Volume helper cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T14:00:00.001Z",
+      "startedAt": "2026-11-14T14:00:00.038Z",
+      "completedAt": "2026-11-14T14:00:00.348Z",
+      "duration": 347,
+      "status": "success",
+      "errorMessage": null,
+      "details": null,
+      "createdAt": "2026-11-14 14:00:00",
+      "logs": ""
+     },
+     {
+      "id": 22473,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 3,
+      "environmentId": null,
+      "entityName": "Volume helper cleanup",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T13:30:00.001Z",
+      "startedAt": "2026-11-14T13:30:00.034Z",
+      "completedAt": "2026-11-14T13:30:00.231Z",
+      "duration": 230,
+      "status": "success",
+      "errorMessage": null,
+      "details": null,
+      "createdAt": "2026-11-14 13:30:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": true
+   },
+   {
+    "id": 5,
+    "type": "system_cleanup",
+    "name": "Vulnerability scan retention",
+    "entityName": "Vulnerability scan retention",
+    "description": "Keeps the 10 newest scans per image and scanner, and removes scans for images gone from the host for 7 days",
+    "environmentId": null,
+    "environmentName": null,
+    "enabled": true,
+    "scheduleType": "custom",
+    "cronExpression": "30 4 * * *",
+    "nextRun": "2026-11-15T04:30:00.000Z",
+    "lastExecution": {
+     "id": 22464,
+     "scheduleType": "system_cleanup",
+     "scheduleId": 5,
+     "environmentId": null,
+     "entityName": "Vulnerability scan retention",
+     "triggeredBy": "cron",
+     "triggeredAt": "2026-11-14T09:30:00.004Z",
+     "startedAt": "2026-11-14T09:30:00.042Z",
+     "completedAt": "2026-11-14T09:30:00.390Z",
+     "duration": 386,
+     "status": "success",
+     "errorMessage": null,
+     "details": {
+      "deletedCount": 8,
+      "superseded": 0,
+      "goneImages": 8,
+      "keepPerImage": 10,
+      "graceDays": 7
+     },
+     "logs": "",
+     "createdAt": "2026-11-14 09:30:00"
+    },
+    "recentExecutions": [
+     {
+      "id": 22464,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 5,
+      "environmentId": null,
+      "entityName": "Vulnerability scan retention",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-14T09:30:00.004Z",
+      "startedAt": "2026-11-14T09:30:00.042Z",
+      "completedAt": "2026-11-14T09:30:00.390Z",
+      "duration": 386,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "deletedCount": 8,
+       "superseded": 0,
+       "goneImages": 8,
+       "keepPerImage": 10,
+       "graceDays": 7
+      },
+      "createdAt": "2026-11-14 09:30:00",
+      "logs": ""
+     },
+     {
+      "id": 22376,
+      "scheduleType": "system_cleanup",
+      "scheduleId": 5,
+      "environmentId": null,
+      "entityName": "Vulnerability scan retention",
+      "triggeredBy": "cron",
+      "triggeredAt": "2026-11-13T09:30:00.002Z",
+      "startedAt": "2026-11-13T09:30:00.034Z",
+      "completedAt": "2026-11-13T09:30:00.501Z",
+      "duration": 499,
+      "status": "success",
+      "errorMessage": null,
+      "details": {
+       "deletedCount": 37,
+       "superseded": 0,
+       "goneImages": 37,
+       "keepPerImage": 10,
+       "graceDays": 7
+      },
+      "createdAt": "2026-11-13 09:30:00",
+      "logs": ""
+     }
+    ],
+    "isSystem": true
+   }
+  ],
+  "scanner_default": "both",
+  "event_collection": {
+   "mode": "stream",
+   "interval": 60
+  },
+  "fetch_failures": []
+ }
+}

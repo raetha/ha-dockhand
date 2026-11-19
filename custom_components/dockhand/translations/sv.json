@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Konfigurera avsökning och funktioner",
-        "description": "Ange hur ofta Dockhand ska avsökas och vilka valfria entitetsgrupper som ska aktiveras. Allt detta kan ändras senare via Konfigurera.",
+        "title": "Välj funktioner",
+        "description": "Välj vilka valfria entitetsgrupper som ska skapas. Allt kan ändras senare via Konfigurera.",
         "data": {
-          "poll_interval_fast": "Snabb avsökningsintervall (sekunder) — statistik, containrar och stacks",
-          "poll_interval_slow": "Långsam avsökningsintervall (sekunder) — images, volymer, nätverk, scheman",
           "enable_schedules": "Aktivera schemasensorer",
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
           "enable_networks": "Aktivera nätverkssensorer",
           "enable_runtime_controls": "Aktivera körtidskontroller (avancerat)",
           "enable_resource_stats": "Aktivera CPU-/minnes-/nätverks-/disk-I/O-sensorer per container och stack",
-          "poll_interval_precise_updates": "Intervall för exakt uppdateringskontroll (sekunder)",
           "enable_update_entities": "Aktivera uppdateringsentiteter",
           "enable_precise_updates": "Aktivera exakta uppdateringsversioner"
         },
         "data_description": {
-          "poll_interval_fast": "Hur ofta statistik uppdateras. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hur ofta images, volymer, nätverk och scheman uppdateras. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiverar sensorer för Dockhands underhållsscheman.",
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
           "enable_runtime_controls": "Skapar number/select-entiteter för att ändra CPU-, minnes- och processgränser samt omstartspolicy för en fristående container i realtid. Inte tillgängligt för containrar som hanteras av Compose.",
           "enable_resource_stats": "Skapar sensorer för CPU, minne, nätverk och disk-I/O för varje container, plus totaler för varje stack. Av som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar också bort redan skapade.",
-          "poll_interval_precise_updates": "Hur ofta registerfrågorna ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
           "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
         }
@@ -80,7 +74,8 @@
     },
     "error": {
       "cannot_connect": "Kan inte ansluta till Dockhand. Kontrollera API-URL och nätverksanslutning.",
-      "invalid_auth": "Ogiltig API-token. Se till att du kopierade hela token som börjar med dh_."
+      "invalid_auth": "Ogiltig API-token. Se till att du kopierade hela token som börjar med dh_.",
+      "already_configured": "Denna Dockhand-instans är redan konfigurerad."
     },
     "abort": {
       "already_configured": "Denna Dockhand-instans är redan konfigurerad.",
@@ -92,32 +87,62 @@
     "step": {
       "init": {
         "title": "Dockhand-alternativ",
-        "description": "Justera avsökningsintervall och valfria datakällor. För att ändra URL, SSL eller API-token, använd Konfigurera om istället.",
+        "description": "Välj vilka valfria entitetsgrupper som ska skapas. Använd Konfigurera om för att ändra URL, SSL eller API-token.",
         "data": {
-          "poll_interval_fast": "Snabb avsökningsintervall (sekunder) — statistik, containrar och stacks",
-          "poll_interval_slow": "Långsam avsökningsintervall (sekunder) — images, volymer, nätverk, scheman",
           "enable_schedules": "Aktivera schemasensorer",
           "enable_images": "Aktivera imagesensorer",
           "enable_volumes": "Aktivera volymsensorer",
           "enable_networks": "Aktivera nätverkssensorer",
           "enable_runtime_controls": "Aktivera körtidskontroller (avancerat)",
           "enable_resource_stats": "Aktivera CPU-/minnes-/nätverks-/disk-I/O-sensorer per container och stack",
-          "poll_interval_precise_updates": "Intervall för exakt uppdateringskontroll (sekunder)",
           "enable_update_entities": "Aktivera uppdateringsentiteter",
           "enable_precise_updates": "Aktivera exakta uppdateringsversioner"
         },
         "data_description": {
-          "poll_interval_fast": "Hur ofta statistik uppdateras. Standard: 60. Minimum: 10.",
-          "poll_interval_slow": "Hur ofta images, volymer, nätverk och scheman uppdateras. Standard: 600. Minimum: 30.",
           "enable_schedules": "Aktiverar sensorer för Dockhands underhållsscheman.",
           "enable_images": "Aktiverar sensorer för Docker-images per miljö.",
           "enable_volumes": "Aktiverar sensorer för Docker-volymer per miljö.",
           "enable_networks": "Aktiverar sensorer för Docker-nätverk per miljö.",
           "enable_runtime_controls": "Skapar number/select-entiteter för att ändra CPU-, minnes- och processgränser samt omstartspolicy för en fristående container i realtid. Inte tillgängligt för containrar som hanteras av Compose.",
           "enable_resource_stats": "Skapar sensorer för CPU, minne, nätverk och disk-I/O för varje container, plus totaler för varje stack. Av som standard eftersom det är många entiteter som de flesta inte behöver; att stänga av det tar också bort redan skapade.",
-          "poll_interval_precise_updates": "Hur ofta registerfrågorna ovan körs (sekunder). Standard: 86400 (24 timmar). Minimum: 300.",
           "enable_update_entities": "Skapar en Home Assistant-uppdateringsentitet för varje container. Stäng av detta om du hanterar uppdateringar på ett annat sätt och inte vill att Dockhands containrar ska visas i HA:s egen uppdateringshantering. Döljer även knappen \"Uppdatera alla\"; \"Sök efter uppdateringar\" fortsätter ändå att fungera.",
           "enable_precise_updates": "Uppgraderar uppdateringsentiteter till att visa exakta versionsnummer (avbildningsdigest) via periodiska registerfrågor, istället för bara en avbildningstagg. Det är också det enda sättet att se uppdateringsstatus för Dockhands egna skyddade containrar (sig själv och Hawser) — Dockhand exponerar aldrig deras uppdateringsstatus via de vanliga cachade uppdateringskontrolldata. Kräver \"Aktivera uppdateringsentiteter\" ovan."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Miljöentiteter",
+            "description": "Entiteter som är avstängda som standard, påslagna för varje miljö, även sådana som läggs till senare.",
+            "data": {
+              "all": "Alla dessa",
+              "enabled": "Slå på för varje miljö"
+            },
+            "data_description": {
+              "all": "Markera för att slå på alla typer här; avmarkera för att stänga av alla.",
+              "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
+            }
+          },
+          "container_entities": {
+            "name": "Containerentiteter",
+            "description": "Entiteter som är avstängda som standard, påslagna för varje container, även sådana som läggs till senare.",
+            "data": {
+              "all": "Alla dessa",
+              "enabled": "Slå på för varje container"
+            },
+            "data_description": {
+              "all": "Markera för att slå på alla typer här; avmarkera för att stänga av alla.",
+              "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
+            }
+          },
+          "stack_entities": {
+            "name": "Stack-entiteter",
+            "description": "Entiteter som är avstängda som standard, påslagna för varje stack, även sådana som läggs till senare.",
+            "data": {
+              "enabled": "Slå på för varje stack"
+            },
+            "data_description": {
+              "enabled": "Att markera en typ slår på den överallt, utom där du själv har stängt av den. Att avmarkera den stänger av den överallt igen, även där du slog på den manuellt."
+            }
+          }
         }
       }
     }
@@ -125,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "CPU-användning"
+        "name": "CPU-användning",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "CPU:er"
+          },
+          "top_containers": {
+            "name": "Mest aktiva containrar"
+          }
+        }
       },
       "memory_usage": {
         "name": "Minnesanvändning"
@@ -149,28 +182,206 @@
         "name": "Diskanvändning"
       },
       "activity_events": {
-        "name": "Aktivitetshändelser"
+        "name": "Aktivitetshändelser",
+        "state_attributes": {
+          "recent_events": {
+            "name": "Senaste händelser"
+          }
+        }
       },
       "state": {
-        "name": "Tillstånd"
+        "name": "Tillstånd",
+        "state": {
+          "created": "Skapad",
+          "running": "Körs",
+          "paused": "Pausad",
+          "restarting": "Startar om",
+          "removing": "Tas bort",
+          "exited": "Avslutad",
+          "dead": "Död"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "Slutkod"
+          },
+          "image": {
+            "name": "Image"
+          },
+          "networks": {
+            "name": "Nätverk"
+          },
+          "restart_count": {
+            "name": "Antal omstarter"
+          },
+          "system_container": {
+            "name": "Systemcontainer"
+          },
+          "tag_colors": {
+            "name": "Taggfärger"
+          },
+          "tags": {
+            "name": "Taggar"
+          }
+        }
       },
       "health": {
-        "name": "Hälsa"
+        "name": "Hälsa",
+        "state": {
+          "healthy": "Frisk",
+          "unhealthy": "Ohälsosam",
+          "starting": "Startar"
+        }
       },
       "status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "running": "Körs",
+          "partial": "Delvis",
+          "restarting": "Startar om",
+          "stopped": "Stoppad",
+          "created": "Skapad"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "Systemcontainer"
+          },
+          "tag_colors": {
+            "name": "Taggfärger"
+          },
+          "tags": {
+            "name": "Taggar"
+          },
+          "type": {
+            "name": "Typ",
+            "state": {
+              "internal": "Intern",
+              "git": "Git",
+              "untracked": "Ospårad"
+            }
+          }
+        }
       },
       "containers_in_stack": {
-        "name": "Containrar"
+        "name": "Containrar",
+        "state_attributes": {
+          "containers": {
+            "name": "Containrar"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Hawser-agentversion"
+        "name": "Hawser-agentversion",
+        "state_attributes": {
+          "agent_id": {
+            "name": "Agent-ID"
+          },
+          "agent_name": {
+            "name": "Agentnamn"
+          }
+        }
       },
       "next_run": {
-        "name": "Nästa körning"
+        "name": "Nästa körning",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Containeruppdatering",
+              "container_start": "Containerstart",
+              "container_stop": "Containerstopp",
+              "git_stack_sync": "Synkronisering av Git-stack",
+              "system_cleanup": "Systemrensning",
+              "env_update_check": "Uppdateringskontroll för miljö",
+              "image_prune": "Rensning av avbildningar",
+              "backup": "Säkerhetskopiering",
+              "repo_prune": "Rensning av repo",
+              "repo_check": "Repokontroll",
+              "repo_verify": "Repoverifiering",
+              "stack_deploy": "Stack-driftsättning",
+              "deploy_log_reconcile": "Avstämning av distributionslogg",
+              "env_report": "Statusrapport"
+            },
+            "name": "Typ"
+          },
+          "cron_expression": {
+            "name": "Cron-uttryck"
+          },
+          "enabled": {
+            "name": "Aktiverad"
+          },
+          "environment": {
+            "name": "Miljö"
+          }
+        }
       },
       "last_status": {
-        "name": "Senaste status"
+        "name": "Senaste status",
+        "state": {
+          "queued": "I kö",
+          "running": "Körs",
+          "success": "Lyckades",
+          "failed": "Misslyckades",
+          "skipped": "Hoppades över",
+          "warning": "Varning",
+          "error": "Fel",
+          "cancelled": "Avbruten",
+          "stale": "Inaktuell"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Containeruppdatering",
+              "container_start": "Containerstart",
+              "container_stop": "Containerstopp",
+              "git_stack_sync": "Synkronisering av Git-stack",
+              "system_cleanup": "Systemrensning",
+              "env_update_check": "Uppdateringskontroll för miljö",
+              "image_prune": "Rensning av avbildningar",
+              "backup": "Säkerhetskopiering",
+              "repo_prune": "Rensning av repo",
+              "repo_check": "Repokontroll",
+              "repo_verify": "Repoverifiering",
+              "stack_deploy": "Stack-driftsättning",
+              "deploy_log_reconcile": "Avstämning av distributionslogg",
+              "env_report": "Statusrapport"
+            },
+            "name": "Typ"
+          },
+          "cron_expression": {
+            "name": "Cron-uttryck"
+          },
+          "description": {
+            "name": "Beskrivning"
+          },
+          "duration_ms": {
+            "name": "Varaktighet (ms)"
+          },
+          "enabled": {
+            "name": "Aktiverad"
+          },
+          "environment": {
+            "name": "Miljö"
+          },
+          "error_message": {
+            "name": "Felmeddelande"
+          },
+          "is_system": {
+            "name": "Systemschema"
+          },
+          "triggered_at": {
+            "name": "Utlöst"
+          },
+          "triggered_by": {
+            "name": "Utlöst av",
+            "state": {
+              "cron": "Schemalagd",
+              "manual": "Manuell",
+              "webhook": "Webhook"
+            }
+          },
+          "updates_found": {
+            "name": "Hittade uppdateringar"
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "CPU-användning"
@@ -224,13 +435,32 @@
           "syncing": "Synkroniserar",
           "synced": "Synkroniserad",
           "error": "Fel"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "Senaste commit"
+          },
+          "sync_error": {
+            "name": "Synkroniseringsfel"
+          },
+          "auto_update": {
+            "name": "Automatisk driftsättning"
+          },
+          "webhook_enabled": {
+            "name": "Webhook aktiverad"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "Senaste synkronisering"
       },
       "host_platform": {
-        "name": "Värdplattform"
+        "name": "Värdplattform",
+        "state_attributes": {
+          "architecture": {
+            "name": "Arkitektur"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Docker-version"
@@ -249,20 +479,273 @@
           "hawser-standard": "Hawser-agent (standard)",
           "hawser-edge": "Hawser-agent (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Körande containrar"
+      },
+      "containers_stopped": {
+        "name": "Stoppade containrar"
+      },
+      "containers_paused": {
+        "name": "Pausade containrar"
+      },
+      "containers_restarting": {
+        "name": "Containrar som startar om"
+      },
+      "containers_unhealthy": {
+        "name": "Ohälsosamma containrar"
+      },
+      "stacks_running": {
+        "name": "Körande stackar"
+      },
+      "stacks_partial": {
+        "name": "Delvis körande stackar"
+      },
+      "stacks_stopped": {
+        "name": "Stoppade stackar"
+      },
+      "pending_updates": {
+        "name": "Väntande uppdateringar"
+      },
+      "installable_updates": {
+        "name": "Installerbara uppdateringar"
+      },
+      "system_updates": {
+        "name": "Uppdateringar för systemcontainrar"
+      },
+      "version_tag_updates": {
+        "name": "Nyare versionstaggar"
+      },
+      "pinned_digest_updates": {
+        "name": "Uppdateringar för låsta digester"
+      },
+      "held_updates": {
+        "name": "Tillbakahållna uppdateringar"
+      },
+      "memory_used": {
+        "name": "Använt minne"
+      },
+      "memory_total": {
+        "name": "Totalt minne"
+      },
+      "disk_usage_images": {
+        "name": "Diskanvändning för images"
+      },
+      "disk_usage_containers": {
+        "name": "Diskanvändning för containrar"
+      },
+      "disk_usage_volumes": {
+        "name": "Diskanvändning för volymer"
+      },
+      "disk_usage_build_cache": {
+        "name": "Diskanvändning för byggcache"
+      },
+      "volume_containers": {
+        "name": "Containrar",
+        "state_attributes": {
+          "containers": {
+            "name": "Containrar"
+          },
+          "created": {
+            "name": "Skapad"
+          },
+          "driver": {
+            "name": "Drivrutin"
+          },
+          "in_use": {
+            "name": "Används"
+          },
+          "labels": {
+            "name": "Etiketter"
+          },
+          "mountpoint": {
+            "name": "Monteringspunkt"
+          },
+          "scope": {
+            "name": "Omfång"
+          }
+        }
+      },
+      "volume_size": {
+        "name": "Storlek"
+      },
+      "activity_events_today": {
+        "name": "Aktivitetshändelser i dag"
+      },
+      "vulnerabilities_critical": {
+        "name": "Kritiska sårbarheter"
+      },
+      "vulnerabilities_high": {
+        "name": "Höga sårbarheter"
+      },
+      "vulnerabilities_medium": {
+        "name": "Medelhöga sårbarheter"
+      },
+      "vulnerabilities_low": {
+        "name": "Låga sårbarheter"
+      },
+      "images_scanned": {
+        "name": "Skannade images"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser senast sedd"
+      },
+      "container_memory_cache": {
+        "name": "Minnescache"
+      },
+      "stack_running_containers": {
+        "name": "Körande containrar"
+      },
+      "stack_pending_updates": {
+        "name": "Väntande uppdateringar"
+      },
+      "image": {
+        "unit_of_measurement": "containrar",
+        "state_attributes": {
+          "containers": {
+            "name": "Containrar"
+          },
+          "created": {
+            "name": "Skapad"
+          },
+          "digests": {
+            "name": "Digests"
+          },
+          "size_bytes": {
+            "name": "Storlek (byte)"
+          },
+          "source": {
+            "name": "Källa"
+          },
+          "tags": {
+            "name": "Taggar"
+          },
+          "title": {
+            "name": "Titel"
+          },
+          "vendor": {
+            "name": "Leverantör"
+          },
+          "version": {
+            "name": "Version"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "Utan tagg",
+        "unit_of_measurement": "containrar",
+        "state_attributes": {
+          "containers": {
+            "name": "Containrar"
+          },
+          "created": {
+            "name": "Skapad"
+          },
+          "digests": {
+            "name": "Digests"
+          },
+          "size_bytes": {
+            "name": "Storlek (byte)"
+          },
+          "source": {
+            "name": "Källa"
+          },
+          "tags": {
+            "name": "Taggar"
+          },
+          "title": {
+            "name": "Titel"
+          },
+          "vendor": {
+            "name": "Leverantör"
+          },
+          "version": {
+            "name": "Version"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "containrar",
+        "state_attributes": {
+          "addresses": {
+            "name": "Adresser"
+          },
+          "containers": {
+            "name": "Containrar"
+          },
+          "driver": {
+            "name": "Drivrutin"
+          },
+          "internal": {
+            "name": "Intern"
+          },
+          "scope": {
+            "name": "Omfång"
+          },
+          "subnet": {
+            "name": "Subnät"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "Online"
+        "name": "Online",
+        "state_attributes": {
+          "connection_host": {
+            "name": "Värd"
+          },
+          "connection_port": {
+            "name": "Port"
+          },
+          "labels": {
+            "name": "Etiketter"
+          }
+        }
+      },
+      "vulnerability_scanning": {
+        "name": "Sårbarhetsgenomsökning"
+      },
+      "git_stack_sync_error": {
+        "name": "Synkroniseringsfel",
+        "state_attributes": {
+          "sync_error": {
+            "name": "Synkroniseringsfel"
+          }
+        }
+      },
+      "stack_updates_available": {
+        "name": "Uppdateringar tillgängliga",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "Containrar med uppdateringar"
+          }
+        }
+      },
+      "live_updates": {
+        "name": "Liveuppdateringar",
+        "state_attributes": {
+          "in_use": {
+            "name": "Används"
+          }
+        }
+      }
+    },
+    "switch": {
+      "container_auto_update": {
+        "name": "Automatisk uppdatering"
+      },
+      "git_stack_auto_deploy": {
+        "name": "Automatisk distribution"
+      },
+      "schedule_enabled": {
+        "name": "Aktiverad"
       },
       "activity_logging": {
         "name": "Aktivitetsinsamling"
       },
       "metrics_collection": {
         "name": "Metrikinsamling"
-      },
-      "vulnerability_scanning": {
-        "name": "Sårbarhetsgenomsökning"
       },
       "update_checks": {
         "name": "Uppdateringskontroller"
@@ -272,20 +755,6 @@
       },
       "image_pruning": {
         "name": "Rensning av images"
-      },
-      "git_stack_sync_error": {
-        "name": "Synkroniseringsfel"
-      },
-      "stack_updates_available": {
-        "name": "Uppdateringar tillgängliga"
-      }
-    },
-    "switch": {
-      "container_auto_update": {
-        "name": "Automatisk uppdatering"
-      },
-      "git_stack_auto_deploy": {
-        "name": "Automatisk distribution"
       }
     },
     "button": {
@@ -298,11 +767,32 @@
       "git_stack_deploy": {
         "name": "Distribuera"
       },
+      "git_stack_sync": {
+        "name": "Synkronisera från Git"
+      },
       "stack_deploy": {
         "name": "Distribuera igen"
       },
       "env_bulk_update": {
         "name": "Uppdatera alla containrar"
+      },
+      "pause": {
+        "name": "Pausa"
+      },
+      "schedule_run": {
+        "name": "Kör nu"
+      },
+      "prune_images": {
+        "name": "Rensa oanvända images"
+      },
+      "prune_containers": {
+        "name": "Rensa stoppade containrar"
+      },
+      "prune_networks": {
+        "name": "Rensa oanvända nätverk"
+      },
+      "prune_volumes": {
+        "name": "Rensa oanvända volymer"
       }
     },
     "number": {
@@ -325,6 +815,73 @@
           "unless-stopped": "Om inte stoppad",
           "on-failure": "Vid fel"
         }
+      },
+      "vulnerability_scanner": {
+        "name": "Sårbarhetsskanner",
+        "state": {
+          "none": "Ingen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype och Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Rensningsläge för images",
+        "state": {
+          "dangling": "Endast föräldralösa images",
+          "all": "Alla oanvända images"
+        }
+      },
+      "default_vulnerability_scanner": {
+        "name": "Standardskanner för sårbarheter",
+        "state": {
+          "none": "Ingen",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype och Trivy"
+        }
+      },
+      "event_collection_mode": {
+        "name": "Insamling av händelser",
+        "state": {
+          "stream": "Ström",
+          "poll": "Avfrågning"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Avfrågningsintervall för händelser",
+        "state": {
+          "30": "30 sekunder",
+          "60": "60 sekunder",
+          "120": "120 sekunder",
+          "300": "300 sekunder"
+        }
+      }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Docker-händelse",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Avslutad",
+              "health_status_healthy": "Hälsokontroll godkänd",
+              "health_status_starting": "Hälsokontroll startar",
+              "health_status_unhealthy": "Hälsokontroll misslyckades",
+              "kill": "Dödad",
+              "oom": "Slut på minne",
+              "pause": "Pausad",
+              "restart": "Omstartad",
+              "start": "Startad",
+              "stop": "Stoppad",
+              "unpause": "Återupptagen",
+              "update": "Uppdaterad"
+            }
+          },
+          "exit_code": {
+            "name": "Slutkod"
+          }
+        }
       }
     }
   },
@@ -335,8 +892,47 @@
     "container_not_found": {
       "message": "Container hittades inte — den kan ha tagits bort"
     },
+    "entry_not_loaded": {
+      "message": "Den Dockhand-instansen är inte inläst. Kontrollera den under Inställningar → Enheter och tjänster."
+    },
     "git_stack_not_found": {
       "message": "Git-stacken hittades inte — den kan ha tagits bort"
+    },
+    "invalid_target": {
+      "message": "Den enheten är inte en Dockhand-miljö eller Dockhand-container som den här åtgärden kan använda."
+    },
+    "permission_denied": {
+      "message": "Dockhand nekade detta: API-tokenets användare saknar behörighet för det. Kontrollera användarens roll i Dockhand."
+    },
+    "system_container": {
+      "message": "Dockhands egen container och Hawser-agenter kan inte återskapas från Home Assistant."
+    },
+    "session_auth_unsupported": {
+      "message": "Den här posten loggar in med en sessionscookie, vilket inte längre stöds. Använd Konfigurera om för att ange en API-token (Profil → API-tokens i Dockhand)."
+    },
+    "setup_failed": {
+      "message": "Kunde inte läsa in data från Dockhand: {error}"
+    },
+    "update_failed": {
+      "message": "Kunde inte uppdatera från Dockhand: {error}"
+    },
+    "token_invalid": {
+      "message": "Dockhands API-token är ogiltig eller har återkallats. Autentisera integrationen igen under Inställningar → Enheter och tjänster."
+    },
+    "stack_not_found": {
+      "message": "Stacken hittades inte – den kan ha tagits bort"
+    },
+    "no_pending_updates": {
+      "message": "Det finns inga uppdateringar att installera"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand rapporterade ett fel utan att ange orsaken. Dess loggar kan säga mer."
+    },
+    "unexpected_response": {
+      "message": "Dockhand gav ett svar som den här integrationen inte förstår. Kontrollera att Dockhand är uppdaterat."
+    },
+    "cannot_connect": {
+      "message": "Kunde inte nå Dockhand. Kontrollera att det körs och att Home Assistant kan nå det."
     }
   },
   "issues": {
@@ -355,6 +951,109 @@
     "runtime_memory_reverted": {
       "title": "Minnesgräns återställd automatiskt för {container}",
       "description": "Container \"{container}\" slutade köras strax efter att dess minnesgräns sänktes, vilket kan inträffa när den nya gränsen är lägre än containerns faktiska användning och kärnan tillämpar den omedelbart. Minnesgränsen har automatiskt återställts till sitt tidigare värde ({memory_bytes} bytes). Kontrollera containerns loggar och aktuella hälsostatus i Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand frågar efter Docker-händelser",
+      "description": "Dockhand samlar in Docker-händelser genom att fråga var {interval}:e sekund i stället för att strömma dem. För {environments} kan liveuppdateringar och Docker-händelseentiteter komma upp till {interval} sekunder för sent, och med ett intervall över 30 sekunder kommer vissa händelser aldrig fram: varje avfrågning läser bara de senaste 30 sekunderna. Ställ in Insamling av händelser på Dockhand-enheten på Ström för att strömma dem (i Dockhand: Settings → General → Activity event collection mode). Om du föredrar avfrågning, ignorera det här problemet: det kommer bara tillbaka efter ett byte till Ström och tillbaka till Avfrågning."
+    },
+    "retired_entities_automation": {
+      "title": "{name} använder ersatta Dockhand-entiteter",
+      "description": "Dockhand har ersatt några av sina entiteter med nya, och automationen {link} använder fortfarande gamla. Redigera den så att den använder de nya entiteterna (gammal entitet → ny entitet):\n\n{entities}\n\nDen här reparationen försvinner när den inte längre använder dem."
+    },
+    "retired_entities_script": {
+      "title": "{name} använder ersatta Dockhand-entiteter",
+      "description": "Dockhand har ersatt några av sina entiteter med nya, och skriptet {link} använder fortfarande gamla. Redigera det så att det använder de nya entiteterna (gammal entitet → ny entitet):\n\n{entities}\n\nDen här reparationen försvinner när det inte längre använder dem."
     }
+  },
+  "services": {
+    "prune": {
+      "name": "Rensa oanvända resurser",
+      "description": "Tar bort oanvända Docker-resurser i en Dockhand-miljö och rapporterar vad som togs bort.",
+      "fields": {
+        "device_id": {
+          "name": "Miljö",
+          "description": "Dockhand-miljön som ska rensas."
+        },
+        "resources": {
+          "name": "Resurser",
+          "description": "Vad som ska tas bort."
+        },
+        "all_images": {
+          "name": "Alla oanvända images",
+          "description": "Ta även bort taggade images som ingen container använder, inte bara hängande (otaggade)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Återskapa container",
+      "description": "Återskapar en container från dess nuvarande konfiguration, som när den sparas i Dockhands redigerare, och hämtar valfritt dess image först.",
+      "fields": {
+        "device_id": {
+          "name": "Container",
+          "description": "Containern som ska återskapas."
+        },
+        "pull": {
+          "name": "Hämta image",
+          "description": "Hämta containerns image igen först, för att få en nyare image under samma tagg."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Stoppade containrar",
+        "images": "Images",
+        "volumes": "Oanvända volymer",
+        "networks": "Oanvända nätverk"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "vulnerability_scanning": "Sårbarhetsgenomsökning",
+        "activity_events": "Aktivitetshändelser",
+        "disk_usage": "Diskanvändning",
+        "vulnerabilities": "Sårbarheter",
+        "prune_images": "Rensa oanvända images",
+        "prune_containers": "Rensa stoppade containrar",
+        "prune_networks": "Rensa oanvända nätverk",
+        "prune_volumes": "Rensa oanvända volymer",
+        "pinned_digest_updates": "Uppdateringar för låsta digester",
+        "held_updates": "Tillbakahållna uppdateringar",
+        "hawser_agent_version": "Hawser-agentversion",
+        "hawser_last_seen": "Hawser senast sedd",
+        "host_docker_version": "Docker-version",
+        "host_platform": "Värdplattform",
+        "uptime": "Drifttid"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Docker-händelse",
+        "pause": "Pausa",
+        "container_auto_update": "Automatisk uppdatering"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatisk distribution"
+      }
+    }
+  },
+  "common": {
+    "release_notes_image": "Image: {image}",
+    "newer_tag_available": "En nyare versionstagg finns: **{tag}**.",
+    "newer_tag_also_available": "En nyare versionstagg finns också: **{tag}**. För att byta till den ändrar du taggen i compose-filen eller containerkonfigurationen.",
+    "newer_tag_advisory_only": "Det här är bara information – containern är låst till sin nuvarande tagg, så Installera flyttar den inte till den här versionen. Ändra taggen i compose-filen eller containerkonfigurationen för att uppgradera.",
+    "release_notes_truncated": "… (förkortad)",
+    "versions_skipped": "_{count} version(er) överhoppade på vägen._",
+    "view_full_release_notes": "Visa fullständiga versionsanteckningar",
+    "view_release_notes": "Visa versionsanteckningar",
+    "pinned_to_digest": "**Låst till en digest.** Imagens tagg pekar nu på en ny digest, men den här containern är låst till den gamla. För att uppdatera den ändrar du digesten i compose-filen eller körkommandot; Installera skulle bara hämta den låsta imagen igen.",
+    "update_held": "**Uppdatering kvarhållen:** {hours} timme/timmar kvar av den minsta image-ålder som är inställd i Dockhand. Därefter kan den installeras.",
+    "update_held_until_check": "**Uppdatering kvarhållen:** den nya imagen har nått den minsta ålder som är inställd i Dockhand. Den kan installeras nästa gång Dockhand söker efter uppdateringar (eller efter **Sök efter image-uppdateringar**).",
+    "scanner_may_block_update": "Den här miljön skannar images efter sårbarheter före uppdatering. Beroende på den inställda policyn kan uppdateringen blockeras om fynden överskrider tröskeln.",
+    "system_container_update": "Det här är en systemcontainer och måste uppdateras direkt på Docker-värden.",
+    "updates_disabled_by_label": "Uppdateringar inaktiverade via etiketten `dockhand.update=false`."
   }
 }

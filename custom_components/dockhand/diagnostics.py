@@ -9,8 +9,9 @@ depth — tlsKey/hawserToken) are redacted before export.
 """
 
 from typing import Any
+from urllib.parse import urlsplit
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import DockhandConfigEntry
@@ -18,6 +19,35 @@ from .helpers import _all_envs, _compose_project, _coordinator_env
 
 # Fields to redact from config entry data before including in diagnostics
 TO_REDACT = {"api_token"}
+
+
+def _redact_url(url: object) -> object:
+    """An address with its host redacted: the scheme and port still show
+    how Home Assistant reaches Dockhand."""
+    if not isinstance(url, str):
+        return url
+    parts = urlsplit(url)
+    if not parts.hostname:
+        return REDACTED
+    port = f":{parts.port}" if parts.port else ""
+    return f"{parts.scheme}://{REDACTED}{port}{parts.path}"
+
+
+def _redact_env_addresses(data: dict[str, Any]) -> dict[str, Any]:
+    """Each environment's address (`stats.host`) and its containers' mount
+    paths on the host. Not keys of their own to redact: `host` is also the
+    slow coordinator's host-information section, and `source` also says
+    where an update came from, and both of those stay."""
+    for env in (data.get("environments") or {}).values():
+        stats = env.get("stats")
+        if isinstance(stats, dict) and "host" in stats:
+            stats["host"] = REDACTED
+        for container in env.get("containers") or []:
+            for mount in container.get("mounts") or []:
+                if isinstance(mount, dict) and "source" in mount:
+                    mount["source"] = REDACTED
+    return data
+
 
 # Fields to redact from raw coordinator data. Docker labels routinely carry
 # secrets (e.g. Traefik basic-auth hashes, tokens in reverse-proxy config),
@@ -34,7 +64,27 @@ TO_REDACT = {"api_token"}
 # source, the route spreads the raw DB row straight into its JSON response).
 # So neither key should ever actually appear in coordinator.data; this
 # redaction is a second layer of protection in case that ever changes.
-COORDINATOR_TO_REDACT = {"labels", "tlsKey", "hawserToken"}
+COORDINATOR_TO_REDACT = {
+    "labels",
+    "tlsKey",
+    "hawserToken",
+    # Docker events carry the container's labels as actor attributes.
+    "actorAttributes",
+    # A schedule run's log, which can echo repository URLs and commands.
+    "logs",
+    # A git repository's URL, which can carry credentials.
+    "url",
+    # Addresses and paths that identify the user's network and hosts.
+    "ipAddress",
+    "ipv4Address",
+    "ipv6Address",
+    "subnet",
+    "gateway",
+    "hostname",
+    "connectionHost",
+    # A container's command line, which can carry passwords and tokens.
+    "command",
+}
 
 
 async def async_get_config_entry_diagnostics(
@@ -114,8 +164,17 @@ async def async_get_config_entry_diagnostics(
             ],
         }
 
+    version = entry.runtime_data.version_coordinator
     return {
-        "config_entry": async_redact_data(dict(entry.data), TO_REDACT),
+        "dockhand_version": version.data,
+        "live_events": {
+            "running": entry.runtime_data.event_stream.running,
+            "connected": entry.runtime_data.event_stream.connected,
+        },
+        "config_entry": {
+            **async_redact_data(dict(entry.data), TO_REDACT),
+            "api_url": _redact_url(entry.data.get("api_url")),
+        },
         "options": async_redact_data(dict(entry.options), TO_REDACT),
         "environment_summary": env_summaries,
         "schedule_count": len(slow_data.get("schedules") or []),
@@ -125,7 +184,9 @@ async def async_get_config_entry_diagnostics(
                 "last_exception": str(fast.last_exception)
                 if fast.last_exception
                 else None,
-                "data": async_redact_data(fast.data or {}, COORDINATOR_TO_REDACT),
+                "data": _redact_env_addresses(
+                    async_redact_data(fast.data or {}, COORDINATOR_TO_REDACT)
+                ),
             },
             "slow": {
                 "last_update_success": slow.last_update_success,

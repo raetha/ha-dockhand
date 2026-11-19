@@ -11,6 +11,7 @@ Covers:
 
 from __future__ import annotations
 
+import asyncio
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,9 +30,15 @@ from custom_components.dockhand import (
     _register_devices,
     async_migrate_entry,
 )
-from custom_components.dockhand.coordinator import (
-    DockhandFastCoordinator,
-    DockhandSlowCoordinator,
+
+from .conftest import (
+    config_entry,
+    container,
+    fast_coordinator,
+    patch_setup,
+    stack,
+    slow_coordinator,
+    update_coordinator,
 )
 
 # ---------------------------------------------------------------------------
@@ -39,13 +46,9 @@ from custom_components.dockhand.coordinator import (
 # ---------------------------------------------------------------------------
 
 ENV1_STATS = {"name": "MyHost"}
-CONTAINER_FREE = {"id": "c1", "name": "nginx", "labels": {}}
-CONTAINER_COMPOSE = {
-    "id": "c2",
-    "name": "web",
-    "labels": {"com.docker.compose.project": "myapp"},
-}
-STACK1 = {"name": "myapp", "status": "running"}
+CONTAINER_FREE = container("nginx", id="c1")
+CONTAINER_COMPOSE = container("web", stack="myapp", id="c2")
+STACK1 = stack("myapp", CONTAINER_COMPOSE)
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -53,9 +56,9 @@ STACK1 = {"name": "myapp", "status": "running"}
 
 
 def _make_entry(hass: HomeAssistant, data=None, options=None) -> MockConfigEntry:
-    """Create a MockConfigEntry registered with hass. Settings passed in
-    `data` are filed under entry.options, where they really live — `data`
-    only keeps the connection details."""
+    """An entry with the optional platforms off. Settings in `data` are
+    filed under entry.options, where they really live: `data` only keeps
+    the connection details."""
     from custom_components.dockhand.const import OPTION_KEYS
 
     d = {"api_url": "http://dh.test:3000", "api_token": "dh_test_token"}
@@ -68,59 +71,30 @@ def _make_entry(hass: HomeAssistant, data=None, options=None) -> MockConfigEntry
     for key, value in (data or {}).items():
         (opts if key in OPTION_KEYS else d)[key] = value
     opts.update(options or {})
-    entry = MockConfigEntry(
-        domain="dockhand",
-        data=d,
-        options=opts,
-        title="http://dh.test:3000",
-    )
-    entry.add_to_hass(hass)
-    return entry
-
-
-def _make_fast_coordinator(data) -> MagicMock:
-    """data is the flat {env_id: {...}} shape every call site in this file
-    already uses — wrapped in "environments" here, once, matching
-    _make_runtime_data's same reasoning above."""
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {"environments": data}
-    coord.async_config_entry_first_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
-
-
-def _make_slow_coordinator(data) -> MagicMock:
-    coord = MagicMock(spec=DockhandSlowCoordinator)
-    coord.data = data
-    coord.last_update_success = True
-    coord.async_config_entry_first_refresh = AsyncMock()
-    coord.async_add_listener = MagicMock(return_value=lambda: None)
-    return coord
+    return config_entry(hass, data=d, options=opts)
 
 
 def _make_runtime_data(fast_data, slow_data, update_data=None) -> MagicMock:
-    """fast_data is the flat {env_id: {...}} shape every call site in this
-    file already uses — wrapped in "environments" here, once, rather than
-    touching all 60+ call sites individually now that
-    DockhandFastCoordinator.data itself carries that wrapper."""
+    """Runtime data whose fast coordinator holds these environments
+    (`fast_data`, by ID), and whose slow coordinator holds `slow_data` (a
+    first poll that failed when empty)."""
     rd = MagicMock()
-    rd.fast_coordinator.data = {"environments": fast_data}
-    rd.fast_coordinator.last_update_success = True
+    rd.fast_coordinator = fast_coordinator(fast_data)
+    rd.slow_coordinator = slow_coordinator(
+        attrs={"last_update_success": bool(slow_data)}
+    )
     rd.slow_coordinator.data = slow_data
-    rd.slow_coordinator.last_update_success = bool(slow_data)
+    rd.update_coordinator = None
     if update_data is not None:
-        rd.update_coordinator = MagicMock()
+        rd.update_coordinator = update_coordinator()
         rd.update_coordinator.data = update_data
-        rd.update_coordinator.last_update_success = True
-    else:
-        rd.update_coordinator = None
     return rd
 
 
 def _run_register(hass, fast_data, slow_data=None, config_overrides=None):
     entry = _make_entry(hass, data=config_overrides)
-    fast = _make_fast_coordinator(fast_data)
-    slow = _make_slow_coordinator(slow_data or {"environments": {}, "schedules": []})
+    fast = fast_coordinator(fast_data)
+    slow = slow_coordinator(**(slow_data or {}))
     _register_devices(
         hass, entry, fast, slow, dict(entry.options), "http://dh.test:3000"
     )
@@ -218,9 +192,7 @@ def test_stacks_group_not_created_when_empty(hass: HomeAssistant):
 
 def test_networks_group_when_enabled_and_data(hass: HomeAssistant):
     slow = {
-        "environments": {
-            1: {"env": {}, "networks": [{"id": "n1"}], "images": [], "volumes": []}
-        },
+        "environments": {1: {"networks": [{"id": "n1"}], "images": [], "volumes": []}},
         "schedules": [],
     }
     entry = _run_register(
@@ -234,9 +206,7 @@ def test_networks_group_when_enabled_and_data(hass: HomeAssistant):
 
 def test_networks_group_not_created_when_disabled(hass: HomeAssistant):
     slow = {
-        "environments": {
-            1: {"env": {}, "networks": [{"id": "n1"}], "images": [], "volumes": []}
-        },
+        "environments": {1: {"networks": [{"id": "n1"}], "images": [], "volumes": []}},
         "schedules": [],
     }
     entry = _run_register(
@@ -270,7 +240,7 @@ def test_env_scoped_schedule_creates_env_group(hass: HomeAssistant):
     """A schedule with environmentId set gets its own env's Schedules group,
     not just the flat hub — see helpers.py's _schedule_group_device."""
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 5,
@@ -293,7 +263,7 @@ def test_env_scoped_schedule_creates_env_group(hass: HomeAssistant):
 
 def test_env_scoped_schedule_device_parented_to_env_group(hass: HomeAssistant):
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 5,
@@ -328,7 +298,7 @@ def test_global_schedule_has_no_env_group_and_stays_under_hub(hass: HomeAssistan
     """environmentId: None (system_cleanup, repo_prune/check/verify) parents
     to schedules_hub, and no per-env Schedules group is created for it."""
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 1,
@@ -365,15 +335,12 @@ def test_global_schedule_has_no_env_group_and_stays_under_hub(hass: HomeAssistan
 def test_schedule_device_via_device_consistent_across_repeated_calls(
     hass: HomeAssistant,
 ):
-    """Regression test for the consolidation pattern in architecture.md §0:
-    _ensure_hub_devices() must build schedule DeviceInfo via the same
-    _sched_device() factory the entity's own device_info uses, not duplicate
-    fields inline — otherwise a repeated call could silently revert an
-    env-scoped schedule's via_device back to schedules_hub on the next
-    coordinator update, the same class of bug that hit the stack device's
-    model field once before."""
+    """_ensure_hub_devices() builds a schedule's device with the same
+    _sched_device() factory as the entity (architecture.md §0), so a
+    later call can't move an environment's schedule back under the
+    schedules hub."""
     slow = {
-        "environments": {1: {"env": {}, "networks": [], "images": [], "volumes": []}},
+        "environments": {1: {"networks": [], "images": [], "volumes": []}},
         "schedules": [
             {
                 "id": 5,
@@ -389,10 +356,8 @@ def test_schedule_device_via_device_consistent_across_repeated_calls(
         slow_data=slow,
         config_overrides={"enable_schedules": True},
     )
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow_coord = _make_slow_coordinator(slow)
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow_coord = slow_coordinator(**slow)
     _register_devices(
         hass, entry, fast, slow_coord, dict(entry.data), "http://dh.test:3000"
     )
@@ -420,10 +385,8 @@ def test_empty_fast_data_creates_no_devices(hass: HomeAssistant):
 
 def test_idempotent_second_call(hass: HomeAssistant):
     entry = _make_entry(hass)
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
     _register_devices(
         hass, entry, fast, slow, dict(entry.options), "http://dh.test:3000"
     )
@@ -560,15 +523,10 @@ def test_removes_stale_container_when_env_online(hass: HomeAssistant):
 def test_preserves_container_when_containers_fetch_specifically_failed(
     hass: HomeAssistant,
 ):
-    """The most severe of this session's findings, reproduced directly:
-    containers == [] with the environment still online looks identical to
-    "every container was genuinely removed" unless fetch_failures says
-    otherwise — see coordinator.py's DockhandFastCoordinator._fetch and
-    docs/architecture.md §9. Container/stack existence is the single
-    most commonly-used data this integration has; a transient DNS/
-    network failure fetching /api/containers used to be able to wipe
-    every container device for an environment that was, in every other
-    respect, perfectly healthy."""
+    """No containers with the environment online looks like every
+    container was removed, unless fetch_failures says the fetch failed
+    (coordinator.py's DockhandFastCoordinator._fetch, architecture.md
+    §9): then nothing is removed."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -662,14 +620,8 @@ def test_removes_containers_group_when_no_freestanding(hass: HomeAssistant):
 
 
 def test_removes_stacks_group_when_no_stacks(hass: HomeAssistant):
-    """The Stacks group device (env_{id}_Stacks) had no cleanup condition
-    at all until this — an empty, useless group device would linger
-    indefinitely once an environment's last stack was genuinely removed.
-    Found during final review, unrelated to the fetch_failures bugs
-    themselves (nothing was being wrongly deleted here — quite the
-    opposite, this device was never being cleaned up when it legitimately
-    should be), fixed alongside them anyway per explicit request to
-    handle all cleanup-related gaps together for this release."""
+    """The Stacks group device goes once an environment's last stack is
+    removed, rather than staying empty."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
@@ -745,15 +697,10 @@ def test_preserves_live_schedule_device(hass: HomeAssistant):
 def test_preserves_schedule_device_when_schedules_fetch_specifically_failed(
     hass: HomeAssistant,
 ):
-    """The actual reported incident, reproduced directly: schedules == []
-    looks identical to "genuinely zero schedules" unless fetch_failures
-    says otherwise. Same slow_data shape as
-    test_removes_stale_schedule_device above — schedules: [] — except
-    this time fetch_failures records that the schedules fetch itself is
-    what produced that empty list, not a real answer. The device must
-    survive here where it wouldn't in that other test; this is the one
-    line of difference that distinguishes a swallowed exception from a
-    real "someone deleted this schedule in Dockhand.\""""
+    """No schedules looks like every schedule was deleted, unless
+    fetch_failures says the fetch failed. The same data as
+    test_removes_stale_schedule_device, except for that record: here the
+    device stays."""
     entry = _make_entry(hass, data={"enable_schedules": True})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"containers": [], "stacks": []}},
@@ -765,6 +712,25 @@ def test_preserves_schedule_device_when_schedules_fetch_specifically_failed(
     )
     dev = _add_device(hass, entry, f"{entry.entry_id}_schedule_99")
     _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
+
+
+def test_preserves_schedule_devices_while_the_slow_data_is_still_loading(
+    hass: HomeAssistant,
+):
+    """Right after setup the slow data is still loading in the background,
+    and a coordinator that hasn't fetched yet reports last_update_success:
+    nothing is known about schedules yet, so nothing goes."""
+    entry = _make_entry(hass, data={"enable_schedules": True})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"containers": [], "stacks": [], "stats": {"online": True}}},
+        slow_data=None,
+    )
+    entry.runtime_data.slow_coordinator.last_update_success = True
+    group = _add_device(hass, entry, f"{entry.entry_id}_env_1_Schedules")
+    dev = _add_device(hass, entry, f"{entry.entry_id}_schedule_99_git_stack_sync")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, group.id)
     assert _device_exists(hass, dev.id)
 
 
@@ -801,12 +767,9 @@ def test_preserves_image_entities_when_images_fetch_specifically_failed(
 def test_disabling_schedules_removes_hub_env_group_and_child_device(
     hass: HomeAssistant,
 ):
-    """Regression test for a real gap: disabling "Enable schedules" used to
-    remove only schedules_hub. HA's device registry clears via_device_id on
-    removal rather than cascading (confirmed against HA core's
-    device_registry.py), so every individual schedule device — and now each
-    env's Schedules group — needs its own explicit unconditional removal too,
-    not just the top-level hub."""
+    """Turning schedules off removes the hub, each environment's
+    Schedules group and every schedule device: Home Assistant clears
+    via_device_id on removal rather than removing children."""
     entry = _make_entry(hass, data={"enable_schedules": False})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
@@ -854,10 +817,8 @@ def test_preserves_populated_env_schedules_group(hass: HomeAssistant):
 
 
 def test_removes_images_group_when_disabled(hass: HomeAssistant):
-    """Regression test: previously nothing ever removed Images/Networks/
-    Volumes group devices at all, even when the toggle was off or the
-    resource list was confirmed empty — only their child entities were
-    cleaned up. Same fix applied to Networks/Volumes below."""
+    """The Images group device goes with the option, not only its
+    entities (Networks and Volumes below likewise)."""
     entry = _make_entry(hass, data={"enable_images": False})
     entry.runtime_data = _make_runtime_data(
         fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
@@ -927,6 +888,53 @@ def test_removes_volumes_group_when_disabled(hass: HomeAssistant):
     dev = _add_device(hass, entry, f"{entry.entry_id}_env_1_Volumes")
     _cleanup_stale_registry(hass, entry)
     assert not _device_exists(hass, dev.id)
+
+
+def _volume_cleanup(hass, *, volumes, enabled=True, slow_ok=True, env_ids=(1,)):
+    entry = _make_entry(hass, data={"enable_volumes": enabled})
+    rd = _make_runtime_data(
+        fast_data={
+            env_id: {"stats": ENV1_STATS, "containers": [], "stacks": []}
+            for env_id in env_ids
+        },
+        slow_data={
+            "environments": {
+                env_id: {"images": [], "networks": [], "volumes": volumes}
+                for env_id in env_ids
+            },
+            "schedules": [],
+        },
+    )
+    rd.slow_coordinator.last_update_success = slow_ok
+    entry.runtime_data = rd
+    dev = _add_device(hass, entry, f"{entry.entry_id}_volume_1_mydata")
+    _cleanup_stale_registry(hass, entry)
+    return _device_exists(hass, dev.id)
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "kept"),
+    [
+        ({"volumes": [{"name": "mydata"}]}, True),
+        ({"volumes": []}, False),  # Dockhand no longer lists it
+        ({"volumes": [], "slow_ok": False}, True),  # can't tell
+        ({"volumes": [{"name": "mydata"}], "enabled": False}, False),
+        ({"volumes": [], "slow_ok": False, "env_ids": (2,)}, False),  # env gone
+    ],
+)
+def test_volume_device_cleanup(hass: HomeAssistant, kwargs, kept):
+    assert _volume_cleanup(hass, **kwargs) is kept
+
+
+def test_volume_device_with_a_bad_identifier_is_left_alone(hass: HomeAssistant):
+    entry = _make_entry(hass, data={"enable_volumes": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={"environments": {1: {"volumes": []}}, "schedules": []},
+    )
+    dev = _add_device(hass, entry, f"{entry.entry_id}_volume_x_mydata")
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, dev.id)
 
 
 def test_preserves_images_group_during_slow_poll_failure(hass: HomeAssistant):
@@ -1015,7 +1023,7 @@ def test_preserves_live_image_entity(hass: HomeAssistant):
         slow_data={
             "environments": {
                 1: {
-                    "images": [{"id": "sha256:deadbeef"}],
+                    "images": [{"id": "sha256:deadbeef", "repoTags": ["nginx:1"]}],
                     "networks": [],
                     "volumes": [],
                 }
@@ -1023,7 +1031,7 @@ def test_preserves_live_image_entity(hass: HomeAssistant):
             "schedules": [],
         },
     )
-    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_image_nginx")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, ent.entity_id)
 
@@ -1063,7 +1071,7 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
         slow_data={
             "environments": {
                 1: {
-                    "images": [{"id": "sha256:aabbccdd"}],
+                    "images": [{"id": "sha256:aabbccdd", "repoTags": []}],
                     "networks": [],
                     "volumes": [],
                 }
@@ -1071,7 +1079,7 @@ def test_stale_and_live_in_same_env(hass: HomeAssistant):
             "schedules": [],
         },
     )
-    live = _add_entity(hass, entry, f"{entry.entry_id}_1_image_aabbccdd")
+    live = _add_entity(hass, entry, f"{entry.entry_id}_1_image_<none>")
     stale = _add_entity(hass, entry, f"{entry.entry_id}_1_image_deadbeef")
     _cleanup_stale_registry(hass, entry)
     assert _entity_exists(hass, live.entity_id)
@@ -1123,9 +1131,9 @@ def test_preserves_live_update_entity(hass: HomeAssistant):
 
 
 def test_preserves_update_entity_when_scheduled_check_disabled(hass: HomeAssistant):
-    """github.com/raetha/ha-dockhand/issues/42: Dockhand's scheduled update
-    check being off for an environment no longer removes its update
-    entities — only the integration's own update-entities option does."""
+    """github.com/raetha/ha-dockhand/issues/42: an environment's update
+    entities stay when Dockhand's scheduled update check is off for it;
+    only the integration's update-entities option removes them."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1606,17 +1614,10 @@ def test_removes_stack_stats_entity_when_stack_gone(hass: HomeAssistant):
 def test_container_stats_memory_limit_collision_disambiguated_by_domain(
     hass: HomeAssistant,
 ):
-    """The actual root cause of the bug report: the container-stats
-    memory_limit sensor and the runtime-control memory_limit number
-    entity share an exact unique_id suffix by design (see
-    _CONTAINER_STATS_SUFFIXES's comment). A container-stats memory_limit
-    *sensor* must not be swept by the runtime-control branch just
-    because both are off/untracked — domain is what disambiguates them,
-    not suffix. Runtime controls off + container stats off: the sensor
-    (container-stats) is removed via the container-stats branch, not
-    preserved by accident, and a same-suffix number entity (a genuine
-    runtime control) is independently removed via its own branch — both
-    correctly evaluated, neither masking the other."""
+    """The container stats memory_limit sensor and the runtime control
+    memory_limit number share a unique ID suffix by design
+    (_CONTAINER_STATS_SUFFIXES): the domain decides which branch handles
+    each. With both options off, each is removed by its own branch."""
     entry = _make_entry(
         hass,
         options={"enable_runtime_controls": False, "enable_resource_stats": False},
@@ -1648,13 +1649,8 @@ def test_container_stats_memory_limit_collision_disambiguated_by_domain(
 
 
 def test_removes_container_stats_entity_predating_the_option(hass: HomeAssistant):
-    """The other half of the bug report: entities created before "Enable
-    container stats" existed at all (option key entirely absent from
-    entry.options, not explicitly False) must also get cleaned up, same
-    as if the option were explicitly turned off. Reads through the same
-    DEFAULT_ENABLE_RESOURCE_STATS fallback as everywhere else — this
-    isn't a special case, just confirming the default (False) behaves
-    like an explicit off for cleanup purposes."""
+    """An entry without the stats option at all counts as off
+    (DEFAULT_ENABLE_RESOURCE_STATS), so its stats entities are removed."""
     entry = _make_entry(hass)  # no options at all — key genuinely absent
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1790,7 +1786,8 @@ def test_preserves_bulk_update_when_pending_updates_exist(hass: HomeAssistant):
     assert _entity_exists(hass, ent.entity_id)
 
 
-def test_removes_bulk_update_when_no_pending_updates(hass: HomeAssistant):
+def test_keeps_bulk_update_when_nothing_is_pending(hass: HomeAssistant):
+    """It stays, unavailable, rather than coming and going with updates."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -1805,31 +1802,13 @@ def test_removes_bulk_update_when_no_pending_updates(hass: HomeAssistant):
     )
     ent = _add_entity(hass, entry, f"{entry.entry_id}_1_bulk_update")
     _cleanup_stale_registry(hass, entry)
-    assert not _entity_exists(hass, ent.entity_id)
+    assert _entity_exists(hass, ent.entity_id)
 
 
-def test_removes_bulk_update_when_only_system_containers_pending(
-    hass: HomeAssistant,
-):
-    """Matches Dockhand's own behavior: its "Update all" button doesn't
-    count system containers, so if the only pending update is Dockhand's
-    own container, there's effectively nothing to bulk-update."""
+def test_removes_bulk_update_with_its_environment(hass: HomeAssistant):
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
-        fast_data={
-            1: {
-                "containers": [
-                    {
-                        "name": "dockhand",
-                        "id": "id-dockhand",
-                        "systemContainer": "dockhand",
-                    }
-                ],
-                "stacks": [],
-                "stats": {"online": True},
-                "pending_update_container_ids": {"id-dockhand"},
-            }
-        },
+        fast_data={2: {"containers": [], "stacks": [], "stats": {"online": True}}},
         slow_data={"environments": {}, "schedules": []},
     )
     ent = _add_entity(hass, entry, f"{entry.entry_id}_1_bulk_update")
@@ -2004,24 +1983,11 @@ def test_removes_stack_deploy_when_stack_becomes_git_tracked(hass: HomeAssistant
 
 
 def test_stack_deploy_cleanup_does_not_affect_git_deploy_button(hass: HomeAssistant):
-    """Confirms a live git stack's Deploy button ("..._git_deploy") is
-    preserved by the _GIT_STACK_SUFFIXES branch, not incorrectly caught
-    by the newer stack-deploy branch below it.
-
-    Note on what this test does and doesn't prove: Python's elif stops
-    at the first matching branch, and _GIT_STACK_SUFFIXES is checked
-    earlier in the chain than the stack-deploy branch — so ordering
-    alone already guarantees "..._git_deploy" never reaches the
-    stack-deploy branch, regardless of whether that branch's own
-    "not uid.endswith('_git_deploy')" exclusion is present. That
-    exclusion is still kept for defensiveness against a future reorder
-    of these branches (an exact match shouldn't depend on file order to
-    be correct), but this particular test can't force it to be the
-    thing that matters — it was verified by temporarily removing the
-    exclusion and confirming this test still passed either way, which
-    is why the exclusion's value here is about not relying on order,
-    not about this test catching its absence.
-    """
+    """A live git stack's Deploy button ("..._git_deploy") is kept by the
+    _GIT_STACK_SUFFIXES branch, not caught by the stack deploy branch.
+    That branch is checked later, so this passes with or without its own
+    "_git_deploy" exclusion; the exclusion is there so the result doesn't
+    depend on branch order."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -2070,10 +2036,8 @@ def test_preserves_stack_action_entities_for_normal_stack(hass: HomeAssistant):
 def test_removes_stack_action_entities_when_stack_gains_system_container(
     hass: HomeAssistant,
 ):
-    """stack['containers'] is a list of container IDs, not names —
-    confirmed from Dockhand's own source. Using names here was a real
-    bug that shipped: this check silently never matched anything, for
-    any stack, ever."""
+    """stack['containers'] lists container IDs, not names, so a system
+    container in it is found by ID."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -2287,20 +2251,10 @@ def test_non_digit_env_id_is_skipped_in_entity_cleanup(hass: HomeAssistant):
 
 async def test_success_stores_runtime_data(hass: HomeAssistant):
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2313,34 +2267,24 @@ async def test_success_stores_runtime_data(hass: HomeAssistant):
 
 
 async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssistant):
-    """Health sensor is created when a container has a healthcheck.
-
-    Regression test for a bug where DockhandContainerHealthSensor was called
-    without entry.entry_id, causing a TypeError at setup time.
-    """
-    from tests.conftest import MOCK_CONTAINER_HEALTHY
-
+    """A container with a healthcheck gets a Health sensor at setup."""
     entry = _make_entry(hass)
-    fast = _make_fast_coordinator(
+    fast = fast_coordinator(
         {
             1: {
                 "stats": ENV1_STATS,
-                "containers": [MOCK_CONTAINER_HEALTHY],
+                "containers": [
+                    container(
+                        "healthy-app", health="healthy", status="Up 3 hours (healthy)"
+                    )
+                ],
                 "stacks": [],
             }
         }
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2360,12 +2304,8 @@ async def test_setup_with_healthy_container_creates_health_sensor(hass: HomeAssi
 
 
 async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssistant):
-    """A container that gains a healthcheck after setup gets its Health sensor.
-
-    Regression test: health sensor creation was gated behind the same
-    known-key set as the other per-container sensors, so a container whose
-    image update added a HEALTHCHECK never got a Health sensor until restart.
-    """
+    """A container that gains a healthcheck after setup (an image update
+    adding HEALTHCHECK) gets its Health sensor without a restart."""
     entry = _make_entry(hass)
     container = {
         "id": "c1",
@@ -2374,7 +2314,7 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
         "labels": {},
         "health": None,
     }
-    fast = _make_fast_coordinator(
+    fast = fast_coordinator(
         {
             1: {
                 "stats": {"name": "MyHost", "online": True},
@@ -2391,17 +2331,9 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
         return lambda: None
 
     fast.async_add_listener = MagicMock(side_effect=_add_listener)
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2436,13 +2368,9 @@ async def test_container_gaining_healthcheck_adds_health_sensor(hass: HomeAssist
         )
 
 
-async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssistant):
-    """Identical network IDs across environments each get an entity.
-
-    Regression test: the network known-set was keyed on the bare Docker
-    network ID, so two environments pointing at the same Docker host (which
-    report identical network IDs) only got an entity for the first env seen.
-    """
+async def test_same_network_in_two_envs_creates_both_entities(hass: HomeAssistant):
+    """Two environments on the same Docker host report the same networks,
+    and each gets its own entity."""
     entry = _make_entry(hass, data={"enable_networks": True})
     network = {
         "id": "netabc123",
@@ -2450,7 +2378,7 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
         "driver": "bridge",
         "containers": {},
     }
-    fast = _make_fast_coordinator(
+    fast = fast_coordinator(
         {
             1: {
                 "stats": {"name": "HostDirect", "online": True},
@@ -2464,17 +2392,15 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
             },
         }
     )
-    slow = _make_slow_coordinator(
-        {
+    slow = slow_coordinator(
+        **{
             "environments": {
                 1: {
-                    "env": {"id": 1, "name": "HostDirect"},
                     "images": [],
                     "networks": [network],
                     "volumes": [],
                 },
                 2: {
-                    "env": {"id": 2, "name": "HostHawser"},
                     "images": [],
                     "networks": [network],
                     "volumes": [],
@@ -2484,42 +2410,26 @@ async def test_same_network_id_in_two_envs_creates_both_entities(hass: HomeAssis
         }
     )
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
     reg = er.async_get(hass)
     uids = {e.unique_id for e in er.async_entries_for_config_entry(reg, entry.entry_id)}
-    assert f"{entry.entry_id}_1_network_netabc123" in uids, uids
-    assert f"{entry.entry_id}_2_network_netabc123" in uids, uids
+    assert f"{entry.entry_id}_1_network_bridge" in uids, uids
+    assert f"{entry.entry_id}_2_network_bridge" in uids, uids
 
 
 async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):
     """Fast coordinator failure puts entry in SETUP_RETRY state."""
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator({})
+    fast = fast_coordinator({})
     fast.async_config_entry_first_refresh = AsyncMock(
         side_effect=ConfigEntryNotReady("timeout")
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2530,8 +2440,8 @@ async def test_fast_coordinator_failure_raises_not_ready(hass: HomeAssistant):
 
 async def test_legacy_entry_without_token_raises_auth_failed(hass: HomeAssistant):
     """Legacy entry without api_token raises ConfigEntryAuthFailed → SETUP_ERROR."""
-    entry = MockConfigEntry(
-        domain="dockhand",
+    entry = config_entry(
+        hass,
         data={
             "api_url": "http://dh.test:3000",
             "username": "admin",
@@ -2544,7 +2454,6 @@ async def test_legacy_entry_without_token_raises_auth_failed(hass: HomeAssistant
         },
         title="http://dh.test:3000",
     )
-    entry.add_to_hass(hass)
 
     with (
         patch(
@@ -2572,20 +2481,10 @@ async def test_legacy_entry_with_token_strips_legacy_keys(hass: HomeAssistant):
             "api_token": "dh_new_token",
         },
     )
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2597,23 +2496,10 @@ async def test_legacy_entry_with_token_strips_legacy_keys(hass: HomeAssistant):
 async def test_slow_coordinator_failure_is_non_fatal(hass: HomeAssistant):
     """Slow coordinator failure at startup is non-fatal; entry reaches LOADED."""
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-    slow.async_config_entry_first_refresh = AsyncMock(
-        side_effect=UpdateFailed("slow timeout")
-    )
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator(last_update_success=False)
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2630,20 +2516,10 @@ async def test_slow_coordinator_failure_is_non_fatal(hass: HomeAssistant):
 
 async def test_unload_returns_true_on_success(hass: HomeAssistant):
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2653,20 +2529,10 @@ async def test_unload_returns_true_on_success(hass: HomeAssistant):
 
 async def test_unload_returns_false_when_platform_fails(hass: HomeAssistant):
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2681,20 +2547,10 @@ async def test_unload_calls_correct_platforms(hass: HomeAssistant):
     from custom_components.dockhand.const import PLATFORMS
 
     entry = _make_entry(hass, {"api_token": "dh_test_token"})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
 
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
 
@@ -2717,32 +2573,29 @@ async def test_unload_calls_correct_platforms(hass: HomeAssistant):
 
 CONNECTION = {"api_url": "http://dh.test:3000", "api_token": "dh_test_token"}
 
-# Current name -> the old name it's also saved under, for releases that
-# still read the old one.
-MIRRORS = {
-    "enable_resource_stats": "enable_container_stats",
-    "poll_interval_fast": "poll_interval",
-    "poll_interval_precise_updates": "poll_interval_updates",
+# Every setting a release on schema 2.2 (1.11.x) saved: current names, the
+# old-name copies it kept for 1.10.x, and the polling intervals 2.0.0
+# removed.
+SAVED_BY_1_11 = {
+    "enable_resource_stats": True,
+    "enable_container_stats": True,
+    "poll_interval_fast": 45,
+    "poll_interval": 45,
+    "poll_interval_slow": 900,
+    "poll_interval_precise_updates": 3600,
+    "poll_interval_updates": 3600,
+    "enable_images": True,
 }
 
 
-def _with_mirrors(options):
-    """`options` plus the old-name copies normalization keeps alongside."""
-    return {
-        **options,
-        **{MIRRORS[k]: v for k, v in options.items() if k in MIRRORS},
-    }
-
-
 def _entry(hass, version, minor_version, data, options):
-    entry = MockConfigEntry(
-        domain="dockhand",
+    entry = config_entry(
+        hass,
         version=version,
         minor_version=minor_version,
         data=data,
         options=options,
     )
-    entry.add_to_hass(hass)
     return entry
 
 
@@ -2762,16 +2615,14 @@ async def test_migrate_1_8_era_entry_renames_and_moves_everything(hass: HomeAssi
         {"enable_updates": True, "poll_interval_updates": 3600},
     )
     assert await async_migrate_entry(hass, entry) is True
-    assert (entry.version, entry.minor_version) == (2, 2)
+    assert (entry.version, entry.minor_version) == (2, 3)
     assert entry.data == {**CONNECTION, "verify_ssl": False}
-    assert entry.options == _with_mirrors(
-        {
-            "poll_interval_fast": 30,
-            "enable_images": True,
-            "enable_precise_updates": True,
-            "poll_interval_precise_updates": 3600,
-        }
-    )
+    assert entry.options == {
+        "poll_interval_fast": 30,
+        "enable_images": True,
+        "enable_precise_updates": True,
+        "poll_interval_precise_updates": 3600,
+    }
 
 
 @pytest.mark.parametrize("value", [True, False])
@@ -2791,14 +2642,30 @@ async def test_migrate_2_1_carries_renamed_values_over(
         },
     )
     assert await async_migrate_entry(hass, entry) is True
-    assert (entry.version, entry.minor_version) == (2, 2)
-    assert entry.options == _with_mirrors(
-        {
-            "enable_resource_stats": value,
-            "poll_interval_fast": 45,
-            "poll_interval_slow": 900,
-        }
-    )
+    assert (entry.version, entry.minor_version) == (2, 3)
+    assert entry.options == {
+        "enable_resource_stats": value,
+        "poll_interval_fast": 45,
+        "poll_interval_slow": 900,
+    }
+
+
+async def test_migrate_2_2_keeps_intervals_and_drops_old_name_copies(
+    hass: HomeAssistant,
+):
+    """The intervals aren't read any more, but a downgrade to 1.11.x still
+    reads them; the old-name copies were only for 1.10.x, which can't
+    reliably load a 2.3 entry anyway."""
+    entry = _entry(hass, 2, 2, dict(CONNECTION), dict(SAVED_BY_1_11))
+    assert await async_migrate_entry(hass, entry) is True
+    assert (entry.version, entry.minor_version) == (2, 3)
+    assert entry.options == {
+        "enable_resource_stats": True,
+        "poll_interval_fast": 45,
+        "poll_interval_slow": 900,
+        "poll_interval_precise_updates": 3600,
+        "enable_images": True,
+    }
 
 
 async def test_migrate_moves_settings_out_of_data_but_options_win(hass: HomeAssistant):
@@ -2828,26 +2695,26 @@ async def test_migrate_accepts_the_next_minor_version_unchanged(hass: HomeAssist
     """Downgrading from the release that bumped the schema to the next
     minor version: Home Assistant still calls this, and it must load the
     entry as-is (unknown settings just aren't read)."""
-    options = {"poll_interval_fast": 30, "some_future_option": True}
-    entry = _entry(hass, 2, 3, dict(CONNECTION), dict(options))
+    options = {"enable_images": True, "some_future_option": True}
+    entry = _entry(hass, 2, 4, dict(CONNECTION), dict(options))
     assert await async_migrate_entry(hass, entry) is True
-    assert (entry.version, entry.minor_version) == (2, 3)
+    assert (entry.version, entry.minor_version) == (2, 4)
     assert entry.options == options
 
 
 async def test_migrate_refuses_an_entry_two_minor_versions_newer(hass: HomeAssistant):
     """The release that wrote it no longer keeps the old names this one
     reads, so loading it would quietly reset those settings."""
-    options = {"poll_interval_fast": 30, "some_future_option": True}
-    entry = _entry(hass, 2, 4, dict(CONNECTION), dict(options))
+    options = {"enable_images": True, "some_future_option": True}
+    entry = _entry(hass, 2, 5, dict(CONNECTION), dict(options))
     assert await async_migrate_entry(hass, entry) is False
-    assert (entry.version, entry.minor_version) == (2, 4)
+    assert (entry.version, entry.minor_version) == (2, 5)
     assert entry.options == options
 
 
 async def test_migrate_current_entry_is_a_no_op(hass: HomeAssistant):
-    options = _with_mirrors({"poll_interval_fast": 30, "enable_resource_stats": True})
-    entry = _entry(hass, 2, 2, dict(CONNECTION), dict(options))
+    options = {"enable_resource_stats": True, "enable_images": True}
+    entry = _entry(hass, 2, 3, dict(CONNECTION), dict(options))
     assert await async_migrate_entry(hass, entry) is True
     assert entry.options == options
 
@@ -2861,33 +2728,39 @@ def test_normalize_prefers_an_old_name_written_after_a_downgrade():
         CONNECTION, {"enable_resource_stats": True, "enable_container_stats": False}
     )
     assert data == CONNECTION
-    assert options == _with_mirrors({"enable_resource_stats": False})
+    assert options == {"enable_resource_stats": False}
 
 
 def test_normalize_leaves_a_current_entry_untouched():
     from custom_components.dockhand import _normalized_entry_config
 
-    options = _with_mirrors({"poll_interval_fast": 30, "enable_images": True})
+    options = {"enable_resource_stats": True, "enable_images": True}
     assert _normalized_entry_config(CONNECTION, options) == (CONNECTION, options)
 
 
-def test_normalize_mirrors_current_values_under_old_names():
-    """So a downgrade to a release that reads the old names keeps them."""
+def test_normalize_moves_a_removed_setting_out_of_data_while_kept():
+    """Releases before 1.7.1 saved the polling interval with the connection
+    details."""
     from custom_components.dockhand import _normalized_entry_config
 
-    _, options = _normalized_entry_config(
-        CONNECTION,
-        {
-            "enable_resource_stats": True,
-            "poll_interval_fast": 25,
-            "poll_interval_precise_updates": 7200,
-            "enable_images": True,
-        },
+    data, options = _normalized_entry_config(
+        {**CONNECTION, "poll_interval": 20}, {"poll_interval_slow": 900}
     )
-    assert options["enable_container_stats"] is True
-    assert options["poll_interval"] == 25
-    assert options["poll_interval_updates"] == 7200
-    assert "enable_updates" not in options  # nothing that reads it can load v2
+    assert data == CONNECTION
+    assert options == {"poll_interval_fast": 20, "poll_interval_slow": 900}
+
+
+@pytest.mark.parametrize("schema", [(2, 4), (3, 1)])
+def test_the_next_schema_version_drops_removed_settings(schema):
+    from custom_components.dockhand import _normalized_entry_config
+
+    data, options = _normalized_entry_config(
+        {**CONNECTION, "poll_interval": 20},
+        {"poll_interval_slow": 900, "enable_images": True},
+        schema=schema,
+    )
+    assert data == CONNECTION
+    assert options == {"enable_images": True}
 
 
 def test_normalize_is_idempotent():
@@ -2903,8 +2776,27 @@ def test_normalize_is_idempotent():
 def test_renames_point_at_real_settings():
     from custom_components.dockhand.const import OPTION_KEYS, RENAMED_OPTIONS
 
-    assert {r.new for r in RENAMED_OPTIONS} <= set(OPTION_KEYS)
+    from custom_components.dockhand.const import REMOVED_OPTIONS
+
+    current = set(OPTION_KEYS) | {r.name for r in REMOVED_OPTIONS}
+    assert {r.new for r in RENAMED_OPTIONS} <= current
     assert not {r.old for r in RENAMED_OPTIONS} & set(OPTION_KEYS)
+
+
+def test_removed_settings_are_not_settings():
+    from custom_components.dockhand.const import (
+        OPTION_KEYS,
+        REMOVED_OPTIONS,
+        removed_to_drop,
+        removed_to_keep,
+    )
+
+    names = {r.name for r in REMOVED_OPTIONS}
+    assert not names & set(OPTION_KEYS)
+    assert removed_to_keep() == names
+    assert removed_to_drop() == frozenset()
+    assert removed_to_keep((2, 4)) == frozenset()
+    assert removed_to_drop((2, 4)) == names
 
 
 def test_no_retired_renames_left_in_the_code():
@@ -2918,6 +2810,8 @@ def test_no_retired_renames_left_in_the_code():
 
 
 def test_rename_lifecycle_today():
+    """1.11.0's rename isn't mirrored any more: schema 2.2's releases read
+    the new name, and 2.1's can't load a 2.3 entry."""
     from custom_components.dockhand.const import (
         renames_to_mirror,
         renames_to_translate,
@@ -2929,41 +2823,33 @@ def test_rename_lifecycle_today():
         "poll_interval": "poll_interval_fast",
         "poll_interval_updates": "poll_interval_precise_updates",
     }
-    # Not "enable_updates": it came with schema 2 itself, so no release in
-    # schema 2 reads the old name.
-    assert set(renames_to_mirror()) == {
-        "enable_container_stats",
-        "poll_interval",
-        "poll_interval_updates",
-    }
+    assert renames_to_mirror() == {}
 
 
 def test_rename_lifecycle_after_future_schema_versions():
-    """At the next schema version, minor or major, today's renames stop
-    being mirrored (only releases on that version's predecessor need them,
-    and 2.2's own releases read the new names), but are still translated
-    for entries upgrading from older releases until two majors later."""
+    """Renames are still translated for entries upgrading from older
+    releases until two majors later."""
     from custom_components.dockhand.const import (
         renames_to_mirror,
         renames_to_translate,
     )
 
-    assert renames_to_mirror((2, 3)) == {}
+    assert renames_to_mirror((2, 4)) == {}
     assert renames_to_mirror((3, 1)) == {}
-    assert "poll_interval" in renames_to_translate((2, 3))
-    assert "poll_interval" in renames_to_translate((3, 1))
+    assert "enable_container_stats" in renames_to_translate((2, 4))
+    assert "enable_container_stats" in renames_to_translate((3, 1))
     assert renames_to_translate((4, 1)) == {}
 
 
 def test_a_rename_is_mirrored_only_at_its_own_schema_version():
     from custom_components.dockhand import const
 
-    future = const.RenamedOption("poll_interval_slow", "poll_interval_x", 2, 3)
+    future = const.RenamedOption("enable_images", "enable_image_sensors", 2, 4)
     with patch.object(const, "RENAMED_OPTIONS", (*const.RENAMED_OPTIONS, future)):
-        assert const.renames_to_mirror((2, 3)) == {
-            "poll_interval_slow": "poll_interval_x"
+        assert const.renames_to_mirror((2, 4)) == {
+            "enable_images": "enable_image_sensors"
         }
-        assert const.renames_to_mirror((2, 4)) == {}
+        assert const.renames_to_mirror((2, 5)) == {}
         # A rename shipped with a new major's first minor is never mirrored:
         # no release of the previous major can load that entry.
         first = const.RenamedOption("a", "b", 3, 1)
@@ -2971,15 +2857,18 @@ def test_a_rename_is_mirrored_only_at_its_own_schema_version():
             assert const.renames_to_mirror((3, 1)) == {}
 
 
-@pytest.mark.parametrize("schema", [(2, 3), (3, 1)])
-def test_the_next_schema_version_cleans_up_the_old_name_copies(schema):
-    """What the next schema version's release does to an entry saved by
-    this one: the old-name copies are removed, values kept."""
-    from custom_components.dockhand import _normalized_entry_config
+def test_a_mirrored_rename_is_saved_under_both_names():
+    from custom_components.dockhand import _normalized_entry_config, const
 
-    saved_now = _with_mirrors({"poll_interval_fast": 25, "enable_resource_stats": True})
-    _, options = _normalized_entry_config(CONNECTION, saved_now, schema=schema)
-    assert options == {"poll_interval_fast": 25, "enable_resource_stats": True}
+    future = const.RenamedOption("enable_images", "enable_image_sensors", 2, 4)
+    with (
+        patch.object(const, "RENAMED_OPTIONS", (future,)),
+        patch.object(const, "OPTION_KEYS", (*const.OPTION_KEYS, future.new)),
+    ):
+        _, options = _normalized_entry_config(
+            CONNECTION, {"enable_images": True}, schema=(2, 4)
+        )
+    assert options == {"enable_image_sensors": True, "enable_images": True}
 
 
 async def test_migrate_refuses_an_entry_more_than_one_schema_major_old(
@@ -3000,17 +2889,22 @@ async def test_migrate_refuses_an_entry_more_than_one_schema_major_old(
 async def test_setup_normalizes_an_entry_left_behind_by_a_downgrade(
     hass: HomeAssistant,
 ):
-    """Downgrade to 1.10.x, change a setting there (it writes the old name),
-    upgrade again: the entry is already 2.2, so no migration step runs —
-    async_setup_entry's own normalization has to pick the change up."""
+    """Downgrade to 1.11.x, change a setting there (it writes the old name
+    too, and its intervals), upgrade again: the entry is already 2.3, so no
+    migration step runs — async_setup_entry's own normalization has to pick
+    the change up."""
     from custom_components.dockhand import async_setup_entry
 
     entry = _entry(
         hass,
         2,
-        2,
+        3,
         {**CONNECTION, "poll_interval": 20},
-        {"enable_container_stats": True, "enable_resource_stats": False},
+        {
+            "enable_container_stats": True,
+            "enable_resource_stats": False,
+            "poll_interval_fast": 30,
+        },
     )
     with patch(
         "custom_components.dockhand.DockhandFastCoordinator",
@@ -3019,16 +2913,14 @@ async def test_setup_normalizes_an_entry_left_behind_by_a_downgrade(
         with pytest.raises(RuntimeError, match="stop after normalizing"):
             await async_setup_entry(hass, entry)
     assert entry.data == CONNECTION
-    assert entry.options == _with_mirrors(
-        {"poll_interval_fast": 20, "enable_resource_stats": True}
-    )
+    assert entry.options == {"enable_resource_stats": True, "poll_interval_fast": 30}
 
 
 def test_config_flow_schema_version():
     """Schema changes bump the minor version only — see config_flow.py."""
     from custom_components.dockhand.config_flow import DockhandConfigFlow
 
-    assert (DockhandConfigFlow.VERSION, DockhandConfigFlow.MINOR_VERSION) == (2, 2)
+    assert (DockhandConfigFlow.VERSION, DockhandConfigFlow.MINOR_VERSION) == (2, 3)
 
 
 # ---------------------------------------------------------------------------
@@ -3041,13 +2933,9 @@ def test_config_flow_schema_version():
 def test_update_check_enabled_sensor_survives_cleanup_when_env_online(
     hass: HomeAssistant,
 ):
-    """Regression test: {entry_id}_{env_id}_update_check_enabled was being
-    incorrectly matched by the "update" (Tier 1 update entity) dispatch
-    branch, since position-2 of its unique_id is "update" — same as a
-    real Tier 1 update entity's uid — even though it's an ordinary
-    always-on binary sensor, not a container update entity at all. It
-    was getting removed on every online poll, since it never appears in
-    update_uids (which only contains real container names)."""
+    """{entry_id}_{env_id}_update_check_enabled has "update" where a
+    container update entity's unique ID does, but isn't one: cleanup
+    keeps it while the environment is online."""
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
         fast_data={
@@ -3176,7 +3064,7 @@ def test_preserves_container_when_stats_total_nonzero_but_list_empty(
                         "running": 2,
                     },
                 },
-                # No "containers" in fetch_failures — _unwrap saw HTTP 200, not an exception
+                "unconfirmed": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},
@@ -3205,6 +3093,7 @@ def test_preserves_container_entity_when_stats_total_nonzero_but_list_empty(
                     "updateCheckEnabled": True,
                     "containers": {"total": 3, "running": 2},
                 },
+                "unconfirmed": {"containers"},
             }
         },
         slow_data={"environments": {}, "schedules": []},
@@ -3312,6 +3201,7 @@ _LIVE = {
     "containers": {"e1_container_1_web"},
     "stacks": {"e1_stack_1_media"},
     "schedules": {"e1_schedule_5_system"},
+    "volumes": {"e1_volume_1_data"},
     "schedules_feature_enabled": True,
 }
 
@@ -3326,6 +3216,8 @@ _LIVE = {
         ("e1_schedule_5_system", False),
         ("e1_schedule_9_system", True),
         ("e1_schedules_hub", False),
+        ("e1_volume_1_data", False),
+        ("e1_volume_1_gone", True),
         ("e1_env_1", False),  # a live environment and its group devices
         ("e1_env_1_Containers", False),
         ("e1_env_10", True),  # environment 10 is gone; only 1 is live
@@ -3367,35 +3259,14 @@ async def test_remove_config_entry_device_while_not_loaded(hass: HomeAssistant):
 # ---------------------------------------------------------------------------
 
 
-def _setup_patches(fast, slow, update=None):
-    patches = [
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ]
-    if update is not None:
-        patches.append(
-            patch(
-                "custom_components.dockhand.DockhandUpdateCoordinator",
-                return_value=update,
-            )
-        )
-    return patches
-
-
 async def test_setup_with_a_rejected_token_starts_reauth(hass: HomeAssistant):
     entry = _make_entry(hass)
-    fast = _make_fast_coordinator({})
+    fast = fast_coordinator({})
     fast.async_config_entry_first_refresh = AsyncMock(
         side_effect=ConfigEntryAuthFailed("revoked")
     )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-    p = _setup_patches(fast, slow)
-    with p[0], p[1], p[2], p[3]:
+    slow = slow_coordinator()
+    with patch_setup(fast, slow):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.SETUP_ERROR
@@ -3411,25 +3282,44 @@ async def test_setup_survives_a_failed_first_precise_update_check(
     """Precise update versions on, and the first registry check fails: the
     integration still loads and retries on the next interval."""
     entry = _make_entry(hass, options={"enable_precise_updates": True})
-    fast = _make_fast_coordinator(
-        {1: {"stats": ENV1_STATS, "containers": [], "stacks": []}}
-    )
-    slow = _make_slow_coordinator({"environments": {}, "schedules": []})
-    update = MagicMock()
-    update.data = {"environments": {}}
-    update.last_update_success = False
-    update.async_config_entry_first_refresh = AsyncMock(
-        side_effect=UpdateFailed("registry unreachable")
-    )
-    update.async_add_listener = MagicMock(return_value=lambda: None)
-    p = _setup_patches(fast, slow, update)
-    with p[0], p[1], p[2], p[3], p[4]:
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
+    update = update_coordinator(last_update_success=False)
+    with patch_setup(fast, slow, update):
         await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert entry.runtime_data.update_coordinator is update
     # The cleanup listener is attached to it too.
     update.async_add_listener.assert_called()
+
+
+async def test_setup_does_not_wait_for_slow_data_or_update_checks(
+    hass: HomeAssistant,
+):
+    """Only the fast data is needed to set up. The slow data, a precise
+    update check (which may take minutes) and the version are fetched right
+    after, without holding setup."""
+    entry = _make_entry(hass, options={"enable_precise_updates": True})
+    fast = fast_coordinator({1: {"stats": ENV1_STATS, "containers": [], "stacks": []}})
+    slow = slow_coordinator()
+    update = update_coordinator()
+    release = asyncio.Event()
+
+    async def slow_fetch() -> None:
+        await release.wait()
+
+    slow.async_refresh = AsyncMock(side_effect=slow_fetch)
+    update.async_refresh = AsyncMock(side_effect=slow_fetch)
+    with patch_setup(fast, slow, update):
+        await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+        assert entry.state is ConfigEntryState.LOADED
+        slow.async_refresh.assert_awaited_once()
+        update.async_refresh.assert_awaited_once()
+        slow.async_config_entry_first_refresh.assert_not_called()
+        release.set()
+        await hass.async_block_till_done(wait_background_tasks=True)
 
 
 # ---------------------------------------------------------------------------
@@ -3476,6 +3366,27 @@ def test_cleanup_leaves_devices_it_cannot_parse_alone(hass: HomeAssistant):
         assert _device_exists(hass, device.id)
 
 
+def test_cleanup_skips_the_registry_while_nothing_changed(hass: HomeAssistant):
+    """A poll that changes neither the live items nor the entry's devices
+    and entities has nothing new to remove; one that does is checked."""
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data={1: {"stats": ENV1_STATS, "containers": [], "stacks": []}},
+        slow_data={"environments": {}, "schedules": []},
+    )
+    entry.runtime_data.cleanup_seen = None
+    _cleanup_stale_registry(hass, entry)
+    with patch(
+        "custom_components.dockhand.dr.async_entries_for_config_entry",
+        wraps=dr.async_entries_for_config_entry,
+    ) as listed:
+        _cleanup_stale_registry(hass, entry)
+    assert listed.call_count == 1  # only to see whether anything changed
+    gone = _add_device(hass, entry, f"{entry.entry_id}_stack_1_media")
+    _cleanup_stale_registry(hass, entry)
+    assert not _device_exists(hass, gone.id)
+
+
 def test_cleanup_removes_a_deleted_environments_stack_device(hass: HomeAssistant):
     entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
@@ -3512,42 +3423,115 @@ async def test_remove_config_entry_device_ignores_other_integrations_identifiers
         assert await async_remove_config_entry_device(hass, _removal_entry(), device)
 
 
-def test_bulk_update_not_kept_for_a_system_container_found_by_a_check(
-    hass: HomeAssistant,
-):
-    """The cleanup's live set uses the same test as the button's creation,
-    so a system container Dockhand's containers list misses (its image
-    listed by id) doesn't keep "Update all" alive."""
-    from custom_components.dockhand import _build_live_sets
-
-    container = {
-        "id": "c1",
-        "name": "dockhand",
-        "state": "running",
-        "image": "sha256:53fdaafc3ea1",
-        "systemContainer": None,
-    }
-    entry = _make_entry(hass, data={"enable_update_entities": True})
+def test_removes_the_binary_sensors_settings_switches_replaced(hass: HomeAssistant):
+    entry = _make_entry(hass)
     entry.runtime_data = _make_runtime_data(
-        fast_data={
-            1: {
-                "stats": ENV1_STATS,
-                "containers": [container],
-                "stacks": [],
-                "pending_update_container_ids": set(),
-            }
-        },
-        slow_data={"environments": {}, "schedules": []},
-        update_data={
-            "environments": {
-                1: {"c1": {"hasUpdate": True, "systemContainer": "dockhand"}}
-            }
+        fast_data={1: {"containers": [], "stacks": []}},
+        slow_data={
+            "environments": {1: {"images": [], "networks": [], "volumes": []}},
+            "schedules": [],
         },
     )
-    assert _build_live_sets(entry)["bulk_update_uids"] == set()
-    entry.runtime_data.update_coordinator.data["environments"][1]["c1"] = {
-        "hasUpdate": True
+    p = f"{entry.entry_id}_1"
+    retired = [
+        _add_entity(hass, entry, f"{p}_{s}", domain="binary_sensor")
+        for s in ("collect_activity", "update_check_enabled", "image_prune_enabled")
+    ]
+    kept = [
+        _add_entity(hass, entry, f"{p}_scanner_enabled", domain="binary_sensor"),
+        _add_entity(hass, entry, f"{p}_image_prune_enabled", domain="switch"),
+        _add_entity(hass, entry, f"{p}_collect_activity", domain="switch"),
+    ]
+    with patch("custom_components.dockhand.async_check_retired_entities") as check:
+        _cleanup_stale_registry(hass, entry)
+        # Removed after Home Assistant started: the repair is checked again.
+        check.assert_called_once_with(hass, entry.entry_id)
+        _cleanup_stale_registry(hass, entry)
+        check.assert_called_once()
+    assert not any(_entity_exists(hass, e.entity_id) for e in retired)
+    assert all(_entity_exists(hass, e.entity_id) for e in kept)
+
+
+# ---------------------------------------------------------------------------
+# Entities introduced in 2.0.0 that come and go with their environment's
+# connection type or Dockhand's stack data
+# ---------------------------------------------------------------------------
+
+
+def _env_with(connection_type, online=True, stacks=()):
+    return {
+        1: {
+            "containers": [],
+            "stacks": list(stacks),
+            "stats": {
+                "name": "myenv",
+                "online": online,
+                "connectionType": connection_type,
+            },
+        }
     }
-    assert _build_live_sets(entry)["bulk_update_uids"] == {
-        f"{entry.entry_id}_1_bulk_update"
-    }
+
+
+def test_hawser_last_seen_kept_for_hawser_edge(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("hawser-edge"),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_hawser_last_seen")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_hawser_last_seen_removed_once_the_environment_connects_otherwise(
+    hass: HomeAssistant,
+):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("hawser-standard"),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_hawser_last_seen")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_hawser_last_seen_kept_while_the_environment_is_offline(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with(None, online=False),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_hawser_last_seen")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+
+def test_stack_update_count_follows_dockhands_stack_updates(hass: HomeAssistant):
+    entry = _make_entry(hass)
+    with_updates = {"name": "app", "containers": [], "updatesAvailable": False}
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("socket", stacks=[with_updates]),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_stack_app_update_count")
+    _cleanup_stale_registry(hass, entry)
+    assert _entity_exists(hass, ent.entity_id)
+
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("socket", stacks=[{"name": "app", "containers": []}]),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)
+
+
+def test_stack_running_containers_removed_with_the_stats_option(hass: HomeAssistant):
+    entry = _make_entry(hass, options={"enable_resource_stats": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data=_env_with("socket", stacks=[{"name": "app", "containers": []}]),
+        slow_data={"environments": {}, "schedules": []},
+    )
+    ent = _add_entity(hass, entry, f"{entry.entry_id}_1_stack_app_running_containers")
+    _cleanup_stale_registry(hass, entry)
+    assert not _entity_exists(hass, ent.entity_id)

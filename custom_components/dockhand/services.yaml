@@ -1,0 +1,37 @@
+prune:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: dockhand
+          model: Environment
+    resources:
+      required: true
+      example: ["images", "networks"]
+      selector:
+        select:
+          multiple: true
+          translation_key: prune_resources
+          options:
+            - containers
+            - images
+            - volumes
+            - networks
+    all_images:
+      default: false
+      selector:
+        boolean:
+
+recreate_container:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: dockhand
+          model: Container
+    pull:
+      default: true
+      selector:
+        boolean:

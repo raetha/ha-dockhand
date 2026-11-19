@@ -1,10 +1,11 @@
 import logging
-from collections.abc import Mapping
+from collections.abc import AsyncIterator, Mapping
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, NoReturn
 from urllib.parse import quote
 
-from aiohttp import ClientSession, ClientTimeout
+from aiohttp import ClientResponse, ClientSession, ClientTimeout
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -26,6 +27,13 @@ def _q(value: Any) -> str:
     return quote(str(value), safe="")
 
 
+def _raise_failure(message: object) -> NoReturn:
+    """Raise Dockhand's own reason for a failed action, if it gave one."""
+    if message:
+        raise DockhandError(str(message))
+    raise DockhandFailedError
+
+
 class DockhandError(Exception):
     """Base class for Dockhand API errors."""
 
@@ -33,6 +41,21 @@ class DockhandError(Exception):
 class DockhandNotFoundError(DockhandError):
     """404 — the route (or the thing it names) doesn't exist. Used to
     feature-detect endpoints an older Dockhand doesn't have yet."""
+
+
+class DockhandPermissionError(DockhandError):
+    """403 — the token's Dockhand user lacks a permission the route needs.
+    Only Dockhand Enterprise roles can cause this; in the free edition every
+    authenticated user may do everything."""
+
+
+class DockhandUnexpectedResponseError(DockhandError):
+    """Dockhand answered, but not in the shape this integration expects:
+    usually a Dockhand version that changed the route."""
+
+
+class DockhandFailedError(DockhandError):
+    """Dockhand reported that an action failed without saying why."""
 
 
 class DockhandAuthError(DockhandError):
@@ -60,56 +83,83 @@ class DockhandClient:
     # Internal helper
     # ------------------------------------------------------------------ #
 
+    def _headers(self, accept: str) -> dict[str, str]:
+        headers = {"Accept": accept}
+        if self._api_token:
+            headers["Authorization"] = f"Bearer {self._api_token}"
+        return headers
+
+    @staticmethod
+    async def _raise_for_status(resp: ClientResponse, method: str, path: str) -> None:
+        if resp.status == 401:
+            body_text = ""
+            try:
+                body_text = await resp.text()
+            except Exception:
+                # Only for the log line; the 401 is raised either way.
+                pass
+            _LOGGER.warning(
+                "Dockhand: 401 Unauthorized on %s %s%s",
+                method,
+                path,
+                f" — response body: {body_text[:300]}" if body_text else "",
+            )
+            raise DockhandAuthError("Unauthorized — token invalid or revoked")
+        if resp.status >= 400:
+            text = await resp.text()
+            if resp.status == 404:
+                raise DockhandNotFoundError(f"HTTP 404: {text[:300]}")
+            if resp.status == 403:
+                raise DockhandPermissionError(f"HTTP 403: {text[:300]}")
+            raise DockhandError(f"HTTP {resp.status}: {text}")
+
     async def _request(
         self, method: str, path: str, timeout_seconds: int = 30, **kwargs: Any
     ) -> Any:
         url = f"{self._api_url}{path}"
-        headers = kwargs.pop("headers", {})
-
-        if self._api_token:
-            headers["Authorization"] = f"Bearer {self._api_token}"
-
-        headers.setdefault("Accept", "application/json")
-
+        headers = {**self._headers("application/json"), **kwargs.pop("headers", {})}
         timeout = ClientTimeout(total=timeout_seconds)
         async with self._session.request(
             method, url, headers=headers, timeout=timeout, **kwargs
         ) as resp:
-            if resp.status == 401:
-                body_text = ""
-                try:
-                    body_text = await resp.text()
-                except Exception:
-                    pass
-                _LOGGER.warning(
-                    "Dockhand: 401 Unauthorized on %s %s%s",
-                    method,
-                    path,
-                    f" — response body: {body_text[:300]}" if body_text else "",
-                )
-                raise DockhandAuthError("Unauthorized — token invalid or revoked")
-            if resp.status >= 400:
-                text = await resp.text()
-                if resp.status == 404:
-                    raise DockhandNotFoundError(f"API error 404: {text[:300]}")
-                raise DockhandError(f"API error {resp.status}: {text}")
+            await self._raise_for_status(resp, method, path)
             try:
                 return await resp.json(content_type=None)
             except Exception:
                 return await resp.text()
 
+    @asynccontextmanager
+    async def async_open_activity_stream(self) -> AsyncIterator[ClientResponse]:
+        """Dockhand's live activity feed (Server-Sent Events): container
+        events and environment online/offline changes, with a heartbeat
+        every 5 seconds. Needs the `activity: view` permission.
+
+        No overall timeout, since the stream stays open; a 30-second read
+        timeout notices a connection that died without closing, such as
+        Dockhand's host losing power.
+        """
+        path = "/api/activity/events"
+        timeout = ClientTimeout(total=None, sock_connect=10, sock_read=30)
+        async with self._session.get(
+            f"{self._api_url}{path}",
+            headers=self._headers("text/event-stream"),
+            timeout=timeout,
+        ) as resp:
+            await self._raise_for_status(resp, "GET", path)
+            yield resp
+
     async def _get_list(self, path: str) -> list[dict[str, Any]]:
         """GET an endpoint whose response is a JSON array."""
         result = await self._request("GET", path)
         if not isinstance(result, list):
-            raise DockhandError(f"Unexpected response from {path}: not a list")
+            raise DockhandUnexpectedResponseError(f"{path}: not a list")
         return result
 
     async def _get_dict(self, path: str) -> dict[str, Any]:
         """GET an endpoint whose response is a JSON object."""
         result = await self._request("GET", path)
         if not isinstance(result, dict):
-            raise DockhandError(f"Unexpected response from {path}: not an object")
+            raise DockhandUnexpectedResponseError(f"{path}: not an object")
         return result
 
     # ------------------------------------------------------------------ #
@@ -137,6 +187,17 @@ class DockhandClient:
     # ------------------------------------------------------------------ #
     # Read endpoints
     # ------------------------------------------------------------------ #
+
+    async def async_get_dockhand_version(self) -> str | None:
+        """The running Dockhand's version.
+
+        Dockhand reports it nowhere else: its changelog is bundled with each
+        build, newest release first, and needs no permission.
+        """
+        changelog = await self._get_list("/api/changelog")
+        newest = changelog[0] if changelog else None
+        version = newest.get("version") if isinstance(newest, dict) else None
+        return version if isinstance(version, str) and version else None
 
     async def async_get_environments(self) -> list[dict[str, Any]]:
         return await self._get_list("/api/environments")
@@ -256,6 +317,18 @@ class DockhandClient:
     async def async_get_stacks(self, env_id: int) -> list[dict[str, Any]]:
         return await self._get_list(f"/api/stacks?env={_q(env_id)}")
 
+    async def async_get_tags(self) -> Any:
+        """Dockhand's tag catalogue (1.0.49+): {"tags": [{id, name, color}]}."""
+        return await self._request("GET", "/api/tags")
+
+    async def async_get_container_tags(self, env_id: int) -> Any:
+        """Tags assigned to containers: {container name: [tag id]}."""
+        return await self._request("GET", f"/api/container-tags?env={_q(env_id)}")
+
+    async def async_get_stack_tags(self, env_id: int) -> Any:
+        """Tags assigned to stacks: {stack name: [tag id]}."""
+        return await self._request("GET", f"/api/stack-tags?env={_q(env_id)}")
+
     async def async_get_networks(self, env_id: int) -> list[dict[str, Any]]:
         return await self._get_list(f"/api/networks?env={_q(env_id)}")
 
@@ -273,6 +346,29 @@ class DockhandClient:
     async def async_get_volumes(self, env_id: int) -> list[dict[str, Any]]:
         """Return volumes for an environment. GET /api/volumes?env=X"""
         return await self._get_list(f"/api/volumes?env={_q(env_id)}")
+
+    async def async_get_volume_sizes(self, env_id: int) -> dict[str, int]:
+        """Each volume's size in bytes, by name, from Docker's `system df`.
+
+        GET /api/system/disk?env=X returns {"diskUsage": <Docker's
+        /system/df> | null}: null when Dockhand skips disk usage
+        (SKIP_DF_COLLECTION) or the scan times out. Docker reports -1 for a
+        size it didn't work out; those volumes are left out. Dockhand
+        1.0.58 and later answer from the same 5-minute cache as the
+        dashboard stats, so this starts no scan of its own.
+        """
+        data = await self._get_dict(f"/api/system/disk?env={_q(env_id)}")
+        usage = data.get("diskUsage")
+        volumes = usage.get("Volumes") if isinstance(usage, dict) else None
+        sizes: dict[str, int] = {}
+        for volume in volumes if isinstance(volumes, list) else []:
+            if not isinstance(volume, dict):
+                continue
+            name = volume.get("Name")
+            size = (volume.get("UsageData") or {}).get("Size")
+            if isinstance(name, str) and isinstance(size, int) and size >= 0:
+                sizes[name] = size
+        return sizes
 
     # ------------------------------------------------------------------ #
     # Container actions
@@ -295,6 +391,90 @@ class DockhandClient:
         await self._request(
             "POST", f"/api/containers/{_q(container_id)}/restart?env={_q(env_id)}"
         )
+
+    async def async_pause_container(self, env_id: int, container_id: str) -> None:
+        """POST /api/containers/{id}/pause — freeze its processes."""
+        await self._request(
+            "POST", f"/api/containers/{_q(container_id)}/pause?env={_q(env_id)}"
+        )
+
+    async def async_unpause_container(self, env_id: int, container_id: str) -> None:
+        """POST /api/containers/{id}/unpause."""
+        await self._request(
+            "POST", f"/api/containers/{_q(container_id)}/unpause?env={_q(env_id)}"
+        )
+
+    async def async_recreate_container(
+        self,
+        env_id: int,
+        container_id: str,
+        *,
+        name: str,
+        image: str,
+        pull: bool,
+        start: bool,
+    ) -> dict[str, Any]:
+        """POST /api/containers/{id}/update with no changed options: Dockhand
+        recreates the container from its current configuration, pulling the
+        image first when `pull` is set (the image is only read for that)."""
+        result = await self._request(
+            "POST",
+            f"/api/containers/{_q(container_id)}/update?env={_q(env_id)}",
+            timeout_seconds=600,
+            json={
+                "name": name,
+                "image": image,
+                "repullImage": pull,
+                "startAfterUpdate": start,
+            },
+        )
+        return result if isinstance(result, dict) else {}
+
+    async def async_prune(
+        self, env_id: int, resource: str, *, all_images: bool = False
+    ) -> dict[str, Any]:
+        """POST /api/prune/{resource} for one environment, where resource is
+        containers (stopped ones), images, volumes or networks. Returns
+        Docker's prune report. Images default to dangling ones only."""
+        query = f"env={_q(env_id)}"
+        if resource == "images":
+            query += f"&dangling={'false' if all_images else 'true'}"
+        result = await self._request(
+            "POST", f"/api/prune/{_q(resource)}?{query}", timeout_seconds=600
+        )
+        if not isinstance(result, dict):
+            raise DockhandUnexpectedResponseError(f"prune {resource}")
+        if not result.get("success", False):
+            _raise_failure(result.get("error"))
+        report = result.get("result")
+        return report if isinstance(report, dict) else {}
+
+    async def async_run_schedule(self, sched_type: str, sched_id: int) -> None:
+        """POST /api/schedules/{type}/{id}/run — one run now, outside its
+        schedule."""
+        result = await self._request(
+            "POST",
+            f"/api/schedules/{_q(sched_type)}/{_q(sched_id)}/run",
+            timeout_seconds=300,
+        )
+        if isinstance(result, dict) and result.get("success") is False:
+            _raise_failure(result.get("message"))
+
+    async def async_toggle_schedule(
+        self, sched_type: str, sched_id: int, *, system: bool = False
+    ) -> bool:
+        """Flip a schedule between enabled and paused; returns the new state.
+        Dockhand only offers a toggle, not a set."""
+        path = (
+            f"/api/schedules/system/{_q(sched_id)}/toggle"
+            if system
+            else f"/api/schedules/{_q(sched_type)}/{_q(sched_id)}/toggle"
+        )
+        result = await self._request("POST", path)
+        enabled = result.get("enabled") if isinstance(result, dict) else None
+        if not isinstance(enabled, bool):
+            raise DockhandUnexpectedResponseError("schedule toggle")
+        return enabled
 
     async def async_update_container_runtime(
         self, env_id: int, container_id: str, updates: dict[str, Any]
@@ -357,17 +537,10 @@ class DockhandClient:
                                        update is held for the minimum image age
                                        (hasUpdate False meanwhile)
         """
-        # timeout_seconds well above the default 30s: this is a real
-        # registry check across every container in the environment, not
-        # a cheap read — it can legitimately take a minute or more.
-        # Previously used the 30s default, which meant the client gave up
-        # (and any UI awaiting this, like the card's "Check for updates"
-        # button, saw the promise settle) well before Dockhand's server
-        # actually finished — the check kept running server-side, its
-        # result never retrieved, since the synchronous-mode POST has no
-        # job ID to poll afterward. Confirmed via Raetha's own report: a
-        # spinner that cleared after only a few seconds while the check
-        # was still visibly running server-side for close to a minute.
+        # Well above the default 30 s: a real registry check across every
+        # container can take a minute or more, and this synchronous POST
+        # has no job id to poll, so giving up early loses the result while
+        # the check carries on in Dockhand.
         data = await self._request(
             "POST",
             f"/api/containers/check-updates?env={_q(env_id)}",
@@ -453,21 +626,16 @@ class DockhandClient:
         hasImageUpdate. See coordinator.py's DockhandFastCoordinator
         docstring for how this integration derives its own
         pending_update_container_ids (actionable subset only) vs.
-        pending_update_details (every row) from this response, and why
-        that split exists (a real over-inclusion bug this integration had
-        before hasImageUpdate/newerVersion were known to exist on this
-        endpoint).
+        pending_update_details (every row) from this response, and why.
 
-        CORRECTED NOTE (was backwards in an earlier revision of this
-        docstring — corrected once hasImageUpdate/newerVersion were
-        actually verified from Dockhand's source): pending-updates is the
-        RICHER of the two related endpoints, not a thinner duplicate at
-        risk of deprecation. GET /api/containers/check-updates (colocated
-        on the same route file as Tier 2's own POST) is a separate, much
-        thinner cached read — {containerId, containerName, currentImage,
-        checkedAt} only, no hasImageUpdate/newerVersion at all — confirmed
-        from src/routes/api/containers/check-updates/+server.ts. Do not
-        confuse the two, and do not switch this method to that route.
+        Pending-updates is the RICHER of the two related endpoints, not a
+        thinner duplicate at risk of deprecation.
+        GET /api/containers/check-updates (on the same route file as Tier
+        2's own POST) is a separate, much thinner cached read —
+        {containerId, containerName, currentImage, checkedAt} only, no
+        hasImageUpdate/newerVersion at all — confirmed from
+        src/routes/api/containers/check-updates/+server.ts. Do not confuse
+        the two, and do not switch this method to that route.
         """
         data = await self._request(
             "GET", f"/api/containers/pending-updates?env={_q(env_id)}"
@@ -514,6 +682,103 @@ class DockhandClient:
         )
         settings = result.get("settings") if isinstance(result, dict) else None
         return settings if isinstance(settings, dict) else {}
+
+    async def async_set_update_check_settings(
+        self, env_id: int, settings: dict[str, Any]
+    ) -> None:
+        """Save an environment's update-check settings.
+
+        POST /api/environments/{id}/update-check replaces every field it
+        knows (a missing one goes back to Dockhand's default), so callers
+        send the current settings with their change.
+        """
+        body = {
+            key: settings[key]
+            for key in ("enabled", "cron", "autoUpdate", "vulnerabilityCriteria")
+            if key in settings
+        }
+        await self._request(
+            "POST", f"/api/environments/{_q(env_id)}/update-check", json=body
+        )
+
+    async def async_update_environment(self, env_id: int, **fields: Any) -> None:
+        """Change some of an environment's own settings (collectActivity,
+        collectMetrics): PUT /api/environments/{id} changes only the fields
+        sent."""
+        await self._request("PUT", f"/api/environments/{_q(env_id)}", json=fields)
+
+    async def async_get_image_prune_settings(self, env_id: int) -> dict[str, Any]:
+        """GET /api/environments/{id}/image-prune: {enabled, cronExpression,
+        pruneMode ("dangling" | "all")}."""
+        result = await self._request(
+            "GET", f"/api/environments/{_q(env_id)}/image-prune"
+        )
+        settings = result.get("settings") if isinstance(result, dict) else None
+        return settings if isinstance(settings, dict) else {}
+
+    async def async_set_image_prune_settings(
+        self, env_id: int, settings: dict[str, Any]
+    ) -> None:
+        """POST /api/environments/{id}/image-prune; like update-check, it
+        replaces every field, so callers send the current ones too."""
+        body = {
+            key: settings[key]
+            for key in ("enabled", "cronExpression", "pruneMode")
+            if key in settings
+        }
+        await self._request(
+            "POST", f"/api/environments/{_q(env_id)}/image-prune", json=body
+        )
+
+    async def async_get_scanner_setting(self, env_id: int | None) -> str | None:
+        """The vulnerability scanner ("none", "grype", "trivy", "both") for
+        an environment, which falls back to Dockhand's default, or with no
+        `env_id` that default itself. GET /api/settings/scanner without its
+        Docker checks (settingsOnly)."""
+        query = f"env={_q(env_id)}&" if env_id is not None else ""
+        result = await self._request(
+            "GET", f"/api/settings/scanner?{query}settingsOnly=true"
+        )
+        settings = result.get("settings") if isinstance(result, dict) else None
+        scanner = settings.get("scanner") if isinstance(settings, dict) else None
+        return scanner if isinstance(scanner, str) else None
+
+    async def async_set_scanner(self, env_id: int | None, scanner: str) -> None:
+        """POST /api/settings/scanner: an environment's scanner, or with no
+        `env_id` Dockhand's default. Fields left out keep their values."""
+        body: dict[str, Any] = {"scanner": scanner}
+        if env_id is not None:
+            body["envId"] = env_id
+        await self._request("POST", "/api/settings/scanner", json=body)
+
+    async def async_get_event_collection(self) -> dict[str, Any] | None:
+        """How Dockhand collects Docker's events: {"mode": "stream" | "poll",
+        "interval": seconds between polls}, from GET /api/settings/general.
+        None without the permission to view settings, which leaves them out."""
+        result = await self._request("GET", "/api/settings/general")
+        mode = result.get("eventCollectionMode") if isinstance(result, dict) else None
+        if mode not in ("stream", "poll"):
+            return None
+        interval = result.get("eventPollInterval")
+        return {
+            "mode": mode,
+            "interval": interval // 1000 if isinstance(interval, int) else None,
+        }
+
+    async def async_set_event_collection_mode(self, mode: str) -> None:
+        """POST /api/settings/general with only the event collection mode;
+        the settings left out keep their values."""
+        await self._request(
+            "POST", "/api/settings/general", json={"eventCollectionMode": mode}
+        )
+
+    async def async_set_event_poll_interval(self, seconds: int) -> None:
+        """POST /api/settings/general with only the event poll interval."""
+        await self._request(
+            "POST",
+            "/api/settings/general",
+            json={"eventPollInterval": seconds * 1000},
+        )
 
     async def async_get_version_notes(
         self, env_id: int, container_id: str, versions: list[str]
@@ -609,7 +874,7 @@ class DockhandClient:
         )
         job_id = result.get("jobId") if isinstance(result, dict) else None
         if not job_id:
-            raise DockhandError("batch-update-stream did not return a job ID")
+            raise DockhandUnexpectedResponseError("batch-update-stream: no job ID")
         return str(job_id)
 
     async def async_get_job(self, job_id: str) -> dict[str, Any]:

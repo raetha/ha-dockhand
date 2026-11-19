@@ -1,84 +1,50 @@
 # Quality scale
 
-The integration aims to meet every rule of Home Assistant's
-[integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/)
-up to and including Platinum. `custom_components/dockhand/quality_scale.yaml`
-records each rule's status (`done`, `exempt` or `todo`) and how it's met.
+The integration aims to meet every rule of Home Assistant's [integration quality scale](https://developers.home-assistant.io/docs/core/integration-quality-scale/) up to and including Platinum. `custom_components/dockhand/quality_scale.yaml` records each rule's status (`done`, `exempt` or `todo`) and how it's met.
 
-Home Assistant only validates that file for core integrations, and the rules
-change over time (new rules are added, existing ones get stricter), so
-compliance drifts unless it's checked. This page is how it's kept current.
+Home Assistant only validates that file for core integrations, and the rules change over time (new rules are added, existing ones get stricter), so compliance drifts unless it's checked. This page is how it's kept current.
 
 ## What's checked automatically
 
 | Check | Where | Catches |
 |---|---|---|
-| 2026-11-03 | 1.11.3 | No integration code changes (comments only: renamed doc paths); the release brings the new README, test builds and `dockhand.zip` packaging to HACS. No rule changes since the 1.11.2 review; no `quality_scale.yaml` comments made stale. |
 | `scripts/check_quality_scale.py` | CI (`quality-scale` job), `scripts/run_tests.sh --full` | A rule Home Assistant added or retired that `quality_scale.yaml` doesn't match; an unknown status; a `todo`/`exempt` rule with no reason given |
 | `mypy` with `mypy.ini` (Home Assistant core's strict settings) | CI (`tests` job), `run_tests.sh --full` | **strict-typing** — including missing `@override` and use of deprecated Home Assistant APIs |
 | `pytest --cov-fail-under=100` | CI (`tests` job), `run_tests.sh --full` | Any line no test runs (**test-coverage** itself asks for 95%) |
 | hassfest | CI | Manifest, translations, and `quality_scale.yaml` syntax |
 | `tests/test_config_flow.py` translation tests | pytest | **entity-translations**, **exception-translations**, **icon-translations** keys out of sync |
 
-`check_quality_scale.py` fetches the rule list from Home Assistant core's
-`dev` branch (`script/hassfest/quality_scale.py`, the same list hassfest
-uses), so a new rule can fail CI on a commit that didn't touch anything.
-That's intended: it's the signal to review the new rule.
+`check_quality_scale.py` fetches the rule list from Home Assistant core's `dev` branch (`script/hassfest/quality_scale.py`, the same list hassfest uses), so a new rule can fail CI on a commit that didn't touch anything. That's intended: it's the signal to review the new rule.
 
 ## Release review
 
-Part of every release's checklist (`docs/development.md`). The automated checks
-don't judge whether a rule marked `done` is still really done, so:
+Part of every release's checklist (`docs/development.md`). The automated checks don't judge whether a rule marked `done` is still really done, so:
 
-1. Run `bash scripts/run_tests.sh --full`. A rule-list failure means a rule
-   was added or retired: read its page (below) and add or remove it in
-   `quality_scale.yaml`.
-2. Read what changed in the rules since the last review:
-   `git log --since=<last review date> -- docs/core/integration-quality-scale/`
-   in [home-assistant/developers.home-assistant](https://github.com/home-assistant/developers.home-assistant),
-   and the "Quality scale" posts on the
-   [developer blog](https://developers.home-assistant.io/blog/).
-   A rule's requirements can change without its name changing.
-3. For anything this release added (an entity, an action, an option, a
-   repair issue, a device type), go through the rules it touches — for
-   example a new action needs **action-exceptions**, a new option
-   **docs-configuration-parameters**, a new entity **entity-translations**,
-   **icon-translations**, **entity-category** and
-   **entity-disabled-by-default**.
-4. Re-read each `quality_scale.yaml` comment the release made stale; they
-   describe how the rule is met, so they drift with the code. Name what's
-   covered rather than counting it (no numbers of tests, sensors, locales or
-   exception keys): counts go stale with every routine addition.
-5. When Home Assistant core changes its `mypy.ini` `[mypy]` section or the
-   mypy version it pins, copy the change into `mypy.ini` and
-   `requirements_test.txt`.
+1. Run `bash scripts/run_tests.sh --full`. A rule-list failure means a rule was added or retired: read its page (below) and add or remove it in `quality_scale.yaml`.
+2. Read what changed in the rules since the last review: `git log --since=<last review date> -- docs/core/integration-quality-scale/` in [home-assistant/developers.home-assistant](https://github.com/home-assistant/developers.home-assistant), and the "Quality scale" posts on the [developer blog](https://developers.home-assistant.io/blog/). A rule's requirements can change without its name changing.
+3. For anything this release added (an entity, an action, an option, a repair issue, a device type), go through the rules it touches — for example a new action needs **action-exceptions**, a new option **docs-configuration-parameters**, a new entity **entity-translations**, **icon-translations**, **entity-category** and **entity-disabled-by-default**.
+4. Re-read each `quality_scale.yaml` comment the release made stale; they describe how the rule is met, so they drift with the code. Name what's covered rather than counting it (no numbers of tests, sensors, locales or exception keys): counts go stale with every routine addition.
+5. When Home Assistant core changes its `mypy.ini` `[mypy]` section or the mypy version it pins, copy the change into `mypy.ini` and `requirements_test.txt`.
 6. Record the review below.
 
 Rule pages: `https://developers.home-assistant.io/docs/core/integration-quality-scale/rules/<rule-name>`.
 
 ## Notes on rules where the reasoning isn't obvious
 
-- **action-exceptions** — not exempt, even though the integration registers
-  no service actions of its own: the rule covers platform actions (pressing
-  a button, turning a switch, setting a number, installing an update).
-- **parallel-updates** — `0` on the action platforms too. Each action is one
-  request to Dockhand, which queues the Docker work itself; see the comment
-  in `quality_scale.yaml`.
-- **strict-typing** — Home Assistant 2026.10 switched forms to probatio
-  (and loads it in place of voluptuous), and moved `BinarySensorDeviceClass`
-  to `binary_sensor.const`. The minimum supported version predates both, so
-  `config_flow.py` keeps voluptuous behind `_form()`, and the
-  `binary_sensor` import carries a `type: ignore`. Both go once the minimum
-  reaches 2026.10 (see `docs/backlog.md`).
-- **stale-devices** — automatic cleanup deliberately keeps what it can't
-  confirm is gone, which is why `async_remove_config_entry_device` exists.
-- **discovery**, **discovery-update-info** — exempt: Dockhand advertises
-  itself in no way Home Assistant can discover.
+- **action-exceptions** — not exempt, even though the integration registers no service actions of its own: the rule covers platform actions (pressing a button, turning a switch, setting a number, installing an update).
+- **parallel-updates** — `0` on the action platforms too. Each action is one request to Dockhand, which queues the Docker work itself; see the comment in `quality_scale.yaml`.
+- **strict-typing** — Home Assistant 2026.10 switched forms to probatio (and loads it in place of voluptuous), and moved `BinarySensorDeviceClass` to `binary_sensor.const`. The minimum supported version predates both, so `config_flow.py` keeps voluptuous behind `_form()`, and the `binary_sensor` import carries a `type: ignore`. Both go once the minimum reaches 2026.10 (see `docs/backlog.md`).
+- **stale-devices** — automatic cleanup deliberately keeps what it can't confirm is gone, which is why `async_remove_config_entry_device` exists.
+- **discovery**, **discovery-update-info** — exempt: Dockhand advertises itself in no way Home Assistant can discover.
 
 ## Review log
 
 | Date | Release | Outcome |
 |---|---|---|
+| 2026-11-18 | 2.0.0 | Re-checked for what landed since 11-17: the Git stack button's translated names (**entity-translations**: both names come from `strings.json`, the entity ID from the English one) and its rewrite on the fast data. Nothing else changed a rule's status. |
+| 2026-11-17 | 2.0.0 | Re-checked for what landed since 11-15: the Uptime sensor's move to Home Assistant's uptime device class, volume devices (**devices**, **dynamic-devices**, **stale-devices**: registered with the other env devices, removed by the cleanup when gone or when volumes are off, refused for manual removal while live; comments updated), the volume size sensor and the image state (**entity-translations**, **icon-translations**, **entity-category**), and a registry migration for the renamed volume entity. The rule list still matches Home Assistant's (`run_tests.sh --full`). |
+| 2026-11-15 | 2.0.0 | No rule or developer-blog changes since the 1.11.3 review (developers.home-assistant last changed 2026-10-16); core's `[mypy]` section and its mypy 2.4.1 pin unchanged. This release's additions checked against the rules they touch: the two actions (**action-setup**, **action-exceptions**, **docs-actions**), the new entities and the event platform (**entity-translations**, **icon-translations**, **entity-category**, **entity-disabled-by-default**), and the new repair issues. Stale comments updated: **appropriate-polling** (the version coordinator and the live feed), **entity-disabled-by-default** (now listed in `entity_defaults.py`; the settings are switches, enabled), **repair-issues**, **icon-translations** and **docs-removal-instructions**. |
+| 2026-11-03 | 1.11.3 | No integration code changes (comments only: renamed doc paths); the release brings the new README, test builds and `dockhand.zip` packaging to HACS. No rule changes since the 1.11.2 review; no `quality_scale.yaml` comments made stale. |
 | 2026-11-02 | 1.11.2 | Bug-fix release; no new entities, actions or options: Dockhand's own release check feeds the existing container update entity, and diagnostics gained system-container and self-update fields. No rule or developer-blog changes since the 1.11.1 review. Core dev now pins mypy 2.4.1 (taken); its `[mypy]` section is unchanged apart from the performance-only `native_parser`/`num_workers`, already left out. **diagnostics** comment refreshed to describe the update-check summary. |
 | 2026-10-29 | 1.11.1 | Bug-fix release; no new entities, actions or options. No rule or developer-blog changes since the 1.11.0 review, and core's `[mypy]` section and mypy pin unchanged. No `quality_scale.yaml` comments made stale. |
 | 2026-10-19 | 1.11.0 | Full re-audit against the rules as of Home Assistant 2026.10. Added the new Bronze rules **docs-triggers** and **docs-conditions** (exempt). Fixed **strict-typing**, which was marked done without mypy ever having run: added `mypy.ini` with core's settings and fixed what it found. **action-exceptions** corrected from exempt to done. Added `entity.py` (**common-modules**) and `async_remove_config_entry_device` (**stale-devices**). README gained Use cases, more examples, and Known limitations. Added the automated checks above. Tests brought to 100% line coverage (from about 96%), and the gate raised to match. |

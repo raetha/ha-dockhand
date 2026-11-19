@@ -25,8 +25,9 @@ from custom_components.dockhand.migration import (
     migrate_1_7_3_entry_scoped_unique_ids,
     migrate_1_8_0_container_stats_option,
     migrate_1_8_0_reenable_container_stats_entities,
-    migrate_1_8_0_remove_consolidated_disk_sensors,
     migrate_1_9_0_entry_scoped_device_identifiers,
+    migrate_2_0_0_image_and_network_unique_ids,
+    migrate_2_0_0_volume_unique_ids,
 )
 
 # ---------------------------------------------------------------------------
@@ -143,6 +144,132 @@ def test_volume_entity_migrated(hass: HomeAssistant):
     ent = _add_entity(hass, entry, "dockhand_volume_1_mydata")
     migrate_1_7_3_entry_scoped_unique_ids(hass, ENTRY_ID)
     assert _get_uid(hass, ent.entity_id) == f"{ENTRY_ID}_1_volume_mydata"
+
+
+def test_volume_entity_gets_its_suffix(hass: HomeAssistant):
+    """1.x's one volume entity, named after its volume, becomes the
+    volume's container count; 2.0's own entities, the size and anything
+    that only looks like a volume entity, are left alone."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+
+    def add(uid: str, name: str | None, key: str | None = None):
+        return registry.async_get_or_create(
+            "sensor",
+            "dockhand",
+            uid,
+            config_entry=entry,
+            original_name=name,
+            translation_key=key,
+        )
+
+    old = add(f"{ENTRY_ID}_1_volume_my_data", "my_data")
+    size = add(f"{ENTRY_ID}_1_volume_my_data_size", None, "volume_size")
+    other = add(f"{ENTRY_ID}_1_network_abc", "abc")
+    named_otherwise = add(f"{ENTRY_ID}_1_volume_cache", "Something else")
+    other_entry = add("another_1_volume_x", "x")
+
+    for _ in range(2):  # idempotent
+        migrate_2_0_0_volume_unique_ids(hass, ENTRY_ID)
+
+    assert _get_uid(hass, old.entity_id) == (
+        f"{ENTRY_ID}_1_volume_my_data_container_count"
+    )
+    assert _get_uid(hass, size.entity_id) == f"{ENTRY_ID}_1_volume_my_data_size"
+    assert _get_uid(hass, other.entity_id) == f"{ENTRY_ID}_1_network_abc"
+    assert _get_uid(hass, named_otherwise.entity_id) == f"{ENTRY_ID}_1_volume_cache"
+    assert _get_uid(hass, other_entry.entity_id) == "another_1_volume_x"
+
+
+def test_volume_entity_already_recreated_is_dropped(hass: HomeAssistant):
+    """If the new entity already exists, the old one only duplicates it."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+    old = registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        f"{ENTRY_ID}_1_volume_data",
+        config_entry=entry,
+        original_name="data",
+    )
+    new = _add_entity(hass, entry, f"{ENTRY_ID}_1_volume_data_container_count")
+    migrate_2_0_0_volume_unique_ids(hass, ENTRY_ID)
+    assert registry.async_get(old.entity_id) is None
+    assert registry.async_get(new.entity_id) is not None
+
+
+def _add_1x(hass, entry, uid: str, name: str | None, entity_id: str | None = None):
+    """A sensor as 1.x left it: named, without a translation key."""
+    registry = er.async_get(hass)
+    return registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        uid,
+        config_entry=entry,
+        original_name=name,
+        suggested_object_id=entity_id,
+    )
+
+
+def test_images_and_networks_are_keyed_by_name(hass: HomeAssistant):
+    """1.x keyed them by Docker's IDs. Each becomes its repository's or
+    network's entity, keeping its entity ID; of two tags of one
+    repository the unsuffixed entity stays; untagged images go (2.0 groups
+    them under one new entity); 2.0's own entities are left alone."""
+    entry = _make_entry(hass)
+    registry = er.async_get(hass)
+    latest = _add_1x(
+        hass,
+        entry,
+        f"{ENTRY_ID}_1_image_aaa",
+        "jellyfin/jellyfin:latest",
+        "env_jellyfin",
+    )
+    pinned = _add_1x(
+        hass,
+        entry,
+        f"{ENTRY_ID}_1_image_bbb",
+        "jellyfin/jellyfin:10.9",
+        "env_jellyfin_2",
+    )
+    untagged = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_ccc", "0123456789ab")
+    unknown = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_ddd", "unknown")
+    nameless = _add_1x(hass, entry, f"{ENTRY_ID}_1_network_eee", None)
+    network = _add_1x(hass, entry, f"{ENTRY_ID}_2_network_fff", "proxy_default")
+    # 1.11 named an image by its repository alone, which can hold a port.
+    ported = _add_1x(hass, entry, f"{ENTRY_ID}_2_image_ggg", "registry.lan:5000/app")
+    current = registry.async_get_or_create(
+        "sensor",
+        "dockhand",
+        f"{ENTRY_ID}_1_image_nginx",
+        config_entry=entry,
+        original_name="nginx",
+        translation_key="image",
+    )
+    other_entry = _add_1x(hass, entry, "another_1_image_x", "x:1")
+
+    for _ in range(2):  # idempotent
+        migrate_2_0_0_image_and_network_unique_ids(hass, ENTRY_ID)
+
+    assert latest.entity_id == "sensor.env_jellyfin"
+    assert _get_uid(hass, latest.entity_id) == f"{ENTRY_ID}_1_image_jellyfin/jellyfin"
+    assert _get_uid(hass, network.entity_id) == f"{ENTRY_ID}_2_network_proxy_default"
+    assert _get_uid(hass, ported.entity_id) == (
+        f"{ENTRY_ID}_2_image_registry.lan:5000/app"
+    )
+    for gone in (pinned, untagged, unknown, nameless):
+        assert registry.async_get(gone.entity_id) is None
+    assert _get_uid(hass, current.entity_id) == f"{ENTRY_ID}_1_image_nginx"
+    assert _get_uid(hass, other_entry.entity_id) == "another_1_image_x"
+
+
+def test_a_migrated_image_whose_repository_is_gone_stays(hass: HomeAssistant):
+    """Until 2.0 sets it up again it keeps its 1.x name and no translation
+    key, which mustn't look like a second entity of its repository."""
+    entry = _make_entry(hass)
+    image = _add_1x(hass, entry, f"{ENTRY_ID}_1_image_nginx", "nginx:latest")
+    migrate_2_0_0_image_and_network_unique_ids(hass, ENTRY_ID)
+    assert _get_uid(hass, image.entity_id) == f"{ENTRY_ID}_1_image_nginx"
 
 
 def test_update_entity_migrated(hass: HomeAssistant):
@@ -540,19 +667,12 @@ def test_container_stats_option_untouched_when_nothing_enabled(hass: HomeAssista
 # migrate_1_8_0_reenable_container_stats_entities
 # ---------------------------------------------------------------------------
 #
-# Real, reported bug: a pre-1.8.0 container-stats entity can come back
-# still disabled once a user turns "Enable container stats" on — not our
-# own bug, but HA's own DeletedRegistryEntry mechanism, which restores a
-# recreated entity's prior disabled_by to preserve deliberate user
-# customizations across reloads/removals. It can't tell "the user
-# disabled this" apart from "this was only ever disabled by the
-# pre-1.8.0 default." The fix only touches entities disabled specifically
-# via RegistryEntryDisabler.INTEGRATION (never a user's own choice,
-# always a default) and leaves RegistryEntryDisabler.USER alone. A
-# genuine one-time migration, not a per-load reconciliation — within
-# 1.8.0's own architecture these entities are only ever created with
-# enabled_default=True, so there's no ongoing source of fresh
-# INTEGRATION-disabled entries to keep checking for.
+# A pre-1.8.0 container stats entity could come back still disabled once
+# "Enable container stats" was turned on: Home Assistant restores a
+# recreated entity's earlier disabled_by, and can't tell a user's choice
+# from the old default. The migration only re-enables entities disabled by
+# RegistryEntryDisabler.INTEGRATION (always a default) and leaves USER
+# alone. It runs once: 1.8.0 and later create these enabled.
 
 
 def test_reenables_container_stats_entity_disabled_by_integration(hass: HomeAssistant):
@@ -646,43 +766,24 @@ def test_container_stats_option_ignores_unrelated_entity(hass: HomeAssistant):
 
 
 # ---------------------------------------------------------------------------
-# migrate_1_8_0_remove_consolidated_disk_sensors
+# Containers and build cache disk sizes
 # ---------------------------------------------------------------------------
-#
-# Real, reported issue: "Containers disk usage" and "Build cache size" were
-# consolidated into attributes on the single "Disk usage" sensor, but their
-# entity classes being removed from sensor.py never removed their registry
-# entries — they'd have orphaned on a future restart, forcing manual
-# cleanup, rather than being cleanly gone the moment a user upgrades.
 
 
-def test_removes_retired_containers_size_entity(hass: HomeAssistant):
-    """Unique_id suffix verified against the actual released v1.7.4
-    source — this sensor's unique_id ("_containers_size") didn't match
-    its own translation_key ("containers_disk_usage"), which is exactly
-    what caused the real, reported bug: assuming they matched (like
-    build_cache_size's did) meant this specific entity was never
-    actually cleaned up."""
+def test_disk_size_sensors_survive_the_migrations(hass: HomeAssistant):
+    """1.8.0 removed the "Containers disk usage" and "Build cache size"
+    sensors; 2.0.0 brought them back under the same unique IDs. Every
+    setup's migrations must leave them, and a volume whose name ends in
+    "_containers", alone."""
     entry = _make_entry(hass)
-    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_containers_size")
-    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
-    assert er.async_get(hass).async_get(ent.entity_id) is None
-
-
-def test_removes_retired_build_cache_size_entity(hass: HomeAssistant):
-    entry = _make_entry(hass)
-    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_build_cache_size")
-    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
-    assert er.async_get(hass).async_get(ent.entity_id) is None
-
-
-def test_does_not_remove_current_disk_usage_entity(hass: HomeAssistant):
-    """The current, consolidated sensor must not be swept up by its
-    retired predecessors' cleanup — different unique_id suffix entirely."""
-    entry = _make_entry(hass)
-    ent = _add_entity(hass, entry, f"{ENTRY_ID}_1_disk_usage")
-    migrate_1_8_0_remove_consolidated_disk_sensors(hass, entry)
-    assert er.async_get(hass).async_get(ent.entity_id) is not None
+    kept = [
+        _add_entity(hass, entry, f"{ENTRY_ID}_1_containers_size"),
+        _add_entity(hass, entry, f"{ENTRY_ID}_1_build_cache_size"),
+        _add_entity(hass, entry, f"{ENTRY_ID}_1_volume_app_containers_size"),
+    ]
+    async_run_migrations(hass, entry, {})
+    for ent in kept:
+        assert er.async_get(hass).async_get(ent.entity_id) is not None
 
 
 # ---------------------------------------------------------------------------
@@ -876,5 +977,9 @@ def test_registry_migration_lifecycle():
     assert registry_migrations_to_run() == list(REGISTRY_MIGRATIONS)
     # At the next schema major, schema 1 installs can't be set up any more,
     # so only the migrations from schema 2 releases still run.
-    assert [m.release for m in registry_migrations_to_run(3)] == ["1.9.0"]
+    assert [m.release for m in registry_migrations_to_run(3)] == [
+        "1.9.0",
+        "2.0.0",
+        "2.0.0",
+    ]
     assert registry_migrations_to_run(4) == []

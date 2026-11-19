@@ -3,9 +3,9 @@
 Each function is named after the release whose registry format it updates
 from. They're only for changes between released versions (e.g. 1.7.3 ->
 1.8.0) — never for churn within an unreleased dev cycle (an entity added
-and removed before ever shipping): Raetha's own testing reloads or re-adds
+and removed before ever shipping): testers of a dev build reload or re-add
 the integration, so a migration for interim-build-only artifacts adds
-permanent maintenance cost for zero real benefit.
+permanent maintenance cost for no benefit.
 
 How long each is kept follows the config schema rules (see RenamedOption
 in const.py and docs/architecture.md §4): REGISTRY_MIGRATIONS records the
@@ -27,7 +27,14 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .const import CONF_ENABLE_RESOURCE_STATS, DOMAIN, SCHEMA_VERSION
-from .helpers import CONTAINER_STATS_SUFFIXES, _device_by_identifier
+from .helpers import (
+    CONTAINER_STATS_SUFFIXES,
+    VOLUME_SUFFIXES,
+    _device_by_identifier,
+    image_unique_id,
+    network_unique_id,
+    tag_repository,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -381,8 +388,7 @@ def migrate_1_8_0_reenable_container_stats_entities(
     it can't distinguish "the user chose to disable this" from "this was
     only ever disabled because of the pre-1.8.0 default."
 
-    A genuine one-time migration, not a per-load reconciliation (an
-    earlier version of this fix ran on every setup instead) — within
+    A genuine one-time migration, not a per-load reconciliation: within
     1.8.0's own architecture, these entities are only ever created with
     enabled_default=True (gated entirely on the option itself; see
     sensor.py's creation loop), so there is no code path going forward
@@ -416,49 +422,6 @@ def migrate_1_8_0_reenable_container_stats_entities(
             _LOGGER.info(
                 "Dockhand: re-enabled container stats entity %s — was disabled "
                 "only due to the pre-1.8.0 default, not a user choice",
-                entity_entry.entity_id,
-            )
-
-
-# unique_id suffixes for the two pre-1.8.0 sensors that got consolidated
-# into the single "disk_usage" sensor's attributes (images/volumes/
-# containers/build-cache sizes all on one entity now, instead of two
-# separate ones). Their entity classes were removed from sensor.py
-# entirely, but nothing ever removed their registry entries — orphaned
-# entities that HA would eventually flag on a future restart, forcing
-# manual cleanup, rather than being cleanly gone the moment a user
-# upgrades.
-#
-# Verified directly against the actual released v1.7.4 source
-# (github.com/raetha/ha-dockhand, tag v1.7.4) rather than assumed from
-# the translation_key naming — those two aren't the same thing, and
-# guessing wrong here was a real, reported bug: the disk sensor's
-# unique_id used "_containers_size", not "_containers_disk_usage" (its
-# translation_key, used only for the UI label). build_cache_size's
-# unique_id suffix happened to match its own translation_key exactly,
-# which is the only reason that one worked while this one didn't.
-_RETIRED_DISK_SENSOR_SUFFIXES = ("_containers_size", "_build_cache_size")
-
-
-def migrate_1_8_0_remove_consolidated_disk_sensors(
-    hass: HomeAssistant,
-    entry: ConfigEntry,
-) -> None:
-    """Remove the pre-1.8.0 "Containers disk usage" and "Build cache
-    size" sensors, now that both are attributes on the single "Disk
-    usage" sensor instead of separate entities. A genuine one-time
-    migration — this is a fixed, one-time population from before the
-    consolidation, not something that can recur, the same reasoning as
-    migrate_1_8_0_reenable_container_stats_entities above.
-    """
-    ent_registry = er.async_get(hass)
-    for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
-        uid = entity_entry.unique_id or ""
-        if uid.endswith(_RETIRED_DISK_SENSOR_SUFFIXES):
-            ent_registry.async_remove(entity_entry.entity_id)
-            _LOGGER.info(
-                "Dockhand: removed retired entity %s — consolidated into "
-                "the single disk_usage sensor's attributes in 1.8.0",
                 entity_entry.entity_id,
             )
 
@@ -570,6 +533,105 @@ def migrate_1_9_0_entry_scoped_device_identifiers(
         )
 
 
+def migrate_2_0_0_volume_unique_ids(hass: HomeAssistant, entry_id: str) -> None:
+    """Give each volume's container count sensor its suffix.
+
+    Up to 1.11 a volume had one entity, `{entry_id}_{env_id}_volume_{name}`.
+    In 2.0.0 a volume is a device with several entities, each ID ending in
+    one of VOLUME_SUFFIXES, so that no volume's IDs can equal another's
+    whose name ends in a suffix. Renaming keeps the entity's ID, history and
+    settings.
+
+    The old entity is told apart by its name: 1.x named it after the
+    volume, while every 2.0 volume entity has a translated name instead.
+    That also makes this idempotent.
+    """
+    ent_registry = er.async_get(hass)
+    prefix = f"{entry_id}_"
+    for entity in er.async_entries_for_config_entry(ent_registry, entry_id):
+        if entity.domain != "sensor" or entity.translation_key is not None:
+            continue
+        parts = entity.unique_id.removeprefix(prefix).split("_", 2)
+        if (
+            not entity.unique_id.startswith(prefix)
+            or len(parts) != 3
+            or not parts[0].isdigit()
+            or parts[1] != "volume"
+            or parts[2] != entity.original_name
+        ):
+            continue
+        new_uid = f"{entity.unique_id}_{VOLUME_SUFFIXES[0]}"
+        if ent_registry.async_get_entity_id("sensor", DOMAIN, new_uid):
+            ent_registry.async_remove(entity.entity_id)
+            continue
+        ent_registry.async_update_entity(entity.entity_id, new_unique_id=new_uid)
+        _LOGGER.debug("Dockhand: renamed volume entity %s", entity.entity_id)
+
+
+def migrate_2_0_0_image_and_network_unique_ids(
+    hass: HomeAssistant, entry_id: str
+) -> None:
+    """Key image and network entities by name instead of Docker's IDs.
+
+    In 1.x an image entity was `{entry_id}_{env_id}_image_{image ID}`, named
+    after its repository (or its first `repository:tag`), and a network entity
+    `{entry_id}_{env_id}_network_{network ID}`, named after the network, so
+    each pull of an image, and each time Compose recreated a network,
+    replaced the entity. 2.0.0 has one image entity per repository and keys
+    networks by name, so the old entity's name gives the new ID. Renaming
+    keeps the entity's ID, history and settings.
+
+    The old entities are told apart by their translation key, which 1.x
+    didn't give them, and by a unique ID that isn't already the new one, so
+    this is idempotent. Of several 1.x images of one repository (two tags),
+    the one with the shortest entity ID (no suffix) is kept and the others
+    are removed; so are untagged 1.x images, named by their short ID, which
+    2.0.0 groups under one entity.
+    """
+    ent_registry = er.async_get(hass)
+    prefix = f"{entry_id}_"
+    old = []
+    for entity in er.async_entries_for_config_entry(ent_registry, entry_id):
+        if entity.domain != "sensor" or entity.translation_key is not None:
+            continue
+        parts = entity.unique_id.removeprefix(prefix).split("_", 2)
+        if (
+            entity.unique_id.startswith(prefix)
+            and len(parts) == 3
+            and parts[0].isdigit()
+            and parts[1] in ("image", "network")
+        ):
+            old.append((entity, parts[0], parts[1]))
+    for entity, env_id, kind in sorted(old, key=lambda item: len(item[0].entity_id)):
+        name = entity.original_name
+        if kind == "network":
+            new_uid = network_unique_id(entry_id, int(env_id), name) if name else None
+        elif name and name != "unknown" and not _is_short_image_id(name):
+            new_uid = image_unique_id(entry_id, int(env_id), tag_repository(name))
+        else:
+            new_uid = None
+        if new_uid == entity.unique_id:
+            continue
+        if new_uid is None or ent_registry.async_get_entity_id(
+            "sensor", DOMAIN, new_uid
+        ):
+            ent_registry.async_remove(entity.entity_id)
+            _LOGGER.debug(
+                "Dockhand: removed %s entity %s (%s)",
+                kind,
+                entity.entity_id,
+                "nothing to key it by" if new_uid is None else "a duplicate",
+            )
+            continue
+        ent_registry.async_update_entity(entity.entity_id, new_unique_id=new_uid)
+        _LOGGER.debug("Dockhand: renamed %s entity %s", kind, entity.entity_id)
+
+
+def _is_short_image_id(name: str) -> bool:
+    """1.x named an untagged image by the first 12 hex digits of its ID."""
+    return len(name) == 12 and all(c in "0123456789abcdef" for c in name)
+
+
 # Config schema 1 was current up to 1.7.x; 1.8.0 introduced schema 2.
 REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
     RegistryMigration(
@@ -606,16 +668,21 @@ REGISTRY_MIGRATIONS: tuple[RegistryMigration, ...] = (
         ),
     ),
     RegistryMigration(
-        "1.8.0",
-        1,
-        lambda hass, entry, fast: migrate_1_8_0_remove_consolidated_disk_sensors(
-            hass, entry
-        ),
-    ),
-    RegistryMigration(
         "1.9.0",
         2,
         lambda hass, entry, fast: migrate_1_9_0_entry_scoped_device_identifiers(
+            hass, entry.entry_id
+        ),
+    ),
+    RegistryMigration(
+        "2.0.0",
+        2,
+        lambda hass, entry, fast: migrate_2_0_0_volume_unique_ids(hass, entry.entry_id),
+    ),
+    RegistryMigration(
+        "2.0.0",
+        2,
+        lambda hass, entry, fast: migrate_2_0_0_image_and_network_unique_ids(
             hass, entry.entry_id
         ),
     ),

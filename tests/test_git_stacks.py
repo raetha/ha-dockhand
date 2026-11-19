@@ -5,12 +5,8 @@ container and git-stack auto-update switches.
 Covers:
 - Git stack sync status/last sync sensors and sync-error binary sensor
 - Git stack Deploy/Sync from Git button: correct git_stack_id used,
-  git_stack_not_found and action_failed error handling, and its live
-  name/icon matching Dockhand's own state-dependent labeling (see
-  DockhandGitStackDeployButton's docstring for why there's no separate
-  check-only Sync button — confirmed redundant with this one, since
-  Dockhand's own deployGitStack() always runs the identical sync step
-  first regardless of whether a deploy follows)
+  git_stack_not_found and action_failed error handling, and its
+  translated name and icon, which follow the stack's state as in Dockhand
 - Git stack auto-update switch: optimistic update, PUT body shape
 - Container auto-update switch: on/off state derived from map membership
   (not an explicit boolean field), optimistic update, enable/disable body shape
@@ -18,10 +14,13 @@ Covers:
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers.typing import UNDEFINED
 
 from custom_components.dockhand.binary_sensor import (
     DockhandGitStackSyncErrorBinarySensor,
@@ -42,6 +41,8 @@ from custom_components.dockhand.switch import (
     DockhandGitStackAutoUpdateSwitch,
 )
 
+from .conftest import fast_coordinator, slow_coordinator, stack
+
 ENV_ID = 1
 ENTRY_ID = "test_entry_id_git"
 ENV_NAME = "myenv"
@@ -60,27 +61,15 @@ GIT_STACK = {
 
 
 def _make_slow_coord(git_stacks=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandSlowCoordinator)
-    coord.data = {
-        "environments": {
-            ENV_ID: {
-                "git_stacks": git_stacks if git_stacks is not None else [GIT_STACK],
-            }
-        }
-    }
-    coord.last_update_success = True
-    coord.async_request_refresh = AsyncMock()
-    return coord
+    return slow_coordinator(
+        {ENV_ID: {"git_stacks": git_stacks if git_stacks is not None else [GIT_STACK]}}
+    )
 
 
 def _make_fast_coord(containers=None) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    coord.data = {
-        "environments": {
-            ENV_ID: {"containers": containers if containers is not None else []}
-        }
-    }
-    return coord
+    return fast_coordinator(
+        {ENV_ID: {"containers": containers if containers is not None else []}}
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,50 +147,88 @@ async def test_deploy_button_uses_git_stack_id():
 
 
 def _make_fast_coord_with_stack_status(status: str | None) -> MagicMock:
-    coord = MagicMock(spec=DockhandFastCoordinator)
-    stacks = [{"name": "myapp", "status": status}] if status is not None else []
-    coord.data = {"environments": {ENV_ID: {"containers": [], "stacks": stacks}}}
-    return coord
+    stacks = [stack("myapp", status=status)] if status is not None else []
+    return fast_coordinator({ENV_ID: {"containers": [], "stacks": stacks}})
 
 
-def test_deploy_button_name_is_deploy_when_stack_not_deployed():
-    fast = _make_fast_coord_with_stack_status("not deployed")
-    slow = _make_slow_coord()
-    button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
+def _translations(language: str) -> dict[str, str]:
+    """The integration's button names in a language, keyed as Home
+    Assistant's platform translations are."""
+    path = (
+        Path(__file__).parent.parent
+        / "custom_components/dockhand/translations"
+        / f"{language}.json"
     )
-    assert button.name == "Deploy"
+    buttons = json.loads(path.read_text(encoding="utf-8"))["entity"]["button"]
+    return {
+        f"component.dockhand.entity.button.{key}.name": value["name"]
+        for key, value in buttons.items()
+    }
 
 
-def test_deploy_button_name_is_deploy_when_stack_created_not_started():
-    fast = _make_fast_coord_with_stack_status("created")
-    slow = _make_slow_coord()
+def _git_deploy_button(status: str | None, language: str = "en"):
     button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
+        _make_fast_coord_with_stack_status(status),
+        _make_slow_coord(),
+        MagicMock(),
+        ENTRY_ID,
+        ENV_ID,
+        ENV_NAME,
+        BASE_URL,
+        GIT_STACK,
     )
-    assert button.name == "Deploy"
+    button.platform_data = MagicMock(
+        platform_name="dockhand",
+        domain="button",
+        platform_translations=_translations(language),
+        object_id_platform_translations=_translations("en"),
+    )
+    return button
+
+
+@pytest.mark.parametrize("status", ["not deployed", "created"])
+def test_deploy_button_name_is_deploy_when_stack_down(status):
+    assert _git_deploy_button(status).name == "Deploy"
 
 
 def test_deploy_button_name_is_sync_from_git_when_running():
-    fast = _make_fast_coord_with_stack_status("running")
-    slow = _make_slow_coord()
-    button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
-    )
-    assert button.name == "Sync from Git"
+    assert _git_deploy_button("running").name == "Sync from Git"
 
 
 def test_deploy_button_name_is_sync_from_git_when_stack_status_unknown():
-    """If the stack isn't found in fast data at all (e.g. a poll gap),
-    default to "Sync from Git" rather than "Deploy" — matching Dockhand's
-    own condition, which only shows "Deploy" for the two specific down
-    states, defaulting to the "up" label otherwise."""
-    fast = _make_fast_coord_with_stack_status(None)
-    slow = _make_slow_coord()
-    button = DockhandGitStackDeployButton(
-        fast, slow, MagicMock(), ENTRY_ID, ENV_ID, ENV_NAME, BASE_URL, GIT_STACK
-    )
+    """Not in the fast data at all (a poll gap): Dockhand only says
+    "Deploy" for the two down states."""
+    assert _git_deploy_button(None).name == "Sync from Git"
+
+
+def test_deploy_button_names_are_translated():
+    assert _git_deploy_button("running", "de").name == "Aus Git synchronisieren"
+    assert _git_deploy_button("created", "de").name == "Bereitstellen"
+
+
+def test_deploy_button_entity_id_comes_from_english_deploy_in_any_state():
+    assert _git_deploy_button("running", "de").suggested_object_id == "Deploy"
+    assert _git_deploy_button("created").suggested_object_id == "Deploy"
+
+
+def test_deploy_button_rewrites_when_the_stack_goes_up_or_down():
+    """Its name and icon follow the fast data's stack state, not just the
+    slow data it otherwise follows."""
+    button = _git_deploy_button("created")
+    button.async_write_ha_state = MagicMock()
+    button._written_down = True
+    button._handle_fast_update()
+    button.async_write_ha_state.assert_not_called()
+    button._fast_coordinator.data = _make_fast_coord_with_stack_status("running").data
+    button._handle_fast_update()
+    button.async_write_ha_state.assert_called_once()
     assert button.name == "Sync from Git"
+
+
+def test_deploy_button_has_no_name_before_it_is_added():
+    button = _git_deploy_button("running")
+    button.platform_data = None
+    assert button.name is UNDEFINED
 
 
 def test_deploy_button_icon_is_rocket_when_down():
@@ -330,12 +357,9 @@ def test_container_auto_update_off_when_absent_from_map():
 
 
 def test_container_auto_update_unavailable_when_fetch_failed():
-    """A swallowed auto_update_settings fetch failure used to show
-    whatever the last-known toggle state was — indistinguishable from a
-    genuinely just-fetched one, and specifically risky here since
-    absence-from-map already means "disabled": a failed fetch could look
-    identical to a real, confirmed disable. Now the entity goes
-    unavailable instead."""
+    """A failed auto_update_settings fetch makes the switch unavailable:
+    a container missing from the settings means "off", so the last state,
+    or an empty one, could pass for a confirmed change."""
     fast = _make_fast_coord(containers=[{"name": "web", "id": "abc"}])
     slow = _make_slow_coord()
     slow.data["environments"][ENV_ID]["auto_update_settings"] = {}

@@ -11,16 +11,29 @@ construct entities around rather than through.
 
 from __future__ import annotations
 
+import copy
 from collections.abc import Callable
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from homeassistant.config_entries import ConfigEntryState
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity_platform import async_get_platforms
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.const import DOMAIN
+
+from .conftest import (
+    config_entry,
+    container,
+    fast_coordinator,
+    patch_setup,
+    slow_coordinator,
+    stack,
+    update_coordinator,
+)
 
 ENV_ID = 1
 STATS = {
@@ -28,40 +41,26 @@ STATS = {
     "online": True,
     "connectionType": "socket",
     "updateCheckEnabled": True,
+    "collectActivity": True,
+    "collectMetrics": False,
+    "updateCheckAutoUpdate": False,
     "metrics": {"cpuPercent": 5.0, "memoryPercent": 40.0},
     "containers": {"total": 5, "running": 4},
 }
-FREE = {"id": "c1", "name": "my-app", "state": "running", "image": "nginx:1.27"}
-COMPOSE = {
-    "id": "c2",
-    "name": "web",
-    "state": "running",
-    "image": "nginx:1.27",
-    "labels": {"com.docker.compose.project": "mystack"},
-}
-SYSTEM = {
-    "id": "c3",
-    "name": "dockhand",
-    "state": "running",
-    "image": "fnsys/dockhand:latest",
-    "systemContainer": True,
-}
-UNNAMED = {"id": "c4", "name": "", "state": "running", "image": "busybox"}
+FREE = container("my-app", id="c1", image="nginx:1.27")
+COMPOSE = container("web", stack="mystack", id="c2", image="nginx:1.27")
+SYSTEM = container(
+    "dockhand",
+    stack="infra",
+    id="c3",
+    image="fnsys/dockhand:latest",
+    systemContainer="dockhand",
+)
+UNNAMED = container("", id="c4", image="busybox")
 STACKS = [
-    {
-        "name": "mystack",
-        "status": "running",
-        "sourceType": "internal",
-        "containers": ["c2"],
-        "updatesAvailable": 1,
-    },
-    {"name": "gitapp", "status": "running", "sourceType": "git", "containers": []},
-    {
-        "name": "infra",
-        "status": "running",
-        "sourceType": "external",
-        "containers": ["c3"],
-    },
+    stack("mystack", COMPOSE, updatesAvailable=True, updateCount=1),
+    stack("gitapp", status="running", sourceType="git"),
+    stack("infra", SYSTEM, sourceType="external"),
 ]
 GIT_STACK = {
     "id": 42,
@@ -80,6 +79,8 @@ SCHEDULE = {
     "lastExecution": {"status": "success"},
 }
 SCHEDULE_NO_ID = {**SCHEDULE, "id": None}
+PRUNE_SCHEDULE = {**SCHEDULE, "id": 8, "type": "image_prune", "enabled": True}
+REPORT_SCHEDULE = {**SCHEDULE, "id": 9, "type": "env_report", "enabled": True}
 
 FAST_DATA = {
     "environments": {
@@ -105,11 +106,16 @@ SLOW_DATA = {
             "runtime_config": {"my-app": {"memory": 0, "restart_policy": "no"}},
             "git_stacks": [GIT_STACK],
             "auto_update_settings": {},
-            "env_meta": {"imagePruneEnabled": True},
+            "env_meta": {},
+            "settings": {
+                "image_prune": {"enabled": True, "pruneMode": "all"},
+                "scanner": "trivy",
+            },
             "fetch_failures": set(),
         }
     },
-    "schedules": [SCHEDULE, SCHEDULE_NO_ID],
+    "schedules": [SCHEDULE, SCHEDULE_NO_ID, PRUNE_SCHEDULE, REPORT_SCHEDULE],
+    "scanner_default": "grype",
     "fetch_failures": set(),
 }
 UPDATE_DATA = {"environments": {ENV_ID: {}}}
@@ -127,17 +133,17 @@ OPTIONS = {
 
 
 ENABLED_UP_FRONT = (
-    ("binary_sensor", "image_prune_enabled"),
+    ("switch", "image_prune_enabled"),
+    ("switch", "collect_activity"),
+    ("select", "vulnerability_scanner"),
     ("binary_sensor", "stack_gitapp_git_sync_error"),
     ("switch", "stack_gitapp_git_auto_deploy"),
 )
 
 
-def _coordinator(data: dict, listeners: list[Callable[[], None]]) -> MagicMock:
-    coord = MagicMock()
-    coord.data = data
-    coord.last_update_success = True
-    coord.async_config_entry_first_refresh = AsyncMock()
+def _listened(coord: MagicMock, listeners: list[Callable[[], None]]) -> MagicMock:
+    """Keep the listeners the integration adds, so a test can run them as a
+    poll would."""
 
     def _add_listener(callback, context=None):
         listeners.append(callback)
@@ -154,33 +160,17 @@ def listeners() -> list[Callable[[], None]]:
 
 @pytest.fixture
 async def loaded_entry(hass: HomeAssistant, listeners) -> MockConfigEntry:
-    fast = _coordinator(FAST_DATA, listeners)
-    slow = _coordinator(SLOW_DATA, listeners)
-    update = _coordinator(UPDATE_DATA, listeners)
-    entry = MockConfigEntry(
-        domain=DOMAIN,
-        data={"api_url": "http://dh.test:3000", "api_token": "dh_x"},
-        options=OPTIONS,
-        version=2,
-        minor_version=2,
-        title="http://dh.test:3000",
-    )
-    entry.add_to_hass(hass)
+    fast = _listened(fast_coordinator(FAST_DATA["environments"]), listeners)
+    slow = _listened(slow_coordinator(**SLOW_DATA), listeners)
+    update = _listened(update_coordinator(UPDATE_DATA["environments"]), listeners)
+    entry = config_entry(hass, options=OPTIONS)
     # Disabled by default; registered enabled up front so they get states.
     ent_reg = er.async_get(hass)
     for domain, suffix in ENABLED_UP_FRONT:
         ent_reg.async_get_or_create(
             domain, DOMAIN, f"{entry.entry_id}_{ENV_ID}_{suffix}", config_entry=entry
         )
-    with (
-        patch("custom_components.dockhand.async_get_clientsession"),
-        patch("custom_components.dockhand.DockhandClient"),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-        patch(
-            "custom_components.dockhand.DockhandUpdateCoordinator", return_value=update
-        ),
-    ):
+    with patch_setup(fast, slow, update):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
@@ -204,12 +194,20 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
         f"{p}_stack_gitapp_git_auto_deploy",
         f"{p}_stack_gitapp_git_sync_status",
         f"{p}_stack_gitapp_git_last_sync",
-        f"{p}_volume_mydata",
+        f"{p}_volume_mydata_container_count",
+        f"{p}_volume_mydata_size",
         f"{p}_container_my-app_memory_limit",
         f"{p}_container_my-app_restart_policy",
         f"{p}_container_my-app_running",
         f"{p}_stack_mystack_running",
         f"{p}_image_prune_enabled",
+        f"{p}_collect_activity",
+        f"{p}_collect_metrics",
+        f"{p}_update_check_enabled",
+        f"{p}_auto_update",
+        f"{p}_vulnerability_scanner",
+        f"{p}_prune_mode",
+        f"{loaded_entry.entry_id}_instance_vulnerability_scanner",
     }
     missing = expected - uids
     assert not missing, missing
@@ -233,10 +231,19 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
     updates = [
         e
         for e in er.async_entries_for_config_entry(ent_reg, loaded_entry.entry_id)
-        if e.domain == "update"
+        if e.domain == "update" and "_instance_" not in e.unique_id
     ]
     assert len(updates) == 3  # my-app, web, dockhand — not the unnamed one
     assert f"{loaded_entry.entry_id}_sched_7_system_next_run" in uids
+    sched = f"{loaded_entry.entry_id}_sched"
+    assert {f"{sched}_7_system_run", f"{sched}_8_image_prune_run"} <= uids
+    assert f"{sched}_8_image_prune_enabled" in uids
+    assert f"{sched}_7_system_enabled" not in uids  # can't be paused
+    assert f"{sched}_9_env_report_run" not in uids  # can't be run on demand
+    assert f"{sched}_None_system_run" not in uids
+    assert f"{p}_container_my-app_pause" in uids
+    assert f"{p}_container_my-app_resume" not in uids
+    assert f"{p}_container_dockhand_pause" not in uids
 
 
 async def test_listeners_add_nothing_twice(
@@ -260,6 +267,80 @@ async def test_git_stack_and_env_meta_entities_have_states(
         entity_id = ent_reg.async_get_entity_id(domain, DOMAIN, f"{p}_{suffix}")
         return hass.states.get(entity_id).state
 
-    assert state("binary_sensor", "image_prune_enabled") == "on"
+    assert state("switch", "image_prune_enabled") == "on"
+    assert state("switch", "update_check_enabled") == "on"
+    assert state("switch", "auto_update") == "off"
+    assert state("select", "vulnerability_scanner") == "trivy"
+    assert state("select", "prune_mode") == "all"
     assert state("binary_sensor", "stack_gitapp_git_sync_error") == "off"
     assert state("switch", "stack_gitapp_git_auto_deploy") == "off"
+
+
+async def test_a_1x_volume_entity_moves_to_its_volume_device(hass: HomeAssistant):
+    """Upgrading from 1.x: the volume's one entity becomes its Containers
+    sensor on the volume's own device, keeping its entity ID."""
+    entry = config_entry(hass, options=OPTIONS)
+    ent_reg = er.async_get(hass)
+    old = ent_reg.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_{ENV_ID}_volume_mydata",
+        config_entry=entry,
+        original_name="mydata",
+        suggested_object_id="local_volumes_mydata",
+    )
+    with patch_setup(
+        fast_coordinator(FAST_DATA["environments"]),
+        slow_coordinator(**SLOW_DATA),
+        update_coordinator(UPDATE_DATA["environments"]),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    moved = ent_reg.async_get(old.entity_id)
+    assert moved is not None
+    assert moved.unique_id == f"{entry.entry_id}_{ENV_ID}_volume_mydata_container_count"
+    assert moved.translation_key == "volume_containers"
+    device = dr.async_get(hass).async_get(moved.device_id)
+    assert device is not None
+    assert (DOMAIN, f"{entry.entry_id}_volume_{ENV_ID}_mydata") in device.identifiers
+    assert device.model == "Local Volume"
+    assert hass.states.get(old.entity_id).state == "0"
+
+
+async def test_uptime_keeps_its_state_through_clock_wobble(hass: HomeAssistant):
+    """The boot time is worked out from uptime and the clock, read at
+    slightly different moments, so it wobbles each poll; the state must
+    change only on a reboot, or every poll writes a row to the database."""
+    slow_data = copy.deepcopy(SLOW_DATA)
+    host = slow_data["environments"][ENV_ID]["host"]
+    host["uptime"] = 3600
+    entry = config_entry(hass, options=OPTIONS)
+    uid = f"{entry.entry_id}_{ENV_ID}_host_last_boot"
+    # Disabled by default: registered beforehand as turned on.
+    er.async_get(hass).async_get_or_create(
+        "sensor", DOMAIN, uid, config_entry=entry, disabled_by=None
+    )
+    with patch_setup(
+        fast_coordinator(FAST_DATA["environments"]),
+        slow_coordinator(**slow_data),
+        update_coordinator(UPDATE_DATA["environments"]),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entity_id = er.async_get(hass).async_get_entity_id("sensor", DOMAIN, uid)
+    assert entity_id is not None
+    entity = next(
+        e
+        for platform in async_get_platforms(hass, DOMAIN)
+        for e in platform.entities.values()
+        if e.entity_id == entity_id
+    )
+    first = hass.states.get(entity_id).state
+    host["uptime"] = 3610.5
+    entity.async_write_ha_state()
+    assert hass.states.get(entity_id).state == first
+    host["uptime"] = 60
+    entity.async_write_ha_state()
+    assert hass.states.get(entity_id).state != first

@@ -1,14 +1,19 @@
 import logging
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
+from homeassistant.components.automation import EVENT_AUTOMATION_RELOADED
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.start import async_at_started
+from homeassistant.helpers.typing import ConfigType
 
 from .api import DockhandClient
 from .const import (
@@ -34,6 +39,8 @@ from .const import (
     SCHEMA,
     SCHEMA_MINOR_VERSION,
     SCHEMA_VERSION,
+    removed_to_drop,
+    removed_to_keep,
     renames_to_mirror,
     renames_to_translate,
 )
@@ -41,25 +48,39 @@ from .coordinator import (
     DockhandFastCoordinator,
     DockhandSlowCoordinator,
     DockhandUpdateCoordinator,
+    DockhandVersionCoordinator,
 )
+from .entity_defaults import async_enable_chosen, async_enable_runtime_controls
+from .events import DockhandEventStream
 from .helpers import (
     CONTAINER_STATS_SUFFIXES,
     STACK_STATS_SUFFIXES,
-    _actionable_pending_update_container_ids,
+    VOLUME_SUFFIXES,
     _all_envs,
     _compose_project,
+    _container_device_version,
     _container_has_healthcheck,
     _coordinator_env,
+    _device_by_identifier,
     _device_id_container,
     _device_id_env,
+    _device_id_instance,
     _device_id_schedule,
     _device_id_schedules_hub,
     _device_id_stack,
+    _device_id_volume,
     _ensure_env_devices,
     _ensure_hub_devices,
+    _instance_device,
     _stack_has_system_container,
+    image_groups,
+    image_unique_id,
+    network_unique_id,
 )
+from .installs import DockhandInstaller
 from .migration import async_run_migrations
+from .retired import async_check_retired_entities, retired_entity
+from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -85,27 +106,27 @@ _GIT_STACK_SUFFIXES = (
 # Running switch + restart button + auto-update switch — suppressed for
 # system containers/stacks containing one, so unlike most container/stack
 # entities these can't rely purely on device cascade either.
-_CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update")
+_CONTAINER_ACTION_SUFFIXES = ("running", "restart", "auto_update", "pause")
 _STACK_ACTION_SUFFIXES = ("running", "restart")
+# The stack's Updates available binary sensor and update count sensor:
+# present only where Dockhand reports a stack's updates (1.0.37+).
+_STACK_UPDATE_SUFFIXES = ("_updates_available", "_update_count")
 
-# Exact, full unique_id suffixes for standalone env-level entities that are
-# NOT conditionally-suppressed and rely purely on device-removal cascade
-# (i.e. they should never reach the type-dispatch below at all), but whose
-# own naming happens to start with a word that's ALSO one of the reserved
-# type tokens the dispatch below matches on (position-2 after splitting on
-# "_" — see the entity-registry pass). Position-2 matching alone can't tell
-# these apart from an actual tracked entity of that type, since it only
-# looks at the first word, not the full suffix — this is a real, shipped-
-# then-caught bug: {entry_id}_{env_id}_update_check_enabled and
-# {entry_id}_{env_id}_image_prune_enabled were both getting swept up by the
-# "update"/"image" branches (which check uid not in update_uids/image_uids)
-# and removed on every online poll, since neither ever appears in either
-# live set — they're not update entities or image entities at all, just
-# ordinary always-on binary sensors whose names happen to start the same
-# way. Checked as an exact full-suffix match (not a prefix), immediately
-# after computing uid_type, before any dispatch branch runs. If a future
-# entity's name happens to collide the same way, add its exact suffix here
-# rather than trying to make the position-2 dispatch itself smarter.
+# Exact, full unique_id suffixes for standalone env-level entities that are NOT
+# conditionally-suppressed and rely purely on device-removal cascade (i.e. they
+# should never reach the type-dispatch below at all), but whose own naming
+# happens to start with a word that's ALSO one of the reserved type tokens the
+# dispatch below matches on (position-2 after splitting on "_" — see the
+# entity-registry pass). Position-2 matching alone can't tell these apart from
+# an actual tracked entity of that type, since it only looks at the first word:
+# {entry_id}_{env_id}_update_check_enabled and
+# {entry_id}_{env_id}_image_prune_enabled would be swept up by the
+# "update"/"image" branches and removed on every online poll, though they're
+# ordinary always-on binary sensors. Checked as an exact full-suffix match (not
+# a prefix), immediately after computing uid_type, before any dispatch branch
+# runs. If a future entity's name happens to collide the same way, add its
+# exact suffix here rather than trying to make the position-2 dispatch itself
+# smarter.
 _TYPE_COLLISION_EXCLUDED_SUFFIXES = (
     "_update_check_enabled",
     "_image_prune_enabled",
@@ -120,15 +141,17 @@ class DockhandData:
     fast_coordinator: DockhandFastCoordinator
     slow_coordinator: DockhandSlowCoordinator
     update_coordinator: DockhandUpdateCoordinator | None
+    version_coordinator: DockhandVersionCoordinator
+    event_stream: DockhandEventStream
+    installer: DockhandInstaller
     # Which entities (domain-prefixed unique_ids) have been added to HA
     # during *this* setup's lifetime — reset fresh every time
     # async_setup_entry runs (fresh instance created below), which is
     # exactly the point: this must NOT survive a reload or restart, unlike
     # the entity registry, which does. See helpers.py's already_registered()
-    # for why checking the registry itself was wrong — it answers "did
-    # this unique_id ever exist," not "is a live object backing it right
-    # now," and after any reload the answer to the second question is
-    # "no" for everything, regardless of what the registry remembers.
+    # for why the registry can't answer this: it says "did this unique_id
+    # ever exist," not "is a live object backing it right now," and after
+    # a reload the second answer is "no" for everything.
     known_entity_ids: set[str] = field(default_factory=set)
     # Tracks entities whose re-add has been scheduled via async_add_entities
     # but whose asyncio task has not yet completed (i.e. the entity is not
@@ -138,11 +161,23 @@ class DockhandData:
     # registry entry" and "the re-add task finishes." See
     # helpers.py's already_registered() for the full explanation.
     pending_readd_entity_ids: set[str] = field(default_factory=set)
+    # What the last registry cleanup saw: the live sets and how many devices
+    # and entities the entry had afterwards. While neither changes there is
+    # nothing new to remove, so most polls skip the registry passes.
+    cleanup_seen: tuple[dict[str, Any], int, int] | None = None
 
 
 # Typed config entry alias — used throughout all platform setup functions
 # so that entry.runtime_data is typed as DockhandData without casting.
 type DockhandConfigEntry = ConfigEntry[DockhandData]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the integration's actions, once, whatever entries exist."""
+    async_setup_services(hass)
+    return True
 
 
 def _normalized_entry_config(
@@ -162,7 +197,10 @@ def _normalized_entry_config(
       2. Settings stored in entry.data by releases before 1.7.1, whose setup
          form saved them with the connection details, move to entry.options.
          A value already in options wins, as it always has for every read.
-      3. Each old name still mirrored (renames_to_mirror: renames made at
+      3. Removed settings (REMOVED_OPTIONS) are dropped from both once a
+         schema bump has passed their removal; until then their stored
+         value stays for the previous schema version's releases.
+      4. Each old name still mirrored (renames_to_mirror: renames made at
          this schema version) gets the current value again, so a downgrade
          to a release on the previous schema version keeps the setting.
          Once a rename stops being mirrored (the next schema bump), step 1
@@ -179,10 +217,16 @@ def _normalized_entry_config(
     for old, current in translate.items():
         if old in new_options:
             new_options[current] = new_options.pop(old)
+    stored = set(OPTION_KEYS) | removed_to_keep(schema)
+    dropped = removed_to_drop(schema)
     for key in list(new_data):
         current = translate.get(key, key)
-        if current in OPTION_KEYS:
+        if current in stored:
             new_options.setdefault(current, new_data.pop(key))
+        elif current in dropped:
+            del new_data[key]
+    for key in dropped:
+        new_options.pop(key, None)
     for old, current in renames_to_mirror(schema).items():
         if current in new_options:
             new_options[old] = new_options[current]
@@ -284,9 +328,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         else:
             # No token yet — prompt the user to provide one via reauth.
             raise ConfigEntryAuthFailed(
-                "This Dockhand entry uses the old session-cookie auth, "
-                "which is no longer supported. Use Reconfigure to provide "
-                "an API token (Profile → API tokens in Dockhand)."
+                translation_domain=DOMAIN,
+                translation_key="session_auth_unsupported",
             )
 
     data, options = _normalized_entry_config(entry.data, entry.options)
@@ -328,35 +371,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
         raise
     except Exception as err:
         raise ConfigEntryNotReady(
-            f"Could not fetch initial Dockhand data: {err}"
+            translation_domain=DOMAIN,
+            translation_key="setup_failed",
+            translation_placeholders={"error": str(err)},
         ) from err
 
-    try:
-        # Slow coordinator failure is non-fatal at startup — optional entities
-        # will show as unavailable until the first successful poll.
-        await slow_coordinator.async_config_entry_first_refresh()
-    except Exception as err:
-        _LOGGER.warning(
-            "Dockhand: initial slow data fetch failed, will retry at next poll: %s",
-            err,
-        )
-
-    if update_coordinator is not None:
-        try:
-            # Update coordinator failure is non-fatal — entities will show as
-            # unavailable until the first successful poll (up to 24h by default).
-            await update_coordinator.async_config_entry_first_refresh()
-        except Exception as err:
-            _LOGGER.warning(
-                "Dockhand: initial update check failed, will retry at next poll: %s",
-                err,
-            )
+    # Never fatal: the version only labels the instance device.
+    version_coordinator = DockhandVersionCoordinator(hass, client, entry=entry)
 
     entry.runtime_data = DockhandData(
         client=client,
         fast_coordinator=fast_coordinator,
         slow_coordinator=slow_coordinator,
         update_coordinator=update_coordinator,
+        version_coordinator=version_coordinator,
+        event_stream=DockhandEventStream(hass, entry),
+        installer=DockhandInstaller(
+            hass, entry.entry_id, client, fast_coordinator, update_coordinator
+        ),
     )
 
     # Run any pending one-time registry migrations BEFORE pre-registering
@@ -377,13 +409,56 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     # registry rather than creating duplicate new-format devices alongside
     # surviving old-format ones.
     base_url = entry.data.get(CONF_API_URL, "")
+    dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id,
+        **_instance_device(entry.entry_id, base_url),
+    )
+    # No entity listens to this coordinator, so this listener is also what
+    # keeps it polling.
+    entry.async_on_unload(
+        version_coordinator.async_add_listener(
+            lambda: _update_instance_version(hass, entry)
+        )
+    )
     _register_devices(hass, entry, fast_coordinator, slow_coordinator, config, base_url)
+    entry.async_on_unload(
+        fast_coordinator.async_add_listener(
+            lambda: _update_container_versions(hass, entry)
+        )
+    )
+
+    # Only the fast data is needed to set up; the rest is fetched right after,
+    # so setup doesn't wait on it: the slow fetch reads several endpoints per
+    # environment, and a precise update check asks every image's registry
+    # (it may take minutes). Their entities are unavailable until it lands,
+    # and the ones that need its data are added then; a failure waits for the
+    # next poll, as it always has.
+    for name, coordinator in (
+        ("slow data", slow_coordinator),
+        ("update check", update_coordinator),
+        ("version", version_coordinator),
+    ):
+        if coordinator is not None:
+            entry.async_create_background_task(
+                hass, coordinator.async_refresh(), f"dockhand first {name} refresh"
+            )
 
     # Run cleanup immediately on setup so that stale registry entries from a
     # previous install/reload are removed before platforms add new entities.
     # Without this, entities pruned between reloads persist in the registry
     # and cause _2/_3/etc suffixes when new entities with the same name register.
     _cleanup_stale_registry(hass, entry)
+
+    # Automations and scripts load after integrations, so whether they still
+    # use a retired entity is only known once Home Assistant has started.
+    @callback
+    def _check_retired(_: HomeAssistant | Event) -> None:
+        async_check_retired_entities(hass, entry.entry_id)
+
+    entry.async_on_unload(async_at_started(hass, _check_retired))
+    entry.async_on_unload(
+        hass.bus.async_listen(EVENT_AUTOMATION_RELOADED, _check_retired)
+    )
 
     # All three coordinators share the same cleanup listener — guard logic is
     # handled inside _cleanup_stale_registry.
@@ -414,8 +489,44 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    async_enable_runtime_controls(hass, entry)
+    async_enable_chosen(hass, entry)
+
+    entry.runtime_data.event_stream.async_setup()
 
     return True
+
+
+def _update_instance_version(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
+    """Show a Dockhand upgrade on the instance device."""
+    version = entry.runtime_data.version_coordinator.data
+    registry = dr.async_get(hass)
+    device = _device_by_identifier(
+        registry, (DOMAIN, _device_id_instance(entry.entry_id)), entry.entry_id
+    )
+    if version and device is not None and device.sw_version != version:
+        registry.async_update_device(device.id, sw_version=version)
+
+
+def _update_container_versions(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
+    """Keep each container device's version on its image's, which changes
+    when the container is recreated on a new image. Devices are registered
+    by their entities, so a container seen before its device is skipped
+    until the next poll."""
+    registry = dr.async_get(hass)
+    for env_id, env in _all_envs(entry.runtime_data.fast_coordinator.data).items():
+        for container in env.get("containers") or []:
+            name = container.get("name")
+            if not name:
+                continue
+            device = _device_by_identifier(
+                registry,
+                (DOMAIN, _device_id_container(entry.entry_id, env_id, name)),
+                entry.entry_id,
+            )
+            version = _container_device_version(container)
+            if device is not None and device.sw_version != version:
+                registry.async_update_device(device.id, sw_version=version)
 
 
 async def _async_reload_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> None:
@@ -486,6 +597,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     Returns a dict with keys:
         env_ids                  set[int]   — environments currently in fast data
         online_env_ids           set[int]   — environments with online=True (or unknown)
+        hawser_edge_env_ids      set[int]   — environments connected by Hawser Edge
         containers               set[str]   — live device identifiers
                                               (container_<env_id>_<name>)
         stacks                   set[str]   — live device identifiers
@@ -496,22 +608,13 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         stacks_group_env_ids     set[int]   — env_ids with ≥1 stack; the
                                               Stacks group device is only
                                               valid for these
-        containers_fetch_ok_env_ids set[int] — env_ids whose containers fetch
-                                              succeeded this cycle AND whose
-                                              result is trusted as ground truth.
-                                              An env is excluded when the fetch
-                                              raised an exception (fetch_failures)
-                                              OR when stats.containers.total > 0
-                                              but the API returned an empty list
-                                              (Hawser-online / Docker-daemon-down
-                                              scenario — see issue #34). Gates
-                                              every container-derived set above
-                                              (containers, update_uids,
-                                              bulk_update_uids, runtime_control_uids,
-                                              container_stats_uids,
-                                              container_action_uids, health_uids)
-                                              — see images_fetch_ok_env_ids below
-                                              for the general pattern this follows.
+        containers_fetch_ok_env_ids set[int] — env_ids whose containers list
+                                              is trusted as complete this cycle:
+                                              the fetch didn't fail, and an empty
+                                              list was confirmed by the
+                                              coordinator (unconfirmed).
+                                              Gates every container-derived set
+                                              above.
         stacks_fetch_ok_env_ids set[int]    — same as containers_fetch_ok_env_ids,
                                               for stacks (stacks, stack_action_uids,
                                               stack_deploy_uids,
@@ -567,14 +670,15 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         image_uids               set[str]   — live entity unique_ids
         network_uids             set[str]   — live entity unique_ids
         volume_uids               set[str]  — live entity unique_ids
+        volumes                   set[str]  — live volume device identifiers
+                                              (empty while volumes are off)
         update_uids              set[str]   — live entity unique_ids (Tier 1 — one
                                               per container while update entities
                                               are enabled, not the optional Tier 2
                                               update_coordinator)
         bulk_update_uids         set[str]   — live entity unique_ids (env-level
-                                              "Update all" button, only while at
-                                              least one non-system-container
-                                              pending update exists)
+                                              "Update all" button, while update
+                                              entities are on)
         runtime_control_uids     set[str]   — live entity unique_ids (memory/cpu/
                                               pids/restart-policy number/select)
         container_stats_uids     set[str]   — live entity unique_ids (the 8
@@ -681,29 +785,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # CONF_ENABLE_UPDATE_ENTITIES is on AND at least one non-system-
     # container pending update exists in the environment.
     #
-    # Considers both Tier 1 (pending_updates) and Tier 2 (update_coordinator,
-    # when configured) via the shared _container_has_pending_update()
-    # helper, matching button.py's creation gate exactly — this MUST stay
-    # in sync with that gate, since a mismatch here means the button
-    # either never gets removed once created (this set too permissive) or
-    # gets removed the instant it's created (this set too strict). Safe to
-    # include Tier 2 because that helper looks it up by each container's
-    # current id — a stale entry from a since-recreated container is
-    # keyed under an id nothing currently has, so it can't keep this uid
-    # alive past the point the update actually resolved.
+    # The Update all button exists in every environment while update
+    # entities are on; button.py makes it unavailable when nothing can be
+    # updated.
     bulk_update_uids: set[str] = set()
-    update_coordinator = entry.runtime_data.update_coordinator
-    update_data = _all_envs(update_coordinator.data if update_coordinator else None)
-    # Tier 1's own pending-updates fetch is intentionally NOT gated on this
-    # option (it's cheap, and other consumers — e.g. the stack
-    # updates-available binary sensor's pending_container_names attribute
-    # — legitimately want it regardless of whether update ENTITIES are
-    # shown) — so pending_update_container_ids can still be non-empty here
-    # even with the platform off. Both update_uids and bulk_update_uids
-    # below must check this explicitly rather than relying on Tier 1/Tier 2
-    # data being absent, or a user who disabled update entities entirely
-    # (github.com/raetha/ha-dockhand/issues/23) would still see the
-    # env-level "Update all" button reappear from Tier 1 data alone.
     update_entities_enabled = entry.options.get(
         CONF_ENABLE_UPDATE_ENTITIES, DEFAULT_ENABLE_UPDATE_ENTITIES
     )
@@ -726,40 +811,14 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
     for env_id, env_data in fast_data.items():
         has_freestanding = False
-        stats = env_data.get("stats") or {}
         env_failures: set[str] = env_data.get("fetch_failures") or set()
         env_containers = env_data.get("containers") or []
-        pending_updates = env_data.get("pending_update_container_ids") or set()
-        update_env_data = update_data.get(env_id)
-        pending_details = env_data.get("pending_update_details") or {}
+        unconfirmed: set[str] = env_data.get("unconfirmed") or set()
         if "containers" not in env_failures:
-            # Cross-validate: stats.containers.total > 0 but list empty (HTTP
-            # 200, no exception) is the fingerprint of the Hawser-online /
-            # Docker-daemon-temporarily-unreachable scenario — Hawser proxies
-            # Docker's empty response with a 200 and no error, so _unwrap()
-            # sees a "success" that is actually incomplete data. Trusting that
-            # as "confirmed zero containers" would cause _cleanup_stale_registry
-            # to remove all container devices for this env, then re-add them
-            # ~60 s later when Docker recovers, producing "unique ID already
-            # registered" duplicates (github.com/raetha/ha-dockhand/issues/34).
-            # Only mark the fetch as OK when either: containers were returned
-            # (non-empty list is ground truth) OR stats also confirm zero (env
-            # with genuinely no running containers).
-            stats_containers_total = (stats.get("containers") or {}).get("total", 0)
-            if env_containers or not stats_containers_total:
+            if "containers" not in unconfirmed:
                 containers_fetch_ok_env_ids.add(env_id)
-            else:
-                _LOGGER.debug(
-                    "Skipping container cleanup for env %d: API returned empty "
-                    "but stats.containers.total=%d — Docker daemon may be "
-                    "temporarily unreachable via Hawser",
-                    env_id,
-                    stats_containers_total,
-                )
-            if update_entities_enabled and _actionable_pending_update_container_ids(
-                env_containers, pending_updates, update_env_data, pending_details
-            ):
-                bulk_update_uids.add(f"{entry.entry_id}_{env_id}_bulk_update")
+        if update_entities_enabled:
+            bulk_update_uids.add(f"{entry.entry_id}_{env_id}_bulk_update")
             for c in env_containers:
                 name = c.get("name", "")
                 if name:
@@ -798,12 +857,15 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             stack_stats_fetch_ok_env_ids.add(env_id)
         stack_stats_supported = env_data.get("stack_stats") is not None
         if "stacks" not in env_failures:
-            stacks_fetch_ok_env_ids.add(env_id)
+            if "stacks" not in unconfirmed:
+                stacks_fetch_ok_env_ids.add(env_id)
             for s in env_data.get("stacks") or []:
                 stack_name = s["name"]
                 stacks.add(_device_id_stack(entry.entry_id, env_id, stack_name))
                 stacks_group_env_ids.add(env_id)
-                has_system = _stack_has_system_container(s, env_containers)
+                has_system = _stack_has_system_container(
+                    entry.runtime_data.fast_coordinator, env_id, s
+                )
                 if not has_system:
                     for suffix in _STACK_ACTION_SUFFIXES:
                         stack_action_uids.add(
@@ -814,9 +876,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                         f"{entry.entry_id}_{env_id}_stack_{stack_name}_deploy"
                     )
                 if "updatesAvailable" in s:
-                    stack_updates_available_uids.add(
-                        f"{entry.entry_id}_{env_id}_stack_{stack_name}_updates_available"
-                    )
+                    for suffix in _STACK_UPDATE_SUFFIXES:
+                        stack_updates_available_uids.add(
+                            f"{entry.entry_id}_{env_id}_stack_{stack_name}{suffix}"
+                        )
                 if container_stats_enabled and stack_stats_supported:
                     for suffix in STACK_STATS_SUFFIXES:
                         stack_stats_uids.add(
@@ -831,9 +894,17 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         for env_id, env_data in fast_data.items()
         if (env_data.get("stats") or {}).get("online", True)
     }
+    hawser_edge_env_ids: set[int] = {
+        env_id
+        for env_id, env_data in fast_data.items()
+        if (env_data.get("stats") or {}).get("connectionType") == "hawser-edge"
+    }
 
     # Slow-coordinator-derived sets — only meaningful when slow data is valid.
     # slow_valid: slow coordinator has run successfully and returned data.
+    # A coordinator that hasn't fetched yet reports last_update_success, so
+    # the data itself must be there too: right after setup the slow data is
+    # still loading, which says nothing about what exists.
     slow_valid = slow.last_update_success and bool(slow_data)
     slow_env_map = _all_envs(slow_data)
     slow_env_ids: set[int] = set(slow_env_map.keys())
@@ -844,7 +915,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # empty. Without checking this too, "schedules" ending up empty because
     # its own fetch failed looks identical to "genuinely zero schedules,"
     # and downstream cleanup would wrongly treat every existing schedule as
-    # confirmed-deleted — a real, reported incident this closes.
+    # confirmed-deleted.
     top_failures: set[str] = slow_data.get("fetch_failures") or set()
 
     # Only populate schedule live set when schedules are enabled AND their
@@ -853,7 +924,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     # "not loaded", not "deleted"; same treatment now applies when enabled
     # but the schedules fetch itself specifically failed.
     schedules_enabled = (
-        slow.last_update_success
+        slow_valid
         and "schedules" not in top_failures
         and bool(entry_config.get(CONF_ENABLE_SCHEDULES, False))
     )
@@ -863,6 +934,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     image_uids: set[str] = set()
     network_uids: set[str] = set()
     volume_uids: set[str] = set()
+    volumes: set[str] = set()
     images_group_env_ids: set[int] = set()
     networks_group_env_ids: set[int] = set()
     volumes_group_env_ids: set[int] = set()
@@ -899,23 +971,30 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             env_failures = env_data.get("fetch_failures") or set()
 
             if "images" not in env_failures:
-                images_fetch_ok_env_ids.add(env_id)
-                for img in env_data.get("images") or []:
-                    raw_id = img.get("id") or ""
-                    short_id = raw_id.split(":")[-1] if ":" in raw_id else raw_id
-                    image_uids.add(f"{entry.entry_id}_{env_id}_image_{short_id}")
+                if "images" not in (env_data.get("unconfirmed") or set()):
+                    images_fetch_ok_env_ids.add(env_id)
+                for repository in image_groups(env_data.get("images") or []):
+                    image_uids.add(image_unique_id(entry.entry_id, env_id, repository))
                     images_group_env_ids.add(env_id)
             if "networks" not in env_failures:
                 networks_fetch_ok_env_ids.add(env_id)
                 for net in env_data.get("networks") or []:
-                    net_id = net.get("id", "")
-                    network_uids.add(f"{entry.entry_id}_{env_id}_network_{net_id}")
+                    network_uids.add(
+                        network_unique_id(
+                            entry.entry_id, env_id, str(net.get("name") or "")
+                        )
+                    )
                     networks_group_env_ids.add(env_id)
             if "volumes" not in env_failures:
                 volumes_fetch_ok_env_ids.add(env_id)
                 for vol in env_data.get("volumes") or []:
-                    vname = vol.get("name") or vol.get("Name", "")
-                    volume_uids.add(f"{entry.entry_id}_{env_id}_volume_{vname}")
+                    vname = vol.get("name", "")
+                    for suffix in VOLUME_SUFFIXES:
+                        volume_uids.add(
+                            f"{entry.entry_id}_{env_id}_volume_{vname}_{suffix}"
+                        )
+                    if enable_volumes:
+                        volumes.add(_device_id_volume(entry.entry_id, env_id, vname))
                     volumes_group_env_ids.add(env_id)
             # Git stack entities — always fetched (not config-gated), live
             # on the stack's own device, but only exist while Dockhand
@@ -936,6 +1015,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     return {
         "env_ids": env_ids,
         "online_env_ids": online_env_ids,
+        "hawser_edge_env_ids": hawser_edge_env_ids,
         "containers": containers,
         "stacks": stacks,
         "containers_group_env_ids": containers_group_env_ids,
@@ -959,6 +1039,7 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         "image_uids": image_uids,
         "network_uids": network_uids,
         "volume_uids": volume_uids,
+        "volumes": volumes,
         "update_uids": update_uids,
         "bulk_update_uids": bulk_update_uids,
         "runtime_control_uids": runtime_control_uids,
@@ -977,6 +1058,25 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
 
 
 def _cleanup_stale_registry(
+    hass: HomeAssistant,
+    entry: DockhandConfigEntry,
+) -> None:
+    """Remove stale device and entity registry entries; timed at debug level,
+    so a slow Home Assistant can be told where the time goes without a
+    profile."""
+    if not _LOGGER.isEnabledFor(logging.DEBUG):
+        _cleanup_stale_registry_now(hass, entry)
+        return
+    started = time.perf_counter()
+    _cleanup_stale_registry_now(hass, entry)
+    _LOGGER.debug(
+        "Dockhand: registry cleanup for %s took %.3f seconds",
+        entry.title,
+        time.perf_counter() - started,
+    )
+
+
+def _cleanup_stale_registry_now(
     hass: HomeAssistant,
     entry: DockhandConfigEntry,
 ) -> None:
@@ -1043,6 +1143,10 @@ def _cleanup_stale_registry(
     live = _build_live_sets(entry)
     dev_registry = dr.async_get(hass)
     ent_registry = er.async_get(hass)
+    if entry.runtime_data.cleanup_seen == _cleanup_seen(
+        live, dev_registry, ent_registry, entry
+    ):
+        return
 
     # ── Device registry pass ─────────────────────────────────────────────────
     for device in dr.async_entries_for_config_entry(dev_registry, entry.entry_id):
@@ -1088,8 +1192,10 @@ def _cleanup_stale_registry(
                         dev_registry.async_remove_device(device.id)
                     else:
                         _LOGGER.debug(
-                            "Dockhand: env offline or containers fetch failed, "
-                            "skipping container cleanup: %s",
+                            "Dockhand: keeping container device %s: its "
+                            "environment is offline, its containers fetch "
+                            "failed, or it isn't confirmed gone yet (missing "
+                            "on one poll only, as while it's recreated)",
                             identifier,
                         )
 
@@ -1120,8 +1226,10 @@ def _cleanup_stale_registry(
                         dev_registry.async_remove_device(device.id)
                     else:
                         _LOGGER.debug(
-                            "Dockhand: env offline or stacks fetch failed, "
-                            "skipping stack cleanup: %s",
+                            "Dockhand: keeping stack device %s: its "
+                            "environment is offline, its stacks fetch failed, "
+                            "or it isn't confirmed gone yet (missing on one "
+                            "poll only)",
                             identifier,
                         )
 
@@ -1223,6 +1331,28 @@ def _cleanup_stale_registry(
                         )
                         dev_registry.async_remove_device(device.id)
 
+            elif bare.startswith("volume_"):
+                # volume_{env_id}_{name}. Removing the Volumes group doesn't
+                # remove its children, so turning volumes off is checked here
+                # too.
+                try:
+                    env_id = int(bare.split("_")[1])
+                except ValueError:
+                    continue
+                if identifier not in live["volumes"] and (
+                    env_id not in live["env_ids"]
+                    or not live["enable_volumes"]
+                    or (
+                        live["slow_valid"]
+                        and env_id in live["online_env_ids"]
+                        and env_id in live["volumes_fetch_ok_env_ids"]
+                    )
+                ):
+                    _LOGGER.debug(
+                        "Dockhand: removing stale volume device %s", identifier
+                    )
+                    dev_registry.async_remove_device(device.id)
+
             elif bare == "schedules_hub":
                 # Remove the schedules hub device when schedules are disabled
                 # in the config. It has no cleanup path otherwise since it has
@@ -1238,13 +1368,9 @@ def _cleanup_stale_registry(
                 # Two removal cases: the feature is off entirely (poll-
                 # independent — remove unconditionally, same as schedules_hub
                 # above), or the feature is on, the slow coordinator has valid
-                # data, and this specific schedule is confirmed gone. Fixes a
-                # real gap: previously this branch only checked the second
-                # case, so disabling "Enable schedules" removed schedules_hub
-                # but left every individual schedule device un-parented (HA's
-                # device registry clears via_device_id on removal, it does
-                # not cascade-remove — confirmed against HA core's
-                # device_registry.py) and never actually removed.
+                # data, and this specific schedule is confirmed gone. The first
+                # is needed because removing schedules_hub doesn't cascade: HA
+                # only clears its children's via_device_id.
                 if not live["schedules_feature_enabled"] or (
                     live["schedules_enabled"] and identifier not in live["schedules"]
                 ):
@@ -1262,6 +1388,7 @@ def _cleanup_stale_registry(
     # (depends on update entities being enabled), runtime controls (depends on
     # the feature being enabled), and git stack entities (depends on
     # Dockhand still classifying the stack as git-tracked).
+    retired_removed = False
     for entity_entry in er.async_entries_for_config_entry(ent_registry, entry.entry_id):
         uid = entity_entry.unique_id or ""
 
@@ -1276,6 +1403,12 @@ def _cleanup_stale_registry(
         except ValueError:
             continue
         uid_type = uid_parts[2]
+
+        if retired_entity(entity_entry.domain, uid) is not None:
+            _LOGGER.debug("Dockhand: removing retired entity %s", uid)
+            ent_registry.async_remove(entity_entry.entity_id)
+            retired_removed = True
+            continue
 
         if any(uid.endswith(sfx) for sfx in _TYPE_COLLISION_EXCLUDED_SUFFIXES):
             continue
@@ -1324,6 +1457,17 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale volume entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
+        elif uid.endswith("_hawser_last_seen"):
+            # Only for Hawser Edge environments: removed when the
+            # environment connects another way.
+            env_id = uid_env_id
+            if env_id not in live["env_ids"] or (
+                env_id in live["online_env_ids"]
+                and env_id not in live["hawser_edge_env_ids"]
+            ):
+                _LOGGER.debug("Dockhand: removing stale Hawser last seen %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+
         elif uid_type == "update":
             env_id = uid_env_id
             # Tier 1 is entirely fast-data-derived, specifically from the
@@ -1341,17 +1485,10 @@ def _cleanup_stale_registry(
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid_type == "bulk" and uid.endswith("_bulk_update"):
-            # Env-level "Update all" button. Conditionally present, not
-            # just conditionally enabled — mirrors Dockhand's own button
-            # disappearing entirely once there's nothing left to update,
-            # rather than going idle/disabled. Same containers-fetch
-            # reliability as the Tier 1 update entities above.
+            # Env-level "Update all" button: exists while update entities
+            # are on, unavailable while nothing can be updated.
             env_id = uid_env_id
-            if env_id not in live["env_ids"] or (
-                env_id in live["online_env_ids"]
-                and env_id in live["containers_fetch_ok_env_ids"]
-                and uid not in live["bulk_update_uids"]
-            ):
+            if env_id not in live["env_ids"] or uid not in live["bulk_update_uids"]:
                 _LOGGER.debug("Dockhand: removing stale bulk update entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
@@ -1369,18 +1506,10 @@ def _cleanup_stale_registry(
             # cleans them up even though the container device itself
             # stays. Same fast-data reliability as containers/update.
             #
-            # Domain check added deliberately: "memory_limit" collides
-            # exactly with the container-stats sensor of the same name
-            # (sensor.py's DockhandContainerMemoryLimitSensor) — same
-            # class of bug as the update_check_enabled/image_prune_enabled
-            # collision noted in _TYPE_COLLISION_EXCLUDED_SUFFIXES above,
-            # caught the same way (a real, shipped entity disappearing
-            # right after creation). A domain check disambiguates these
-            # two suffix-identical but functionally distinct entities more
-            # precisely than adding to that exclusion list would, since
-            # this one does need its own (different) conditional removal —
-            # see the container_stats_uids branch below — not blanket
-            # exemption from cleanup altogether.
+            # The domain check matters: "memory_limit" is also the suffix
+            # of the container-stats sensor (DockhandContainerMemoryLimitSensor),
+            # which has its own conditional removal below, so the exclusion
+            # list above wouldn't fit.
             env_id = uid_env_id
             if env_id not in live["env_ids"] or (
                 env_id in live["online_env_ids"]
@@ -1396,11 +1525,8 @@ def _cleanup_stale_registry(
             # sensor.py's async_setup_entry), so — like runtime controls
             # above — need explicit tracking: turning the option off must
             # clean these up even though the container device itself
-            # stays. Without this branch, toggling the option off did
-            # nothing to entities already created while it was on (a
-            # real, shipped gap — the option only ever controlled future
-            # creation, cleanup had no way to know these were now
-            # supposed to be gone).
+            # stays, or turning the option off would leave the ones
+            # already created.
             env_id = uid_env_id
             if env_id not in live["env_ids"] or (
                 env_id in live["online_env_ids"]
@@ -1474,7 +1600,7 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale git stack entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
-        elif uid_type == "stack" and uid.endswith(CONTAINER_STATS_SUFFIXES):
+        elif uid_type == "stack" and uid.endswith(STACK_STATS_SUFFIXES):
             # Dockhand's stack totals — removed when the container stats
             # option is off or Dockhand no longer has the endpoint, but
             # never because of a failed stack stats fetch.
@@ -1503,8 +1629,9 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale stack action entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
-        elif uid_type == "stack" and uid.endswith("_updates_available"):
-            # Stack updates-available binary sensor. Feature-detected
+        elif uid_type == "stack" and uid.endswith(_STACK_UPDATE_SUFFIXES):
+            # Stack updates-available binary sensor and update count sensor.
+            # Feature-detected
             # (Dockhand 1.0.37+) — same fast-data reliability as the
             # other stack-scoped entities above; no slow_valid guard
             # needed since this comes from /api/stacks, not a
@@ -1543,6 +1670,28 @@ def _cleanup_stale_registry(
                 _LOGGER.debug("Dockhand: removing stale stack deploy entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
+    # Removed after Home Assistant started (a first poll that came late):
+    # the check made at start didn't see them.
+    if retired_removed and hass.is_running:
+        async_check_retired_entities(hass, entry.entry_id)
+
+    entry.runtime_data.cleanup_seen = _cleanup_seen(
+        live, dev_registry, ent_registry, entry
+    )
+
+
+def _cleanup_seen(
+    live: dict[str, Any],
+    dev_registry: dr.DeviceRegistry,
+    ent_registry: er.EntityRegistry,
+    entry: DockhandConfigEntry,
+) -> tuple[dict[str, Any], int, int]:
+    return (
+        live,
+        len(dr.async_entries_for_config_entry(dev_registry, entry.entry_id)),
+        len(er.async_entries_for_config_entry(ent_registry, entry.entry_id)),
+    )
+
 
 async def async_remove_config_entry_device(
     hass: HomeAssistant, entry: DockhandConfigEntry, device_entry: dr.DeviceEntry
@@ -1563,9 +1712,11 @@ async def async_remove_config_entry_device(
     env_ids: set[int] = live_sets["env_ids"]
     env_prefixes = tuple(_device_id_env(entry.entry_id, env_id) for env_id in env_ids)
     live: set[str] = {
+        _device_id_instance(entry.entry_id),
         *live_sets["containers"],
         *live_sets["stacks"],
         *live_sets["schedules"],
+        *live_sets["volumes"],
     }
     if live_sets["schedules_feature_enabled"]:
         live.add(_device_id_schedules_hub(entry.entry_id))

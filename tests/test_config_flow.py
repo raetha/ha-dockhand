@@ -27,7 +27,10 @@ from homeassistant.data_entry_flow import FlowResultType, InvalidData
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dockhand.api import DockhandAuthError
+
+from .conftest import fast_coordinator, patch_setup, slow_coordinator
 from custom_components.dockhand.config_flow import _options_schema
+from custom_components.dockhand.const import SCHEMA_MINOR_VERSION, SCHEMA_VERSION
 
 BASE_CONNECTION = {
     "api_url": "http://dh.test:3000",
@@ -36,15 +39,12 @@ BASE_CONNECTION = {
 
 # Minimal options submitted on the setup_options step (all defaults accepted).
 BASE_OPTIONS = {
-    "poll_interval_fast": 60,
-    "poll_interval_slow": 600,
     "enable_schedules": False,
     "enable_images": False,
     "enable_volumes": False,
     "enable_networks": False,
     "enable_update_entities": True,
     "enable_precise_updates": False,
-    "poll_interval_precise_updates": 86400,
 }
 
 # Legacy entry data shape (poll/enable keys stored in data by older versions).
@@ -52,8 +52,6 @@ BASE_OPTIONS = {
 LEGACY_ENTRY_DATA = {
     "api_url": "http://dh.test:3000",
     "verify_ssl": True,
-    "poll_interval_fast": 60,
-    "poll_interval_slow": 600,
     "enable_schedules": False,
     "enable_images": False,
     "enable_volumes": False,
@@ -78,30 +76,19 @@ def _patch_client(probe_side_effect=None):
 
 
 @contextlib.contextmanager
-def _patch_full_setup():
-    """Patch everything needed for async_setup_entry to succeed without network access."""
-    fast = MagicMock()
-    fast.data = {
+def _patch_full_setup(fast_data: dict | None = None, slow_data: dict | None = None):
+    """Set an entry up without network access, with the coordinators
+    holding the data given (one empty environment by default)."""
+    fast = fast_coordinator()
+    fast.data = fast_data or {
         "environments": {
             1: {"stats": {}, "containers": [], "stacks": [], "container_stats": {}}
         }
     }
-    fast.async_config_entry_first_refresh = AsyncMock()
-    fast.async_add_listener = MagicMock(return_value=lambda: None)
-    slow = MagicMock()
-    slow.data = {"environments": {}, "schedules": []}
-    slow.last_update_success = True
-    slow.async_config_entry_first_refresh = AsyncMock()
-    slow.async_add_listener = MagicMock(return_value=lambda: None)
-    with (
-        patch(
-            "custom_components.dockhand.async_get_clientsession",
-            return_value=MagicMock(),
-        ),
-        patch("custom_components.dockhand.DockhandClient", return_value=MagicMock()),
-        patch("custom_components.dockhand.DockhandFastCoordinator", return_value=fast),
-        patch("custom_components.dockhand.DockhandSlowCoordinator", return_value=slow),
-    ):
+    slow = slow_coordinator()
+    if slow_data is not None:
+        slow.data = slow_data
+    with patch_setup(fast, slow):
         yield
 
 
@@ -130,15 +117,13 @@ async def test_step_user_no_auth_creates_entry(hass: HomeAssistant):
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert "api_token" not in result["data"]
-    assert result["options"]["poll_interval_fast"] == 60
+    assert result["options"]["enable_images"] is False
 
 
 async def test_step_user_strips_whitespace_from_api_url(hass: HomeAssistant):
-    """Regression test: a URL with incidental leading/trailing whitespace
-    (e.g. from copy-pasting) used to get stored verbatim, silently
-    breaking every "open in Dockhand" link this integration ever set —
-    see test_helpers.py's identical regression test for the mechanism.
-    The stored entry, not just the unique_id, needs the clean value."""
+    """A URL pasted with surrounding whitespace is stored without it, in
+    the entry as well as its unique ID: every "open in Dockhand" link is
+    built from it (test_helpers.py covers the links themselves)."""
     result = await hass.config_entries.flow.async_init(
         "dockhand", context={"source": "user"}
     )
@@ -233,7 +218,7 @@ async def test_step_token_success_creates_entry(hass: HomeAssistant):
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert result["data"]["api_token"] == MOCK_TOKEN
     assert result["data"]["api_url"] == "http://dh.test:3000"
-    assert result["options"]["poll_interval_fast"] == 60
+    assert result["options"]["enable_images"] is False
 
 
 async def test_step_token_invalid_token_shows_invalid_auth(hass: HomeAssistant):
@@ -392,6 +377,87 @@ async def test_step_reconfigure_no_auth_strips_token(hass: HomeAssistant):
     assert "api_token" not in entry.data
 
 
+def _entry_for(hass: HomeAssistant, url: str, title: str | None = None):
+    entry = MockConfigEntry(
+        domain="dockhand",
+        title=title or url,
+        unique_id=url.rstrip("/").lower(),
+        data={"api_url": url, "verify_ssl": True},
+        version=SCHEMA_VERSION,
+        minor_version=SCHEMA_MINOR_VERSION,
+    )
+    entry.add_to_hass(hass)
+    return entry
+
+
+async def test_step_reconfigure_new_url_moves_unique_id_and_title(
+    hass: HomeAssistant,
+):
+    entry = _entry_for(hass, "http://old:3000")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with (
+        _patch_client(),
+        patch("custom_components.dockhand.async_setup_entry", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://New:3000/", "verify_ssl": True}
+        )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.unique_id == "http://new:3000"
+    assert entry.title == "http://New:3000/"
+
+
+async def test_step_reconfigure_keeps_a_renamed_title(hass: HomeAssistant):
+    entry = _entry_for(hass, "http://old:3000", title="Home lab")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with (
+        _patch_client(),
+        patch("custom_components.dockhand.async_setup_entry", return_value=True),
+    ):
+        await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://new:3000", "verify_ssl": True}
+        )
+    assert entry.title == "Home lab"
+    assert entry.unique_id == "http://new:3000"
+
+
+async def test_step_reconfigure_refuses_another_entrys_url(hass: HomeAssistant):
+    entry = _entry_for(hass, "http://one:3000")
+    other = _entry_for(hass, "http://two:3000")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with _patch_client() as client_cls:
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://TWO:3000/", "verify_ssl": True}
+        )
+    assert result["type"] == FlowResultType.FORM
+    assert result["errors"] == {"base": "already_configured"}
+    assert entry.data["api_url"] == "http://one:3000"
+    assert other.unique_id == "http://two:3000"
+    client_cls.assert_not_called()
+
+
+async def test_step_reconfigure_same_url_is_not_a_conflict(hass: HomeAssistant):
+    entry = _entry_for(hass, "http://one:3000")
+    result = await hass.config_entries.flow.async_init(
+        "dockhand", context={"source": "reconfigure", "entry_id": entry.entry_id}
+    )
+    with (
+        _patch_client(),
+        patch("custom_components.dockhand.async_setup_entry", return_value=True),
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"api_url": "http://one:3000", "verify_ssl": False}
+        )
+    assert result["reason"] == "reconfigure_successful"
+    assert entry.data["verify_ssl"] is False
+
+
 async def test_step_reconfigure_clearing_token_disables_auth(hass: HomeAssistant):
     """Clearing the token field → probe without auth → if probe succeeds, strip token."""
     result = await hass.config_entries.flow.async_init(
@@ -531,10 +597,10 @@ async def test_options_flow_saves_options(hass: HomeAssistant):
     assert result["type"] == FlowResultType.FORM
 
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"poll_interval_fast": 120}
+        result["flow_id"], {"enable_images": True}
     )
     assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert entry.options["poll_interval_fast"] == 120
+    assert entry.options["enable_images"] is True
 
 
 async def test_options_flow_runtime_controls_defaults_off(hass: HomeAssistant):
@@ -552,9 +618,7 @@ async def test_options_flow_runtime_controls_defaults_off(hass: HomeAssistant):
         await hass.async_block_till_done()
 
     result = await hass.config_entries.options.async_init(entry.entry_id)
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"poll_interval_fast": 60}
-    )
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
     assert result["type"] == FlowResultType.CREATE_ENTRY
     assert entry.options["enable_runtime_controls"] is False
 
@@ -579,30 +643,9 @@ async def test_options_flow_runtime_controls_can_be_enabled(hass: HomeAssistant)
     assert entry.options["enable_runtime_controls"] is True
 
 
-async def test_options_flow_rejects_interval_below_minimum(hass: HomeAssistant):
-    """Zero/negative poll intervals are rejected by the options schema.
-
-    Without validation a zero interval would make the coordinator refresh
-    in a tight loop and hammer the Dockhand API.
-    """
-    entry = MockConfigEntry(
-        domain="dockhand",
-        data={**LEGACY_ENTRY_DATA, "api_token": "dh_test_token"},
-        title="http://dh.test:3000",
-    )
-    entry.add_to_hass(hass)
-
-    with _patch_full_setup():
-        await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
-
-    result = await hass.config_entries.options.async_init(entry.entry_id)
-    assert result["type"] == FlowResultType.FORM
-
-    with pytest.raises(InvalidData):
-        await hass.config_entries.options.async_configure(
-            result["flow_id"], {"poll_interval_fast": 0}
-        )
+async def test_options_flow_has_no_polling_intervals(hass: HomeAssistant):
+    """Home Assistant doesn't let users set polling intervals."""
+    assert not any("interval" in str(key) for key in _options_schema().schema)
 
 
 async def test_options_flow_no_input_shows_form(hass: HomeAssistant):
@@ -646,7 +689,7 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
         ) as mock_reload:
             result = await hass.config_entries.options.async_init(entry.entry_id)
             await hass.config_entries.options.async_configure(
-                result["flow_id"], {"poll_interval_fast": 120}
+                result["flow_id"], {"enable_images": True}
             )
             await hass.async_block_till_done()
             mock_reload.assert_called_once_with(entry.entry_id)
@@ -654,25 +697,15 @@ async def test_options_change_triggers_reload(hass: HomeAssistant):
 
 # ---------------------------------------------------------------------------
 # strings.json / translations coverage: every schema field must resolve to
-# a real, non-empty label — a missing translation key doesn't error
-# anywhere, it just silently falls back to showing the raw snake_case
-# config key in the UI. These tests can only verify that strings.json has
-# non-empty values at the right JSON paths, not that HA's frontend actually
-# renders them correctly — that distinction mattered for real: an attempt
-# to group enable_update_entities/enable_precise_updates/poll_interval_updates
-# via HA's section() helper (briefly, in an unreleased 1.8.1 dev cycle) kept
-# rendering the fields inside the section as raw config keys with no text no
-# matter how the translation JSON was structured, and was reverted — see
-# docs/backlog.md. What these tests reliably do catch is a schema field with
-# no strings.json entry at all, or a locale silently missing/emptying one —
-# which is exactly what caught the second bug below.
+# a real, non-empty label. A missing translation key raises nothing; the
+# form just shows the raw config key. These tests prove the strings exist
+# at the right paths, not that the frontend renders them (fields inside a
+# section() didn't, whatever the strings: see docs/backlog.md), so layout
+# changes still need a look in a real Home Assistant.
 #
-# _options_schema() backs TWO step_ids — config.step.setup_options (first-time
-# setup) and options.step.init (Configure, reused later) — so both need their
-# own full copy of the translations, and both are checked below. They drifted
-# apart for real once already: config.step.setup_options was still showing
-# the pre-1.8.0 "enable_updates" key and was missing enable_runtime_controls/
-# enable_resource_stats entirely, undetected until this test existed.
+# _options_schema() backs two step IDs, config.step.setup_options (first
+# setup) and options.step.init (Configure), each with its own copy of the
+# translations, and both are checked.
 # ---------------------------------------------------------------------------
 
 _OPTIONS_SCHEMA_STEP_PATHS = [

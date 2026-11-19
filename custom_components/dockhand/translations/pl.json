@@ -24,31 +24,25 @@
         }
       },
       "setup_options": {
-        "title": "Konfiguracja odpytywania i funkcji",
-        "description": "Ustaw, jak często Dockhand ma być odpytywany i które opcjonalne grupy encji mają być włączone. Wszystko to można zmienić później przez Konfiguruj.",
+        "title": "Wybierz funkcje",
+        "description": "Wybierz, które opcjonalne grupy encji utworzyć. Wszystko można później zmienić w Konfiguruj.",
         "data": {
-          "poll_interval_fast": "Szybki interwał odpytywania (sekundy) — statystyki, kontenery i stosy",
-          "poll_interval_slow": "Wolny interwał odpytywania (sekundy) — obrazy, wolumeny, sieci, harmonogramy",
           "enable_schedules": "Włącz czujniki harmonogramów",
           "enable_images": "Włącz czujniki obrazów",
           "enable_volumes": "Włącz czujniki wolumenów",
           "enable_networks": "Włącz czujniki sieci",
           "enable_runtime_controls": "Włącz sterowanie w czasie działania (zaawansowane)",
           "enable_resource_stats": "Włącz czujniki CPU/pamięci/sieci/we-wy dysku kontenerów i stosów",
-          "poll_interval_precise_updates": "Interwał sprawdzania dokładnych aktualizacji (sekundy)",
           "enable_update_entities": "Włącz encje aktualizacji",
           "enable_precise_updates": "Włącz precyzyjne wersje aktualizacji"
         },
         "data_description": {
-          "poll_interval_fast": "Jak często odświeżać statystyki. Domyślnie: 60. Minimum: 10.",
-          "poll_interval_slow": "Jak często odświeżać obrazy, wolumeny, sieci i harmonogramy. Domyślnie: 600. Minimum: 30.",
           "enable_schedules": "Włącza czujniki dla harmonogramów konserwacji Dockhand.",
           "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
           "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
           "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
           "enable_runtime_controls": "Tworzy encje number/select do zmiany na żywo limitów CPU, pamięci i procesów oraz zasad ponownego uruchamiania samodzielnego kontenera. Niedostępne dla kontenerów zarządzanych przez Compose.",
           "enable_resource_stats": "Tworzy czujniki CPU, pamięci, sieci i operacji dyskowych dla każdego kontenera oraz sumy dla każdego stosu. Domyślnie wyłączone, bo to wiele encji, których większość osób nie potrzebuje; wyłączenie usuwa też już utworzone.",
-          "poll_interval_precise_updates": "Jak często wykonywane są powyższe zapytania do rejestru (sekundy). Domyślnie: 86400 (24 godziny). Minimum: 300.",
           "enable_update_entities": "Tworzy encję aktualizacji Home Assistant dla każdego kontenera. Wyłącz tę opcję, jeśli zarządzasz aktualizacjami w inny sposób i nie chcesz, aby kontenery Dockhand pojawiały się we własnym zarządzaniu aktualizacjami HA. Ukrywa też przycisk „Zaktualizuj wszystko”; „Sprawdź aktualizacje” nadal działa.",
           "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. To także jedyny sposób, by zobaczyć status aktualizacji własnych, chronionych kontenerów Dockhand (jego samego i Hawsera) — Dockhand nigdy nie udostępnia ich statusu aktualizacji poprzez zwykłe zbuforowane dane sprawdzania aktualizacji. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
         }
@@ -80,7 +74,8 @@
     },
     "error": {
       "cannot_connect": "Nie można połączyć się z Dockhand. Sprawdź adres URL API i połączenie sieciowe.",
-      "invalid_auth": "Nieprawidłowy token API. Upewnij się, że skopiowałeś pełny token zaczynający się od dh_."
+      "invalid_auth": "Nieprawidłowy token API. Upewnij się, że skopiowałeś pełny token zaczynający się od dh_.",
+      "already_configured": "Ta instancja Dockhand jest już skonfigurowana."
     },
     "abort": {
       "already_configured": "Ta instancja Dockhand jest już skonfigurowana.",
@@ -92,32 +87,62 @@
     "step": {
       "init": {
         "title": "Opcje Dockhand",
-        "description": "Dostosuj interwały odpytywania i opcjonalne źródła danych. Aby zmienić URL, SSL lub token API, użyj zamiast tego opcji Ponowna konfiguracja.",
+        "description": "Wybierz, które opcjonalne grupy encji utworzyć. Aby zmienić URL, SSL lub token API, użyj zamiast tego Ponownej konfiguracji.",
         "data": {
-          "poll_interval_fast": "Szybki interwał odpytywania (sekundy) — statystyki, kontenery i stosy",
-          "poll_interval_slow": "Wolny interwał odpytywania (sekundy) — obrazy, wolumeny, sieci, harmonogramy",
           "enable_schedules": "Włącz czujniki harmonogramów",
           "enable_images": "Włącz czujniki obrazów",
           "enable_volumes": "Włącz czujniki wolumenów",
           "enable_networks": "Włącz czujniki sieci",
           "enable_runtime_controls": "Włącz sterowanie w czasie działania (zaawansowane)",
           "enable_resource_stats": "Włącz czujniki CPU/pamięci/sieci/we-wy dysku kontenerów i stosów",
-          "poll_interval_precise_updates": "Interwał sprawdzania dokładnych aktualizacji (sekundy)",
           "enable_update_entities": "Włącz encje aktualizacji",
           "enable_precise_updates": "Włącz precyzyjne wersje aktualizacji"
         },
         "data_description": {
-          "poll_interval_fast": "Jak często odświeżać statystyki. Domyślnie: 60. Minimum: 10.",
-          "poll_interval_slow": "Jak często odświeżać obrazy, wolumeny, sieci i harmonogramy. Domyślnie: 600. Minimum: 30.",
           "enable_schedules": "Włącza czujniki dla harmonogramów konserwacji Dockhand.",
           "enable_images": "Włącza czujniki dla obrazów Docker na każde środowisko.",
           "enable_volumes": "Włącza czujniki dla wolumenów Docker na każde środowisko.",
           "enable_networks": "Włącza czujniki dla sieci Docker na każde środowisko.",
           "enable_runtime_controls": "Tworzy encje number/select do zmiany na żywo limitów CPU, pamięci i procesów oraz zasad ponownego uruchamiania samodzielnego kontenera. Niedostępne dla kontenerów zarządzanych przez Compose.",
           "enable_resource_stats": "Tworzy czujniki CPU, pamięci, sieci i operacji dyskowych dla każdego kontenera oraz sumy dla każdego stosu. Domyślnie wyłączone, bo to wiele encji, których większość osób nie potrzebuje; wyłączenie usuwa też już utworzone.",
-          "poll_interval_precise_updates": "Jak często wykonywane są powyższe zapytania do rejestru (sekundy). Domyślnie: 86400 (24 godziny). Minimum: 300.",
           "enable_update_entities": "Tworzy encję aktualizacji Home Assistant dla każdego kontenera. Wyłącz tę opcję, jeśli zarządzasz aktualizacjami w inny sposób i nie chcesz, aby kontenery Dockhand pojawiały się we własnym zarządzaniu aktualizacjami HA. Ukrywa też przycisk „Zaktualizuj wszystko”; „Sprawdź aktualizacje” nadal działa.",
           "enable_precise_updates": "Aktualizuje encje aktualizacji, aby pokazywały precyzyjne numery wersji (skróty obrazu) dzięki okresowym zapytaniom do rejestru, zamiast samego tagu obrazu. To także jedyny sposób, by zobaczyć status aktualizacji własnych, chronionych kontenerów Dockhand (jego samego i Hawsera) — Dockhand nigdy nie udostępnia ich statusu aktualizacji poprzez zwykłe zbuforowane dane sprawdzania aktualizacji. Wymaga włączonej powyżej opcji „Włącz encje aktualizacji”."
+        },
+        "sections": {
+          "environment_entities": {
+            "name": "Encje środowisk",
+            "description": "Encje domyślnie wyłączone, włączone dla każdego środowiska, także dodanych później.",
+            "data": {
+              "all": "Wszystkie",
+              "enabled": "Włącz dla każdego środowiska"
+            },
+            "data_description": {
+              "all": "Zaznacz, aby włączyć wszystkie typy tutaj; odznacz, aby wyłączyć je wszystkie.",
+              "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
+            }
+          },
+          "container_entities": {
+            "name": "Encje kontenerów",
+            "description": "Encje domyślnie wyłączone, włączone dla każdego kontenera, także dodanych później.",
+            "data": {
+              "all": "Wszystkie",
+              "enabled": "Włącz dla każdego kontenera"
+            },
+            "data_description": {
+              "all": "Zaznacz, aby włączyć wszystkie typy tutaj; odznacz, aby wyłączyć je wszystkie.",
+              "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
+            }
+          },
+          "stack_entities": {
+            "name": "Encje stosów",
+            "description": "Encje domyślnie wyłączone, włączone dla każdego stosu, także dodanych później.",
+            "data": {
+              "enabled": "Włącz dla każdego stosu"
+            },
+            "data_description": {
+              "enabled": "Zaznaczenie typu włącza go wszędzie, poza miejscami, gdzie sam go wyłączyłeś. Odznaczenie wyłącza go znowu wszędzie, także tam, gdzie włączyłeś go ręcznie."
+            }
+          }
         }
       }
     }
@@ -125,7 +150,15 @@
   "entity": {
     "sensor": {
       "cpu_usage": {
-        "name": "Użycie CPU"
+        "name": "Użycie CPU",
+        "state_attributes": {
+          "cpu_count": {
+            "name": "Procesory"
+          },
+          "top_containers": {
+            "name": "Najaktywniejsze kontenery"
+          }
+        }
       },
       "memory_usage": {
         "name": "Użycie pamięci"
@@ -149,28 +182,206 @@
         "name": "Wykorzystanie dysku"
       },
       "activity_events": {
-        "name": "Zdarzenia aktywności"
+        "name": "Zdarzenia aktywności",
+        "state_attributes": {
+          "recent_events": {
+            "name": "Ostatnie zdarzenia"
+          }
+        }
       },
       "state": {
-        "name": "Stan"
+        "name": "Stan",
+        "state": {
+          "created": "Utworzony",
+          "running": "Działa",
+          "paused": "Wstrzymany",
+          "restarting": "Restartuje",
+          "removing": "Usuwany",
+          "exited": "Zakończony",
+          "dead": "Martwy"
+        },
+        "state_attributes": {
+          "exit_code": {
+            "name": "Kod wyjścia"
+          },
+          "image": {
+            "name": "Obraz"
+          },
+          "networks": {
+            "name": "Sieci"
+          },
+          "restart_count": {
+            "name": "Liczba restartów"
+          },
+          "system_container": {
+            "name": "Kontener systemowy"
+          },
+          "tag_colors": {
+            "name": "Kolory tagów"
+          },
+          "tags": {
+            "name": "Tagi"
+          }
+        }
       },
       "health": {
-        "name": "Zdrowie"
+        "name": "Zdrowie",
+        "state": {
+          "healthy": "Zdrowy",
+          "unhealthy": "Niezdrowy",
+          "starting": "Uruchamianie"
+        }
       },
       "status": {
-        "name": "Status"
+        "name": "Status",
+        "state": {
+          "running": "Uruchomiony",
+          "partial": "Częściowy",
+          "restarting": "Restartuje",
+          "stopped": "Zatrzymany",
+          "created": "Utworzony"
+        },
+        "state_attributes": {
+          "system_container": {
+            "name": "Kontener systemowy"
+          },
+          "tag_colors": {
+            "name": "Kolory tagów"
+          },
+          "tags": {
+            "name": "Tagi"
+          },
+          "type": {
+            "name": "Typ",
+            "state": {
+              "internal": "Wewnętrzny",
+              "git": "Git",
+              "untracked": "Nieśledzony"
+            }
+          }
+        }
       },
       "containers_in_stack": {
-        "name": "Kontenery"
+        "name": "Kontenery",
+        "state_attributes": {
+          "containers": {
+            "name": "Kontenery"
+          }
+        }
       },
       "hawser_agent_version": {
-        "name": "Wersja agenta Hawser"
+        "name": "Wersja agenta Hawser",
+        "state_attributes": {
+          "agent_id": {
+            "name": "ID agenta"
+          },
+          "agent_name": {
+            "name": "Nazwa agenta"
+          }
+        }
       },
       "next_run": {
-        "name": "Następne uruchomienie"
+        "name": "Następne uruchomienie",
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Aktualizacja kontenera",
+              "container_start": "Start kontenera",
+              "container_stop": "Zatrzymanie kontenera",
+              "git_stack_sync": "Synchronizacja stosu Git",
+              "system_cleanup": "Czyszczenie systemu",
+              "env_update_check": "Sprawdzanie aktualizacji środowiska",
+              "image_prune": "Czyszczenie obrazów",
+              "backup": "Backup",
+              "repo_prune": "Czyszczenie repozytorium",
+              "repo_check": "Sprawdzenie repozytorium",
+              "repo_verify": "Weryfikacja repozytorium",
+              "stack_deploy": "Wdrożenie stacka",
+              "deploy_log_reconcile": "Uzgadnianie dziennika wdrożeń",
+              "env_report": "Raport stanu"
+            },
+            "name": "Typ"
+          },
+          "cron_expression": {
+            "name": "Wyrażenie cron"
+          },
+          "enabled": {
+            "name": "Włączony"
+          },
+          "environment": {
+            "name": "Środowisko"
+          }
+        }
       },
       "last_status": {
-        "name": "Ostatni status"
+        "name": "Ostatni status",
+        "state": {
+          "queued": "W kolejce",
+          "running": "W toku",
+          "success": "Sukces",
+          "failed": "Niepowodzenie",
+          "skipped": "Pominięty",
+          "warning": "Ostrzeżenie",
+          "error": "Błąd",
+          "cancelled": "Anulowany",
+          "stale": "Nieaktualny"
+        },
+        "state_attributes": {
+          "schedule_type": {
+            "state": {
+              "container_update": "Aktualizacja kontenera",
+              "container_start": "Start kontenera",
+              "container_stop": "Zatrzymanie kontenera",
+              "git_stack_sync": "Synchronizacja stosu Git",
+              "system_cleanup": "Czyszczenie systemu",
+              "env_update_check": "Sprawdzanie aktualizacji środowiska",
+              "image_prune": "Czyszczenie obrazów",
+              "backup": "Backup",
+              "repo_prune": "Czyszczenie repozytorium",
+              "repo_check": "Sprawdzenie repozytorium",
+              "repo_verify": "Weryfikacja repozytorium",
+              "stack_deploy": "Wdrożenie stacka",
+              "deploy_log_reconcile": "Uzgadnianie dziennika wdrożeń",
+              "env_report": "Raport stanu"
+            },
+            "name": "Typ"
+          },
+          "cron_expression": {
+            "name": "Wyrażenie cron"
+          },
+          "description": {
+            "name": "Opis"
+          },
+          "duration_ms": {
+            "name": "Czas trwania (ms)"
+          },
+          "enabled": {
+            "name": "Włączony"
+          },
+          "environment": {
+            "name": "Środowisko"
+          },
+          "error_message": {
+            "name": "Komunikat o błędzie"
+          },
+          "is_system": {
+            "name": "Harmonogram systemowy"
+          },
+          "triggered_at": {
+            "name": "Uruchomiono"
+          },
+          "triggered_by": {
+            "name": "Uruchomione przez",
+            "state": {
+              "cron": "Harmonogram",
+              "manual": "Ręcznie",
+              "webhook": "Webhook"
+            }
+          },
+          "updates_found": {
+            "name": "Znalezione aktualizacje"
+          }
+        }
       },
       "container_cpu_percent": {
         "name": "Użycie CPU"
@@ -224,13 +435,32 @@
           "syncing": "Synchronizowanie",
           "synced": "Zsynchronizowano",
           "error": "Błąd"
+        },
+        "state_attributes": {
+          "last_commit": {
+            "name": "Ostatni commit"
+          },
+          "sync_error": {
+            "name": "Błąd synchronizacji"
+          },
+          "auto_update": {
+            "name": "Automatyczne wdrażanie"
+          },
+          "webhook_enabled": {
+            "name": "Webhook włączony"
+          }
         }
       },
       "git_stack_last_sync": {
         "name": "Ostatnia synchronizacja"
       },
       "host_platform": {
-        "name": "Platforma hosta"
+        "name": "Platforma hosta",
+        "state_attributes": {
+          "architecture": {
+            "name": "Architektura"
+          }
+        }
       },
       "host_docker_version": {
         "name": "Wersja Dockera"
@@ -249,20 +479,273 @@
           "hawser-standard": "Agent Hawser (standardowy)",
           "hawser-edge": "Agent Hawser (edge)"
         }
+      },
+      "containers_running": {
+        "name": "Uruchomione kontenery"
+      },
+      "containers_stopped": {
+        "name": "Zatrzymane kontenery"
+      },
+      "containers_paused": {
+        "name": "Wstrzymane kontenery"
+      },
+      "containers_restarting": {
+        "name": "Restartujące kontenery"
+      },
+      "containers_unhealthy": {
+        "name": "Niesprawne kontenery"
+      },
+      "stacks_running": {
+        "name": "Uruchomione stacki"
+      },
+      "stacks_partial": {
+        "name": "Częściowo uruchomione stacki"
+      },
+      "stacks_stopped": {
+        "name": "Zatrzymane stacki"
+      },
+      "pending_updates": {
+        "name": "Oczekujące aktualizacje"
+      },
+      "installable_updates": {
+        "name": "Aktualizacje do zainstalowania"
+      },
+      "system_updates": {
+        "name": "Aktualizacje kontenerów systemowych"
+      },
+      "version_tag_updates": {
+        "name": "Nowsze tagi wersji"
+      },
+      "pinned_digest_updates": {
+        "name": "Aktualizacje przypiętych digestów"
+      },
+      "held_updates": {
+        "name": "Wstrzymane aktualizacje"
+      },
+      "memory_used": {
+        "name": "Użyta pamięć"
+      },
+      "memory_total": {
+        "name": "Całkowita pamięć"
+      },
+      "disk_usage_images": {
+        "name": "Miejsce na dysku: obrazy"
+      },
+      "disk_usage_containers": {
+        "name": "Miejsce na dysku: kontenery"
+      },
+      "disk_usage_volumes": {
+        "name": "Miejsce na dysku: wolumeny"
+      },
+      "disk_usage_build_cache": {
+        "name": "Miejsce na dysku: pamięć podręczna buildów"
+      },
+      "volume_containers": {
+        "name": "Kontenery",
+        "state_attributes": {
+          "containers": {
+            "name": "Kontenery"
+          },
+          "created": {
+            "name": "Utworzono"
+          },
+          "driver": {
+            "name": "Sterownik"
+          },
+          "in_use": {
+            "name": "W użyciu"
+          },
+          "labels": {
+            "name": "Etykiety"
+          },
+          "mountpoint": {
+            "name": "Punkt montowania"
+          },
+          "scope": {
+            "name": "Zakres"
+          }
+        }
+      },
+      "volume_size": {
+        "name": "Rozmiar"
+      },
+      "activity_events_today": {
+        "name": "Zdarzenia aktywności dzisiaj"
+      },
+      "vulnerabilities_critical": {
+        "name": "Krytyczne podatności"
+      },
+      "vulnerabilities_high": {
+        "name": "Wysokie podatności"
+      },
+      "vulnerabilities_medium": {
+        "name": "Średnie podatności"
+      },
+      "vulnerabilities_low": {
+        "name": "Niskie podatności"
+      },
+      "images_scanned": {
+        "name": "Przeskanowane obrazy"
+      },
+      "hawser_last_seen": {
+        "name": "Hawser ostatnio widziany"
+      },
+      "container_memory_cache": {
+        "name": "Pamięć podręczna"
+      },
+      "stack_running_containers": {
+        "name": "Uruchomione kontenery"
+      },
+      "stack_pending_updates": {
+        "name": "Oczekujące aktualizacje"
+      },
+      "image": {
+        "unit_of_measurement": "kontenery",
+        "state_attributes": {
+          "containers": {
+            "name": "Kontenery"
+          },
+          "created": {
+            "name": "Utworzono"
+          },
+          "digests": {
+            "name": "Skróty"
+          },
+          "size_bytes": {
+            "name": "Rozmiar (bajty)"
+          },
+          "source": {
+            "name": "Źródło"
+          },
+          "tags": {
+            "name": "Tagi"
+          },
+          "title": {
+            "name": "Tytuł"
+          },
+          "vendor": {
+            "name": "Dostawca"
+          },
+          "version": {
+            "name": "Wersja"
+          }
+        }
+      },
+      "untagged_images": {
+        "name": "Bez tagów",
+        "unit_of_measurement": "kontenery",
+        "state_attributes": {
+          "containers": {
+            "name": "Kontenery"
+          },
+          "created": {
+            "name": "Utworzono"
+          },
+          "digests": {
+            "name": "Skróty"
+          },
+          "size_bytes": {
+            "name": "Rozmiar (bajty)"
+          },
+          "source": {
+            "name": "Źródło"
+          },
+          "tags": {
+            "name": "Tagi"
+          },
+          "title": {
+            "name": "Tytuł"
+          },
+          "vendor": {
+            "name": "Dostawca"
+          },
+          "version": {
+            "name": "Wersja"
+          }
+        }
+      },
+      "network": {
+        "unit_of_measurement": "kontenery",
+        "state_attributes": {
+          "addresses": {
+            "name": "Adresy"
+          },
+          "containers": {
+            "name": "Kontenery"
+          },
+          "driver": {
+            "name": "Sterownik"
+          },
+          "internal": {
+            "name": "Wewnętrzna"
+          },
+          "scope": {
+            "name": "Zakres"
+          },
+          "subnet": {
+            "name": "Podsieć"
+          }
+        }
       }
     },
     "binary_sensor": {
       "online": {
-        "name": "Online"
+        "name": "Online",
+        "state_attributes": {
+          "connection_host": {
+            "name": "Host"
+          },
+          "connection_port": {
+            "name": "Port"
+          },
+          "labels": {
+            "name": "Etykiety"
+          }
+        }
+      },
+      "vulnerability_scanning": {
+        "name": "Skanowanie podatności"
+      },
+      "git_stack_sync_error": {
+        "name": "Błąd synchronizacji",
+        "state_attributes": {
+          "sync_error": {
+            "name": "Błąd synchronizacji"
+          }
+        }
+      },
+      "stack_updates_available": {
+        "name": "Dostępne aktualizacje",
+        "state_attributes": {
+          "pending_container_names": {
+            "name": "Kontenery z aktualizacjami"
+          }
+        }
+      },
+      "live_updates": {
+        "name": "Aktualizacje na żywo",
+        "state_attributes": {
+          "in_use": {
+            "name": "W użyciu"
+          }
+        }
+      }
+    },
+    "switch": {
+      "container_auto_update": {
+        "name": "Automatyczna aktualizacja"
+      },
+      "git_stack_auto_deploy": {
+        "name": "Automatyczne wdrażanie"
+      },
+      "schedule_enabled": {
+        "name": "Włączony"
       },
       "activity_logging": {
         "name": "Zbieranie aktywności"
       },
       "metrics_collection": {
         "name": "Zbieranie metryk"
-      },
-      "vulnerability_scanning": {
-        "name": "Skanowanie podatności"
       },
       "update_checks": {
         "name": "Sprawdzanie aktualizacji"
@@ -272,20 +755,6 @@
       },
       "image_pruning": {
         "name": "Czyszczenie obrazów"
-      },
-      "git_stack_sync_error": {
-        "name": "Błąd synchronizacji"
-      },
-      "stack_updates_available": {
-        "name": "Dostępne aktualizacje"
-      }
-    },
-    "switch": {
-      "container_auto_update": {
-        "name": "Automatyczna aktualizacja"
-      },
-      "git_stack_auto_deploy": {
-        "name": "Automatyczne wdrażanie"
       }
     },
     "button": {
@@ -298,11 +767,32 @@
       "git_stack_deploy": {
         "name": "Wdróż"
       },
+      "git_stack_sync": {
+        "name": "Synchronizuj z Gita"
+      },
       "stack_deploy": {
         "name": "Wdróż ponownie"
       },
       "env_bulk_update": {
         "name": "Zaktualizuj wszystkie kontenery"
+      },
+      "pause": {
+        "name": "Wstrzymaj"
+      },
+      "schedule_run": {
+        "name": "Uruchom teraz"
+      },
+      "prune_images": {
+        "name": "Usuń nieużywane obrazy"
+      },
+      "prune_containers": {
+        "name": "Usuń zatrzymane kontenery"
+      },
+      "prune_networks": {
+        "name": "Usuń nieużywane sieci"
+      },
+      "prune_volumes": {
+        "name": "Usuń nieużywane wolumeny"
       }
     },
     "number": {
@@ -325,6 +815,73 @@
           "unless-stopped": "Chyba że zatrzymano",
           "on-failure": "Przy błędzie"
         }
+      },
+      "vulnerability_scanner": {
+        "name": "Skaner podatności",
+        "state": {
+          "none": "Brak",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype i Trivy"
+        }
+      },
+      "image_prune_mode": {
+        "name": "Tryb czyszczenia obrazów",
+        "state": {
+          "dangling": "Tylko osierocone obrazy",
+          "all": "Wszystkie nieużywane obrazy"
+        }
+      },
+      "default_vulnerability_scanner": {
+        "name": "Domyślny skaner podatności",
+        "state": {
+          "none": "Brak",
+          "grype": "Grype",
+          "trivy": "Trivy",
+          "both": "Grype i Trivy"
+        }
+      },
+      "event_collection_mode": {
+        "name": "Tryb zbierania zdarzeń",
+        "state": {
+          "stream": "Strumień",
+          "poll": "Odpytywanie"
+        }
+      },
+      "event_poll_interval": {
+        "name": "Interwał odpytywania zdarzeń",
+        "state": {
+          "30": "30 sekund",
+          "60": "60 sekund",
+          "120": "120 sekund",
+          "300": "300 sekund"
+        }
+      }
+    },
+    "event": {
+      "docker_event": {
+        "name": "Zdarzenie Dockera",
+        "state_attributes": {
+          "event_type": {
+            "state": {
+              "die": "Zakończony",
+              "health_status_healthy": "Kontrola kondycji zaliczona",
+              "health_status_starting": "Kontrola kondycji uruchamiana",
+              "health_status_unhealthy": "Kontrola kondycji niezaliczona",
+              "kill": "Zabity",
+              "oom": "Brak pamięci",
+              "pause": "Wstrzymany",
+              "restart": "Uruchomiony ponownie",
+              "start": "Uruchomiony",
+              "stop": "Zatrzymany",
+              "unpause": "Wznowiony",
+              "update": "Zaktualizowany"
+            }
+          },
+          "exit_code": {
+            "name": "Kod wyjścia"
+          }
+        }
       }
     }
   },
@@ -335,8 +892,47 @@
     "container_not_found": {
       "message": "Kontener nie znaleziony — mógł zostać usunięty"
     },
+    "entry_not_loaded": {
+      "message": "Ta instancja Dockhand nie jest załadowana. Sprawdź ją w Ustawienia → Urządzenia i usługi."
+    },
     "git_stack_not_found": {
       "message": "Nie znaleziono stosu git — mógł zostać usunięty"
+    },
+    "invalid_target": {
+      "message": "To urządzenie nie jest środowiskiem ani kontenerem Dockhand, którego może użyć ta akcja."
+    },
+    "permission_denied": {
+      "message": "Dockhand odmówił: użytkownik tokenu API nie ma do tego uprawnień. Sprawdź rolę użytkownika w Dockhand."
+    },
+    "system_container": {
+      "message": "Własnego kontenera Dockhand i agentów Hawser nie można odtworzyć z poziomu Home Assistant."
+    },
+    "session_auth_unsupported": {
+      "message": "Ten wpis loguje się za pomocą pliku cookie sesji, który nie jest już obsługiwany. Użyj opcji Skonfiguruj ponownie, aby podać token API (Profil → Tokeny API w Dockhand)."
+    },
+    "setup_failed": {
+      "message": "Nie udało się wczytać danych z Dockhand: {error}"
+    },
+    "update_failed": {
+      "message": "Nie udało się zaktualizować danych z Dockhand: {error}"
+    },
+    "token_invalid": {
+      "message": "Token API Dockhand jest nieprawidłowy lub został unieważniony. Uwierzytelnij integrację ponownie w Ustawienia → Urządzenia i usługi."
+    },
+    "stack_not_found": {
+      "message": "Nie znaleziono stosu — mógł zostać usunięty"
+    },
+    "no_pending_updates": {
+      "message": "Brak aktualizacji do zainstalowania"
+    },
+    "dockhand_failed": {
+      "message": "Dockhand zgłosił niepowodzenie bez podania przyczyny. Jego dzienniki mogą powiedzieć więcej."
+    },
+    "unexpected_response": {
+      "message": "Dockhand udzielił odpowiedzi, której ta integracja nie rozumie. Sprawdź, czy Dockhand jest aktualny."
+    },
+    "cannot_connect": {
+      "message": "Nie można połączyć się z Dockhand. Sprawdź, czy działa i czy Home Assistant może się z nim połączyć."
     }
   },
   "issues": {
@@ -355,6 +951,109 @@
     "runtime_memory_reverted": {
       "title": "Limit pamięci automatycznie przywrócony dla {container}",
       "description": "Kontener \"{container}\" przestał działać wkrótce po obniżeniu limitu pamięci, co może się zdarzyć, gdy nowy limit jest niższy niż rzeczywiste zużycie kontenera, a jądro systemu natychmiast go egzekwuje. Limit pamięci został automatycznie przywrócony do poprzedniej wartości ({memory_bytes} bajtów). Sprawdź dzienniki i bieżący stan kontenera w Dockhand."
+    },
+    "event_collection_poll": {
+      "title": "Dockhand odpytuje o zdarzenia Dockera",
+      "description": "Dockhand zbiera zdarzenia Dockera, odpytując co {interval} sekund, zamiast odbierać je strumieniowo. Dla {environments} aktualizacje na żywo i encje zdarzeń Dockera mogą się spóźniać nawet o {interval} sekund, a przy interwale powyżej 30 sekund niektóre zdarzenia nigdy nie docierają: każde odpytanie czyta tylko ostatnie 30 sekund. Aby odbierać je strumieniowo, ustaw Tryb zbierania zdarzeń urządzenia Dockhand na Strumień (w Dockhand: Settings → General → Activity event collection mode). Jeśli wolisz odpytywanie, zignoruj ten problem: wróci dopiero po przełączeniu na Strumień i z powrotem na Odpytywanie."
+    },
+    "retired_entities_automation": {
+      "title": "{name} używa zastąpionych encji Dockhand",
+      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a automatyzacja {link} nadal używa starych. Zmień ją tak, aby używała nowych encji (stara encja → nowa encja):\n\n{entities}\n\nTa naprawa zniknie, gdy przestanie ich używać."
+    },
+    "retired_entities_script": {
+      "title": "{name} używa zastąpionych encji Dockhand",
+      "description": "Dockhand zastąpił niektóre swoje encje nowymi, a skrypt {link} nadal używa starych. Zmień go tak, aby używał nowych encji (stara encja → nowa encja):\n\n{entities}\n\nTa naprawa zniknie, gdy przestanie ich używać."
     }
+  },
+  "services": {
+    "prune": {
+      "name": "Usuń nieużywane zasoby",
+      "description": "Usuwa nieużywane zasoby Dockera w jednym środowisku Dockhand i zgłasza, co zostało usunięte.",
+      "fields": {
+        "device_id": {
+          "name": "Środowisko",
+          "description": "Środowisko Dockhand do wyczyszczenia."
+        },
+        "resources": {
+          "name": "Zasoby",
+          "description": "Co usunąć."
+        },
+        "all_images": {
+          "name": "Wszystkie nieużywane obrazy",
+          "description": "Usuń także otagowane obrazy, których nie używa żaden kontener, a nie tylko wiszące (bez tagu)."
+        }
+      }
+    },
+    "recreate_container": {
+      "name": "Odtwórz kontener",
+      "description": "Odtwarza kontener z jego bieżącej konfiguracji, jak zapisanie w edytorze Dockhand, opcjonalnie najpierw pobierając jego obraz.",
+      "fields": {
+        "device_id": {
+          "name": "Kontener",
+          "description": "Kontener do odtworzenia."
+        },
+        "pull": {
+          "name": "Pobierz obraz",
+          "description": "Najpierw ponownie pobierz obraz kontenera, aby użyć nowszego obrazu pod tym samym tagiem."
+        }
+      }
+    }
+  },
+  "selector": {
+    "prune_resources": {
+      "options": {
+        "containers": "Zatrzymane kontenery",
+        "images": "Obrazy",
+        "volumes": "Nieużywane wolumeny",
+        "networks": "Nieużywane sieci"
+      }
+    },
+    "environment_entities": {
+      "options": {
+        "vulnerability_scanning": "Skanowanie podatności",
+        "activity_events": "Zdarzenia aktywności",
+        "disk_usage": "Wykorzystanie dysku",
+        "vulnerabilities": "Podatności",
+        "prune_images": "Usuń nieużywane obrazy",
+        "prune_containers": "Usuń zatrzymane kontenery",
+        "prune_networks": "Usuń nieużywane sieci",
+        "prune_volumes": "Usuń nieużywane wolumeny",
+        "pinned_digest_updates": "Aktualizacje przypiętych digestów",
+        "held_updates": "Wstrzymane aktualizacje",
+        "hawser_agent_version": "Wersja agenta Hawser",
+        "hawser_last_seen": "Hawser ostatnio widziany",
+        "host_docker_version": "Wersja Dockera",
+        "host_platform": "Platforma hosta",
+        "uptime": "Czas działania"
+      }
+    },
+    "container_entities": {
+      "options": {
+        "docker_event": "Zdarzenie Dockera",
+        "pause": "Wstrzymaj",
+        "container_auto_update": "Automatyczna aktualizacja"
+      }
+    },
+    "stack_entities": {
+      "options": {
+        "git_stack_auto_deploy": "Automatyczne wdrażanie"
+      }
+    }
+  },
+  "common": {
+    "release_notes_image": "Obraz: {image}",
+    "newer_tag_available": "Dostępny jest nowszy tag wersji: **{tag}**.",
+    "newer_tag_also_available": "Dostępny jest też nowszy tag wersji: **{tag}**. Aby na niego przejść, zmień tag w pliku compose lub konfiguracji kontenera.",
+    "newer_tag_advisory_only": "To tylko informacja — kontener jest przypięty do bieżącego tagu, więc Instaluj nie przeniesie go do tej wersji. Aby zaktualizować, zmień tag w pliku compose lub konfiguracji kontenera.",
+    "release_notes_truncated": "… (skrócono)",
+    "versions_skipped": "_Po drodze pominięto wersje: {count}._",
+    "view_full_release_notes": "Zobacz pełne informacje o wydaniu",
+    "view_release_notes": "Zobacz informacje o wydaniu",
+    "pinned_to_digest": "**Przypięty do skrótu.** Tag obrazu wskazuje teraz nowy skrót, ale ten kontener jest przypięty do starego. Aby go zaktualizować, zmień skrót w pliku compose lub poleceniu uruchomienia; Instaluj pobrałby tylko ponownie przypięty obraz.",
+    "update_held": "**Aktualizacja wstrzymana:** do minimalnego wieku obrazu ustawionego w Dockhand pozostało godzin: {hours}. Potem będzie można ją zainstalować.",
+    "update_held_until_check": "**Aktualizacja wstrzymana:** nowy obraz osiągnął minimalny wiek ustawiony w Dockhand. Będzie można ją zainstalować przy następnym sprawdzeniu aktualizacji przez Dockhand (lub po **Sprawdź aktualizacje obrazów**).",
+    "scanner_may_block_update": "To środowisko skanuje obrazy pod kątem podatności przed aktualizacją. Zależnie od skonfigurowanej zasady ta aktualizacja może zostać zablokowana, jeśli wyniki przekroczą próg.",
+    "system_container_update": "To kontener systemowy, który trzeba zaktualizować bezpośrednio na hoście Dockera.",
+    "updates_disabled_by_label": "Aktualizacje wyłączone etykietą `dockhand.update=false`."
   }
 }

@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
 """Release helpers for CI (.github/workflows/build.yml) and release pull requests.
 
-python3 scripts/release.py check [--release]
+python3 scripts/release.py check [--release] [--released-from <changelog>]
     CHANGELOG.md has [Unreleased]; with --release (pull requests into and pushes
-    to main), also a dated section for manifest.json's version.
+    to main), also a dated section for manifest.json's version; with
+    --released-from (main's CHANGELOG.md), every section released there is
+    unchanged here.
 python3 scripts/release.py version
     manifest.json's version.
-python3 scripts/release.py dev-version <run> <tagged>
+python3 scripts/release.py dev-version <last> <tagged>
     The test build's version: the next patch once the current version is
     tagged (<tagged> = true|false), so HACS offers it over the installed
-    release.
-python3 scripts/release.py notes <version> [--test-build <run>]
+    release, numbered one past <last> (the latest test build's tag, or "")
+    for the same version and from 1 for a new one, so the number counts
+    test builds rather than workflow runs.
+python3 scripts/release.py notes <version> [--test-build <n>]
     Release notes: that changelog section plus install text ("Unreleased"
     for test builds).
 python3 scripts/release.py package <zip> [--version <version>]
@@ -34,6 +38,12 @@ INTEGRATION = ROOT / "custom_components" / "dockhand"
 MANIFEST = INTEGRATION / "manifest.json"
 CHANGELOG = ROOT / "CHANGELOG.md"
 REPO = "https://github.com/raetha/ha-dockhand"
+# The changelog links docs and images on main, where they land with the
+# release; a test build's notes link dev's, where they are until then.
+_ON_MAIN = re.compile(
+    r"(https://github\.com/raetha/ha-dockhand/blob/|"
+    r"https://raw\.githubusercontent\.com/raetha/ha-dockhand/)main/"
+)
 
 # Older sections use an em dash before the date, newer ones a hyphen: both are read.
 _HEADING = re.compile(r"^## \[([^\]]+)\](?:\s*[-—]\s*\S+)?\s*$")
@@ -61,7 +71,12 @@ def sections(changelog: str) -> dict[str, str]:
     return out
 
 
-def check(changelog: str, version: str, release: bool = False) -> list[str]:
+def check(
+    changelog: str,
+    version: str,
+    release: bool = False,
+    released_from: str | None = None,
+) -> list[str]:
     """Return the problems that should fail CI.
 
     On dev, manifest.json holds the expected next version, which has no section
@@ -78,16 +93,26 @@ def check(changelog: str, version: str, release: bool = False) -> list[str]:
             f"CHANGELOG.md has no dated section for version {version}: "
             "date it in the release pull request"
         )
+    if released_from is not None:
+        # Released notes are frozen: an entry meant for Unreleased that
+        # lands under the release below it would otherwise go unnoticed.
+        for name, text in sections(released_from).items():
+            if name != "Unreleased" and found.get(name) != text:
+                problems.append(
+                    f"CHANGELOG.md changes the released [{name}] section: "
+                    "new entries go under [Unreleased]"
+                )
     return problems
 
 
-def dev_version(version: str, run: int, tagged: bool) -> str:
+def dev_version(version: str, last: str, tagged: bool) -> str:
     match = _PLAIN_VERSION.match(version)
     if not match:
         raise ValueError(f"not a plain X.Y.Z version: {version}")
     major, minor, patch = (int(part) for part in match.groups())
     base = f"{major}.{minor}.{patch + 1}" if tagged else version
-    return f"{base}-dev.{run}"
+    previous = re.fullmatch(rf"v?{re.escape(base)}-dev\.(\d+)", last)
+    return f"{base}-dev.{int(previous.group(1)) + 1 if previous else 1}"
 
 
 def notes(changelog: str, version: str, test_build: int | None = None) -> str:
@@ -95,20 +120,23 @@ def notes(changelog: str, version: str, test_build: int | None = None) -> str:
     if body is None:
         raise ValueError(f"CHANGELOG.md has no section for {version}")
     install = (
-        f"**Install** with HACS (search for Dockhand, or add `{REPO}` as a custom "
-        "repository of type Integration), restart Home Assistant, then add the "
-        "Dockhand integration under Settings → Devices & services. The "
-        "[Dockhand Cards](https://github.com/raetha/ha-dockhand-cards) add "
-        f"dashboard cards for it.\n\nMore: [README]({REPO}#readme)"
+        "**Install** from Home Assistant's Marketplace (2026.11 and later; HACS "
+        "on older versions): find Dockhand, install it and restart Home "
+        "Assistant, then add the Dockhand integration under Settings → Devices "
+        "& services. The [Dockhand Cards](https://github.com/raetha/ha-dockhand-cards) "
+        f"add dashboard cards for it.\n\nMore: [README]({REPO}#readme)"
     )
     parts = []
     if test_build is not None:
         parts.append(
             f"**Test build {test_build}** from `dev`, for trying what's coming. "
-            "To get it, enable and turn on the Dockhand **Pre-release** switch "
-            "HACS adds (disabled by default); HACS then offers it as an update. "
-            "The changes since the last release:"
+            "To get it, turn on pre-releases for Dockhand (in the Marketplace, "
+            "Dockhand's ⋮ menu; or its **Pre-release** switch, disabled by "
+            "default) and it's offered as an update. The changes since the last "
+            "release:"
         )
+    if test_build is not None and body:
+        body = _ON_MAIN.sub(r"\1dev/", body)
     parts += [body or "_No changes listed yet._", install]
     return "\n\n".join(parts) + "\n"
 
@@ -148,9 +176,10 @@ def main(argv: list[str]) -> int:
     sub = parser.add_subparsers(dest="cmd", required=True)
     chk = sub.add_parser("check")
     chk.add_argument("--release", action="store_true")
+    chk.add_argument("--released-from", type=Path)
     sub.add_parser("version")
     dev = sub.add_parser("dev-version")
-    dev.add_argument("run", type=int)
+    dev.add_argument("last")
     dev.add_argument("tagged", choices=["true", "false"])
     note = sub.add_parser("notes")
     note.add_argument("version")
@@ -163,7 +192,12 @@ def main(argv: list[str]) -> int:
     changelog = CHANGELOG.read_text(encoding="utf-8")
     version = json.loads(MANIFEST.read_text(encoding="utf-8"))["version"]
     if args.cmd == "check":
-        problems = check(changelog, version, args.release)
+        released = (
+            args.released_from.read_text(encoding="utf-8")
+            if args.released_from
+            else None
+        )
+        problems = check(changelog, version, args.release, released)
         for problem in problems:
             print(f"::error file=CHANGELOG.md::{problem}", file=sys.stderr)
         if problems:
@@ -172,7 +206,7 @@ def main(argv: list[str]) -> int:
     elif args.cmd == "version":
         print(version)
     elif args.cmd == "dev-version":
-        print(dev_version(version, args.run, args.tagged == "true"))
+        print(dev_version(version, args.last, args.tagged == "true"))
     elif args.cmd == "notes":
         sys.stdout.write(notes(changelog, args.version, args.test_build))
     else:
