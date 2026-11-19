@@ -148,7 +148,7 @@ Releasing (the owner decides when):
 
 1. On a branch from `dev`, run `scripts/bump_version.sh X.Y.Z [YYYY-MM-DD]` with the version `dev` already holds (or a different one, if the release review says so): it sets `manifest.json`'s version, turns `[Unreleased]` into the dated section (with a fresh empty `[Unreleased]` above) and updates the compare links. Go through the release checklist below.
 2. Open the release pull request into `main`, titled "Dockhand X.Y.Z", with the new changelog section as its body (or open it from `dev` once the bump is merged there).
-3. Squash-merge it. CI tags `X.Y.Z` (no leading "v": HACS shows tag names; releases up to 1.11.3 are tagged `vX.Y.Z`), publishes the release with the changelog section as notes and `dockhand.zip` attached, deletes the test builds, and resets `dev` to `main`.
+3. Squash-merge it. CI tags `X.Y.Z` (no leading "v": HACS shows tag names; releases up to 1.11.3 are tagged `vX.Y.Z`), publishes the release with the changelog section as notes and `dockhand.zip` attached, deletes the test builds, and resets `dev` to `main` (sync-dev: when `dev` holds nothing that wasn't released, whether the pull request came from `dev` or from a release branch off it).
 
 HACS installs from that release asset, not the repository's files (`hacs.json`: `zip_release` and `filename`), so every release and test build must carry `dockhand.zip`, built by `scripts/release.py package` with the integration's files at the zip's root (HACS extracts it into `custom_components/dockhand/`). The asset's download count is the install count HACS shows.
 

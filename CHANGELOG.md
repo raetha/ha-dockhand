@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Internal
+
+- After a release, CI resets `dev` to `main` also when the release pull request came from a release branch off `dev`, as 2.0.0's did.
+
 ## [2.0.0] - 2026-11-18
 
 Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely and puts more of Dockhand in your hands.
