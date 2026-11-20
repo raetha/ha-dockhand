@@ -243,4 +243,4 @@ conditions:
   - "{{ 'critical' in state_attr('sensor.web_state', 'tags') }}"
 ```
 
-They show the tags Dockhand's own lists show. A container's tags don't include its stack's, which Dockhand only adds when you turn that on in its containers list. Tags are read every 10 minutes (labels with every poll), so a new tag can take that long to appear.
+They show the tags Dockhand's own lists show. A container also carries the tags assigned to its stack, after its own, as Dockhand's containers list shows them by default; the tags a stack's services name in their labels stay on the stack. Dockhand lets you turn stack tags off in its containers list, but keeps that choice in your browser, where Home Assistant can't see it: with it off, Dockhand shows fewer tags on those containers than Home Assistant does. Tags are read every 10 minutes (labels with every poll), so a new tag can take that long to appear.
