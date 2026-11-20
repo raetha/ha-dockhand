@@ -1858,6 +1858,35 @@ def test_removes_update_entity_when_update_entities_option_disabled(
     assert not _entity_exists(hass, ent.entity_id)
 
 
+def test_preserves_containers_when_update_entities_option_disabled(
+    hass: HomeAssistant,
+):
+    """Turning update entities off must leave the containers themselves
+    alone (github.com/raetha/ha-dockhand/issues/105)."""
+    entry = _make_entry(hass, options={"enable_update_entities": False})
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            1: {
+                "containers": [
+                    {"name": "nginx", "id": "abc", "state": "running", "labels": {}}
+                ],
+                "stacks": [],
+                "stats": {"name": "myenv", "online": True},
+            }
+        },
+        slow_data={"environments": {}, "schedules": []},
+    )
+    device = _add_device(hass, entry, f"{entry.entry_id}_container_1_nginx")
+    group = _add_device(hass, entry, f"{entry.entry_id}_env_1_Containers")
+    switch = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_nginx_running", domain="switch"
+    )
+    _cleanup_stale_registry(hass, entry)
+    assert _device_exists(hass, device.id)
+    assert _device_exists(hass, group.id)
+    assert _entity_exists(hass, switch.entity_id)
+
+
 def test_preserves_update_entity_when_update_entities_option_explicitly_enabled(
     hass: HomeAssistant,
 ):

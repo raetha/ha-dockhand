@@ -2,8 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Container devices and their switches and buttons no longer disappear and reappear on every poll when **Enable update entities** is off ([#105](https://github.com/raetha/ha-dockhand/issues/105)).
+
 ### Internal
 
+- A test sets the integration up under each option on its own, on and off, and checks that cleanup keeps everything setup created.
 - After a release, CI resets `dev` to `main` also when the release pull request came from a release branch off `dev`, as 2.0.0's did.
 
 ## [2.0.0] - 2026-11-18
