@@ -55,7 +55,7 @@ What cleanup can't confirm is gone (an offline environment, a failed fetch) it k
 3. Add the matching branch in `_cleanup_stale_registry`, following the safety rule.
 4. Test it in `test_init.py` like the runtime-control, git-stack and update tests: kept while live, removed when the condition flips, kept while offline or after a failed poll.
 
-A missing cleanup case raises nothing and fails no test you didn't write, so check every new entity type against this section in review.
+A missing cleanup case raises nothing and fails no test you didn't write, so check every new entity type against this section in review. One net does catch cleanup disagreeing with setup: `tests/test_option_settings.py` sets the integration up from the real-data fixture under each option on its own, on and off, and fails if cleanup then removes anything setup made. A new option joins its list (a test fails until it does); an entity type the fixture's data doesn't produce isn't covered by it.
 
 **Type-word collisions.** The entity pass dispatches on the word at position 2 alone. An always-present entity whose suffix merely *starts* with a type word (`update_check_enabled`, `image_prune_enabled`) would be checked against that type's live set, never found, and removed on every online poll. List such exact suffixes in `_TYPE_COLLISION_EXCLUDED_SUFFIXES`, or choose a suffix that doesn't start with one.
 

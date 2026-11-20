@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-11-19
+
+A fix for a regression in 2.0.0: with **Enable update entities** turned off, container devices, with their switches and buttons, kept disappearing and coming back.
+
+### Fixed
+
+- Container devices and their switches and buttons no longer disappear and reappear on every poll when **Enable update entities** is off ([#105](https://github.com/raetha/ha-dockhand/issues/105)).
+
+### Internal
+
+- A test sets the integration up under each option on its own, on and off, and checks that cleanup keeps everything setup created.
+- After a release, CI resets `dev` to `main` also when the release pull request came from a release branch off `dev`, as 2.0.0's did.
+
 ## [2.0.0] - 2026-11-18
 
 Dockhand for Home Assistant 2.0 follows Home Assistant's standards more closely and puts more of Dockhand in your hands.
@@ -1506,7 +1519,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.0...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.1...HEAD
+[2.0.1]: https://github.com/raetha/ha-dockhand/compare/2.0.0...2.0.1
 [2.0.0]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...2.0.0
 [1.11.3]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...v1.11.3
 [1.11.2]: https://github.com/raetha/ha-dockhand/compare/v1.11.1...v1.11.2

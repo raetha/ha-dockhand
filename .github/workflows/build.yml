@@ -183,20 +183,39 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      pull-requests: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
-      - name: Reset dev to main if they match
+      # dev is reset when everything on it was released: its files match main's, or
+      # it's part of the pull request just merged (a release branch off dev dates the
+      # changelog on top, so the files differ by that). Anything that landed on dev
+      # since keeps it as it is.
+      - name: Reset dev to main if everything on it was released
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -e
           git rev-parse -q --verify origin/dev >/dev/null || { echo "no dev branch"; exit 0; }
+          released=false
           if git diff --quiet origin/main origin/dev; then
+            released=true
+          else
+            pr=$(gh api "repos/$GH_REPO/commits/$GITHUB_SHA/pulls" \
+              --jq '[.[] | select(.base.ref == "main")][0].number // empty' || true)
+            if [ -n "$pr" ] && git fetch -q origin "refs/pull/$pr/head" \
+              && git merge-base --is-ancestor origin/dev FETCH_HEAD; then
+              released=true
+            fi
+          fi
+          if [ "$released" = true ]; then
             git push --force origin origin/main:refs/heads/dev
             echo "dev reset to main"
           else
-            echo "::warning::dev has changes that aren't on main: left as it is"
+            echo "::warning::dev has changes that weren't released: left as it is"
           fi
 
   test-build:
