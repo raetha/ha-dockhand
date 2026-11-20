@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- A container now also carries the tags assigned to its stack, as Dockhand's containers list shows them by default, so containers in a tagged stack no longer look untagged in Home Assistant ([ha-dockhand-cards#108](https://github.com/raetha/ha-dockhand-cards/issues/108)). If you've turned stack tags off in Dockhand's containers list, Home Assistant still shows them: Dockhand keeps that choice in the browser.
+
+### Changed
+
+- Diagnostics count each environment's tag assignments as Dockhand reports them (no names), to help with tag reports.
+
 ## [2.0.1] - 2026-11-19
 
 A fix for a regression in 2.0.0: with **Enable update entities** turned off, container devices, with their switches and buttons, kept disappearing and coming back.

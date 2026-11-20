@@ -95,6 +95,17 @@ def test_stack_label_tags():
     assert tags.stack_label_tags({"containers": 2}, containers) == []
 
 
+def test_with_stack_tags_adds_what_the_container_lacks():
+    own = [{"name": "media", "color": BLUE}]
+    stack = [{"name": "MEDIA", "color": RED}, {"name": "critical", "color": RED}]
+    assert tags.with_stack_tags(own, stack) == [
+        {"name": "media", "color": BLUE},
+        {"name": "critical", "color": RED},
+    ]
+    assert tags.with_stack_tags([], stack) == stack
+    assert tags.with_stack_tags(own, []) == own
+
+
 def test_attributes():
     assert tags.attributes([{"name": "media", "color": BLUE}]) == {
         "tags": ["media"],
@@ -134,6 +145,60 @@ async def test_tags_reach_the_environments_data(hass: HomeAssistant):
     }
     assert env["stack_tags"] == {
         "app": [{"name": "critical", "color": RED}, {"name": "edge", "color": RED}]
+    }
+
+
+async def test_containers_show_their_stacks_tags(hass: HomeAssistant):
+    """Dockhand's containers list shows a stack's assigned tags on its
+    containers by default (github.com/raetha/ha-dockhand-cards/issues/108);
+    the stack's label tags stay on the stack."""
+    client = _client()
+    db = container(
+        "db",
+        stack="app",
+        labels={
+            "com.docker.compose.project": "app",
+            "dockhand.tags": "store",
+        },
+    )
+    cache = container("cache", stack="app")
+    loose = container("loose")
+    client.async_get_containers = AsyncMock(return_value=[db, cache, loose])
+    client.async_get_stacks = AsyncMock(
+        return_value=[{"name": "app", "containers": [db["id"], cache["id"]]}]
+    )
+    client.async_get_container_tags = AsyncMock(return_value={"db": [2]})
+    client.async_get_stack_tags = AsyncMock(return_value={"app": [2, 1]})
+    coord = DockhandFastCoordinator(hass, client, {})
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    shown = {
+        name: [t["name"] for t in found]
+        for name, found in env["container_tags"].items()
+    }
+    assert shown == {
+        "db": ["critical", "store", "media"],
+        "cache": ["critical", "media"],
+    }
+    assert [t["name"] for t in env["stack_tags"]["app"]] == [
+        "critical",
+        "media",
+        "store",
+    ]
+    assert coord.tag_summary(1, [db, cache, loose], [{"name": "app"}]) == {
+        "catalog": 2,
+        "assigned_containers": 1,
+        "assigned_containers_not_found": 0,
+        "assigned_stacks": 1,
+        "assigned_stacks_not_found": 0,
+    }
+    assert coord.tag_summary(1, [], [])["assigned_containers_not_found"] == 1
+    assert coord.tag_summary(9, [], []) == {
+        "catalog": 2,
+        "assigned_containers": 0,
+        "assigned_containers_not_found": 0,
+        "assigned_stacks": 0,
+        "assigned_stacks_not_found": 0,
     }
 
 
