@@ -819,40 +819,38 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
                 containers_fetch_ok_env_ids.add(env_id)
         if update_entities_enabled:
             bulk_update_uids.add(f"{entry.entry_id}_{env_id}_bulk_update")
-            for c in env_containers:
-                name = c.get("name", "")
-                if name:
-                    containers.add(_device_id_container(entry.entry_id, env_id, name))
-                    if update_entities_enabled:
-                        update_uids.add(f"{entry.entry_id}_{env_id}_update_{name}")
-                    if not c.get("systemContainer"):
-                        for suffix in _CONTAINER_ACTION_SUFFIXES:
-                            container_action_uids.add(
-                                f"{entry.entry_id}_{env_id}_container_{name}_{suffix}"
-                            )
-                    if _container_has_healthcheck(c):
-                        health_uids.add(
-                            f"{entry.entry_id}_{env_id}_container_{name}_health"
+        # Every container counts here whatever the options say: these sets
+        # decide which container devices and entities survive cleanup.
+        for c in env_containers:
+            name = c.get("name", "")
+            if name:
+                containers.add(_device_id_container(entry.entry_id, env_id, name))
+                if update_entities_enabled:
+                    update_uids.add(f"{entry.entry_id}_{env_id}_update_{name}")
+                if not c.get("systemContainer"):
+                    for suffix in _CONTAINER_ACTION_SUFFIXES:
+                        container_action_uids.add(
+                            f"{entry.entry_id}_{env_id}_container_{name}_{suffix}"
                         )
-                    if container_stats_enabled:
-                        for suffix in CONTAINER_STATS_SUFFIXES:
-                            container_stats_uids.add(
-                                f"{entry.entry_id}_{env_id}_container_{name}{suffix}"
-                            )
-                is_stackless = not _compose_project(c)
-                if is_stackless:
-                    has_freestanding = True
-                    if (
-                        runtime_controls_enabled
-                        and name
-                        and not c.get("systemContainer")
-                    ):
-                        for suffix in _RUNTIME_CONTROL_SUFFIXES:
-                            runtime_control_uids.add(
-                                f"{entry.entry_id}_{env_id}_container_{name}_{suffix}"
-                            )
-            if has_freestanding:
-                containers_group_env_ids.add(env_id)
+                if _container_has_healthcheck(c):
+                    health_uids.add(
+                        f"{entry.entry_id}_{env_id}_container_{name}_health"
+                    )
+                if container_stats_enabled:
+                    for suffix in CONTAINER_STATS_SUFFIXES:
+                        container_stats_uids.add(
+                            f"{entry.entry_id}_{env_id}_container_{name}{suffix}"
+                        )
+            is_stackless = not _compose_project(c)
+            if is_stackless:
+                has_freestanding = True
+                if runtime_controls_enabled and name and not c.get("systemContainer"):
+                    for suffix in _RUNTIME_CONTROL_SUFFIXES:
+                        runtime_control_uids.add(
+                            f"{entry.entry_id}_{env_id}_container_{name}_{suffix}"
+                        )
+        if has_freestanding:
+            containers_group_env_ids.add(env_id)
         if "stack_stats" not in env_failures:
             stack_stats_fetch_ok_env_ids.add(env_id)
         stack_stats_supported = env_data.get("stack_stats") is not None
