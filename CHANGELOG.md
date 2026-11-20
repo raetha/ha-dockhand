@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-11-20
+
+Containers in a tagged stack now show that stack's tags in Home Assistant and the cards, as Dockhand's own containers list does.
+
 ### Fixed
 
 - A container now also carries the tags assigned to its stack, as Dockhand's containers list shows them by default, so containers in a tagged stack no longer look untagged in Home Assistant ([ha-dockhand-cards#108](https://github.com/raetha/ha-dockhand-cards/issues/108)). If you've turned stack tags off in Dockhand's containers list, Home Assistant still shows them: Dockhand keeps that choice in the browser.
@@ -1527,7 +1531,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.2...HEAD
+[2.0.2]: https://github.com/raetha/ha-dockhand/compare/2.0.1...2.0.2
 [2.0.1]: https://github.com/raetha/ha-dockhand/compare/2.0.0...2.0.1
 [2.0.0]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...2.0.0
 [1.11.3]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...v1.11.3
