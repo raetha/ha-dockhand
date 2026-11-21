@@ -136,6 +136,7 @@ async def async_get_config_entry_diagnostics(
                 1 for c in containers if not _compose_project(c)
             ),
             "compose_containers": sum(1 for c in containers if _compose_project(c)),
+            "tags": fast.tag_summary(env_id, containers, stacks),
         }
 
     # Build a lightweight update summary

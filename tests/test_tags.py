@@ -79,22 +79,6 @@ def test_resolve_merges_like_dockhand():
     assert tags.resolve(None, [], catalog) == []
 
 
-def test_stack_label_tags():
-    containers = [
-        {"id": "a", "labels": {"dockhand.tags": "media"}},
-        {"id": "b", "labels": {"dockhand.tags": "db:green"}},
-        {"id": "c", "labels": {"dockhand.tags": "other"}},
-    ]
-    stack = {"name": "s", "containers": ["a", "b"]}
-    assert [t["name"] for t in tags.stack_label_tags(stack, containers)] == [
-        "media",
-        "db",
-    ]
-    sent = {"labelTags": [{"name": "media", "color": "blue"}, {"name": "?"}, "x"]}
-    assert tags.stack_label_tags(sent, containers) == [{"name": "media", "color": BLUE}]
-    assert tags.stack_label_tags({"containers": 2}, containers) == []
-
-
 def test_attributes():
     assert tags.attributes([{"name": "media", "color": BLUE}]) == {
         "tags": ["media"],
@@ -132,8 +116,53 @@ async def test_tags_reach_the_environments_data(hass: HomeAssistant):
     assert env["container_tags"] == {
         "web": [{"name": "media", "color": BLUE}, {"name": "edge", "color": RED}]
     }
-    assert env["stack_tags"] == {
-        "app": [{"name": "critical", "color": RED}, {"name": "edge", "color": RED}]
+    assert env["stack_tags"] == {"app": [{"name": "critical", "color": RED}]}
+
+
+async def test_each_item_carries_only_its_own_tags(hass: HomeAssistant):
+    """A container's label tags are its own and don't roll up to its stack;
+    a stack's tags don't come down to its containers (the cards do that,
+    github.com/raetha/ha-dockhand-cards/issues/108)."""
+    client = _client()
+    db = container(
+        "db",
+        stack="app",
+        labels={
+            "com.docker.compose.project": "app",
+            "dockhand.tags": "store",
+        },
+    )
+    cache = container("cache", stack="app")
+    loose = container("loose")
+    client.async_get_containers = AsyncMock(return_value=[db, cache, loose])
+    client.async_get_stacks = AsyncMock(
+        return_value=[{"name": "app", "containers": [db["id"], cache["id"]]}]
+    )
+    client.async_get_container_tags = AsyncMock(return_value={"db": [2]})
+    client.async_get_stack_tags = AsyncMock(return_value={"app": [2, 1]})
+    coord = DockhandFastCoordinator(hass, client, {})
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    shown = {
+        name: [t["name"] for t in found]
+        for name, found in env["container_tags"].items()
+    }
+    assert shown == {"db": ["critical", "store"]}
+    assert [t["name"] for t in env["stack_tags"]["app"]] == ["critical", "media"]
+    assert coord.tag_summary(1, [db, cache, loose], [{"name": "app"}]) == {
+        "catalog": 2,
+        "assigned_containers": 1,
+        "assigned_containers_not_found": 0,
+        "assigned_stacks": 1,
+        "assigned_stacks_not_found": 0,
+    }
+    assert coord.tag_summary(1, [], [])["assigned_containers_not_found"] == 1
+    assert coord.tag_summary(9, [], []) == {
+        "catalog": 2,
+        "assigned_containers": 0,
+        "assigned_containers_not_found": 0,
+        "assigned_stacks": 0,
+        "assigned_stacks_not_found": 0,
     }
 
 
@@ -166,7 +195,7 @@ async def test_a_failed_read_keeps_the_tags_known(hass: HomeAssistant):
     await coord.async_refresh()
     env = coord.data["environments"][1]
     assert [t["name"] for t in env["container_tags"]["web"]] == ["media", "edge"]
-    assert [t["name"] for t in env["stack_tags"]["app"]] == ["edge"]
+    assert env["stack_tags"] == {}
 
 
 async def test_without_tag_support_only_labels_show(hass: HomeAssistant):
@@ -177,7 +206,7 @@ async def test_without_tag_support_only_labels_show(hass: HomeAssistant):
     await coord.async_refresh()
     env = coord.data["environments"][1]
     assert env["container_tags"] == {"web": [{"name": "edge", "color": RED}]}
-    assert env["stack_tags"] == {"app": [{"name": "edge", "color": RED}]}
+    assert env["stack_tags"] == {}
 
 
 # --------------------------------------------------------------------------- #

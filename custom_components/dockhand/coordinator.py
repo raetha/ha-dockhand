@@ -474,6 +474,26 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
         self._tags_read_at[key] = now
         return True
 
+    def tag_summary(
+        self, env_id: int, containers: list[dict], stacks: list[dict]
+    ) -> dict[str, int]:
+        """Counts for diagnostics of what Dockhand assigned, without names:
+        enough to tell a tag Dockhand never sent from one lost on the way."""
+        assigned_containers, assigned_stacks = self._tag_assignments.get(
+            env_id, ({}, {})
+        )
+        container_names = {c.get("name") for c in containers}
+        stack_names = {st.get("name") for st in stacks}
+        return {
+            "catalog": len(self._tag_catalog),
+            "assigned_containers": len(assigned_containers),
+            "assigned_containers_not_found": len(
+                set(assigned_containers) - container_names
+            ),
+            "assigned_stacks": len(assigned_stacks),
+            "assigned_stacks_not_found": len(set(assigned_stacks) - stack_names),
+        }
+
     async def _async_tags(
         self, env_id: int, containers: list[dict], stacks: list[dict]
     ) -> tuple[dict[str, list[tags.Tag]], dict[str, list[tags.Tag]]]:
@@ -517,15 +537,16 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
                 )
             )
         }
+        # Only what's assigned to the stack itself: labels belong to the
+        # containers that carry them, so Dockhand's roll-up of its services'
+        # label tags isn't the stack's own.
         stack_tags = {
             st["name"]: found
             for st in stacks
             if st.get("name")
             and (
                 found := tags.resolve(
-                    stack_assigned.get(st["name"]),
-                    tags.stack_label_tags(st, containers),
-                    self._tag_catalog,
+                    stack_assigned.get(st["name"]), [], self._tag_catalog
                 )
             )
         }

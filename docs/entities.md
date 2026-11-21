@@ -243,4 +243,9 @@ conditions:
   - "{{ 'critical' in state_attr('sensor.web_state', 'tags') }}"
 ```
 
-They show the tags Dockhand's own lists show. A container's tags don't include its stack's, which Dockhand only adds when you turn that on in its containers list. Tags are read every 10 minutes (labels with every poll), so a new tag can take that long to appear.
+Each carries only its own tags. A container's are the ones assigned to it in Dockhand plus the ones its `dockhand.tags` label names; a stack's are the ones assigned to it in Dockhand. Two differences from Dockhand's lists follow:
+
+- Dockhand's stacks list also shows the tags a stack's services name in their labels. Labels belong to the containers that carry them (compose has no labels for a whole stack), so here they stay on those containers.
+- Dockhand's containers list shows a stack's tags on its containers too, by default. Here the container sensor doesn't repeat them; the [Dockhand cards](https://github.com/raetha/ha-dockhand-cards) show them on a container, drawn so you can tell them apart, by reading the stack's own sensor. An automation that wants them can read the stack's Status sensor, the container's parent device.
+
+Tags are read every 10 minutes (labels with every poll), so a new tag can take that long to appear.

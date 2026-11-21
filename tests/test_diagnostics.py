@@ -30,6 +30,8 @@ SECRET_LABELS = {
     "traefik.http.middlewares.auth.basicauth.users": "admin:$apr1$secret",
 }
 
+TAG_SUMMARY = {"catalog": 3, "assigned_containers": 1}
+
 FAST_DATA = {
     1: {
         "stats": {
@@ -109,6 +111,7 @@ def _make_entry_with_runtime_data() -> MagicMock:
     entry.options = {}
 
     fast = fast_coordinator(FAST_DATA, last_exception=None)
+    fast.tag_summary = MagicMock(return_value=TAG_SUMMARY)
     slow = slow_coordinator(**SLOW_DATA, attrs={"last_exception": None})
 
     entry.runtime_data.fast_coordinator = fast
@@ -236,6 +239,7 @@ async def test_summary_counts_survive_redaction(hass: HomeAssistant):
     assert summary["compose_containers"] == 1
     assert summary["freestanding_containers"] == 1
     assert summary["stack_count"] == 1
+    assert summary["tags"] == TAG_SUMMARY
 
 
 async def test_update_summary_reflects_real_per_environment_data(
