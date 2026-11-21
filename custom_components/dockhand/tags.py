@@ -7,9 +7,11 @@ Assistant shows the tags Dockhand's lists do: assigned tags first, then label
 tags; a label naming a catalogue tag shows as that tag; a name appears once
 whatever its case.
 
-A container also shows the tags assigned to its stack, as Dockhand's
-containers list does by default. Dockhand lets each viewer turn that off, but
-keeps the choice in the browser, so it can't be followed here.
+Each item carries only its own tags. Labels belong to the container that
+carries them, so a stack's tags are the ones assigned to it in Dockhand, not
+Dockhand's roll-up of its services' label tags. Showing a stack's tags on its
+containers, as Dockhand's containers list does by default, is left to the
+cards, which find a container's stack through its parent device.
 """
 
 import re
@@ -106,35 +108,6 @@ def resolve(assigned_ids: Any, named: list[Tag], catalog: dict[int, Tag]) -> lis
             continue
         seen.add(key)
         out.append(by_name.get(key, tag))
-    return out
-
-
-def with_stack_tags(own: list[Tag], stack: list[Tag]) -> list[Tag]:
-    """A container's own tags, then its stack's assigned ones it doesn't
-    already have. Only assigned ones: a stack's label tags come from its
-    services, so handing them down would put one service's label on the
-    others."""
-    seen = {tag["name"].lower() for tag in own}
-    return own + [tag for tag in stack if tag["name"].lower() not in seen]
-
-
-def stack_label_tags(stack: dict[str, Any], containers: list[dict]) -> list[Tag]:
-    """The tags a stack's services name in their labels: Dockhand's own
-    `labelTags` on the stack when it sends them, else read from the stack's
-    containers (compose puts no label of its own on a stack)."""
-    sent = stack.get("labelTags")
-    if isinstance(sent, list):
-        tags: list[Tag] = []
-        for spec in sent:
-            if isinstance(spec, dict) and (name := _normalize(spec.get("name"))):
-                tags.append({"name": name, "color": _hex(spec.get("color"))})
-        return tags
-    listed = stack.get("containers")
-    ids = set(listed) if isinstance(listed, list) else set()
-    out: list[Tag] = []
-    for container in containers:
-        if container.get("id") in ids:
-            out.extend(label_tags(container.get("labels")))
     return out
 
 
