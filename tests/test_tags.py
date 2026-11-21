@@ -79,33 +79,6 @@ def test_resolve_merges_like_dockhand():
     assert tags.resolve(None, [], catalog) == []
 
 
-def test_stack_label_tags():
-    containers = [
-        {"id": "a", "labels": {"dockhand.tags": "media"}},
-        {"id": "b", "labels": {"dockhand.tags": "db:green"}},
-        {"id": "c", "labels": {"dockhand.tags": "other"}},
-    ]
-    stack = {"name": "s", "containers": ["a", "b"]}
-    assert [t["name"] for t in tags.stack_label_tags(stack, containers)] == [
-        "media",
-        "db",
-    ]
-    sent = {"labelTags": [{"name": "media", "color": "blue"}, {"name": "?"}, "x"]}
-    assert tags.stack_label_tags(sent, containers) == [{"name": "media", "color": BLUE}]
-    assert tags.stack_label_tags({"containers": 2}, containers) == []
-
-
-def test_with_stack_tags_adds_what_the_container_lacks():
-    own = [{"name": "media", "color": BLUE}]
-    stack = [{"name": "MEDIA", "color": RED}, {"name": "critical", "color": RED}]
-    assert tags.with_stack_tags(own, stack) == [
-        {"name": "media", "color": BLUE},
-        {"name": "critical", "color": RED},
-    ]
-    assert tags.with_stack_tags([], stack) == stack
-    assert tags.with_stack_tags(own, []) == own
-
-
 def test_attributes():
     assert tags.attributes([{"name": "media", "color": BLUE}]) == {
         "tags": ["media"],
@@ -143,15 +116,13 @@ async def test_tags_reach_the_environments_data(hass: HomeAssistant):
     assert env["container_tags"] == {
         "web": [{"name": "media", "color": BLUE}, {"name": "edge", "color": RED}]
     }
-    assert env["stack_tags"] == {
-        "app": [{"name": "critical", "color": RED}, {"name": "edge", "color": RED}]
-    }
+    assert env["stack_tags"] == {"app": [{"name": "critical", "color": RED}]}
 
 
-async def test_containers_show_their_stacks_tags(hass: HomeAssistant):
-    """Dockhand's containers list shows a stack's assigned tags on its
-    containers by default (github.com/raetha/ha-dockhand-cards/issues/108);
-    the stack's label tags stay on the stack."""
+async def test_each_item_carries_only_its_own_tags(hass: HomeAssistant):
+    """A container's label tags are its own and don't roll up to its stack;
+    a stack's tags don't come down to its containers (the cards do that,
+    github.com/raetha/ha-dockhand-cards/issues/108)."""
     client = _client()
     db = container(
         "db",
@@ -176,15 +147,8 @@ async def test_containers_show_their_stacks_tags(hass: HomeAssistant):
         name: [t["name"] for t in found]
         for name, found in env["container_tags"].items()
     }
-    assert shown == {
-        "db": ["critical", "store", "media"],
-        "cache": ["critical", "media"],
-    }
-    assert [t["name"] for t in env["stack_tags"]["app"]] == [
-        "critical",
-        "media",
-        "store",
-    ]
+    assert shown == {"db": ["critical", "store"]}
+    assert [t["name"] for t in env["stack_tags"]["app"]] == ["critical", "media"]
     assert coord.tag_summary(1, [db, cache, loose], [{"name": "app"}]) == {
         "catalog": 2,
         "assigned_containers": 1,
@@ -231,7 +195,7 @@ async def test_a_failed_read_keeps_the_tags_known(hass: HomeAssistant):
     await coord.async_refresh()
     env = coord.data["environments"][1]
     assert [t["name"] for t in env["container_tags"]["web"]] == ["media", "edge"]
-    assert [t["name"] for t in env["stack_tags"]["app"]] == ["edge"]
+    assert env["stack_tags"] == {}
 
 
 async def test_without_tag_support_only_labels_show(hass: HomeAssistant):
@@ -242,7 +206,7 @@ async def test_without_tag_support_only_labels_show(hass: HomeAssistant):
     await coord.async_refresh()
     env = coord.data["environments"][1]
     assert env["container_tags"] == {"web": [{"name": "edge", "color": RED}]}
-    assert env["stack_tags"] == {"app": [{"name": "edge", "color": RED}]}
+    assert env["stack_tags"] == {}
 
 
 # --------------------------------------------------------------------------- #

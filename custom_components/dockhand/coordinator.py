@@ -530,29 +530,23 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
             for c in containers
             if c.get("name")
             and (
-                found := tags.with_stack_tags(
-                    tags.resolve(
-                        container_assigned.get(c["name"]),
-                        tags.label_tags(c.get("labels")),
-                        self._tag_catalog,
-                    ),
-                    tags.resolve(
-                        stack_assigned.get(_compose_project(c) or ""),
-                        [],
-                        self._tag_catalog,
-                    ),
+                found := tags.resolve(
+                    container_assigned.get(c["name"]),
+                    tags.label_tags(c.get("labels")),
+                    self._tag_catalog,
                 )
             )
         }
+        # Only what's assigned to the stack itself: labels belong to the
+        # containers that carry them, so Dockhand's roll-up of its services'
+        # label tags isn't the stack's own.
         stack_tags = {
             st["name"]: found
             for st in stacks
             if st.get("name")
             and (
                 found := tags.resolve(
-                    stack_assigned.get(st["name"]),
-                    tags.stack_label_tags(st, containers),
-                    self._tag_catalog,
+                    stack_assigned.get(st["name"]), [], self._tag_catalog
                 )
             )
         }
