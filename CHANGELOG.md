@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-11-20
+
+Each container and stack now carries only its own Dockhand tags, and the Dockhand cards 2.1.0, released alongside, show a stack's tags on its containers. Update both together.
+
 ### Changed
 
 - A stack's `tags` are now only the ones assigned to it in Dockhand. Tags its services name in their `dockhand.tags` labels stay on those containers, instead of also rolling up to the stack as in Dockhand's stacks list; compose has no labels for a whole stack. Automations or filters that matched a stack by one of its services' label tags no longer will.
@@ -9,7 +13,7 @@
 
 ### Internal
 
-- A container's tags stay its own: the Dockhand cards 2.x release paired with this one shows a stack's tags on its containers ([ha-dockhand-cards#108](https://github.com/raetha/ha-dockhand-cards/issues/108)), reading them from the stack.
+- A container's tags stay its own: Dockhand Cards 2.1.0, released alongside, shows a stack's tags on its containers ([ha-dockhand-cards#108](https://github.com/raetha/ha-dockhand-cards/issues/108)), reading them from the stack.
 
 ## [2.0.1] - 2026-11-19
 
@@ -1528,7 +1532,8 @@ No-auth installations are unaffected.
 
 Initial stable release.
 
-[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.0.1...HEAD
+[Unreleased]: https://github.com/raetha/ha-dockhand/compare/2.1.0...HEAD
+[2.1.0]: https://github.com/raetha/ha-dockhand/compare/2.0.1...2.1.0
 [2.0.1]: https://github.com/raetha/ha-dockhand/compare/2.0.0...2.0.1
 [2.0.0]: https://github.com/raetha/ha-dockhand/compare/v1.11.3...2.0.0
 [1.11.3]: https://github.com/raetha/ha-dockhand/compare/v1.11.2...v1.11.3
