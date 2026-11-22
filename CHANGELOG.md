@@ -10,6 +10,10 @@
 
 - No more repair while Dockhand polls for Docker events: from Dockhand 1.0.59 polling only delays them, by the poll interval (a minute by default). An ignored one is cleared too. The Data Updates docs explain the trade-off.
 
+### Internal
+
+- The license names the copyright holder as Elias Hunt (raetha).
+
 ## [2.1.0] - 2026-11-20
 
 Each container and stack now carries only its own Dockhand tags, and the Dockhand cards 2.1.0, released alongside, show a stack's tags on its containers. Update both together.
