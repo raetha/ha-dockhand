@@ -1031,7 +1031,9 @@
       "options": {
         "docker_event": "Docker-gebeurtenis",
         "pause": "Pauzeren",
-        "container_auto_update": "Automatisch bijwerken"
+        "container_auto_update": "Automatisch bijwerken",
+        "vulnerabilities_critical": "Kritieke kwetsbaarheden",
+        "vulnerabilities_high": "Hoge kwetsbaarheden"
       }
     },
     "stack_entities": {

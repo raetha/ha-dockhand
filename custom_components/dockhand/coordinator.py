@@ -56,6 +56,25 @@ def _safe_list(value: Any) -> list:
     return value if isinstance(value, list) else []
 
 
+def _container_vulnerabilities(answer: Any) -> dict[str, dict[str, int]] | None:
+    """Each scanned container's critical and high counts, by name, from
+    Dockhand's grouped vulnerability counts; None when the answer has no
+    `groups` (a Dockhand without grouping, or a failed fetch)."""
+    groups = answer.get("groups") if isinstance(answer, dict) else None
+    if not isinstance(groups, list):
+        return None
+    counts: dict[str, dict[str, int]] = {}
+    for group in groups:
+        if not isinstance(group, dict) or not group.get("name"):
+            continue
+        counts[group["name"]] = {
+            severity: value
+            for severity in ("critical", "high")
+            if isinstance(value := group.get(severity), int)
+        }
+    return counts
+
+
 def _unwrap(
     val: Any,
     default: Any,
@@ -1255,6 +1274,9 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
                 named["vulnerabilities"] = self.client.async_get_vulnerabilities_count(
                     env_id
                 )
+                named["container_vulnerabilities"] = (
+                    self.client.async_get_container_vulnerabilities(env_id)
+                )
             # Always fetched: a single bulk call per environment (not
             # per-container/per-stack like runtime controls), so there's no
             # meaningful API cost to gate. Entities are only created for
@@ -1362,6 +1384,18 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
                         results["vulnerabilities"] = (
                             summary if isinstance(summary, dict) else {}
                         )
+                    elif key == "container_vulnerabilities":
+                        results["container_vulnerabilities"] = (
+                            _container_vulnerabilities(
+                                _unwrap(
+                                    val,
+                                    {},
+                                    f"container_vulnerabilities env={env_id}",
+                                    failures,
+                                    "container_vulnerabilities",
+                                )
+                            )
+                        )
                     else:
                         results[key] = _safe_list(
                             _unwrap(val, [], f"{key} env={env_id}", failures, key)
@@ -1391,6 +1425,10 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
                 "auto_update_settings": results.get("auto_update_settings", {}),
                 "recent_events": results.get("recent_events", []),
                 "vulnerabilities": results.get("vulnerabilities", {}),
+                # None while scanning is off, the fetch failed, or Dockhand
+                # can't group its counts (older than 1.0.59): no
+                # per-container vulnerability sensors then.
+                "container_vulnerabilities": results.get("container_vulnerabilities"),
                 "settings": results.get("settings", {}),
                 "env_meta": env_meta.get(env_id, {}),
                 # See the fast coordinator's matching keys.

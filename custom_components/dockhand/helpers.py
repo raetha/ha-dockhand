@@ -249,6 +249,17 @@ CONTAINER_STATS_SUFFIXES = (
     "_block_write",
 )
 
+# Per-container vulnerability sensors: Dockhand's grouped-count field →
+# translation key (the environment's sensors of the same severity share it,
+# on another device), and the unique ID suffixes cleanup matches.
+CONTAINER_VULNERABILITY_SENSORS = {
+    "critical": "vulnerabilities_critical",
+    "high": "vulnerabilities_high",
+}
+CONTAINER_VULNERABILITY_SUFFIXES = tuple(
+    f"_{key}" for key in CONTAINER_VULNERABILITY_SENSORS.values()
+)
+
 # The stack totals Dockhand reports (GET /api/stack-stats): the container
 # set without memory cache and percent, which Dockhand doesn't give for a
 # stack, plus how many of its containers are running.

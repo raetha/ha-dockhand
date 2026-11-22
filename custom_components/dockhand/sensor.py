@@ -38,6 +38,7 @@ from .entity import (
 )
 from .entity_defaults import enabling_chosen
 from .helpers import (
+    CONTAINER_VULNERABILITY_SENSORS,
     UNTAGGED_IMAGES,
     _actionable_pending_update_container_ids,
     _all_envs,
@@ -195,6 +196,9 @@ async def async_setup_entry(
             )
 
             # Per-container sensors
+            env_container_vulnerabilities = _coordinator_env(slow.data, env_id).get(
+                "container_vulnerabilities"
+            )
             for container in env_data.get("containers") or []:
                 if _container_has_healthcheck(container):
                     health_sensor = DockhandContainerHealthSensor(
@@ -212,6 +216,22 @@ async def async_setup_entry(
                 )
                 if not _already_registered("sensor", state_sensor.unique_id):
                     new.append(state_sensor)
+                if env_container_vulnerabilities is not None and container.get("name"):
+                    new += _unregistered(
+                        [
+                            DockhandContainerVulnerabilitySensor(
+                                fast,
+                                slow,
+                                entry.entry_id,
+                                env_id,
+                                env_name,
+                                base_url,
+                                container,
+                                severity,
+                            )
+                            for severity in CONTAINER_VULNERABILITY_SENSORS
+                        ]
+                    )
 
                 # Resource stats sensors — only created at all when "Enable
                 # container stats" is on, so turning the option off lets the
@@ -1324,6 +1344,70 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
     def native_value(self) -> str | None:
         health = (self._container() or {}).get("health")
         return health if health in CONTAINER_HEALTH_STATES else None
+
+
+class DockhandContainerVulnerabilitySensor(BaseFastContainerSensor):
+    """Findings of one severity in the container's image, from Dockhand's
+    vulnerability counts grouped by container (slow poll, Dockhand 1.0.59+).
+
+    Created for every container while Dockhand answers with groups, so a
+    container shows unknown until its image is scanned rather than
+    appearing later; disabled by default like the environment's own counts.
+    """
+
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_entity_registry_enabled_default = False
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: DockhandFastCoordinator,
+        slow_coordinator: DockhandSlowCoordinator,
+        entry_id: str,
+        env_id: int,
+        env_name: str,
+        base_url: str,
+        container: dict,
+        severity: str,
+    ) -> None:
+        super().__init__(coordinator, entry_id, env_id, env_name, base_url, container)
+        self._slow_coordinator = slow_coordinator
+        self._severity = severity
+        self._attr_translation_key = CONTAINER_VULNERABILITY_SENSORS[severity]
+        self._attr_unique_id = (
+            f"{self._entry_id}_{env_id}_container_{self._container_name}"
+            f"_{self._attr_translation_key}"
+        )
+
+    def _slow_env(self) -> dict:
+        return _coordinator_env(self._slow_coordinator.data, self._env_id)
+
+    def _slow_ok(self) -> bool:
+        return self._slow_coordinator.last_update_success and (
+            "container_vulnerabilities"
+            not in (self._slow_env().get("fetch_failures") or set())
+        )
+
+    def _counts(self) -> dict | None:
+        return (self._slow_env().get("container_vulnerabilities") or {}).get(
+            self._container_name
+        )
+
+    @property
+    @override
+    def available(self) -> bool:
+        return super().available and self._slow_ok()
+
+    @property
+    @override
+    def native_value(self) -> int | None:
+        return (self._counts() or {}).get(self._severity)
+
+    @override
+    def _update_inputs(self) -> Any:
+        # Written from the fast poll, which follows the slow one within a
+        # poll interval.
+        return (super()._update_inputs(), self._slow_ok(), self._counts())
 
 
 # --------------------------------------------------------------------------- #

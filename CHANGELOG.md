@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Critical and High vulnerabilities sensors on each container, with Dockhand 1.0.59 or later and vulnerability scanning on, so you can see which containers to update first. Disabled by default: turn them on for every container under **Container entities** in Configure.
+
 ## [2.1.0] - 2026-11-20
 
 Each container and stack now carries only its own Dockhand tags, and the Dockhand cards 2.1.0, released alongside, show a stack's tags on its containers. Update both together.

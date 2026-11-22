@@ -3564,3 +3564,65 @@ def test_stack_running_containers_removed_with_the_stats_option(hass: HomeAssist
     ent = _add_entity(hass, entry, f"{entry.entry_id}_1_stack_app_running_containers")
     _cleanup_stale_registry(hass, entry)
     assert not _entity_exists(hass, ent.entity_id)
+
+
+def _vulnerability_cleanup(
+    hass, *, counts, failures=(), online=True, slow_ok=True, env_ids=(1,)
+):
+    """Cleanup with web's critical vulnerabilities sensor registered, the
+    slow data holding `counts` as environment 1's counts by container."""
+    entry = _make_entry(hass)
+    slow_env = {
+        "images": [],
+        "networks": [],
+        "volumes": [],
+        "git_stacks": [],
+        "container_vulnerabilities": counts,
+        "fetch_failures": set(failures),
+    }
+    entry.runtime_data = _make_runtime_data(
+        fast_data={
+            env_id: {
+                "containers": [{"name": "web"}],
+                "stacks": [],
+                "stats": {"online": online},
+            }
+            for env_id in env_ids
+        },
+        slow_data=({"environments": {1: slow_env}, "schedules": []} if slow_ok else {}),
+    )
+    ent = _add_entity(
+        hass, entry, f"{entry.entry_id}_1_container_web_vulnerabilities_critical"
+    )
+    _cleanup_stale_registry(hass, entry)
+    return _entity_exists(hass, ent.entity_id)
+
+
+def test_preserves_container_vulnerability_sensor_while_counted(hass: HomeAssistant):
+    # Kept for a container whose image isn't scanned yet, too.
+    assert _vulnerability_cleanup(hass, counts={})
+
+
+def test_removes_container_vulnerability_sensor_without_counts(hass: HomeAssistant):
+    """Scanning turned off, or a Dockhand without counts by container: the
+    container stays, its vulnerability sensors go."""
+    assert not _vulnerability_cleanup(hass, counts=None)
+
+
+def test_removes_container_vulnerability_sensor_when_env_deleted(hass: HomeAssistant):
+    assert not _vulnerability_cleanup(hass, counts={}, env_ids=(2,))
+
+
+@pytest.mark.parametrize(
+    "kwargs",
+    [
+        {"failures": {"container_vulnerabilities"}},
+        {"online": False},
+        {"slow_ok": False},
+    ],
+    ids=["fetch failed", "offline", "slow poll failed"],
+)
+def test_preserves_container_vulnerability_sensor_when_unconfirmed(
+    hass: HomeAssistant, kwargs
+):
+    assert _vulnerability_cleanup(hass, counts=None, **kwargs)

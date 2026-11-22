@@ -1031,7 +1031,9 @@
       "options": {
         "docker_event": "Docker 事件",
         "pause": "暂停",
-        "container_auto_update": "自动更新"
+        "container_auto_update": "自动更新",
+        "vulnerabilities_critical": "严重漏洞",
+        "vulnerabilities_high": "高危漏洞"
       }
     },
     "stack_entities": {

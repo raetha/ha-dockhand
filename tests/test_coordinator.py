@@ -18,6 +18,7 @@ from custom_components.dockhand import coordinator as coordinator_module
 from custom_components.dockhand.api import (
     DockhandAuthError,
     DockhandClient,
+    DockhandError,
     DockhandNotFoundError,
 )
 from custom_components.dockhand.coordinator import (
@@ -1268,6 +1269,71 @@ async def test_slow_vulnerabilities_malformed_response_defaults_to_empty_dict(
     )
     await coord.async_refresh()
     assert coord.data["environments"][1]["vulnerabilities"] == {}
+
+
+async def test_slow_container_vulnerabilities_by_name(hass: HomeAssistant):
+    """Dockhand 1.0.59+'s counts by container become each container's
+    critical and high counts, by name; malformed groups are skipped."""
+    client = _make_client(envs=[ENV1])
+    client.async_get_container_vulnerabilities = AsyncMock(
+        return_value={
+            "groupBy": "container",
+            "groups": [
+                {"id": "c1", "name": "web", "critical": 1, "high": 2, "low": 9},
+                {"id": "c2", "name": "db", "critical": 0, "high": "3"},
+                {"id": "c3", "name": "", "critical": 4},
+                "not-a-group",
+            ],
+        }
+    )
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"scannerEnabled": True})
+    )
+    await coord.async_refresh()
+    client.async_get_container_vulnerabilities.assert_called_once_with(1)
+    env = coord.data["environments"][1]
+    assert env["container_vulnerabilities"] == {
+        "web": {"critical": 1, "high": 2},
+        "db": {"critical": 0},
+    }
+    assert "container_vulnerabilities" not in env["fetch_failures"]
+
+
+@pytest.mark.parametrize(
+    ("stats", "answer"),
+    [
+        # Scanning off: not asked.
+        ({"scannerEnabled": False}, {"groups": []}),
+        # A Dockhand before 1.0.59 ignores groupBy and sends the summary.
+        ({"scannerEnabled": True}, {"total": 3, "summary": {"total": 3}}),
+    ],
+)
+async def test_slow_container_vulnerabilities_absent(
+    hass: HomeAssistant, stats, answer
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_container_vulnerabilities = AsyncMock(return_value=answer)
+    coord = _slow(hass, client, fast_coordinator=_fast_coord_with_stats(stats))
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert env["container_vulnerabilities"] is None
+    assert "container_vulnerabilities" not in env["fetch_failures"]
+
+
+async def test_slow_container_vulnerabilities_failure_is_recorded(
+    hass: HomeAssistant,
+):
+    client = _make_client(envs=[ENV1])
+    client.async_get_container_vulnerabilities = AsyncMock(
+        side_effect=DockhandError("boom")
+    )
+    coord = _slow(
+        hass, client, fast_coordinator=_fast_coord_with_stats({"scannerEnabled": True})
+    )
+    await coord.async_refresh()
+    env = coord.data["environments"][1]
+    assert env["container_vulnerabilities"] is None
+    assert "container_vulnerabilities" in env["fetch_failures"]
 
 
 async def test_slow_feature_api_failure_returns_empty(hass: HomeAssistant):

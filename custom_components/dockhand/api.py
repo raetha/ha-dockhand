@@ -230,6 +230,20 @@ class DockhandClient:
         """
         return await self._get_dict(f"/api/vulnerabilities/count?env={_q(env_id)}")
 
+    async def async_get_container_vulnerabilities(self, env_id: int) -> dict[str, Any]:
+        """Fetch each scanned container's vulnerability counts.
+
+        GET /api/vulnerabilities/count?env=X&groupBy=container
+
+        Dockhand 1.0.59+ answers {groupBy, groups: [{id, name, image,
+        critical, high, medium, low, total}]}, a container whose image was
+        never scanned left out. An older Dockhand ignores groupBy and
+        answers the summary, with no `groups`.
+        """
+        return await self._get_dict(
+            f"/api/vulnerabilities/count?env={_q(env_id)}&groupBy=container"
+        )
+
     async def async_get_recent_activity(
         self, env_id: int, limit: int = 10
     ) -> dict[str, Any]:

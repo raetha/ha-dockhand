@@ -105,6 +105,8 @@ SLOW_DATA = {
             "volumes": [VOLUME],
             "runtime_config": {"my-app": {"memory": 0, "restart_policy": "no"}},
             "git_stacks": [GIT_STACK],
+            # web's image never scanned: listed by Dockhand without it.
+            "container_vulnerabilities": {"my-app": {"critical": 2, "high": 5}},
             "auto_update_settings": {},
             "env_meta": {},
             "settings": {
@@ -138,6 +140,8 @@ ENABLED_UP_FRONT = (
     ("select", "vulnerability_scanner"),
     ("binary_sensor", "stack_gitapp_git_sync_error"),
     ("switch", "stack_gitapp_git_auto_deploy"),
+    ("sensor", "container_my-app_vulnerabilities_critical"),
+    ("sensor", "container_web_vulnerabilities_high"),
 )
 
 
@@ -208,6 +212,10 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
         f"{p}_vulnerability_scanner",
         f"{p}_prune_mode",
         f"{loaded_entry.entry_id}_instance_vulnerability_scanner",
+        f"{p}_container_my-app_vulnerabilities_critical",
+        f"{p}_container_my-app_vulnerabilities_high",
+        f"{p}_container_web_vulnerabilities_critical",
+        f"{p}_container_dockhand_vulnerabilities_high",
     }
     missing = expected - uids
     assert not missing, missing
@@ -226,6 +234,7 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
     for domain, uid in (
         ("number", f"{p}_container__memory_limit"),
         ("select", f"{p}_container__restart_policy"),
+        ("sensor", f"{p}_container__vulnerabilities_critical"),
     ):
         assert ent_reg.async_get_entity_id(domain, DOMAIN, uid) is None, uid
     updates = [
@@ -274,6 +283,9 @@ async def test_git_stack_and_env_meta_entities_have_states(
     assert state("select", "prune_mode") == "all"
     assert state("binary_sensor", "stack_gitapp_git_sync_error") == "off"
     assert state("switch", "stack_gitapp_git_auto_deploy") == "off"
+    assert state("sensor", "container_my-app_vulnerabilities_critical") == "2"
+    # Its image not scanned yet.
+    assert state("sensor", "container_web_vulnerabilities_high") == "unknown"
 
 
 async def test_a_1x_volume_entity_moves_to_its_volume_device(hass: HomeAssistant):
