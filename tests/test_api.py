@@ -899,6 +899,16 @@ async def test_get_vulnerabilities_count(client_with_mock_request):
     )
 
 
+async def test_get_container_vulnerabilities(client_with_mock_request):
+    client_with_mock_request._request.return_value = {"groupBy": "container"}
+    result = await client_with_mock_request.async_get_container_vulnerabilities(3)
+    assert result == {"groupBy": "container"}
+    assert (
+        client_with_mock_request._request.call_args.args[1]
+        == "/api/vulnerabilities/count?env=3&groupBy=container"
+    )
+
+
 async def test_get_recent_activity(client_with_mock_request):
     client_with_mock_request._request.return_value = {"events": [], "total": 0}
     await client_with_mock_request.async_get_recent_activity(3, limit=5)

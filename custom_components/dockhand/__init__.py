@@ -54,6 +54,7 @@ from .entity_defaults import async_enable_chosen, async_enable_runtime_controls
 from .events import DockhandEventStream
 from .helpers import (
     CONTAINER_STATS_SUFFIXES,
+    CONTAINER_VULNERABILITY_SUFFIXES,
     STACK_STATS_SUFFIXES,
     VOLUME_SUFFIXES,
     _all_envs,
@@ -710,6 +711,13 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         health_uids               set[str]  — live entity unique_ids (Health
                                               sensor, only for containers with
                                               a healthcheck configured)
+        container_vulnerability_uids set[str] — live entity unique_ids (the
+                                              per-container vulnerability
+                                              sensors, while Dockhand groups
+                                              its counts by container)
+        container_vulnerabilities_fetch_ok_env_ids set[int] — env_ids in the
+                                              slow data whose grouped counts
+                                              weren't a fetch failure
         slow_valid               bool       — slow coordinator last poll succeeded
         slow_env_ids             set[int]   — envs present in slow data (for Guard 3)
     """
@@ -952,6 +960,12 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
     networks_fetch_ok_env_ids: set[int] = set()
     volumes_fetch_ok_env_ids: set[int] = set()
     git_stacks_fetch_ok_env_ids: set[int] = set()
+    # Per-container vulnerability sensors: one per container and severity
+    # while the environment's slow data has Dockhand's counts by container
+    # (scanning on, Dockhand 1.0.59+). The container device stays when
+    # scanning is turned off, so these need their own tracking.
+    container_vulnerability_uids: set[str] = set()
+    container_vulnerabilities_fetch_ok_env_ids: set[int] = set()
 
     if slow_valid:
         # Only populate when enabled — empty list when disabled is not "deleted".
@@ -999,6 +1013,15 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
             # still classifies that stack as git-tracked, so (like runtime
             # controls) they need explicit tracking rather than relying
             # purely on device-removal cascade.
+            if "container_vulnerabilities" not in env_failures:
+                container_vulnerabilities_fetch_ok_env_ids.add(env_id)
+            if env_data.get("container_vulnerabilities") is not None:
+                for c in (fast_data.get(env_id) or {}).get("containers") or []:
+                    if name := c.get("name", ""):
+                        for suffix in CONTAINER_VULNERABILITY_SUFFIXES:
+                            container_vulnerability_uids.add(
+                                f"{entry.entry_id}_{env_id}_container_{name}{suffix}"
+                            )
             if "git_stacks" not in env_failures:
                 git_stacks_fetch_ok_env_ids.add(env_id)
                 for gs in env_data.get("git_stacks") or []:
@@ -1050,6 +1073,10 @@ def _build_live_sets(entry: DockhandConfigEntry) -> dict[str, Any]:
         "stack_deploy_uids": stack_deploy_uids,
         "stack_updates_available_uids": stack_updates_available_uids,
         "git_stack_uids": git_stack_uids,
+        "container_vulnerability_uids": container_vulnerability_uids,
+        "container_vulnerabilities_fetch_ok_env_ids": (
+            container_vulnerabilities_fetch_ok_env_ids
+        ),
         "slow_valid": slow_valid,
         "slow_env_ids": slow_env_ids,
     }
@@ -1552,6 +1579,25 @@ def _cleanup_stale_registry_now(
                 _LOGGER.debug(
                     "Dockhand: removing stale container action entity %s", uid
                 )
+                ent_registry.async_remove(entity_entry.entity_id)
+
+        elif uid_type == "container" and uid.endswith(CONTAINER_VULNERABILITY_SUFFIXES):
+            # Per-container vulnerability sensors: removed once a successful
+            # slow poll shows the environment no longer has counts by
+            # container (scanning off, or Dockhand without grouping), never
+            # on a failed fetch. Removing the container removes its device.
+            env_id = uid_env_id
+            if env_id not in live["env_ids"]:
+                _LOGGER.debug("Dockhand: removing stale vulnerability entity %s", uid)
+                ent_registry.async_remove(entity_entry.entity_id)
+            elif live["slow_valid"] and (
+                env_id in live["slow_env_ids"]
+                and env_id in live["online_env_ids"]
+                and env_id in live["containers_fetch_ok_env_ids"]
+                and env_id in live["container_vulnerabilities_fetch_ok_env_ids"]
+                and uid not in live["container_vulnerability_uids"]
+            ):
+                _LOGGER.debug("Dockhand: removing stale vulnerability entity %s", uid)
                 ent_registry.async_remove(entity_entry.entity_id)
 
         elif uid_type == "container" and uid.endswith("_health"):

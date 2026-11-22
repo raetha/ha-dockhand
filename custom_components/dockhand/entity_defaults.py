@@ -52,6 +52,8 @@ OPTIONAL_ENTITIES: dict[str, tuple[str, ...]] = {
         "docker_event",
         "pause",
         "container_auto_update",
+        "vulnerabilities_critical",
+        "vulnerabilities_high",
     ),
     "stack": ("git_stack_auto_deploy",),
 }

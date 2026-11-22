@@ -1031,7 +1031,9 @@
       "options": {
         "docker_event": "Docker-händelse",
         "pause": "Pausa",
-        "container_auto_update": "Automatisk uppdatering"
+        "container_auto_update": "Automatisk uppdatering",
+        "vulnerabilities_critical": "Kritiska sårbarheter",
+        "vulnerabilities_high": "Höga sårbarheter"
       }
     },
     "stack_entities": {

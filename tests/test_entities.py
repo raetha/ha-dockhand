@@ -3525,3 +3525,37 @@ def test_container_count_pinned_digest_and_held_updates():
     assert attrs["pinned_digest"] == 2
     assert attrs["held"] == 1
     assert attrs["pending"] == 4
+
+
+def test_container_vulnerability_sensor_follows_the_slow_poll():
+    """Its value and availability come from the slow poll's counts by
+    container, and its inputs change with them so the fast poll writes."""
+    from custom_components.dockhand.sensor import DockhandContainerVulnerabilitySensor
+
+    web = container("web")
+    fast = fast_coordinator({1: {"containers": [web]}})
+    slow = slow_coordinator(
+        {1: {"container_vulnerabilities": {"web": {"critical": 3}}}},
+        attrs={"last_update_success": True},
+    )
+    sensor = DockhandContainerVulnerabilitySensor(
+        fast, slow, "E", 1, "local", "http://dh", web, "critical"
+    )
+    assert sensor.unique_id == "E_1_container_web_vulnerabilities_critical"
+    assert sensor.translation_key == "vulnerabilities_critical"
+    assert sensor.entity_category is EntityCategory.DIAGNOSTIC
+    assert sensor.native_value == 3
+    assert sensor.available
+    before = sensor._update_inputs()
+
+    slow.data = {
+        "environments": {
+            1: {
+                "container_vulnerabilities": None,
+                "fetch_failures": {"container_vulnerabilities"},
+            }
+        }
+    }
+    assert sensor.native_value is None
+    assert not sensor.available
+    assert sensor._update_inputs() != before
