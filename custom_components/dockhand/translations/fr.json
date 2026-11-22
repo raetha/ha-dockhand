@@ -952,10 +952,6 @@
       "title": "Limite de mémoire rétablie automatiquement pour {container}",
       "description": "Le conteneur \"{container}\" a cessé de fonctionner peu après l'abaissement de sa limite de mémoire, ce qui peut se produire lorsque la nouvelle limite est inférieure à l'utilisation réelle du conteneur et que le noyau l'applique immédiatement. La limite de mémoire a été automatiquement rétablie à sa valeur précédente ({memory_bytes} octets). Vérifiez les journaux et l'état de santé actuel du conteneur dans Dockhand."
     },
-    "event_collection_poll": {
-      "title": "Dockhand interroge les événements Docker",
-      "description": "Dockhand collecte les événements Docker en interrogeant toutes les {interval} secondes au lieu de les recevoir en stream. Pour {environments}, les mises à jour en direct et les entités d'événements Docker peuvent avoir jusqu'à {interval} secondes de retard. Dockhand avant la 1.0.59 perd en outre certains événements avec un intervalle de plus de 30 secondes : mettez-le à jour s'il est plus ancien. Pour les recevoir en stream, réglez Mode de collecte des événements de l'appareil Dockhand sur Stream (dans Dockhand : Settings → General → Activity event collection mode). Si vous préférez l'interrogation, ignorez ce problème : il ne revient qu'après un passage à Stream puis de nouveau à Interrogation."
-    },
     "retired_entities_automation": {
       "title": "{name} utilise des entités Dockhand remplacées",
       "description": "Dockhand a remplacé certaines de ses entités par de nouvelles, et l’automatisation {link} utilise encore d’anciennes entités. Modifiez-la pour qu’elle utilise les nouvelles (ancienne entité → nouvelle entité) :\n\n{entities}\n\nCette réparation disparaît dès qu’elle ne les utilise plus."
@@ -1032,8 +1028,7 @@
         "docker_event": "Événement Docker",
         "pause": "Mettre en pause",
         "container_auto_update": "Mise à jour automatique",
-        "vulnerabilities_critical": "Vulnérabilités critiques",
-        "vulnerabilities_high": "Vulnérabilités élevées"
+        "vulnerabilities": "Vulnérabilités"
       }
     },
     "stack_entities": {

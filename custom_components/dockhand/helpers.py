@@ -250,11 +250,14 @@ CONTAINER_STATS_SUFFIXES = (
 )
 
 # Per-container vulnerability sensors: Dockhand's grouped-count field →
-# translation key (the environment's sensors of the same severity share it,
-# on another device), and the unique ID suffixes cleanup matches.
+# translation key (the environment's own sensors share them, on another
+# device), and the unique ID suffixes cleanup matches.
 CONTAINER_VULNERABILITY_SENSORS = {
+    "total": "vulnerabilities",
     "critical": "vulnerabilities_critical",
     "high": "vulnerabilities_high",
+    "medium": "vulnerabilities_medium",
+    "low": "vulnerabilities_low",
 }
 CONTAINER_VULNERABILITY_SUFFIXES = tuple(
     f"_{key}" for key in CONTAINER_VULNERABILITY_SENSORS.values()

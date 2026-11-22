@@ -952,10 +952,6 @@
       "title": "Limit pamięci automatycznie przywrócony dla {container}",
       "description": "Kontener \"{container}\" przestał działać wkrótce po obniżeniu limitu pamięci, co może się zdarzyć, gdy nowy limit jest niższy niż rzeczywiste zużycie kontenera, a jądro systemu natychmiast go egzekwuje. Limit pamięci został automatycznie przywrócony do poprzedniej wartości ({memory_bytes} bajtów). Sprawdź dzienniki i bieżący stan kontenera w Dockhand."
     },
-    "event_collection_poll": {
-      "title": "Dockhand odpytuje o zdarzenia Dockera",
-      "description": "Dockhand zbiera zdarzenia Dockera, odpytując co {interval} sekund, zamiast odbierać je strumieniowo. Dla {environments} aktualizacje na żywo i encje zdarzeń Dockera mogą się spóźniać nawet o {interval} sekund. Dockhand starszy niż 1.0.59 dodatkowo gubi niektóre zdarzenia przy interwale powyżej 30 sekund, więc zaktualizuj go, jeśli jest starszy. Aby odbierać je strumieniowo, ustaw Tryb zbierania zdarzeń urządzenia Dockhand na Strumień (w Dockhand: Settings → General → Activity event collection mode). Jeśli wolisz odpytywanie, zignoruj ten problem: wróci dopiero po przełączeniu na Strumień i z powrotem na Odpytywanie."
-    },
     "retired_entities_automation": {
       "title": "{name} używa zastąpionych encji Dockhand",
       "description": "Dockhand zastąpił niektóre swoje encje nowymi, a automatyzacja {link} nadal używa starych. Zmień ją tak, aby używała nowych encji (stara encja → nowa encja):\n\n{entities}\n\nTa naprawa zniknie, gdy przestanie ich używać."
@@ -1032,8 +1028,7 @@
         "docker_event": "Zdarzenie Dockera",
         "pause": "Wstrzymaj",
         "container_auto_update": "Automatyczna aktualizacja",
-        "vulnerabilities_critical": "Krytyczne podatności",
-        "vulnerabilities_high": "Wysokie podatności"
+        "vulnerabilities": "Podatności"
       }
     },
     "stack_entities": {

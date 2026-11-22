@@ -1347,8 +1347,9 @@ class DockhandContainerHealthSensor(BaseFastContainerSensor):
 
 
 class DockhandContainerVulnerabilitySensor(BaseFastContainerSensor):
-    """Findings of one severity in the container's image, from Dockhand's
-    vulnerability counts grouped by container (slow poll, Dockhand 1.0.59+).
+    """All findings, or those of one severity, in the container's image, from
+    Dockhand's vulnerability counts grouped by container (slow poll, Dockhand
+    1.0.59+).
 
     Created for every container while Dockhand answers with groups, so a
     container shows unknown until its image is scanned rather than

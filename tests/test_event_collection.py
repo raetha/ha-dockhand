@@ -76,38 +76,22 @@ def _issue(hass: HomeAssistant):
     return ir.async_get(hass).async_get_issue(DOMAIN, "entry_event_collection_poll")
 
 
-async def test_a_repair_while_polling_cleared_by_streaming(hass: HomeAssistant):
+async def test_polling_raises_no_repair(hass: HomeAssistant):
+    """From Dockhand 1.0.59 polling only delays events, which the docs say:
+    no repair, while polling or after switching back."""
     coord = _coordinator(
         hass, _fast("hawser-standard", "hawser-edge"), {"mode": "poll", "interval": 60}
     )
     await coord.async_refresh_event_collection()
-    issue = _issue(hass)
-    assert issue is not None
-    assert issue.translation_key == "event_collection_poll"
-    # Hawser Edge agents send their own events.
-    assert issue.translation_placeholders == {"interval": "60", "environments": "env1"}
+    assert _issue(hass) is None
+    assert coord.data["event_collection"]["mode"] == "poll"
 
     coord.client.async_get_event_collection.return_value = {
         "mode": "stream",
         "interval": 60,
     }
     await coord.async_refresh_event_collection()
-    assert _issue(hass) is None
     assert coord.data["event_collection"]["mode"] == "stream"
-
-
-async def test_no_repair_when_only_hawser_edge_depends_on_it(hass: HomeAssistant):
-    coord = _coordinator(hass, _fast("hawser-edge"), {"mode": "poll", "interval": 60})
-    await coord.async_refresh_event_collection()
-    assert _issue(hass) is None
-
-
-async def test_an_ignored_repair_stays_ignored_while_polling(hass: HomeAssistant):
-    coord = _coordinator(hass, _fast("socket"), {"mode": "poll", "interval": 300})
-    await coord.async_refresh_event_collection()
-    ir.async_ignore_issue(hass, DOMAIN, "entry_event_collection_poll", True)
-    await coord.async_refresh_event_collection()
-    assert _issue(hass).dismissed_version is not None
 
 
 async def test_unreadable_settings_keep_the_last_value(hass: HomeAssistant):
@@ -119,14 +103,6 @@ async def test_unreadable_settings_keep_the_last_value(hass: HomeAssistant):
     coord.data = {"event_collection": {"mode": "stream", "interval": 60}}
     coord.client.async_get_event_collection.side_effect = OSError("down")
     assert await coord._fetch_event_collection() == {"mode": "stream", "interval": 60}
-
-
-async def test_no_repair_without_a_config_entry(hass: HomeAssistant):
-    coord = _coordinator(
-        hass, _fast("socket"), {"mode": "poll", "interval": 60}, entry=False
-    )
-    await coord.async_refresh_event_collection()
-    assert _issue(hass) is None
 
 
 def _slow(collection) -> MagicMock:

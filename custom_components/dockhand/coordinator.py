@@ -57,7 +57,7 @@ def _safe_list(value: Any) -> list:
 
 
 def _container_vulnerabilities(answer: Any) -> dict[str, dict[str, int]] | None:
-    """Each scanned container's critical and high counts, by name, from
+    """Each scanned container's total and per-severity counts, by name, from
     Dockhand's grouped vulnerability counts; None when the answer has no
     `groups` (a Dockhand without grouping, or a failed fetch)."""
     groups = answer.get("groups") if isinstance(answer, dict) else None
@@ -69,7 +69,7 @@ def _container_vulnerabilities(answer: Any) -> dict[str, dict[str, int]] | None:
             continue
         counts[group["name"]] = {
             severity: value
-            for severity in ("critical", "high")
+            for severity in ("total", "critical", "high", "medium", "low")
             if isinstance(value := group.get(severity), int)
         }
     return counts
@@ -1009,7 +1009,6 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
         _sync_fetch_issues(
             self.hass, self.config_entry, "slow", result, self._fast_coordinator.data
         )
-        self._sync_event_collection_issue(result)
         self._async_follow_runs(result["schedules"])
         return result
 
@@ -1055,40 +1054,7 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
         it, without pushing back the poll."""
         collection = await self._fetch_event_collection()
         self.data = {**(self.data or {}), "event_collection": collection}
-        self._sync_event_collection_issue(self.data)
         self.async_update_listeners()
-
-    def _sync_event_collection_issue(self, data: dict[str, Any]) -> None:
-        """A repair while Dockhand polls for events instead of streaming
-        them and an environment depends on that (Hawser Edge agents send
-        theirs). The issue stays while polling, so one the user ignored
-        stays ignored; it comes back only after a switch to Stream and back."""
-        if self.config_entry is None:
-            return
-        entry_id = self.config_entry.entry_id
-        issue_id = f"{entry_id}_event_collection_poll"
-        collection = data.get("event_collection") or {}
-        affected = [
-            (env.get("stats") or {}).get("name", f"Environment {env_id}")
-            for env_id, env in _all_envs(self._fast_coordinator.data).items()
-            if (env.get("stats") or {}).get("connectionType") != "hawser-edge"
-        ]
-        if collection.get("mode") == "poll" and affected:
-            create_issue(
-                self.hass,
-                entry_id,
-                issue_id,
-                is_fixable=False,
-                is_persistent=False,
-                severity=ir.IssueSeverity.WARNING,
-                translation_key="event_collection_poll",
-                translation_placeholders={
-                    "interval": str(collection.get("interval") or 60),
-                    "environments": ", ".join(sorted(affected)),
-                },
-            )
-        elif collection:
-            ir.async_delete_issue(self.hass, DOMAIN, issue_id)
 
     async def async_refresh_scanner_default(self) -> None:
         """Read the default scanner back after Home Assistant changed it,

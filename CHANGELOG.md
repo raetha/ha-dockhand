@@ -4,11 +4,11 @@
 
 ### Added
 
-- Critical and High vulnerabilities sensors on each container, with Dockhand 1.0.59 or later and vulnerability scanning on, so you can see which containers to update first. Disabled by default: turn them on for every container under **Container entities** in Configure.
+- Vulnerabilities sensors on each container, the total and each severity like the environment's, with Dockhand 1.0.59 or later and vulnerability scanning on, so you can see which containers to update first. Disabled by default: turn them on for every container with **Vulnerabilities** under **Container entities** in Configure.
 
 ### Changed
 
-- The repair raised while Dockhand polls for Docker events says events arrive late, and no longer that some are lost, except with Dockhand older than 1.0.59, which fixed that.
+- No more repair while Dockhand polls for Docker events: from Dockhand 1.0.59 polling only delays them, by the poll interval (a minute by default). An ignored one is cleared too. The Data Updates docs explain the trade-off.
 
 ## [2.1.0] - 2026-11-20
 

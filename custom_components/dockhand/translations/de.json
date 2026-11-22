@@ -952,10 +952,6 @@
       "title": "Speicherlimit für {container} automatisch zurückgesetzt",
       "description": "Container \"{container}\" wurde kurz nach der Absenkung seines Speicherlimits beendet, was auftreten kann, wenn das neue Limit unter der tatsächlichen Nutzung des Containers liegt und der Kernel es sofort durchsetzt. Das Speicherlimit wurde automatisch auf seinen vorherigen Wert ({memory_bytes} Bytes) zurückgesetzt. Überprüfen Sie die Protokolle und den aktuellen Zustand des Containers in Dockhand."
     },
-    "event_collection_poll": {
-      "title": "Dockhand fragt Docker-Ereignisse ab",
-      "description": "Dockhand erfasst Docker-Ereignisse per Abfrage alle {interval} Sekunden statt als Stream. Für {environments} können Live-Updates und Docker-Ereignis-Entitäten bis zu {interval} Sekunden verspätet sein. Dockhand vor 1.0.59 verliert bei einem Intervall über 30 Sekunden außerdem manche Ereignisse; aktualisiere es, falls es älter ist. Für einen Stream setze Ereigniserfassung am Dockhand-Gerät auf Stream (in Dockhand: Settings → General → Activity event collection mode). Wenn du die Abfrage bevorzugst, ignoriere dieses Problem: Es erscheint erst wieder nach einem Wechsel zu Stream und zurück zu Abfrage."
-    },
     "retired_entities_automation": {
       "title": "{name} nutzt ersetzte Dockhand-Entitäten",
       "description": "Dockhand hat einige seiner Entitäten durch neue ersetzt, und die Automation {link} nutzt noch alte. Bearbeite sie so, dass sie die neuen Entitäten nutzt (alte Entität → neue Entität):\n\n{entities}\n\nDiese Reparatur verschwindet, sobald sie sie nicht mehr nutzt."
@@ -1032,8 +1028,7 @@
         "docker_event": "Docker-Ereignis",
         "pause": "Pausieren",
         "container_auto_update": "Automatische Aktualisierung",
-        "vulnerabilities_critical": "Kritische Schwachstellen",
-        "vulnerabilities_high": "Hohe Schwachstellen"
+        "vulnerabilities": "Schwachstellen"
       }
     },
     "stack_entities": {

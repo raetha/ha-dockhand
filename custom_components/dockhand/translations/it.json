@@ -952,10 +952,6 @@
       "title": "Limite di memoria ripristinato automaticamente per {container}",
       "description": "Il container \"{container}\" ha smesso di funzionare poco dopo l'abbassamento del suo limite di memoria, il che può accadere quando il nuovo limite è inferiore all'utilizzo effettivo del container e il kernel lo applica immediatamente. Il limite di memoria è stato ripristinato automaticamente al suo valore precedente ({memory_bytes} byte). Controlla i log e lo stato di salute attuale del container in Dockhand."
     },
-    "event_collection_poll": {
-      "title": "Dockhand interroga gli eventi Docker",
-      "description": "Dockhand raccoglie gli eventi Docker con un polling ogni {interval} secondi invece di riceverli in stream. Per {environments}, gli aggiornamenti in tempo reale e le entità degli eventi Docker possono arrivare fino a {interval} secondi in ritardo. Dockhand prima della 1.0.59 perde inoltre alcuni eventi con un intervallo superiore a 30 secondi: aggiornalo se è più vecchio. Per riceverli in stream, imposta Modalità di raccolta eventi del dispositivo Dockhand su Stream (in Dockhand: Settings → General → Activity event collection mode). Se preferisci il polling, ignora questo problema: torna solo dopo un passaggio a Stream e di nuovo a Polling."
-    },
     "retired_entities_automation": {
       "title": "{name} usa entità Dockhand sostituite",
       "description": "Dockhand ha sostituito alcune delle sue entità con entità nuove, e l’automazione {link} usa ancora entità vecchie. Modificala in modo che usi le nuove entità (entità vecchia → entità nuova):\n\n{entities}\n\nQuesta riparazione scompare quando non le usa più."
@@ -1032,8 +1028,7 @@
         "docker_event": "Evento Docker",
         "pause": "Metti in pausa",
         "container_auto_update": "Aggiornamento automatico",
-        "vulnerabilities_critical": "Vulnerabilità critiche",
-        "vulnerabilities_high": "Vulnerabilità alte"
+        "vulnerabilities": "Vulnerabilità"
       }
     },
     "stack_entities": {

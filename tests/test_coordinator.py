@@ -1279,7 +1279,15 @@ async def test_slow_container_vulnerabilities_by_name(hass: HomeAssistant):
         return_value={
             "groupBy": "container",
             "groups": [
-                {"id": "c1", "name": "web", "critical": 1, "high": 2, "low": 9},
+                {
+                    "id": "c1",
+                    "name": "web",
+                    "total": 12,
+                    "critical": 1,
+                    "high": 2,
+                    "medium": 0,
+                    "low": 9,
+                },
                 {"id": "c2", "name": "db", "critical": 0, "high": "3"},
                 {"id": "c3", "name": "", "critical": 4},
                 "not-a-group",
@@ -1293,7 +1301,7 @@ async def test_slow_container_vulnerabilities_by_name(hass: HomeAssistant):
     client.async_get_container_vulnerabilities.assert_called_once_with(1)
     env = coord.data["environments"][1]
     assert env["container_vulnerabilities"] == {
-        "web": {"critical": 1, "high": 2},
+        "web": {"total": 12, "critical": 1, "high": 2, "medium": 0, "low": 9},
         "db": {"critical": 0},
     }
     assert "container_vulnerabilities" not in env["fetch_failures"]

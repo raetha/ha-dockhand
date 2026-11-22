@@ -467,9 +467,7 @@ rules:
       see why some entities are unavailable); runtime_update_warning when
       Dockhand returns warnings for a live resource-limit change;
       runtime_memory_reverted when lowering a memory limit stopped the
-      container and the integration put the previous limit back;
-      event_collection_poll while Dockhand polls for Docker events instead of
-      streaming them; and retired_entities_automation and
+      container and the integration put the previous limit back; and retired_entities_automation and
       retired_entities_script, one per automation or script still using an
       entity a release replaced, linking to its editor (retired.py).
 

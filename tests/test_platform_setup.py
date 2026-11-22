@@ -106,7 +106,9 @@ SLOW_DATA = {
             "runtime_config": {"my-app": {"memory": 0, "restart_policy": "no"}},
             "git_stacks": [GIT_STACK],
             # web's image never scanned: listed by Dockhand without it.
-            "container_vulnerabilities": {"my-app": {"critical": 2, "high": 5}},
+            "container_vulnerabilities": {
+                "my-app": {"total": 9, "critical": 2, "high": 5, "medium": 2, "low": 0}
+            },
             "auto_update_settings": {},
             "env_meta": {},
             "settings": {
@@ -141,6 +143,7 @@ ENABLED_UP_FRONT = (
     ("binary_sensor", "stack_gitapp_git_sync_error"),
     ("switch", "stack_gitapp_git_auto_deploy"),
     ("sensor", "container_my-app_vulnerabilities_critical"),
+    ("sensor", "container_my-app_vulnerabilities_low"),
     ("sensor", "container_web_vulnerabilities_high"),
 )
 
@@ -212,8 +215,11 @@ async def test_every_optional_entity_is_created(hass: HomeAssistant, loaded_entr
         f"{p}_vulnerability_scanner",
         f"{p}_prune_mode",
         f"{loaded_entry.entry_id}_instance_vulnerability_scanner",
+        f"{p}_container_my-app_vulnerabilities",
         f"{p}_container_my-app_vulnerabilities_critical",
         f"{p}_container_my-app_vulnerabilities_high",
+        f"{p}_container_my-app_vulnerabilities_medium",
+        f"{p}_container_my-app_vulnerabilities_low",
         f"{p}_container_web_vulnerabilities_critical",
         f"{p}_container_dockhand_vulnerabilities_high",
     }
@@ -284,6 +290,7 @@ async def test_git_stack_and_env_meta_entities_have_states(
     assert state("binary_sensor", "stack_gitapp_git_sync_error") == "off"
     assert state("switch", "stack_gitapp_git_auto_deploy") == "off"
     assert state("sensor", "container_my-app_vulnerabilities_critical") == "2"
+    assert state("sensor", "container_my-app_vulnerabilities_low") == "0"
     # Its image not scanned yet.
     assert state("sensor", "container_web_vulnerabilities_high") == "unknown"
 
@@ -356,3 +363,29 @@ async def test_uptime_keeps_its_state_through_clock_wobble(hass: HomeAssistant):
     host["uptime"] = 60
     entity.async_write_ha_state()
     assert hass.states.get(entity_id).state != first
+
+
+async def test_setup_clears_the_retired_poll_repair(hass: HomeAssistant):
+    """Releases up to 2.1.0 raised one while Dockhand polled for events;
+    one the user ignored would otherwise stay."""
+    from homeassistant.helpers import issue_registry as ir
+
+    entry = config_entry(hass, options=OPTIONS)
+    issue_id = f"{entry.entry_id}_event_collection_poll"
+    ir.async_create_issue(
+        hass,
+        DOMAIN,
+        issue_id,
+        is_fixable=False,
+        severity=ir.IssueSeverity.WARNING,
+        translation_key="event_collection_poll",
+    )
+    ir.async_ignore_issue(hass, DOMAIN, issue_id, True)
+    with patch_setup(
+        fast_coordinator(FAST_DATA["environments"]),
+        slow_coordinator(**SLOW_DATA),
+        update_coordinator(UPDATE_DATA["environments"]),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, issue_id) is None

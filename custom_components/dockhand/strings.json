@@ -952,10 +952,6 @@
       "title": "Memory limit auto-reverted for {container}",
       "description": "Container \"{container}\" stopped running shortly after its memory limit was lowered, which can happen when the new limit is below the container's actual usage and the kernel enforces it immediately. The memory limit has been automatically reverted to its previous value ({memory_bytes} bytes). Check the container's logs and current health in Dockhand."
     },
-    "event_collection_poll": {
-      "title": "Dockhand polls for Docker events",
-      "description": "Dockhand is set to collect Docker events by polling every {interval} seconds instead of streaming them. For {environments}, live updates and Docker event entities can be up to {interval} seconds late. Dockhand before 1.0.59 also loses some events when the interval is over 30 seconds, so update it if it's older. To stream them, set Event collection mode on the Dockhand device to Stream (in Dockhand: Settings → General → Activity event collection mode). If you prefer polling, ignore this issue: it comes back only after a switch to Stream and back to Poll."
-    },
     "retired_entities_automation": {
       "title": "{name} uses replaced Dockhand entities",
       "description": "Dockhand replaced some of its entities with new ones, and the automation {link} still uses old ones. Edit it to use the new entities (old entity → new entity):\n\n{entities}\n\nThis repair goes away once it no longer uses them."
@@ -1032,8 +1028,7 @@
         "docker_event": "Docker event",
         "pause": "Pause",
         "container_auto_update": "Auto update",
-        "vulnerabilities_critical": "Critical vulnerabilities",
-        "vulnerabilities_high": "High vulnerabilities"
+        "vulnerabilities": "Vulnerabilities"
       }
     },
     "stack_entities": {

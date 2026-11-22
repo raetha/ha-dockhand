@@ -11,6 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.start import async_at_started
 from homeassistant.helpers.typing import ConfigType
@@ -449,6 +450,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     # Without this, entities pruned between reloads persist in the registry
     # and cause _2/_3/etc suffixes when new entities with the same name register.
     _cleanup_stale_registry(hass, entry)
+
+    # Releases up to 2.1.0 raised a repair while Dockhand polled for events;
+    # Home Assistant keeps one the user ignored, so clear it.
+    ir.async_delete_issue(hass, DOMAIN, f"{entry.entry_id}_event_collection_poll")
 
     # Automations and scripts load after integrations, so whether they still
     # use a retired entity is only known once Home Assistant has started.
