@@ -954,7 +954,7 @@
     },
     "event_collection_poll": {
       "title": "Dockhand pollt Docker-gebeurtenissen",
-      "description": "Dockhand verzamelt Docker-gebeurtenissen door elke {interval} seconden te pollen in plaats van ze te streamen. Voor {environments} kunnen live updates en Docker-gebeurtenisentiteiten tot {interval} seconden te laat zijn, en bij een interval van meer dan 30 seconden komen sommige gebeurtenissen nooit aan: elke poll leest alleen de laatste 30 seconden. Zet Verzamelen van gebeurtenissen op het Dockhand-apparaat op Stream om ze te streamen (in Dockhand: Settings → General → Activity event collection mode). Geef je de voorkeur aan pollen, negeer dit probleem dan: het komt pas terug na een wissel naar Stream en terug naar Polling."
+      "description": "Dockhand verzamelt Docker-gebeurtenissen door elke {interval} seconden te pollen in plaats van ze te streamen. Voor {environments} kunnen live updates en Docker-gebeurtenisentiteiten tot {interval} seconden te laat zijn. Dockhand vóór 1.0.59 mist bovendien sommige gebeurtenissen bij een interval van meer dan 30 seconden, dus werk het bij als het ouder is. Zet Verzamelen van gebeurtenissen op het Dockhand-apparaat op Stream om ze te streamen (in Dockhand: Settings → General → Activity event collection mode). Geef je de voorkeur aan pollen, negeer dit probleem dan: het komt pas terug na een wissel naar Stream en terug naar Polling."
     },
     "retired_entities_automation": {
       "title": "{name} gebruikt vervangen Dockhand-entiteiten",

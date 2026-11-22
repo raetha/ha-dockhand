@@ -954,7 +954,7 @@
     },
     "event_collection_poll": {
       "title": "Dockhand odpytuje o zdarzenia Dockera",
-      "description": "Dockhand zbiera zdarzenia Dockera, odpytując co {interval} sekund, zamiast odbierać je strumieniowo. Dla {environments} aktualizacje na żywo i encje zdarzeń Dockera mogą się spóźniać nawet o {interval} sekund, a przy interwale powyżej 30 sekund niektóre zdarzenia nigdy nie docierają: każde odpytanie czyta tylko ostatnie 30 sekund. Aby odbierać je strumieniowo, ustaw Tryb zbierania zdarzeń urządzenia Dockhand na Strumień (w Dockhand: Settings → General → Activity event collection mode). Jeśli wolisz odpytywanie, zignoruj ten problem: wróci dopiero po przełączeniu na Strumień i z powrotem na Odpytywanie."
+      "description": "Dockhand zbiera zdarzenia Dockera, odpytując co {interval} sekund, zamiast odbierać je strumieniowo. Dla {environments} aktualizacje na żywo i encje zdarzeń Dockera mogą się spóźniać nawet o {interval} sekund. Dockhand starszy niż 1.0.59 dodatkowo gubi niektóre zdarzenia przy interwale powyżej 30 sekund, więc zaktualizuj go, jeśli jest starszy. Aby odbierać je strumieniowo, ustaw Tryb zbierania zdarzeń urządzenia Dockhand na Strumień (w Dockhand: Settings → General → Activity event collection mode). Jeśli wolisz odpytywanie, zignoruj ten problem: wróci dopiero po przełączeniu na Strumień i z powrotem na Odpytywanie."
     },
     "retired_entities_automation": {
       "title": "{name} używa zastąpionych encji Dockhand",

@@ -22,7 +22,7 @@
 ## Known limitations
 
 - **Live updates need Dockhand to watch an environment's Docker events.** Environments that collect neither activity nor metrics, or a token without `activity: view`, only change on the next poll (see [Data Updates](data-updates.md)). Totals such as an environment's running-container count also come from the poll.
-- **Dockhand's Poll event collection mode delays and drops events.** Keep it on Stream (see [Data Updates](data-updates.md)).
+- **Dockhand's Poll event collection mode delays events** (and before Dockhand 1.0.59 drops some). Keep it on Stream (see [Data Updates](data-updates.md)).
 - **Some schedules can't be paused or run from here.** Dockhand can't run scheduled reports or stack deploys on demand, and can't pause backup-repository maintenance without it disappearing from its schedule list, so those get no Run now or Enabled entity.
 - **No build-cache pruning.** Dockhand's API has no build-cache prune, so `dockhand.prune` can't do it either.
 - **Runtime controls only for stand-alone containers.** Memory, CPU and process limits and the restart policy can't be changed live for a Compose-managed container, since the stack's own compose file would put them back.
