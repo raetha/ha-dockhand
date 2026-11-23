@@ -413,7 +413,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: DockhandConfigEntry) -> 
     base_url = entry.data.get(CONF_API_URL, "")
     dr.async_get(hass).async_get_or_create(
         config_entry_id=entry.entry_id,
-        **_instance_device(entry.entry_id, base_url),
+        **_instance_device(entry.entry_id, base_url, entry.title),
     )
     # No entity listens to this coordinator, so this listener is also what
     # keeps it polling.

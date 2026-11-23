@@ -73,20 +73,23 @@ async def test_version_coordinator_reports_failures(hass: HomeAssistant):
 
 @pytest.fixture
 async def loaded_entry(hass: HomeAssistant):
+    # The title a new entry gets: its API URL.
     entry = config_entry(
         hass,
-        title="Home Dockhand",
+        title="http://dh.test:3000",
         data={"api_url": "http://dh.test:3000", "api_token": "t"},
         options={},
     )
     client = api_client()
+    # Kept patched for the test, so a reload (renaming the entry) sets up
+    # again.
     with (
         patch("custom_components.dockhand.async_get_clientsession"),
         patch("custom_components.dockhand.DockhandClient", return_value=client),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
-    return entry
+        yield entry
 
 
 def _instance(hass: HomeAssistant, entry: MockConfigEntry) -> dr.DeviceEntry:
@@ -191,9 +194,22 @@ async def test_unloading_stops_the_version_poll(
     assert not version._listeners
 
 
+async def test_instance_device_takes_a_renamed_entrys_title(
+    hass: HomeAssistant, loaded_entry: MockConfigEntry
+):
+    """The cards name a Dockhand by this device; renaming the entry reloads
+    it under the new name."""
+    hass.config_entries.async_update_entry(loaded_entry, title="dockhand1")
+    await hass.async_block_till_done()
+    assert _instance(hass, loaded_entry).name == "dockhand1"
+
+
 def test_instance_host_falls_back_to_dockhand():
     assert instance_host("https://dockhand.example.com") == "dockhand.example.com"
     assert _instance_device("e", "")["name"] == "Dockhand"
+    # The default title is the API URL: the host, not the whole URL.
+    url = "http://dh.test:3000"
+    assert _instance_device("e", url, url)["name"] == "Dockhand (dh.test:3000)"
 
 
 def _entity_id(hass: HomeAssistant, platform: str, unique_id: str) -> str:

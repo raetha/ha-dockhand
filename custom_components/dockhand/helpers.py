@@ -610,18 +610,26 @@ def instance_host(base_url: str) -> str | None:
     return f"{parsed.hostname}:{parsed.port}" if parsed.port else parsed.hostname
 
 
-def _instance_device(entry_id: str, base_url: str) -> DeviceInfo:
+def _instance_device(entry_id: str, base_url: str, title: str = "") -> DeviceInfo:
     """The Dockhand server itself, parent of its environments.
 
-    Named after its host rather than the entry's title, which is the whole
-    API URL. Registered in async_setup_entry before any other device and
-    never removed while the entry is loaded. Its software version is set
-    once the version coordinator has it (_update_instance_version).
+    Named after the entry once the user has renamed it (dockhand1,
+    dockhand2): the cards label what belongs to a Dockhand rather than an
+    environment by this device's name. Until then the title is the whole
+    API URL, so the host instead. Renaming the entry reloads it (the update
+    listener), which registers this again under the new name. Registered in
+    async_setup_entry before any other device and never removed while the
+    entry is loaded. Its software version is set once the version
+    coordinator has it (_update_instance_version).
     """
     host = instance_host(base_url)
+    if title and title != base_url:
+        name = title
+    else:
+        name = f"Dockhand ({host})" if host else "Dockhand"
     info = DeviceInfo(
         identifiers={(DOMAIN, _device_id_instance(entry_id))},
-        name=f"Dockhand ({host})" if host else "Dockhand",
+        name=name,
         manufacturer="Dockhand",
         model="Dockhand",
         entry_type=DeviceEntryType.SERVICE,

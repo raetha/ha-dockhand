@@ -81,7 +81,8 @@ async def setup_from_real_data(
     fast, slow = _coordinator_data()
     entry = config_entry(
         hass,
-        title="Dockhand",
+        # A new entry's title: its API URL.
+        title="http://dockhand.example.internal:3000",
         version=SCHEMA_VERSION,
         minor_version=SCHEMA_MINOR_VERSION,
         data={"api_url": "http://dockhand.example.internal:3000", "verify_ssl": True},

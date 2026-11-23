@@ -55,6 +55,8 @@ Dockhand – Schedules  (if enabled)         ← Global hub device (not env-spec
     └── sensor.Last status
 ```
 
+The Dockhand device is named after the integration entry once you rename it (**Settings → Devices & services → Dockhand**, the entry's ⋮ menu → **Rename**), otherwise after Dockhand's address. With several Dockhands, give each a useful name, like `dockhand1` and `dockhand2`: the cards use it for what belongs to a Dockhand rather than an environment, such as global schedules.
+
 **Entity ID convention:** `<platform>.<env>_<type>_<name>_<attribute>` — for example `sensor.myenv_containers_mycontainer_state` or `switch.myenv_stacks_mystack`. The type segment (`containers`, `stacks`, `images`, etc.) makes entity_ids unambiguous even when a container and stack share the same name.
 
 Each device in the list shows its **Type** (`model` field), so it's easy to distinguish containers from stacks, and group devices from individual ones. Every device also has a direct **open in Dockhand** link that takes you straight to the corresponding page.
