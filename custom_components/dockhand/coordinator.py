@@ -37,6 +37,7 @@ from .helpers import (
     _compose_project,
     _coordinator_env,
     _extract_runtime_config,
+    async_common_texts,
     create_issue,
 )
 
@@ -440,7 +441,9 @@ class DockhandFastCoordinator(_TimedCoordinator[dict[str, Any]]):
         assert result is not None  # loop always breaks or raises above
         self._full_poll_generation += 1
         self._as_of = dict.fromkeys(_all_envs(result), started)
-        _sync_fetch_issues(self.hass, self.config_entry, "fast", result, result)
+        await _async_sync_fetch_issues(
+            self.hass, self.config_entry, "fast", result, result
+        )
         return result
 
     async def _fetch(self) -> dict[str, Any]:
@@ -1006,7 +1009,7 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
             ) from err
         except Exception as err:
             raise _update_failed(err) from err
-        _sync_fetch_issues(
+        await _async_sync_fetch_issues(
             self.hass, self.config_entry, "slow", result, self._fast_coordinator.data
         )
         self._async_follow_runs(result["schedules"])
@@ -1426,7 +1429,7 @@ class DockhandSlowCoordinator(_TimedCoordinator[dict[str, Any]]):
         }
 
 
-def _sync_fetch_issues(
+async def _async_sync_fetch_issues(
     hass: HomeAssistant,
     config_entry: ConfigEntry | None,
     source: str,
@@ -1478,6 +1481,18 @@ def _sync_fetch_issues(
         return
     entry_id = config_entry.entry_id
     stats_envs = _all_envs(stats_source)
+    text = await async_common_texts(hass)
+
+    def names(failures: set[str]) -> str:
+        # Each resource by its translated name (common.fetch_resource_<key>),
+        # alphabetically; the key itself if one has no name.
+        named = [
+            name
+            if (name := text(f"fetch_resource_{key}")) != f"fetch_resource_{key}"
+            else key
+            for key in failures
+        ]
+        return ", ".join(sorted(named, key=str.casefold))
 
     top_failures: set[str] = result.get("fetch_failures") or set()
     top_issue_id = f"{entry_id}_fetch_failed_top_level_{source}"
@@ -1490,7 +1505,7 @@ def _sync_fetch_issues(
             is_persistent=False,
             severity=ir.IssueSeverity.WARNING,
             translation_key="fetch_failed_top_level",
-            translation_placeholders={"resources": ", ".join(sorted(top_failures))},
+            translation_placeholders={"resources": names(top_failures)},
         )
     else:
         ir.async_delete_issue(hass, DOMAIN, top_issue_id)
@@ -1514,7 +1529,7 @@ def _sync_fetch_issues(
                 translation_key="fetch_failed_env",
                 translation_placeholders={
                     "env_name": env_name,
-                    "resources": ", ".join(sorted(env_failures)),
+                    "resources": names(env_failures),
                 },
             )
         else:

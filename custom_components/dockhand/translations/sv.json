@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**Uppdatering kvarhållen:** den nya imagen har nått den minsta ålder som är inställd i Dockhand. Den kan installeras nästa gång Dockhand söker efter uppdateringar (eller efter **Sök efter image-uppdateringar**).",
     "scanner_may_block_update": "Den här miljön skannar images efter sårbarheter före uppdatering. Beroende på den inställda policyn kan uppdateringen blockeras om fynden överskrider tröskeln.",
     "system_container_update": "Det här är en systemcontainer och måste uppdateras direkt på Docker-värden.",
-    "updates_disabled_by_label": "Uppdateringar inaktiverade via etiketten `dockhand.update=false`."
+    "updates_disabled_by_label": "Uppdateringar inaktiverade via etiketten `dockhand.update=false`.",
+    "fetch_resource_auto_update_settings": "inställningar för automatisk uppdatering",
+    "fetch_resource_container_stats": "containerstatistik",
+    "fetch_resource_container_vulnerabilities": "sårbarheter per container",
+    "fetch_resource_containers": "containrar",
+    "fetch_resource_environments": "miljöer",
+    "fetch_resource_git_stacks": "Git-stackar",
+    "fetch_resource_host": "värdinformation",
+    "fetch_resource_images": "avbilder",
+    "fetch_resource_networks": "nätverk",
+    "fetch_resource_pending_updates": "väntande uppdateringar",
+    "fetch_resource_recent_events": "senaste händelser",
+    "fetch_resource_runtime_config": "körinställningar för containrar",
+    "fetch_resource_schedules": "scheman",
+    "fetch_resource_stack_stats": "stackstatistik",
+    "fetch_resource_stacks": "stackar",
+    "fetch_resource_volume_sizes": "volymstorlekar",
+    "fetch_resource_volumes": "volymer",
+    "fetch_resource_vulnerabilities": "antal sårbarheter"
   }
 }

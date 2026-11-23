@@ -1593,6 +1593,52 @@ async def test_sync_creates_issue_for_per_environment_fetch_failure(
     assert issue.translation_placeholders["resources"] == "images"
 
 
+@pytest.mark.parametrize(
+    ("language", "expected"),
+    [
+        # By name, alphabetically ignoring case: not the keys' order.
+        ("en", "container runtime settings, Git stacks, images"),
+        ("de", "Container-Laufzeiteinstellungen, Git-Stacks, Images"),
+    ],
+)
+async def test_fetch_issue_names_resources_in_the_users_language(
+    hass: HomeAssistant, language, expected
+):
+    from custom_components.dockhand.coordinator import _async_sync_fetch_issues
+
+    hass.config.language = language
+    coord = _slow_with_entry(hass, _make_client(envs=[ENV1]))
+    failures = {"images", "runtime_config", "git_stacks"}
+    await _async_sync_fetch_issues(
+        hass,
+        coord.config_entry,
+        "slow",
+        {"environments": {1: {"fetch_failures": failures}}},
+        {},
+    )
+    issue_id = f"{coord.config_entry.entry_id}_fetch_failed_env_1_slow"
+    issue = ir.async_get(hass).async_get_issue("dockhand", issue_id)
+    assert issue.translation_placeholders["resources"] == expected
+
+
+async def test_fetch_issue_keeps_a_resource_without_a_name_as_its_key(
+    hass: HomeAssistant,
+):
+    from custom_components.dockhand.coordinator import _async_sync_fetch_issues
+
+    coord = _slow_with_entry(hass, _make_client(envs=[ENV1]))
+    await _async_sync_fetch_issues(
+        hass,
+        coord.config_entry,
+        "slow",
+        {"environments": {1: {"fetch_failures": {"images", "something_new"}}}},
+        {},
+    )
+    issue_id = f"{coord.config_entry.entry_id}_fetch_failed_env_1_slow"
+    issue = ir.async_get(hass).async_get_issue("dockhand", issue_id)
+    assert issue.translation_placeholders["resources"] == "images, something_new"
+
+
 async def test_sync_clears_per_environment_issue_once_fetch_recovers(
     hass: HomeAssistant,
 ):

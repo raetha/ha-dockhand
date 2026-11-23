@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**Actualización retenida:** la nueva imagen ya alcanzó la antigüedad mínima configurada en Dockhand. Se podrá instalar cuando Dockhand vuelva a buscar actualizaciones (o después de **Comprobar actualizaciones de imágenes**).",
     "scanner_may_block_update": "Este entorno analiza las imágenes en busca de vulnerabilidades antes de actualizar. Según la política configurada, esta actualización puede bloquearse si los hallazgos superan el umbral.",
     "system_container_update": "Este es un contenedor del sistema y debe actualizarse directamente en el host de Docker.",
-    "updates_disabled_by_label": "Actualizaciones desactivadas mediante la etiqueta `dockhand.update=false`."
+    "updates_disabled_by_label": "Actualizaciones desactivadas mediante la etiqueta `dockhand.update=false`.",
+    "fetch_resource_auto_update_settings": "ajustes de actualización automática",
+    "fetch_resource_container_stats": "estadísticas de contenedores",
+    "fetch_resource_container_vulnerabilities": "vulnerabilidades por contenedor",
+    "fetch_resource_containers": "contenedores",
+    "fetch_resource_environments": "entornos",
+    "fetch_resource_git_stacks": "stacks de Git",
+    "fetch_resource_host": "detalles del host",
+    "fetch_resource_images": "imágenes",
+    "fetch_resource_networks": "redes",
+    "fetch_resource_pending_updates": "actualizaciones pendientes",
+    "fetch_resource_recent_events": "eventos recientes",
+    "fetch_resource_runtime_config": "ajustes de ejecución de contenedores",
+    "fetch_resource_schedules": "programaciones",
+    "fetch_resource_stack_stats": "estadísticas de stacks",
+    "fetch_resource_stacks": "stacks",
+    "fetch_resource_volume_sizes": "tamaños de volúmenes",
+    "fetch_resource_volumes": "volúmenes",
+    "fetch_resource_vulnerabilities": "recuentos de vulnerabilidades"
   }
 }

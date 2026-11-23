@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**Oppdatering holdt tilbake:** det nye imaget har nådd minstealderen satt i Dockhand. Det kan installeres neste gang Dockhand ser etter oppdateringer (eller etter **Se etter image-oppdateringer**).",
     "scanner_may_block_update": "Dette miljøet skanner images for sårbarheter før oppdatering. Avhengig av den konfigurerte policyen kan denne oppdateringen blokkeres hvis funnene overskrider terskelen.",
     "system_container_update": "Dette er en systembeholder og må oppdateres direkte på Docker-verten.",
-    "updates_disabled_by_label": "Oppdateringer deaktivert med etiketten `dockhand.update=false`."
+    "updates_disabled_by_label": "Oppdateringer deaktivert med etiketten `dockhand.update=false`.",
+    "fetch_resource_auto_update_settings": "innstillinger for automatisk oppdatering",
+    "fetch_resource_container_stats": "containerstatistikk",
+    "fetch_resource_container_vulnerabilities": "sårbarheter per container",
+    "fetch_resource_containers": "containere",
+    "fetch_resource_environments": "miljøer",
+    "fetch_resource_git_stacks": "Git-stakker",
+    "fetch_resource_host": "vertsdetaljer",
+    "fetch_resource_images": "images",
+    "fetch_resource_networks": "nettverk",
+    "fetch_resource_pending_updates": "ventende oppdateringer",
+    "fetch_resource_recent_events": "nylige hendelser",
+    "fetch_resource_runtime_config": "kjøreinnstillinger for containere",
+    "fetch_resource_schedules": "tidsplaner",
+    "fetch_resource_stack_stats": "stakkstatistikk",
+    "fetch_resource_stacks": "stakker",
+    "fetch_resource_volume_sizes": "volumstørrelser",
+    "fetch_resource_volumes": "volumer",
+    "fetch_resource_vulnerabilities": "antall sårbarheter"
   }
 }

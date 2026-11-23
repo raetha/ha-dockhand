@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**Update held:** the new image has reached the minimum image age set in Dockhand. It can be installed once Dockhand next checks for updates (or after **Check for image updates**).",
     "scanner_may_block_update": "This environment scans images for vulnerabilities before updating. Depending on its configured policy, this update may be blocked if findings exceed the threshold.",
     "system_container_update": "This is a system container and must be updated directly on the Docker host.",
-    "updates_disabled_by_label": "Updates disabled via the `dockhand.update=false` label."
+    "updates_disabled_by_label": "Updates disabled via the `dockhand.update=false` label.",
+    "fetch_resource_auto_update_settings": "auto-update settings",
+    "fetch_resource_container_stats": "container stats",
+    "fetch_resource_container_vulnerabilities": "vulnerabilities by container",
+    "fetch_resource_containers": "containers",
+    "fetch_resource_environments": "environments",
+    "fetch_resource_git_stacks": "Git stacks",
+    "fetch_resource_host": "host details",
+    "fetch_resource_images": "images",
+    "fetch_resource_networks": "networks",
+    "fetch_resource_pending_updates": "pending updates",
+    "fetch_resource_recent_events": "recent events",
+    "fetch_resource_runtime_config": "container runtime settings",
+    "fetch_resource_schedules": "schedules",
+    "fetch_resource_stack_stats": "stack stats",
+    "fetch_resource_stacks": "stacks",
+    "fetch_resource_volume_sizes": "volume sizes",
+    "fetch_resource_volumes": "volumes",
+    "fetch_resource_vulnerabilities": "vulnerability counts"
   }
 }

@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**更新已暂缓：** 新镜像已达到 Dockhand 中设置的最短存在时间。Dockhand 下次检查更新后（或执行 **检查镜像更新** 后）即可安装。",
     "scanner_may_block_update": "此环境会在更新前扫描镜像漏洞。根据所配置的策略，如果发现的问题超过阈值，此更新可能会被阻止。",
     "system_container_update": "这是系统容器，必须直接在 Docker 主机上更新。",
-    "updates_disabled_by_label": "已通过 `dockhand.update=false` 标签禁用更新。"
+    "updates_disabled_by_label": "已通过 `dockhand.update=false` 标签禁用更新。",
+    "fetch_resource_auto_update_settings": "自动更新设置",
+    "fetch_resource_container_stats": "容器统计",
+    "fetch_resource_container_vulnerabilities": "按容器的漏洞",
+    "fetch_resource_containers": "容器",
+    "fetch_resource_environments": "环境",
+    "fetch_resource_git_stacks": "Git 堆栈",
+    "fetch_resource_host": "主机详情",
+    "fetch_resource_images": "镜像",
+    "fetch_resource_networks": "网络",
+    "fetch_resource_pending_updates": "待处理更新",
+    "fetch_resource_recent_events": "最近事件",
+    "fetch_resource_runtime_config": "容器运行时设置",
+    "fetch_resource_schedules": "计划",
+    "fetch_resource_stack_stats": "堆栈统计",
+    "fetch_resource_stacks": "堆栈",
+    "fetch_resource_volume_sizes": "卷大小",
+    "fetch_resource_volumes": "卷",
+    "fetch_resource_vulnerabilities": "漏洞计数"
   }
 }

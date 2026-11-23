@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**Update vastgehouden:** de nieuwe image heeft de minimale leeftijd uit Dockhand bereikt. Hij kan worden geïnstalleerd zodra Dockhand opnieuw op updates controleert (of na **Controleren op image-updates**).",
     "scanner_may_block_update": "Deze omgeving scant images op kwetsbaarheden voordat er wordt bijgewerkt. Afhankelijk van het ingestelde beleid kan deze update worden geblokkeerd als de bevindingen de drempel overschrijden.",
     "system_container_update": "Dit is een systeemcontainer en moet direct op de Docker-host worden bijgewerkt.",
-    "updates_disabled_by_label": "Updates uitgeschakeld via het label `dockhand.update=false`."
+    "updates_disabled_by_label": "Updates uitgeschakeld via het label `dockhand.update=false`.",
+    "fetch_resource_auto_update_settings": "instellingen voor automatisch bijwerken",
+    "fetch_resource_container_stats": "containerstatistieken",
+    "fetch_resource_container_vulnerabilities": "kwetsbaarheden per container",
+    "fetch_resource_containers": "containers",
+    "fetch_resource_environments": "omgevingen",
+    "fetch_resource_git_stacks": "Git-stacks",
+    "fetch_resource_host": "hostgegevens",
+    "fetch_resource_images": "images",
+    "fetch_resource_networks": "netwerken",
+    "fetch_resource_pending_updates": "openstaande updates",
+    "fetch_resource_recent_events": "recente gebeurtenissen",
+    "fetch_resource_runtime_config": "runtime-instellingen van containers",
+    "fetch_resource_schedules": "planningen",
+    "fetch_resource_stack_stats": "stackstatistieken",
+    "fetch_resource_stacks": "stacks",
+    "fetch_resource_volume_sizes": "volumegroottes",
+    "fetch_resource_volumes": "volumes",
+    "fetch_resource_vulnerabilities": "aantallen kwetsbaarheden"
   }
 }

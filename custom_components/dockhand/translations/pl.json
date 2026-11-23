@@ -1051,6 +1051,24 @@
     "update_held_until_check": "**Aktualizacja wstrzymana:** nowy obraz osiągnął minimalny wiek ustawiony w Dockhand. Będzie można ją zainstalować przy następnym sprawdzeniu aktualizacji przez Dockhand (lub po **Sprawdź aktualizacje obrazów**).",
     "scanner_may_block_update": "To środowisko skanuje obrazy pod kątem podatności przed aktualizacją. Zależnie od skonfigurowanej zasady ta aktualizacja może zostać zablokowana, jeśli wyniki przekroczą próg.",
     "system_container_update": "To kontener systemowy, który trzeba zaktualizować bezpośrednio na hoście Dockera.",
-    "updates_disabled_by_label": "Aktualizacje wyłączone etykietą `dockhand.update=false`."
+    "updates_disabled_by_label": "Aktualizacje wyłączone etykietą `dockhand.update=false`.",
+    "fetch_resource_auto_update_settings": "ustawienia automatycznych aktualizacji",
+    "fetch_resource_container_stats": "statystyki kontenerów",
+    "fetch_resource_container_vulnerabilities": "podatności według kontenera",
+    "fetch_resource_containers": "kontenery",
+    "fetch_resource_environments": "środowiska",
+    "fetch_resource_git_stacks": "stosy Git",
+    "fetch_resource_host": "szczegóły hosta",
+    "fetch_resource_images": "obrazy",
+    "fetch_resource_networks": "sieci",
+    "fetch_resource_pending_updates": "oczekujące aktualizacje",
+    "fetch_resource_recent_events": "ostatnie zdarzenia",
+    "fetch_resource_runtime_config": "ustawienia uruchamiania kontenerów",
+    "fetch_resource_schedules": "harmonogramy",
+    "fetch_resource_stack_stats": "statystyki stosów",
+    "fetch_resource_stacks": "stosy",
+    "fetch_resource_volume_sizes": "rozmiary woluminów",
+    "fetch_resource_volumes": "woluminy",
+    "fetch_resource_vulnerabilities": "liczby podatności"
   }
 }
