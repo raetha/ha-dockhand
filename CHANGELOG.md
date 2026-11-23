@@ -8,6 +8,7 @@
 
 ### Changed
 
+- The entity lists under Environment, Container and Stack entities in Configure are in alphabetical order, in your language.
 - No more repair while Dockhand polls for Docker events: from Dockhand 1.0.59 polling only delays them, by the poll interval (a minute by default). An ignored one is cleared too. The Data Updates docs explain the trade-off.
 
 ### Internal

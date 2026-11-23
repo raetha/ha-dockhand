@@ -124,6 +124,9 @@ def _entity_sections(options: Mapping[str, Any]) -> dict[Any, Any]:
                                 multiple=True,
                                 mode=SelectSelectorMode.LIST,
                                 translation_key=f"{kind}_entities",
+                                # By name in the user's language: the
+                                # tuples' order is just when each was added.
+                                sort=True,
                             )
                         ),
                     }

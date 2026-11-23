@@ -192,6 +192,8 @@ async def test_options_flow_stores_the_choice_and_applies_it(hass: HomeAssistant
     all_box, enabled = container.schema.schema
     assert all_box.default() is False
     assert enabled.default() == ["docker_event"]
+    # Listed by name in the user's language, not in the code's order.
+    assert container.schema.schema[enabled].config["sort"] is True
     stack = next(
         value
         for key, value in result["data_schema"].schema.items()
